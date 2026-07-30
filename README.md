@@ -29,6 +29,8 @@ Conjunto acumulativo; cada paso del plan añade los suyos.
 | Sintaxis del contrato de API (OpenAPI 3.1) | `python -m openapi_spec_validator server/openapi/v1.yaml` |
 | YAML de Docker Compose válido (base + override dev) | `docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.dev.yml config` |
 | `.env` completo respecto a `.env.example` | `bash infra/scripts/check_envvars.sh` |
+| Pipeline de CI completo (backend + mobile + gates), local o vía GitHub Actions | `bash infra/scripts/ci_local.sh` (local) / `.github/workflows/backend.yml` + `mobile.yml` (Actions) |
+| Lint anti-TLS-bypass (RD-01, ADR-009) | `bash infra/scripts/lint_no_tls_bypass.sh` |
 
 Requiere `python -m pip install openapi-spec-validator` (se integrará en las dependencias de CI
 en el Paso 4). Detalles del contrato y su estrategia de generación de código en
@@ -39,6 +41,16 @@ en el Paso 4). Detalles del contrato y su estrategia de generación de código e
 El entorno local (Docker Compose, servicios, variables de entorno) se define en `infra/` — ver
 [`infra/README.md`](infra/README.md) para instrucciones de arranque, la selección de overrides vía
 `COMPOSE_FILE` y el estado de los servicios `api`/`worker` (placeholders hasta los Pasos 4 y 19).
+
+## CI y gates de calidad/seguridad
+
+Desde el Paso 3 existe un gate de CI (`.github/workflows/backend.yml`,
+`.github/workflows/mobile.yml`) que incluye, entre otros, el lint anti-TLS-bypass
+**RD-01** (ADR-009). Ver [`CONTRIBUTING.md`](CONTRIBUTING.md) para la regla
+completa: **ningún paso posterior de este plan se considera completo si su
+propio job de CI no pasa**, y cómo ejecutar el pipeline localmente
+(`bash infra/scripts/ci_local.sh`) mientras el repositorio no tenga remoto en
+GitHub.
 
 ## Convención de commits
 

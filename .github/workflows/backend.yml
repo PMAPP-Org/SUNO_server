@@ -1,0 +1,100 @@
+name: Backend CI
+
+# Paso 3 del plan (plans/visitacampo-construccion.md): gate de CI para
+# server/ (Django + Ninja, se inicializa en el Paso 4). Este workflow se
+# activa desde ya, aunque server/ hoy solo tiene un .gitkeep — doc 08 §8
+# Fase 0 exige el gate desde el principio para que ningún paso posterior
+# pueda saltárselo.
+#
+# Sin remoto de GitHub configurado en el entorno de desarrollo actual, este
+# workflow no se ha ejecutado nunca en Actions real. El equivalente
+# ejecutable localmente es `infra/scripts/ci_local.sh` (ver también
+# CONTRIBUTING.md). Cuando el repo tenga remoto en GitHub, este workflow se
+# activa automáticamente sin cambios adicionales.
+#
+# Cada paso `run:` es defensivo: si server/ todavía no tiene el archivo que
+# necesita (manage.py, algún *.py) o la herramienta aplicable, se informa y
+# se omite en vez de fallar — "0 archivos que lintar no es un fallo" (brief
+# del Paso 3). Esto es intencional y temporal: a partir del Paso 4, cuando
+# exista código real, estos mismos comandos pasan a evaluar contenido real.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "server/**"
+      - "infra/.env.example"
+      - "infra/scripts/check_envvars.sh"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - "infra/.env.example"
+      - "infra/scripts/check_envvars.sh"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch: {}
+
+jobs:
+  lint-and-test:
+    name: ruff + mypy + pytest + manage.py checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar ruff, mypy, pytest
+        run: python -m pip install --upgrade pip ruff mypy pytest
+
+      - name: ruff check server/
+        run: ruff check server/
+
+      - name: mypy server/
+        run: |
+          if find server -name '*.py' -not -path '*/.venv/*' | grep -q .; then
+            mypy server/
+          else
+            echo "server/ todavía no tiene archivos .py (se crea en el Paso 4) — mypy pasa vacío."
+          fi
+
+      - name: pytest server/
+        run: |
+          if find server -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
+            pytest server/
+          else
+            echo "server/ todavía no tiene tests (se crean a partir del Paso 4) — pytest pasa vacío."
+          fi
+
+      - name: python manage.py check --deploy
+        run: |
+          if [ -f server/manage.py ]; then
+            python server/manage.py check --deploy
+          else
+            echo "server/manage.py todavía no existe (se crea en el Paso 4) — check omitido."
+          fi
+
+      - name: python manage.py makemigrations --check --dry-run
+        run: |
+          if [ -f server/manage.py ]; then
+            python server/manage.py makemigrations --check --dry-run
+          else
+            echo "server/manage.py todavía no existe (se crea en el Paso 4) — check omitido."
+          fi
+
+  check-envvars:
+    name: check_envvars.sh (infra/.env.example, Paso 2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash infra/scripts/check_envvars.sh
+        # En CI no existe infra/.env real (nunca se versiona, ver .gitignore,
+        # y no hay secretos reales disponibles para un runner público). El
+        # auto-chequeo contra sí mismo verifica que infra/.env.example esté
+        # bien formado y sea la referencia válida — el script ya soporta
+        # rutas explícitas exactamente para este uso (ver su comentario de
+        # cabecera: "rutas explícitas (tests, CI)"). La comparación contra un
+        # `.env` real con valores reales sigue haciéndose en local/despliegue.
+        run: bash infra/scripts/check_envvars.sh infra/.env.example infra/.env.example

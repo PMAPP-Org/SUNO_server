@@ -98,8 +98,10 @@ contener como mínimo las mismas claves.
 
 `infra/scripts/check_envvars.sh` valida justamente eso: compara las claves de
 `.env` contra `.env.example` y falla con un mensaje explícito si falta
-alguna. Pensado para ejecutarse en CI (cuando se configure, Paso 4 en
-adelante) además de localmente:
+alguna. Se ejecuta en CI **desde el Paso 3** como job de
+[`backend.yml`](../.github/workflows/backend.yml) (auto-chequeo contra
+`infra/.env.example`, ya que en CI no hay `.env` real con secretos) además de
+localmente:
 
 ```bash
 bash infra/scripts/check_envvars.sh                        # infra/.env vs infra/.env.example
@@ -121,6 +123,22 @@ desarrollo es el volumen `pgdata` (Postgres) y, en el override de dev,
 docker compose down -v   # limpia también los volúmenes (¡destruye datos locales!)
 ```
 
+## CI (Paso 3): `ci_local.sh` y el lint RD-01
+
+Desde el **Paso 3** existe un gate de CI (`.github/workflows/backend.yml` +
+`.github/workflows/mobile.yml`) que cubre `server/`, `app/`,
+`check_envvars.sh` y el lint anti-TLS-bypass RD-01/ADR-009. Sin remoto de
+GitHub configurado en este entorno, el equivalente ejecutable localmente es:
+
+```bash
+bash infra/scripts/ci_local.sh
+```
+
+Ver [`CONTRIBUTING.md`](../CONTRIBUTING.md) para el detalle completo (qué
+checks corren de verdad vs. se omiten cuando falta el toolchain o el código
+todavía no existe, y la regla RD-01). Regla general del repo: **ningún paso
+posterior del plan se considera completo si su propio job de CI no pasa.**
+
 ## Comandos de verificación de este paso
 
 | Qué verifica | Comando |
@@ -128,3 +146,5 @@ docker compose down -v   # limpia también los volúmenes (¡destruye datos loca
 | YAML válido, interpolación de variables correcta | `docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.dev.yml config` (ejecutar desde la raíz del repo, o `docker compose config` desde `infra/` con `.env` presente) |
 | Postgres arranca y acepta conexiones | `docker compose up db` → `docker compose exec db pg_isready -U $POSTGRES_USER` |
 | `.env.example` completo / detecta variables faltantes | `bash infra/scripts/check_envvars.sh` (ver sección anterior) |
+| Pipeline de CI completo (Paso 3) contra el estado actual del repo | `bash infra/scripts/ci_local.sh` |
+| Lint anti-TLS-bypass (RD-01) de forma aislada | `bash infra/scripts/lint_no_tls_bypass.sh` |

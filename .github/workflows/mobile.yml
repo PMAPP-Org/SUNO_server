@@ -1,0 +1,73 @@
+name: Mobile CI
+
+# Paso 3 del plan: gate de CI para app/ (Flutter, se inicializa en el
+# Paso 10) y el lint anti-TLS-bypass RD-01 (ADR-009), que aplica a
+# cualquier archivo .dart del repo desde ya, no solo a app/.
+#
+# Igual que backend.yml: sin remoto de GitHub en este entorno, este
+# workflow todavía no se ha ejecutado en Actions real. El equivalente local
+# es `infra/scripts/ci_local.sh`. Se activa automáticamente en cuanto el
+# repo tenga remoto en GitHub, sin cambios adicionales.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "app/**"
+      - "infra/scripts/lint_no_tls_bypass.sh"
+      - ".github/workflows/mobile.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "infra/scripts/lint_no_tls_bypass.sh"
+      - ".github/workflows/mobile.yml"
+  workflow_dispatch: {}
+
+jobs:
+  analyze-and-test:
+    name: dart analyze + flutter test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: flutter pub get
+        run: |
+          if [ -f app/pubspec.yaml ]; then
+            (cd app && flutter pub get)
+          else
+            echo "app/pubspec.yaml todavía no existe (se crea en el Paso 10) — pub get omitido."
+          fi
+
+      - name: dart analyze app/
+        run: |
+          if find app -name '*.dart' | grep -q .; then
+            dart analyze app/
+          else
+            echo "app/ todavía no tiene archivos .dart (se crea en el Paso 10) — dart analyze pasa vacío."
+          fi
+
+      - name: flutter test app/
+        run: |
+          if [ -f app/pubspec.yaml ] && find app/test -name '*_test.dart' 2>/dev/null | grep -q .; then
+            (cd app && flutter test)
+          else
+            echo "app/ todavía no tiene tests (se crean a partir del Paso 10) — flutter test pasa vacío."
+          fi
+
+  rd01-tls-bypass-lint:
+    name: "RD-01: lint anti-TLS-bypass (ADR-009)"
+    runs-on: ubuntu-latest
+    # Job independiente y deliberadamente sin dependencia de que exista
+    # pubspec.yaml/Flutter instalado: solo necesita bash/grep, así que se
+    # ejecuta siempre, incluso hoy que app/ está casi vacío. Ver
+    # infra/scripts/lint_no_tls_bypass.sh para la regla completa y su
+    # justificación (docs/07 hallazgo CRITICAL, docs/08 ADR-009, RD-01).
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash infra/scripts/lint_no_tls_bypass.sh
+        run: bash infra/scripts/lint_no_tls_bypass.sh
