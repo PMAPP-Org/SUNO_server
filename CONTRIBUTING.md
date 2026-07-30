@@ -82,13 +82,17 @@ de CI explícita:
 
 `infra/scripts/lint_no_tls_bypass.sh` implementa esta regla: falla si
 `badCertificateCallback`, `allowBadCertificates`, `ignoreSslErrors` o
-`ignoreCertificateErrors` aparecen en cualquier archivo `.dart` fuera de una
-ruta con un segmento de directorio `trust_store` o un archivo llamado
-`trust_store.dart` (el módulo `TrustStore` auditado que se construye
+`ignoreCertificateErrors` aparecen en cualquier archivo `.dart` fuera de la
+ruta canónica exacta `app/lib/core/security/trust_store.dart` (o cualquier
+archivo bajo `app/lib/core/security/trust_store/`, si Paso 16 lo divide en
+varios archivos) — el módulo `TrustStore` auditado que se construye
 funcionalmente en el **Paso 16** con pinning de SPKI y consentimiento
-explícito del usuario). Este es el único mecanismo de confianza permitido
-para servidores self-hosted con certificado no reconocido por una CA
-pública — nunca un bypass incondicional.
+explícito del usuario. El allow-list está anclado a ese prefijo desde la
+raíz del repo: un directorio o archivo llamado `trust_store` en cualquier
+otra ruta (p. ej. `app/lib/features/auth/trust_store/`) **no** cuenta como
+excepción y sigue bloqueado por el gate. Este es el único mecanismo de
+confianza permitido para servidores self-hosted con certificado no
+reconocido por una CA pública — nunca un bypass incondicional.
 
 Si el lint produce un falso positivo bloqueante, la estrategia de rollback
 del Paso 3 aplica: se ajusta el regex/allow-list del script en un commit de
