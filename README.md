@@ -14,10 +14,23 @@ El plan de construcción paso a paso vive en [`plans/visitacampo-construccion.md
 VisitaCampo/
 ├── app/     # Cliente Flutter (se inicializa en el Paso 10 del plan)
 ├── server/  # Backend Django (se inicializa en el Paso 4 del plan)
+│   └── openapi/  # Contrato de API v1 (OpenAPI 3.1) — fuente de verdad de ambos extremos
 ├── infra/   # Docker Compose, Caddy, scripts de despliegue (se puebla en el Paso 2 del plan)
 ├── docs/    # Documentos de arquitectura (ya existentes)
 └── plans/   # Plan de construcción (ya existente)
 ```
+
+## Comandos de verificación
+
+Conjunto acumulativo; cada paso del plan añade los suyos.
+
+| Qué verifica | Comando |
+|---|---|
+| Sintaxis del contrato de API (OpenAPI 3.1) | `python -m openapi_spec_validator server/openapi/v1.yaml` |
+
+Requiere `python -m pip install openapi-spec-validator` (se integrará en las dependencias de CI
+en el Paso 4). Detalles del contrato y su estrategia de generación de código en
+[`server/openapi/README.md`](server/openapi/README.md).
 
 ## Entorno local
 

@@ -1,0 +1,1607 @@
+openapi: 3.1.0
+
+info:
+  title: VisitaCampo API
+  version: 1.0.0
+  summary: Contrato de API v1 (superficie mínima) de VisitaCampo.
+  description: |
+    Contrato **fuente de verdad** de la API v1 de VisitaCampo, escrito antes que el código
+    (doc 08 §8 Fase 0). Ambos extremos —backend Django Ninja + Pydantic v2 y cliente Flutter—
+    se validan contra este archivo (**RD-03**).
+
+    Alcance: exactamente la superficie mínima enumerada en
+    [doc 08 §6](../../docs/08-arquitectura-propuesta-visitacampo.md#6-contrato-de-api-v1--superficie-mínima).
+    No se añaden endpoints fuera de esa lista.
+
+    ### Semántica de sincronización (ADR-003)
+
+    - **Outbox + CAS por versión**: cada operación lleva `op_uuid` (UUIDv7 generado en el
+      dispositivo) y `base_version`. El UPSERT se aplica con la guarda `WHERE version = base_version`.
+    - **Aplicación síncrona transaccional**: `POST /v1/sync/push` aplica todo el lote dentro de una
+      transacción de PostgreSQL y devuelve el resultado por operación en la misma respuesta.
+      No hay jobs ni polling en el camino crítico.
+    - **Idempotencia**: reenviar un `op_uuid` ya registrado en `sync_op_log` devuelve el resultado
+      guardado sin volver a aplicar la operación.
+    - **Server-authoritative sin merge de 3 vías**: una operación en `conflict` devuelve la
+      **fila autoritativa completa** (`server_row`) para que el cliente reemplace su fila local.
+    - **Pull incremental por cursor** (`change_seq`), con orden estricto y tombstones.
+    - **Carril de adjuntos independiente**: una visita se acepta aunque sus fotos aún no estén subidas.
+
+    ### Límites de lote (ADR-003)
+
+    `POST /v1/sync/push` acepta como máximo **500 operaciones** y **5 MB** de cuerpo (tras
+    descompresión si se usa `Content-Encoding: gzip`). `maxItems: 500` se expresa en el esquema;
+    el límite de bytes **no es expresable en OpenAPI/JSON Schema** y se aplica en el servidor
+    (Paso 8), devolviendo `413` con `code: payload_too_large`. El cliente pagina el lote.
+
+    ### Versionado del contrato
+
+    Dos ejes independientes:
+
+    - **Versión de ruta** (`/v1/...`): cambia solo ante una ruptura incompatible de la superficie HTTP.
+    - **`schema_version`** (entero): versión del *payload* de sync, presente en todos los cuerpos de
+      `/v1/sync/*` (RD-03). El cliente negocia compatibilidad con `GET /v1/server/info`
+      (`schema_version` y `min_supported_schema_version`) **antes** de sincronizar. Un
+      `schema_version` no soportado se rechaza con `code: schema_unsupported`.
+
+    ### Errores
+
+    Cuerpo uniforme `{code, message, details?}` (doc 08 §6), definido **una sola vez**
+    (`components/schemas/Error`) y reutilizado en todos los endpoints vía
+    `components/responses/*`. El cliente mapea `code` a mensajes traducidos; nunca muestra
+    `message` crudo al agente de campo.
+  license:
+    name: Propietario
+  contact:
+    name: VisitaCampo
+
+servers:
+  - url: https://{host}
+    description: Instancia de VisitaCampo (self-hosted o gestionada). TLS estricto siempre (ADR-009).
+    variables:
+      host:
+        default: api.visitacampo.example
+        description: Host de la instancia.
+
+tags:
+  - name: auth
+    description: Autenticación y ciclo de vida de tokens (ADR-008).
+  - name: server
+    description: Negociación de capacidades y compatibilidad.
+  - name: sync
+    description: Sincronización offline-first (ADR-003).
+  - name: attachments
+    description: Adjuntos direccionados por contenido (ADR-007).
+  - name: jobs
+    description: Estado de trabajos asíncronos (ADR-006).
+  - name: health
+    description: Liveness y readiness. Sin autenticación, sin filtrar información.
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ---------------------------------------------------------------- auth ----
+
+  /v1/auth/login:
+    post:
+      operationId: authLogin
+      tags: [auth]
+      summary: Inicia sesión y registra el dispositivo
+      description: |
+        Devuelve un access token JWT de vida corta (15 min) y un refresh opaco ligado al
+        dispositivo (ADR-008). Rate-limited por IP y por cuenta; la respuesta de credenciales
+        inválidas es genérica y de tiempo uniforme (no revela si el usuario existe).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión iniciada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/auth/refresh:
+    post:
+      operationId: authRefresh
+      tags: [auth]
+      summary: Rota el refresh token del dispositivo
+      description: |
+        Cada refresh **rota** el token. La detección de reuso (llegada de un `verifier` ya rotado)
+        revoca **toda la familia del dispositivo**, fuerza re-login y emite un `AuditEvent`
+        (ADR-008). Existe una ventana de gracia de 30 s para reintentos concurrentes del mismo
+        dispositivo.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Tokens rotados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/auth/logout:
+    post:
+      operationId: authLogout
+      tags: [auth]
+      summary: Revoca el refresh token del dispositivo
+      description: |
+        Revoca la familia de refresh del dispositivo indicado. **No borra la outbox local**:
+        el trabajo pendiente del agente se conserva en el dispositivo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Sesión del dispositivo revocada (idempotente).
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # -------------------------------------------------------------- server ----
+
+  /v1/server/info:
+    get:
+      operationId: serverInfo
+      tags: [server]
+      summary: Versión de API, schema_version, hora del servidor y capacidades
+      description: |
+        Permite **negociar compatibilidad antes de sincronizar**. El cliente compara su
+        `schema_version` con `[min_supported_schema_version, schema_version]` y usa `server_time`
+        para corregir el desfase de reloj del dispositivo (relevante para URLs prefirmadas, ADR-007).
+      responses:
+        '200':
+          description: Información del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfo'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------- sync ----
+
+  /v1/sync/bootstrap:
+    get:
+      operationId: syncBootstrap
+      tags: [sync]
+      summary: Estado inicial completo + cursor
+      description: |
+        Se invoca tras instalar la app o tras recibir `409 cursor_expired` (cursor más antiguo que
+        la purga de tombstones, 90 días). Devuelve el estado visible completo para el
+        `RequestContext` del solicitante y el `cursor` desde el que continuar con
+        `GET /v1/sync/pull`.
+      responses:
+        '200':
+          description: Estado inicial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/sync/pull:
+    get:
+      operationId: syncPull
+      tags: [sync]
+      summary: Filas cambiadas + tombstones + next_cursor
+      description: |
+        Paginado y con **orden estricto por `change_seq`**. `change_seq` se asigna dentro de la
+        transacción de escritura sosteniendo `pg_advisory_xact_lock(org_id)`, de modo que ningún
+        cambio puede quedarse por debajo de un cursor ya avanzado.
+
+        Si `cursor` es más antiguo que la purga de tombstones, la respuesta es `409` con
+        `code: cursor_expired` y el cliente debe ejecutar `GET /v1/sync/bootstrap`.
+      parameters:
+        - name: cursor
+          in: query
+          required: true
+          description: |
+            Cursor opaco devuelto por `bootstrap` o por el `next_cursor` del pull anterior.
+            El cliente **no debe** interpretarlo ni construirlo.
+          schema:
+            $ref: '#/components/schemas/Cursor'
+        - name: limit
+          in: query
+          required: false
+          description: Número máximo de filas (rows + tombstones) por página.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        '200':
+          description: Página de cambios.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PullResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            Cursor caducado (`cursor_expired`). El cliente debe hacer bootstrap completo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/sync/push:
+    post:
+      operationId: syncPush
+      tags: [sync]
+      summary: Lote de operaciones idempotentes (aplicación síncrona transaccional)
+      description: |
+        **Límites de lote (ADR-003): máx. 500 operaciones y máx. 5 MB de cuerpo.**
+        `maxItems: 500` es verificable por esquema; el límite de 5 MB **no es expresable en
+        OpenAPI/JSON Schema** (no existe una restricción de bytes totales) y se aplica en el
+        servidor, que responde `413` con `code: payload_too_large`. El cliente parte el lote.
+
+        Se admite `Content-Encoding: gzip`; los límites se evalúan sobre el cuerpo **descomprimido**.
+
+        La respuesta `200` es un resultado **por operación**: `applied`, `conflict` (incluye
+        `server_row` autoritativa) o `rejected` (validación/permisos; el cliente lo pasa a
+        `quarantine`, nunca lo descarta en silencio). Un `200` global no implica que todas las
+        operaciones se hayan aplicado.
+
+        Reenviar el mismo `op_uuid` devuelve el resultado ya registrado en `sync_op_log`
+        (idempotencia real, no re-aplicación).
+      parameters:
+        - name: Content-Encoding
+          in: header
+          required: false
+          description: Codificación del cuerpo. Se recomienda `gzip` en redes móviles.
+          schema:
+            type: string
+            enum: [gzip]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRequest'
+      responses:
+        '200':
+          description: Lote procesado; resultado por operación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PushResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            Conflicto a nivel de lote (p. ej. `batch_uuid` reutilizado con un contenido distinto).
+            Los conflictos de CAS **por operación** no usan este código: viajan en el `200`
+            con `status: conflict`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --------------------------------------------------------- attachments ----
+
+  /v1/attachments/presign:
+    post:
+      operationId: attachmentsPresign
+      tags: [attachments]
+      summary: URL prefirmada de subida (o respuesta de deduplicación)
+      description: |
+        Si ya existe un `blob` con ese `sha256`, responde `already_present: true` y el cliente
+        **no sube nada** (deduplicación por contenido, ADR-007). Si no existe, devuelve
+        `upload_url` (PUT directo al object storage, expiración 15 min) y los
+        `required_headers` que deben enviarse tal cual en el PUT porque están incluidos en la firma.
+
+        Los bytes **nunca pasan por el API**. Endpoint rate-limited (ADR-008).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresignRequest'
+      responses:
+        '200':
+          description: Resultado de la solicitud de subida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/attachments/{sha256}/commit:
+    post:
+      operationId: attachmentsCommit
+      tags: [attachments]
+      summary: Confirma y verifica el objeto subido
+      description: |
+        Tras el PUT prefirmado el cliente confirma la subida. El servidor hace `HEAD` sobre el
+        objeto y **verifica tamaño, MIME y checksum** antes de registrar el `blob`
+        (`INSERT ... ON CONFLICT DO NOTHING`). Sin esta verificación, la subida prefirmada sería
+        una vía para inyectar contenido arbitrario.
+
+        Idempotente: confirmar un `sha256` ya registrado devuelve el mismo `blob`.
+      parameters:
+        - $ref: '#/components/parameters/Sha256Path'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitRequest'
+      responses:
+        '201':
+          description: Blob confirmado y registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Blob'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: |
+            El objeto no supera la verificación: `attachment_checksum_mismatch` (checksum o tamaño
+            distintos de lo declarado) o MIME fuera de la allow-list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/attachments/{sha256}/url:
+    get:
+      operationId: attachmentsDownloadUrl
+      tags: [attachments]
+      summary: URL prefirmada de descarga
+      description: |
+        Se emite **solo tras comprobar permisos**; el bucket nunca es público. Si el solicitante
+        no puede ver ningún adjunto que referencie ese `sha256`, la respuesta es `404`
+        (denegación por inexistencia, RD-11), no `403`.
+      parameters:
+        - $ref: '#/components/parameters/Sha256Path'
+      responses:
+        '200':
+          description: URL de descarga de corta duración.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ---------------------------------------------------------------- jobs ----
+
+  /v1/jobs/{id}:
+    get:
+      operationId: jobStatus
+      tags: [jobs]
+      summary: Estado de un job asíncrono
+      description: |
+        Solo rol ADMIN. `output` se persiste ya *scrubbed* (RD-12); nunca contiene secretos ni
+        datos personales sin redactar. Un job de otra organización responde `404`, no `403` (RD-11).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Estado del job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # -------------------------------------------------------------- health ----
+
+  /healthz:
+    get:
+      operationId: healthz
+      tags: [health]
+      summary: Liveness
+      description: |
+        El proceso está vivo. **Sin autenticación y sin filtrar información**: no devuelve
+        versiones, hostnames ni estado de dependencias.
+      security: []
+      responses:
+        '200':
+          description: Vivo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /readyz:
+    get:
+      operationId: readyz
+      tags: [health]
+      summary: Readiness
+      description: |
+        El proceso puede atender tráfico (dependencias críticas alcanzables).
+        **Sin autenticación y sin filtrar información**: el cuerpo no indica *qué* dependencia
+        falla; ese detalle vive en los logs.
+      security: []
+      responses:
+        '200':
+          description: Listo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: No listo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token JWT firmado con EdDSA/Ed25519, TTL 15 min, claims mínimos
+        (`sub`, `org`, `device`, `roles`, `jti`, `exp`). No se persiste en el servidor (ADR-008).
+
+  parameters:
+    Sha256Path:
+      name: sha256
+      in: path
+      required: true
+      description: Hash SHA-256 en minúsculas del contenido del adjunto.
+      schema:
+        $ref: '#/components/schemas/Sha256'
+
+  # -- Respuestas de error: el cuerpo uniforme se define UNA vez (Error) y se
+  # -- reutiliza aquí; los endpoints solo referencian estas respuestas.
+  responses:
+    BadRequest:
+      description: Solicitud malformada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: |
+        Credenciales ausentes, inválidas o access token caducado. El cliente intenta **un**
+        refresh; si también falla, pasa a `Disconnected` y pide re-login **sin borrar la outbox**.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: |
+        Autenticado pero sin permiso sobre un recurso que sí puede ver. Los recursos de **otra
+        organización** responden `404`, no `403` (RD-11).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Recurso inexistente o no visible para el solicitante (RD-11).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    PayloadTooLarge:
+      description: |
+        Cuerpo por encima del límite duro (p. ej. lote de sync > 5 MB, o adjunto por encima del
+        tamaño máximo). `code: payload_too_large`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: |
+        Cuerpo sintácticamente válido pero semánticamente inválido (validación de esquema,
+        `schema_unsupported`, checksum de adjunto no coincidente).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: 'Límite de tasa superado. `code: rate_limited`.'
+      headers:
+        Retry-After:
+          description: Segundos que el cliente debe esperar antes de reintentar.
+          schema:
+            type: integer
+            minimum: 0
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Error interno. El `message` es genérico; el detalle vive en los logs (RD-12).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+
+    # ------------------------------------------------------ tipos base ----
+
+    Uuid:
+      type: string
+      format: uuid
+      description: Identificador UUID. Los IDs de entidades sincronizables se generan en el cliente.
+      examples:
+        - 018f3c2a-6f1e-7c3d-9a2b-4d5e6f708192
+
+    Sha256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+      description: SHA-256 hexadecimal en minúsculas.
+      examples:
+        - e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: Instante en RFC 3339 con offset explícito (el servidor emite siempre UTC, `Z`).
+      examples:
+        - '2026-07-30T14:05:09.123Z'
+
+    SchemaVersion:
+      type: integer
+      minimum: 1
+      description: |
+        Versión del *payload* de sincronización (RD-03). Presente en todos los cuerpos de
+        `/v1/sync/*`. Se negocia con `GET /v1/server/info`.
+      examples:
+        - 1
+
+    ChangeSeq:
+      type: integer
+      format: int64
+      minimum: 0
+      description: |
+        Secuencia monótona de cambios por organización. Asignada dentro de la transacción de
+        escritura bajo `pg_advisory_xact_lock(org_id)`.
+
+    Version:
+      type: integer
+      minimum: 0
+      description: Versión de la fila para el CAS optimista (`WHERE version = base_version`).
+
+    Cursor:
+      type: string
+      minLength: 1
+      description: |
+        Cursor de pull **opaco**. Codifica el `change_seq` alcanzado; el cliente lo almacena y lo
+        reenvía tal cual, sin interpretarlo.
+      examples:
+        - 'c1:000000000000102394'
+
+    Mime:
+      type: string
+      enum:
+        - image/jpeg
+        - image/png
+        - image/webp
+        - application/pdf
+      description: Allow-list de tipos MIME aceptados para adjuntos (ADR-007).
+
+    # ----------------------------------------------------------- error ----
+
+    ErrorCode:
+      type: string
+      description: |
+        Código estable y legible por máquina. El cliente lo mapea a un mensaje traducido
+        (patrón `CloudError`); **nunca** muestra `message` crudo al agente de campo.
+
+        Códigos de contrato (doc 08 §6): `conflict`, `cursor_expired`, `payload_too_large`,
+        `schema_unsupported`, `rate_limited`, `attachment_checksum_mismatch`.
+        El resto son códigos genéricos de transporte necesarios para describir 400/401/403/404/500.
+      enum:
+        - conflict
+        - cursor_expired
+        - payload_too_large
+        - schema_unsupported
+        - rate_limited
+        - attachment_checksum_mismatch
+        - invalid_credentials
+        - unauthenticated
+        - forbidden
+        - not_found
+        - validation_error
+        - internal_error
+
+    Error:
+      type: object
+      description: |
+        **Cuerpo de error uniforme de la API** (doc 08 §6). Definido una sola vez y reutilizado
+        en todas las respuestas de error vía `components/responses/*`.
+      required: [code, message]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: |
+            Descripción legible por una persona, en inglés y orientada a diagnóstico.
+            No es texto de UI: la traducción la resuelve el cliente a partir de `code`.
+        details:
+          type: [object, 'null']
+          additionalProperties: true
+          description: |
+            Contexto adicional estructurado y **ya redactado** (RD-12): p. ej.
+            `{"field": "answers.altura_cm", "reason": "out_of_range"}` o
+            `{"expected_sha256": "...", "actual_sha256": "..."}`.
+      examples:
+        - code: cursor_expired
+          message: Cursor is older than the tombstone retention window; run a full bootstrap.
+          details:
+            oldest_available_change_seq: 91230
+
+    # ------------------------------------------------------------ auth ----
+
+    DeviceInfo:
+      type: object
+      description: |
+        Identificación del dispositivo. `device_id` lo genera el cliente y es estable durante toda
+        la vida de la instalación: el refresh token y la outbox son **por dispositivo** (ADR-008).
+      required: [device_id, platform, app_version]
+      properties:
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+        platform:
+          type: string
+          enum: [android, ios]
+        os_version:
+          type: [string, 'null']
+          maxLength: 64
+        model:
+          type: [string, 'null']
+          maxLength: 128
+        app_version:
+          type: string
+          maxLength: 32
+          description: Versión de la app Flutter (semver).
+        display_name:
+          type: [string, 'null']
+          maxLength: 128
+          description: Nombre visible del dispositivo en el back-office ("Tablet campo 3").
+
+    LoginRequest:
+      type: object
+      required: [username, password, device_info]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 256
+          format: password
+        device_info:
+          $ref: '#/components/schemas/DeviceInfo'
+
+    TokenPair:
+      type: object
+      description: |
+        Par de tokens emitido en login y en cada rotación. El `refresh_token` es **opaco**
+        (`selector.verifier`); el servidor solo almacena `sha256(verifier)` (RD-09).
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - refresh_token
+        - refresh_expires_in
+        - server_time
+      properties:
+        access_token:
+          type: string
+          description: JWT Ed25519 de vida corta.
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+          description: Segundos de validez del access token (900 = 15 min).
+        refresh_token:
+          type: string
+          description: Token opaco `selector.verifier`. Se almacena en el llavero seguro del sistema.
+        refresh_expires_in:
+          type: integer
+          minimum: 1
+          description: Segundos de validez del refresh (60 días con uso).
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+
+    LoginResponse:
+      type: object
+      required: [tokens, user]
+      properties:
+        tokens:
+          $ref: '#/components/schemas/TokenPair'
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token, device_id]
+      properties:
+        refresh_token:
+          type: string
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+
+    LogoutRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    UserProfile:
+      type: object
+      required: [id, username, org_id, roles]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        username:
+          type: string
+        display_name:
+          type: [string, 'null']
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        roles:
+          type: array
+          description: Roles del usuario en `org_id` (tabla `membership`).
+          items:
+            type: string
+          examples:
+            - [agent]
+
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+
+    # ---------------------------------------------------------- server ----
+
+    ServerInfo:
+      type: object
+      required:
+        - api_version
+        - schema_version
+        - min_supported_schema_version
+        - server_time
+        - capabilities
+      properties:
+        api_version:
+          type: string
+          const: v1
+        schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        min_supported_schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+        capabilities:
+          $ref: '#/components/schemas/ServerCapabilities'
+
+    ServerCapabilities:
+      type: object
+      description: |
+        Límites operativos que el cliente debe respetar. Se leen del servidor en lugar de
+        codificarse en la app, para poder ajustarlos sin publicar una release.
+      additionalProperties: true
+      required:
+        - sync_push_max_ops
+        - sync_push_max_bytes
+        - sync_pull_max_limit
+        - attachment_max_bytes
+        - attachment_allowed_mime
+      properties:
+        sync_push_max_ops:
+          type: integer
+          minimum: 1
+          description: Máximo de operaciones por lote (ADR-003 = 500).
+          examples: [500]
+        sync_push_max_bytes:
+          type: integer
+          minimum: 1
+          description: Máximo de bytes por lote, ya descomprimido (ADR-003 = 5 MB).
+          examples: [5242880]
+        sync_pull_max_limit:
+          type: integer
+          minimum: 1
+          examples: [1000]
+        attachment_max_bytes:
+          type: integer
+          minimum: 1
+          description: Tamaño máximo por adjunto individual.
+        attachment_allowed_mime:
+          type: array
+          items:
+            $ref: '#/components/schemas/Mime'
+
+    # -------------------------------------------------------- entidades ----
+
+    EntityType:
+      type: string
+      description: Entidades que participan en la sincronización.
+      enum:
+        - visit
+        - visit_attachment
+        - assignment
+        - form_template_version
+
+    Visit:
+      type: object
+      description: |
+        Visita de campo. El `id` lo **genera el cliente** (idempotencia real). `answers` se valida
+        en el servidor contra el JSON Schema de `template_version_id`. La ubicación son
+        **columnas planas**, no geometría (ADR-005).
+      required:
+        - id
+        - org_id
+        - version
+        - change_seq
+        - deleted_at
+        - template_version_id
+        - answers
+        - captured_at
+        - device_id
+        - created_by
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        version:
+          $ref: '#/components/schemas/Version'
+        change_seq:
+          $ref: '#/components/schemas/ChangeSeq'
+        deleted_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Borrado lógico (tombstone). Purga a los 90 días.
+        assignment_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Asignación que originó la visita, si la hubo.
+        template_version_id:
+          $ref: '#/components/schemas/Uuid'
+        answers:
+          type: object
+          additionalProperties: true
+          description: Respuestas del formulario (JSONB), validadas contra `template_version_id`.
+        lat:
+          type: [number, 'null']
+          minimum: -90
+          maximum: 90
+        lon:
+          type: [number, 'null']
+          minimum: -180
+          maximum: 180
+        accuracy_m:
+          type: [number, 'null']
+          minimum: 0
+          description: Precisión horizontal informada por el GPS, en metros.
+        altitude_m:
+          type: [number, 'null']
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+        created_by:
+          $ref: '#/components/schemas/Uuid'
+
+    VisitAttachment:
+      type: object
+      description: |
+        Uso de un blob dentro de una visita. Separa "qué archivo" (`blob`, inmutable y compartido)
+        de "dónde se usa". Una visita se acepta aunque el blob todavía no esté subido: el adjunto
+        queda pendiente y se confirma por el carril de adjuntos.
+      required:
+        - id
+        - org_id
+        - version
+        - change_seq
+        - deleted_at
+        - visit_id
+        - sha256
+        - role
+        - captured_at
+        - order
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        version:
+          $ref: '#/components/schemas/Version'
+        change_seq:
+          $ref: '#/components/schemas/ChangeSeq'
+        deleted_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        visit_id:
+          $ref: '#/components/schemas/Uuid'
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        role:
+          type: string
+          enum: [foto, firma, doc]
+        caption:
+          type: [string, 'null']
+          maxLength: 512
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        order:
+          type: integer
+          minimum: 0
+          description: Orden de presentación dentro de la visita.
+
+    Assignment:
+      type: object
+      description: |
+        Trabajo planificado que origina visitas. Se descarga por el pull; el cliente no la modifica.
+      required:
+        - id
+        - org_id
+        - version
+        - change_seq
+        - deleted_at
+        - template_version_id
+        - assigned_to
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        version:
+          $ref: '#/components/schemas/Version'
+        change_seq:
+          $ref: '#/components/schemas/ChangeSeq'
+        deleted_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        template_version_id:
+          $ref: '#/components/schemas/Uuid'
+        assigned_to:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: [string, 'null']
+          maxLength: 256
+        scheduled_for:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        lat:
+          type: [number, 'null']
+          minimum: -90
+          maximum: 90
+        lon:
+          type: [number, 'null']
+          minimum: -180
+          maximum: 180
+
+    FormTemplateVersion:
+      type: object
+      description: |
+        Versión inmutable de una plantilla de formulario. `definition` es **JSON declarativo**
+        (campos, tipos, etiquetas i18n, obligatoriedad, rangos, visibilidad condicional de un DSL
+        restringido). El cliente la **interpreta**; nunca evalúa código remoto (ADR-012).
+        Cada visita referencia la versión exacta usada, de modo que las visitas históricas siguen
+        siendo interpretables tras cambios de formulario.
+      required:
+        - id
+        - org_id
+        - version
+        - change_seq
+        - deleted_at
+        - template_id
+        - version_number
+        - definition
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        org_id:
+          $ref: '#/components/schemas/Uuid'
+        version:
+          $ref: '#/components/schemas/Version'
+        change_seq:
+          $ref: '#/components/schemas/ChangeSeq'
+        deleted_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        template_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: [string, 'null']
+          maxLength: 256
+        version_number:
+          type: integer
+          minimum: 1
+        definition:
+          type: object
+          additionalProperties: true
+          description: Definición declarativa del formulario. Nunca contiene código ejecutable.
+        published_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+
+    # --------------------------------------------- envoltorios de sync ----
+
+    EntityRecord:
+      description: |
+        Fila autoritativa etiquetada con su entidad. Se usa en el pull (`rows`) y en el resultado
+        de conflicto del push (`server_row`). `entity` es el discriminador.
+      oneOf:
+        - $ref: '#/components/schemas/VisitRecord'
+        - $ref: '#/components/schemas/VisitAttachmentRecord'
+        - $ref: '#/components/schemas/AssignmentRecord'
+        - $ref: '#/components/schemas/FormTemplateVersionRecord'
+      discriminator:
+        propertyName: entity
+        mapping:
+          visit: '#/components/schemas/VisitRecord'
+          visit_attachment: '#/components/schemas/VisitAttachmentRecord'
+          assignment: '#/components/schemas/AssignmentRecord'
+          form_template_version: '#/components/schemas/FormTemplateVersionRecord'
+
+    VisitRecord:
+      type: object
+      required: [entity, data]
+      properties:
+        entity:
+          type: string
+          const: visit
+        data:
+          $ref: '#/components/schemas/Visit'
+
+    VisitAttachmentRecord:
+      type: object
+      required: [entity, data]
+      properties:
+        entity:
+          type: string
+          const: visit_attachment
+        data:
+          $ref: '#/components/schemas/VisitAttachment'
+
+    AssignmentRecord:
+      type: object
+      required: [entity, data]
+      properties:
+        entity:
+          type: string
+          const: assignment
+        data:
+          $ref: '#/components/schemas/Assignment'
+
+    FormTemplateVersionRecord:
+      type: object
+      required: [entity, data]
+      properties:
+        entity:
+          type: string
+          const: form_template_version
+        data:
+          $ref: '#/components/schemas/FormTemplateVersion'
+
+    Tombstone:
+      type: object
+      description: Borrado lógico propagado por el pull.
+      required: [entity, id, change_seq, deleted_at]
+      properties:
+        entity:
+          $ref: '#/components/schemas/EntityType'
+        id:
+          $ref: '#/components/schemas/Uuid'
+        change_seq:
+          $ref: '#/components/schemas/ChangeSeq'
+        deleted_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    # ------------------------------------------------------- bootstrap ----
+
+    BootstrapResponse:
+      type: object
+      required:
+        - schema_version
+        - server_time
+        - cursor
+        - organization
+        - user
+        - form_template_versions
+        - assignments
+        - visits
+        - visit_attachments
+      properties:
+        schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+        cursor:
+          $ref: '#/components/schemas/Cursor'
+        organization:
+          $ref: '#/components/schemas/Organization'
+        user:
+          $ref: '#/components/schemas/UserProfile'
+        form_template_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormTemplateVersion'
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Assignment'
+        visits:
+          type: array
+          items:
+            $ref: '#/components/schemas/Visit'
+        visit_attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisitAttachment'
+
+    # ------------------------------------------------------------ pull ----
+
+    PullResponse:
+      type: object
+      required:
+        - schema_version
+        - server_time
+        - rows
+        - tombstones
+        - next_cursor
+        - has_more
+      properties:
+        schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+        rows:
+          type: array
+          description: Filas cambiadas, en orden estricto ascendente de `change_seq`.
+          items:
+            $ref: '#/components/schemas/EntityRecord'
+        tombstones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tombstone'
+        next_cursor:
+          $ref: '#/components/schemas/Cursor'
+        has_more:
+          type: boolean
+          description: |
+            `true` si quedan cambios por encima de `next_cursor`. El cliente vuelve a llamar
+            inmediatamente; con `false` guarda el cursor y termina el ciclo.
+
+    # ------------------------------------------------------------ push ----
+
+    OpType:
+      type: string
+      enum: [create, update, delete]
+      description: |
+        `create` exige `base_version: null`; `update` y `delete` exigen el `base_version`
+        conocido por el cliente (guarda CAS).
+
+    SyncOp:
+      description: |
+        Operación de outbox. `op_uuid` es UUIDv7 generado en el dispositivo y es la **clave de
+        idempotencia**: reenviarla devuelve el resultado ya registrado en `sync_op_log`.
+        `entity` es el discriminador del payload.
+      oneOf:
+        - $ref: '#/components/schemas/VisitOp'
+        - $ref: '#/components/schemas/VisitAttachmentOp'
+      discriminator:
+        propertyName: entity
+        mapping:
+          visit: '#/components/schemas/VisitOp'
+          visit_attachment: '#/components/schemas/VisitAttachmentOp'
+
+    SyncOpBase:
+      type: object
+      required: [op_uuid, entity, op_type, base_version, payload]
+      properties:
+        op_uuid:
+          $ref: '#/components/schemas/Uuid'
+        op_type:
+          $ref: '#/components/schemas/OpType'
+        base_version:
+          oneOf:
+            - $ref: '#/components/schemas/Version'
+            - type: 'null'
+          description: |
+            Versión sobre la que el cliente basó el cambio. `null` en `create`.
+            El UPSERT aplica `WHERE version = base_version`; si no coincide ⇒ `conflict`.
+
+    VisitOp:
+      allOf:
+        - $ref: '#/components/schemas/SyncOpBase'
+        - type: object
+          required: [entity, payload]
+          properties:
+            entity:
+              type: string
+              const: visit
+            payload:
+              $ref: '#/components/schemas/VisitPayload'
+
+    VisitAttachmentOp:
+      allOf:
+        - $ref: '#/components/schemas/SyncOpBase'
+        - type: object
+          required: [entity, payload]
+          properties:
+            entity:
+              type: string
+              const: visit_attachment
+            payload:
+              $ref: '#/components/schemas/VisitAttachmentPayload'
+
+    VisitPayload:
+      type: object
+      description: |
+        Campos de `visit` que el cliente puede escribir. `org_id`, `version`, `change_seq` y
+        `deleted_at` son **server-authoritative** y no se envían.
+        En `op_type: create` el servidor exige el conjunto completo
+        (`template_version_id`, `answers`, `captured_at`, `device_id`); en `update` basta con los
+        campos que cambian; en `delete` basta con `id`. Esa condicionalidad se valida en el
+        servidor (Pydantic v2) y no se expresa aquí para no romper la generación de modelos.
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        assignment_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        template_version_id:
+          $ref: '#/components/schemas/Uuid'
+        answers:
+          type: object
+          additionalProperties: true
+        lat:
+          type: [number, 'null']
+          minimum: -90
+          maximum: 90
+        lon:
+          type: [number, 'null']
+          minimum: -180
+          maximum: 180
+        accuracy_m:
+          type: [number, 'null']
+          minimum: 0
+        altitude_m:
+          type: [number, 'null']
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+
+    VisitAttachmentPayload:
+      type: object
+      description: |
+        Campos de `visit_attachment` que el cliente puede escribir. El `sha256` puede referenciar
+        un blob **aún no subido**: el dato estructurado no espera a los bytes.
+      required: [id]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        visit_id:
+          $ref: '#/components/schemas/Uuid'
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        role:
+          type: string
+          enum: [foto, firma, doc]
+        caption:
+          type: [string, 'null']
+          maxLength: 512
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        order:
+          type: integer
+          minimum: 0
+
+    PushRequest:
+      type: object
+      description: |
+        Lote de operaciones. **Máx. 500 ops (`maxItems`) y máx. 5 MB de cuerpo descomprimido**
+        (ADR-003). El límite de bytes no es expresable en JSON Schema: se aplica en el servidor
+        y devuelve `413 payload_too_large`.
+      required: [schema_version, device_id, batch_uuid, ops]
+      properties:
+        schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+        batch_uuid:
+          $ref: '#/components/schemas/Uuid'
+        ops:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/SyncOp'
+
+    OpStatus:
+      type: string
+      enum: [applied, conflict, rejected]
+      description: |
+        - `applied`: la operación se aplicó; el cliente borra la op de la outbox y actualiza `version`.
+        - `conflict`: el CAS falló; `server_row` trae la fila autoritativa, que reemplaza la local.
+          La versión local del agente se conserva en `quarantine`, **nunca se descarta en silencio**.
+        - `rejected`: validación o permisos; `error` explica por qué. Va a `quarantine` para que
+          el agente corrija y reenvíe.
+
+    OpResult:
+      type: object
+      required: [op_uuid, entity, status]
+      properties:
+        op_uuid:
+          $ref: '#/components/schemas/Uuid'
+        entity:
+          $ref: '#/components/schemas/EntityType'
+        entity_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/OpStatus'
+        server_version:
+          oneOf:
+            - $ref: '#/components/schemas/Version'
+            - type: 'null'
+          description: Versión resultante en `applied`, o versión autoritativa actual en `conflict`.
+        server_row:
+          oneOf:
+            - $ref: '#/components/schemas/EntityRecord'
+            - type: 'null'
+          description: |
+            Fila autoritativa completa. Obligatoria en `conflict` (evita re-descargar todo);
+            opcional en `applied`.
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/Error'
+            - type: 'null'
+          description: 'Presente en `rejected` (y en `conflict` con `code: conflict`).'
+
+    PushResponse:
+      type: object
+      required: [schema_version, server_time, results]
+      properties:
+        schema_version:
+          $ref: '#/components/schemas/SchemaVersion'
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+        results:
+          type: array
+          description: Un resultado por operación enviada, en el mismo orden.
+          items:
+            $ref: '#/components/schemas/OpResult'
+
+    # ----------------------------------------------------- attachments ----
+
+    PresignRequest:
+      type: object
+      required: [sha256, size, mime]
+      properties:
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        size:
+          type: integer
+          minimum: 1
+          description: Tamaño exacto en bytes. Se fija en la firma y se verifica en el commit.
+        mime:
+          $ref: '#/components/schemas/Mime'
+        visit_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Visita a la que se destina, para comprobar permisos y cuota por visita.
+
+    PresignResponse:
+      type: object
+      description: |
+        Si `already_present` es `true`, el blob ya existe (deduplicación) y `upload_url`,
+        `expires_in` y `required_headers` son `null`: el cliente marca el adjunto como subido y
+        pasa directamente al siguiente. Si es `false`, los tres campos vienen informados.
+      required: [already_present, server_time]
+      properties:
+        already_present:
+          type: boolean
+        upload_url:
+          type: [string, 'null']
+          format: uri
+          description: URL prefirmada para un `PUT` directo al object storage.
+        expires_in:
+          type: [integer, 'null']
+          minimum: 1
+          description: Segundos de validez de la URL (900 = 15 min).
+        required_headers:
+          type: [object, 'null']
+          additionalProperties:
+            type: string
+          description: |
+            Cabeceras que el `PUT` debe enviar **exactamente** porque forman parte de la firma
+            (`Content-Length`, `Content-Type`).
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+
+    CommitRequest:
+      type: object
+      description: |
+        Tamaño y MIME declarados; el servidor hace `HEAD` sobre el objeto y los verifica junto al
+        checksum antes de registrar el blob. Discrepancia ⇒ `422 attachment_checksum_mismatch`.
+      required: [size, mime]
+      properties:
+        size:
+          type: integer
+          minimum: 1
+        mime:
+          $ref: '#/components/schemas/Mime'
+
+    Blob:
+      type: object
+      description: Blob inmutable direccionado por contenido.
+      required: [sha256, size, mime, created_at]
+      properties:
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        size:
+          type: integer
+          minimum: 1
+        mime:
+          $ref: '#/components/schemas/Mime'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    DownloadUrlResponse:
+      type: object
+      required: [url, expires_in, server_time]
+      properties:
+        url:
+          type: string
+          format: uri
+        expires_in:
+          type: integer
+          minimum: 1
+        mime:
+          $ref: '#/components/schemas/Mime'
+        size:
+          type: integer
+          minimum: 1
+        server_time:
+          $ref: '#/components/schemas/Timestamp'
+
+    # ------------------------------------------------------------ jobs ----
+
+    JobStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, dead_letter]
+      description: |
+        `dead_letter` = se superó `max_attempts`; requiere intervención desde el back-office.
+        Un job cuyo `locked_until` expira vuelve a `pending` por acción del reaper (RD-13).
+
+    Job:
+      type: object
+      description: |
+        Estado de un trabajo asíncrono (reportes, exportaciones). Solo ADMIN. No expone
+        `payload`, `locked_by` ni `locked_until`: son detalle interno del worker.
+      required: [id, type, status, attempts, max_attempts, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        type:
+          type: string
+          description: Tipo de job (p. ej. `export_visits_csv`).
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        attempts:
+          type: integer
+          minimum: 0
+        max_attempts:
+          type: integer
+          minimum: 1
+        run_after:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+        finished_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+        output:
+          type: [object, 'null']
+          additionalProperties: true
+          description: Salida ya *scrubbed* (RD-12). `null` mientras el job no ha terminado.
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/Error'
+            - type: 'null'
+          description: Motivo del fallo en `failed` / `dead_letter`.
+
+    # ---------------------------------------------------------- health ----
+
+    HealthStatus:
+      type: object
+      description: |
+        Cuerpo deliberadamente mínimo: **no filtra información** (ni versión, ni hostname, ni qué
+        dependencia falla).
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
