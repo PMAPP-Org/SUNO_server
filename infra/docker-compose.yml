@@ -1,0 +1,94 @@
+# VisitaCampo — Docker Compose base (ADR-010, docs/08 §5 "Hosting")
+#
+# Cuatro servicios fijos por ADR-010: caddy, api, worker, db.
+# Este archivo es el común a TODOS los entornos (dev/selfhosted/managed); lo que
+# cambia por entorno se añade con overrides seleccionados vía la variable de
+# entorno COMPOSE_FILE (ver infra/README.md). NO declarar aquí nada específico
+# de un entorno (puertos de depuración, MinIO, hot-reload, etc.) — eso vive en
+# override.dev.yml y, en pasos posteriores de infraestructura, en
+# override.selfhosted.yml / override.managed.yml.
+#
+# `api` y `worker` todavía no tienen código real (Django se crea en el Paso 4,
+# la cola de trabajos en el Paso 19): aquí quedan como placeholders funcionales
+# (imagen base + comando de espera) para que `docker compose up` no falle y
+# para que la topología de red/servicios ya exista y no haya que reescribir
+# este archivo cuando llegue el código real. Ver comentarios inline en cada
+# servicio para instrucciones de activación.
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Sin `ports:` aquí a propósito: en producción Postgres no se expone al
+    # host/Internet (docs/08 ADR-010, "sin acceso público a Postgres"). El
+    # override de desarrollo publica 5432 para poder conectar herramientas
+    # locales (psql, DBeaver, etc.).
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      # Ver infra/Caddyfile y infra/README.md para el significado de cada uno.
+      CADDY_DOMAIN: ${CADDY_DOMAIN}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+    depends_on:
+      - api
+
+  api:
+    # PLACEHOLDER — sin código real hasta el Paso 4 (esqueleto Django Ninja).
+    # Activación en el Paso 4:
+    #   1. Sustituir `image:` por:
+    #        build:
+    #          context: ../server
+    #          dockerfile: Dockerfile
+    #   2. Sustituir `command:` por el proceso real (gunicorn/uvicorn en base;
+    #      el override de dev ya trae `manage.py runserver` con hot-reload).
+    #   3. Añadir el resto de variables de entorno Django/JWT/S3 de `.env.example`.
+    image: python:3.12-slim
+    restart: unless-stopped
+    command: ["sh", "-c", "echo 'api: placeholder sin codigo Django (activar en Paso 4, ver infra/docker-compose.yml)'; sleep infinity"]
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    # PLACEHOLDER — sin código real hasta el Paso 19 (cola de trabajos SKIP LOCKED).
+    # Activación en el Paso 19: análoga a `api` (build del mismo Dockerfile de
+    # `server/`, pero con `command` apuntando al entrypoint del worker en vez
+    # del servidor HTTP).
+    image: python:3.12-slim
+    restart: unless-stopped
+    command: ["sh", "-c", "echo 'worker: placeholder sin codigo (activar en Paso 19, ver infra/docker-compose.yml)'; sleep infinity"]
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: ${DJANGO_DEBUG}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

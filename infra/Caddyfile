@@ -1,0 +1,64 @@
+# VisitaCampo — Caddyfile (docs/08 ADR-010, RD-15)
+#
+# Caddy sustituye a nginx + certbot + mkcert (ADR-010, patrón N-17 evitado):
+# TLS automático (ACME) con una sola línea, HTTP/2 y HTTP/3, HSTS por defecto.
+#
+# TLS por entorno — un único Caddyfile para dev y producción, seleccionado por
+# el valor de la variable de entorno CADDY_DOMAIN (ver .env / .env.example):
+#
+#   - Producción: CADDY_DOMAIN=visitas.tudominio.com (o el dominio real).
+#     Al ser un nombre DNS público, Caddy emite y renueva automáticamente un
+#     certificado Let's Encrypt vía ACME (HTTP-01/TLS-ALPN) — cero
+#     configuración manual de certificados.
+#   - Desarrollo local: CADDY_DOMAIN=localhost (valor por defecto en
+#     .env.example). Como "localhost" no es un nombre DNS público resoluble,
+#     Caddy detecta que ACME es inviable y usa automáticamente su propia CA
+#     interna para emitir un certificado autofirmado válido para HTTPS local
+#     (sin warnings de ACME, sin tocar este archivo). El navegador mostrará
+#     un aviso de certificado no confiable la primera vez -- es esperado y
+#     documentado (docs/08 §5, TLS/self-hosted): en dev no hay pinning ni
+#     TOFU, es tráfico 100% local.
+#     Alternativa aún más simple para depuración rápida: CADDY_DOMAIN=:80
+#     sirve en HTTP plano sin TLS en absoluto.
+#
+{
+	email {$CADDY_ACME_EMAIL:admin@example.com}
+}
+
+{$CADDY_DOMAIN:localhost} {
+	encode zstd gzip
+
+	# --- RD-15 (docs/07, MEDIUM) ---------------------------------------------
+	# `SECURE_PROXY_SSL_HEADER` en Django confía en `X-Forwarded-Proto` para
+	# decidir si la conexión original era HTTPS. Si un proxy reenviara el
+	# valor que mande el cliente, un atacante en HTTP plano podría spoofear
+	# `X-Forwarded-Proto: https` y saltarse cookies/CSRF "secure". Por eso
+	# Caddy, como único borde de confianza, SOBRESCRIBE (no añade, no reenvía)
+	# esta cabecera de forma incondicional con el esquema real de la conexión
+	# entrante a Caddy, junto con Host y For para que Django los use de forma
+	# consistente. `header_up <campo> <valor>` en Caddy siempre REEMPLAZA el
+	# valor entrante (a diferencia de `+<campo>`, que añadiría); por tanto
+	# cualquier `X-Forwarded-Proto` enviado por el cliente llega descartado.
+	# La verificación funcional completa (Django confiando en este único
+	# proxy) se hace en el Paso 25.
+	reverse_proxy api:8000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-For {remote_host}
+		header_up Host {host}
+	}
+
+	header {
+		# HSTS solo tiene efecto real bajo HTTPS (producción); en dev con
+		# certificado interno o HTTP plano el navegador la ignora o no aplica.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Defensa en profundidad básica; no sustituye la configuración de
+		# seguridad de Django (CSP/permissions-policy se revisan en Paso 25).
+		X-Content-Type-Options "nosniff"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

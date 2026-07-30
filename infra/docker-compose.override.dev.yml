@@ -1,0 +1,103 @@
+# VisitaCampo — override de DESARROLLO (docs/08 ADR-010: "override.dev.yml
+# (hot reload, MinIO local, MailHog)").
+#
+# Se activa vía la variable de entorno COMPOSE_FILE (ver infra/README.md):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.override.dev.yml
+#
+# Añade, respecto a la base (infra/docker-compose.yml):
+#   - Puertos publicados al host para depuración local (db, api).
+#   - Placeholder de hot-reload para `api` (montaje de código fuente; el
+#     comando real de recarga automática se activa en el Paso 4 junto con el
+#     código Django — hasta entonces sigue siendo el placeholder de la base).
+#   - MinIO como emulador local de almacenamiento S3-compatible, para probar
+#     el flujo de adjuntos (ADR-007 / Paso 17) sin depender de red ni de
+#     credenciales reales de Cloudflare R2. Incluye un contenedor `createbuckets`
+#     de un solo uso que crea el bucket automáticamente al arrancar.
+#   - MailHog para capturar correo saliente (reseteo de contraseña, alertas)
+#     sin enviarlo de verdad. Se incluye explícitamente porque ADR-010 lo lista
+#     como parte de `override.dev.yml`; no hay activación pendiente, ya queda
+#     funcional en este paso (Django todavía no envía correo real: eso llega
+#     con el código del Paso 4 en adelante, pero el servicio SMTP ya está listo).
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  caddy:
+    # CADDY_DOMAIN por defecto (.env.example) es `localhost`: Caddy emite un
+    # certificado interno autofirmado automáticamente (ver infra/Caddyfile).
+    # No hace falta ningún override aquí; se deja el servicio documentado
+    # para que quede claro que en dev SÍ se usa el mismo Caddyfile que en
+    # producción, solo cambia el valor de la variable de entorno.
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+
+  api:
+    # Placeholder de hot-reload: se monta `server/` completo dentro del
+    # contenedor para que, en cuanto exista código (Paso 4), los cambios se
+    # reflejen sin reconstruir la imagen. El `command` de la base (sleep
+    # infinity) sigue aplicando hasta el Paso 4; a partir de ahí este mismo
+    # override debe cambiar `command` a algo como:
+    #   command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    # (o el equivalente con recarga automática del servidor ASGI elegido).
+    volumes:
+      - ../server:/app
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "true"
+      STORAGE_S3_ENDPOINT_URL: http://minio:9000
+      STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
+      STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
+      STORAGE_S3_USE_PATH_STYLE: "true"
+      EMAIL_HOST: mailhog
+      EMAIL_PORT: "1025"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${STORAGE_S3_SECRET_ACCESS_KEY}
+    ports:
+      - "9000:9000" # API S3-compatible
+      - "9001:9001" # Consola web
+    volumes:
+      - minio_data:/data
+
+  createbuckets:
+    # Contenedor de un solo uso: crea el bucket de desarrollo si no existe y
+    # termina. Patrón tomado de QFieldCloud (docs/05 §1, `createbuckets`).
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    restart: "no"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        mc alias set local http://minio:9000 "$$STORAGE_S3_ACCESS_KEY_ID" "$$STORAGE_S3_SECRET_ACCESS_KEY" &&
+        mc mb --ignore-existing "local/$$STORAGE_S3_BUCKET_NAME"
+    environment:
+      STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
+      STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # UI web
+
+volumes:
+  minio_data:
