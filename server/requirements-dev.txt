@@ -1,0 +1,8 @@
+# VisitaCampo backend — dependencias de desarrollo/CI (Paso 4).
+# ruff/mypy/pytest ya los instala .github/workflows/backend.yml e
+# infra/scripts/ci_local.sh directamente (Paso 3); este archivo documenta
+# las versiones usadas para desarrollar y verificar este paso localmente.
+-r requirements.txt
+ruff==0.16.1
+mypy==2.3.0
+pytest==9.1.1

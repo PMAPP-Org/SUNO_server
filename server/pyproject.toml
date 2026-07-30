@@ -1,0 +1,58 @@
+[project]
+name = "visitacampo-server"
+version = "0.1.0"
+description = "VisitaCampo backend — Django 5 + Django Ninja (ADR-004, sin DRF)"
+requires-python = ">=3.12"
+
+# --- ruff --------------------------------------------------------------
+# Configuración base (Paso 4): reglas estándar razonables, no exhaustivas.
+# Se invoca como `ruff check server/` desde la raíz del repo
+# (.github/workflows/backend.yml, infra/scripts/ci_local.sh, Paso 3).
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "DJ",  # flake8-django
+]
+ignore = [
+    "DJ001", # nullable CharField/TextField: no hay modelos todavía (Paso 4)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "visitacampo"]
+
+[tool.ruff.lint.per-file-ignores]
+# settings/dev.py y prod.py reexportan base.py con `import *` a propósito
+# (patrón estándar de settings divididos de Django).
+"config/settings/dev.py" = ["F403", "F405"]
+"config/settings/prod.py" = ["F403", "F405"]
+
+# --- mypy ----------------------------------------------------------------
+# Configuración base (Paso 4). Se invoca como `mypy server/` desde la raíz
+# del repo; mypy solo busca configuración en el directorio desde el que se
+# invoca (no en el argumento de ruta), así que este mismo archivo se
+# referencia explícitamente con --config-file en CI/ci_local.sh.
+[tool.mypy]
+python_version = "3.12"
+exclude = "migrations/"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# Los settings usan `from .base import *`, lo que mypy no puede resolver
+# de forma completa/estricta; y las migraciones (cuando existan) son
+# generadas por Django, no código de mano.
+module = "config.settings.*"
+ignore_errors = true

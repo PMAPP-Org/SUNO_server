@@ -1,0 +1,10 @@
+# VisitaCampo backend — dependencias de runtime (Paso 4).
+# Versiones ancladas a lo verificado en este paso; se actualizan
+# deliberadamente en pasos posteriores, no con floats sin techo.
+# ADR-004: Django 5.x LTS + Django Ninja (Pydantic v2) + PostgreSQL, sin DRF.
+# ADR-008: Argon2id (`argon2-cffi`) como hasher de contraseñas primario.
+
+Django==5.2.16
+django-ninja==1.6.2
+argon2-cffi==25.1.0
+psycopg[binary]==3.3.4

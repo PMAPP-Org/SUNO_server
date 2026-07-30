@@ -78,7 +78,10 @@ if ! has_py_files; then
 	skip "mypy server/" "server/ todavía no tiene archivos .py (Paso 4)"
 elif ! command_exists mypy; then
 	skip "mypy server/" "mypy no está instalado en este entorno"
-elif mypy server/; then
+# mypy busca su configuración en el directorio desde el que se invoca (la
+# raíz del repo aquí), no en el argumento de ruta, así que
+# server/pyproject.toml (Paso 4) se referencia explícitamente.
+elif mypy --config-file server/pyproject.toml server/; then
 	pass "mypy server/"
 else
 	fail "mypy server/"

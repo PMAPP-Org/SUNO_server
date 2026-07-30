@@ -48,13 +48,27 @@ jobs:
       - name: Instalar ruff, mypy, pytest
         run: python -m pip install --upgrade pip ruff mypy pytest
 
+      - name: Instalar dependencias del proyecto (server/requirements.txt)
+        # Añadido en el Paso 4: sin esto, Django/Ninja/Argon2/psycopg no
+        # están disponibles y mypy/pytest/manage.py fallarían con
+        # ModuleNotFoundError en vez de evaluar el código real.
+        run: |
+          if [ -f server/requirements.txt ]; then
+            python -m pip install -r server/requirements.txt
+          else
+            echo "server/requirements.txt todavía no existe (se crea en el Paso 4) — instalación omitida."
+          fi
+
       - name: ruff check server/
         run: ruff check server/
 
       - name: mypy server/
         run: |
           if find server -name '*.py' -not -path '*/.venv/*' | grep -q .; then
-            mypy server/
+            # mypy busca su configuración en el directorio desde el que se
+            # invoca (la raíz del repo aquí), no en el argumento de ruta, así
+            # que server/pyproject.toml (Paso 4) se referencia explícitamente.
+            mypy --config-file server/pyproject.toml server/
           else
             echo "server/ todavía no tiene archivos .py (se crea en el Paso 4) — mypy pasa vacío."
           fi
