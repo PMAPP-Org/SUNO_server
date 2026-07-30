@@ -198,6 +198,11 @@ paths:
         la purga de tombstones, 90 días). Devuelve el estado visible completo para el
         `RequestContext` del solicitante y el `cursor` desde el que continuar con
         `GET /v1/sync/pull`.
+
+        **Sin paginación en v1** (doc 08 §6: "estado inicial completo"). El campo `has_more` de
+        la respuesta está **reservado** —siempre `false` en v1— para poder introducir paginación
+        más adelante sin que los clientes ya desplegados se queden con un estado incompleto sin
+        enterarse.
       responses:
         '200':
           description: Estado inicial.
@@ -280,7 +285,12 @@ paths:
         operaciones se hayan aplicado.
 
         Reenviar el mismo `op_uuid` devuelve el resultado ya registrado en `sync_op_log`
-        (idempotencia real, no re-aplicación).
+        (idempotencia real, no re-aplicación). **La unidad de idempotencia es la operación
+        (`op_uuid`), nunca el lote** (ADR-003): un lote puede reenviarse con un conjunto de
+        operaciones distinto —el cliente pudo mutar su outbox entre intentos— y el resultado
+        sigue siendo correcto, porque cada operación se resuelve por separado. `batch_uuid` es
+        solo telemetría/auditoría (`sync_op_log`, §4.4) y **no** tiene semántica de detección de
+        conflictos: reutilizarlo no produce ningún error.
       parameters:
         - name: Content-Encoding
           in: header
@@ -305,15 +315,6 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: |
-            Conflicto a nivel de lote (p. ej. `batch_uuid` reutilizado con un contenido distinto).
-            Los conflictos de CAS **por operación** no usan este código: viajan en el `200`
-            con `status: conflict`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -798,7 +799,11 @@ components:
 
     UserProfile:
       type: object
-      required: [id, username, org_id, roles]
+      description: |
+        Perfil del usuario autenticado. Se emite en `login` y se lee de nuevo en
+        `GET /v1/sync/bootstrap`, por lo que sigue la convención de entidades emitidas por el
+        servidor: **todas las propiedades son `required`** y la opcionalidad se expresa con `null`.
+      required: [id, username, display_name, org_id, roles]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -901,14 +906,24 @@ components:
         Visita de campo. El `id` lo **genera el cliente** (idempotencia real). `answers` se valida
         en el servidor contra el JSON Schema de `template_version_id`. La ubicación son
         **columnas planas**, no geometría (ADR-005).
+
+        **Todas las propiedades son `required`** (convención de entidades emitidas por el
+        servidor): lo que es opcional lo es en el *valor* (`null`), nunca en la *presencia*.
+        Así el test de deriva Ninja↔contrato detecta un backend que omita un campo en vez de
+        emitirlo como `null`.
       required:
         - id
         - org_id
         - version
         - change_seq
         - deleted_at
+        - assignment_id
         - template_version_id
         - answers
+        - lat
+        - lon
+        - accuracy_m
+        - altitude_m
         - captured_at
         - device_id
         - created_by
@@ -964,6 +979,9 @@ components:
         Uso de un blob dentro de una visita. Separa "qué archivo" (`blob`, inmutable y compartido)
         de "dónde se usa". Una visita se acepta aunque el blob todavía no esté subido: el adjunto
         queda pendiente y se confirma por el carril de adjuntos.
+
+        **Todas las propiedades son `required`** (convención de entidades emitidas por el
+        servidor); la opcionalidad se expresa con `null` en el valor, no con la ausencia del campo.
       required:
         - id
         - org_id
@@ -973,6 +991,7 @@ components:
         - visit_id
         - sha256
         - role
+        - caption
         - captured_at
         - order
       properties:
@@ -1009,6 +1028,9 @@ components:
       type: object
       description: |
         Trabajo planificado que origina visitas. Se descarga por el pull; el cliente no la modifica.
+
+        **Todas las propiedades son `required`** (convención de entidades emitidas por el
+        servidor); la opcionalidad se expresa con `null` en el valor, no con la ausencia del campo.
       required:
         - id
         - org_id
@@ -1017,6 +1039,10 @@ components:
         - deleted_at
         - template_version_id
         - assigned_to
+        - title
+        - scheduled_for
+        - lat
+        - lon
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -1058,6 +1084,9 @@ components:
         restringido). El cliente la **interpreta**; nunca evalúa código remoto (ADR-012).
         Cada visita referencia la versión exacta usada, de modo que las visitas históricas siguen
         siendo interpretables tras cambios de formulario.
+
+        **Todas las propiedades son `required`** (convención de entidades emitidas por el
+        servidor); la opcionalidad se expresa con `null` en el valor, no con la ausencia del campo.
       required:
         - id
         - org_id
@@ -1065,8 +1094,10 @@ components:
         - change_seq
         - deleted_at
         - template_id
+        - name
         - version_number
         - definition
+        - published_at
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -1174,6 +1205,16 @@ components:
 
     BootstrapResponse:
       type: object
+      description: |
+        Estado inicial **completo** para el `RequestContext` del solicitante (doc 08 §6), sin
+        paginación en v1.
+
+        `has_more` está **reservado**: en v1 el servidor lo emite siempre como `false` (o lo omite)
+        y el cliente debe tratar su ausencia como `false`. Existe para que, si en el futuro el
+        bootstrap necesita paginarse, ese cambio no sea una puerta de un solo sentido: los
+        clientes ya desplegados conocen el campo y lo toleran en vez de ignorar silenciosamente
+        que quedaba estado por descargar. **No se define `limit` ni continuación en v1**; hacerlo
+        exigiría el ciclo normal de `schema_version`.
       required:
         - schema_version
         - server_time
@@ -1211,6 +1252,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VisitAttachment'
+        has_more:
+          type: boolean
+          default: false
+          description: |
+            **Reservado para compatibilidad futura.** En v1 es siempre `false`: el bootstrap
+            devuelve el estado inicial completo. Deliberadamente **no** está en `required`, para
+            que un servidor v1 pueda omitirlo; el cliente interpreta la ausencia como `false`.
+            Si una versión futura pagina el bootstrap, este campo pasará a `true` en las páginas
+            intermedias sin necesidad de romper a los clientes ya desplegados.
 
     # ------------------------------------------------------------ pull ----
 
@@ -1379,6 +1429,9 @@ components:
         Lote de operaciones. **Máx. 500 ops (`maxItems`) y máx. 5 MB de cuerpo descomprimido**
         (ADR-003). El límite de bytes no es expresable en JSON Schema: se aplica en el servidor
         y devuelve `413 payload_too_large`.
+
+        La idempotencia es **por operación** (`op_uuid`), no por lote: reenviar el mismo
+        `batch_uuid` con un conjunto de operaciones distinto es legítimo y no produce error.
       required: [schema_version, device_id, batch_uuid, ops]
       properties:
         schema_version:
@@ -1387,6 +1440,11 @@ components:
           $ref: '#/components/schemas/Uuid'
         batch_uuid:
           $ref: '#/components/schemas/Uuid'
+          description: |
+            Identificador del intento de envío, usado como **telemetría y auditoría** en
+            `sync_op_log` (§4.4): permite correlacionar en los logs qué operaciones viajaron
+            juntas. **No es clave de idempotencia ni de detección de conflictos** — esa función
+            la cumple `op_uuid` (ADR-003).
         ops:
           type: array
           minItems: 1
@@ -1558,7 +1616,20 @@ components:
       description: |
         Estado de un trabajo asíncrono (reportes, exportaciones). Solo ADMIN. No expone
         `payload`, `locked_by` ni `locked_until`: son detalle interno del worker.
-      required: [id, type, status, attempts, max_attempts, created_at]
+
+        **Todas las propiedades son `required`** (convención de entidades emitidas por el
+        servidor); la opcionalidad se expresa con `null` en el valor, no con la ausencia del campo.
+      required:
+        - id
+        - type
+        - status
+        - attempts
+        - max_attempts
+        - run_after
+        - created_at
+        - finished_at
+        - output
+        - error
       properties:
         id:
           $ref: '#/components/schemas/Uuid'

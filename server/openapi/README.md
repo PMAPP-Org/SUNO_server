@@ -84,6 +84,30 @@ Paso 9) para que servidor y cliente validen **exactamente los mismos bytes**.
 5. `id`, `version`, `change_seq`, `deleted_at` y `org_id` son **server-authoritative** salvo el
    `id` de las entidades creadas en el dispositivo. El cliente nunca los envía en un payload de
    push (ver `VisitPayload` / `VisitAttachmentPayload`).
+6. **Presencia vs. valor: dos convenciones opuestas y deliberadas.**
+   - **Entidades emitidas por el servidor** (`Visit`, `VisitAttachment`, `Assignment`,
+     `FormTemplateVersion`, `Job`, `UserProfile`, `Organization`, `Blob` — todo lo que se lee de
+     `/v1/sync/pull`, `/v1/sync/bootstrap` o como `server_row` de un `OpResult`): **el 100% de
+     las propiedades declaradas está en `required`**. Lo que es opcional lo es en el *valor*
+     (`type: [..., 'null']`, o `oneOf: [$ref, {type: 'null'}]` cuando el tipo base es un `$ref`),
+     nunca en la *presencia*. Sin esta regla, dos backends pueden validar contra el mismo esquema
+     emitiendo uno el campo ausente y el otro `null`, y el test de deriva Ninja↔contrato **no lo
+     detectaría**: la divergencia se descubriría en el dispositivo, en campo.
+   - **Payloads escribibles por el cliente** (`VisitPayload`, `VisitAttachmentPayload`): lo
+     contrario. Solo `id` es `required` porque **la ausencia es significativa**: un `op_type:
+     delete` envía solo `id`, y un `update` envía solo los campos que cambian. Aquí "campo
+     ausente" y "campo a `null`" son dos intenciones distintas (no tocar vs. borrar el valor) y el
+     esquema debe poder distinguirlas.
+
+   Añadir una propiedad nueva a una entidad del servidor sigue siendo un cambio compatible
+   (regla 3): entra ya en `required` y como nullable, y los clientes antiguos la ignoran. Lo que
+   la regla 6 fija es la **salida del servidor**, no la tolerancia del cliente.
+7. **La unidad de idempotencia es `op_uuid`, nunca el lote** (ADR-003). `batch_uuid` es
+   telemetría/auditoría de `sync_op_log` (§4.4) y **no** debe adquirir semántica de detección de
+   conflictos: un cliente puede reenviar el mismo `batch_uuid` con un conjunto de operaciones
+   distinto (mutó su outbox entre intentos) y eso es legítimo. `POST /v1/sync/push` no tiene, por
+   tanto, ningún conflicto a nivel de lote; los conflictos de CAS viajan **por operación** en el
+   `200`, con `status: conflict` y `server_row`.
 
 ## Límites no expresables en el esquema
 
@@ -126,3 +150,14 @@ revisión si algún paso posterior descubre una necesidad distinta:
 - **`cursor` como cadena opaca** en lugar de exponer `change_seq` crudo: permite migrar al
   *escape hatch* de cursor por snapshot (§4.4) sin romper el contrato.
 - **`attachment_checksum_mismatch` se sirve con `422`**, reservando `409` para el conflicto de CAS.
+- **`BootstrapResponse.has_more` es un placeholder de compatibilidad futura, reservado a
+  propósito.** Doc 08 §6 pide "estado inicial completo" y v1 **no pagina** el bootstrap: el campo
+  se emite siempre como `false` y no existe ningún parámetro `limit` ni token de continuación.
+  Está declarado —y solo declarado— porque un bootstrap sin techo de tamaño es una **puerta de un
+  solo sentido** frente a la regla 4: si mañana hiciera falta paginarlo, los clientes ya
+  desplegados (S-08: dispositivos que pasan semanas offline) leerían la primera página como si
+  fuera el estado completo y **fallarían en silencio**, que es exactamente lo que la regla 4
+  prohíbe. Al reservar el campo ahora, esos clientes ya lo conocen y toleran.
+  Es el único caso del contrato en el que se declara algo que v1 no usa; queda deliberadamente
+  **fuera de `required`** (un servidor v1 puede omitirlo; el cliente trata la ausencia como
+  `false`) y no implica compromiso alguno de implementar paginación.
