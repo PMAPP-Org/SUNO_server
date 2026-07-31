@@ -30,6 +30,7 @@ ampliarla obliga a tocar este archivo, que es la fricción que se busca.
 from __future__ import annotations
 
 import ast
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,22 +91,33 @@ def scan_source(source: str, relative_path: str) -> list[Violation]:
     ]
 
 
-def production_modules() -> list[Path]:
-    """Todos los `.py` de producción del servidor, en orden estable."""
+def production_modules(root: Path = SERVER_ROOT) -> list[Path]:
+    """Todos los `.py` de producción bajo `root`, en orden estable.
+
+    `root` es opcional y por defecto es el `SERVER_ROOT` real: todos los
+    llamadores existentes (incluido `scan_repository()`) siguen escaneando el
+    repositorio de verdad sin cambiar una línea. El parámetro solo existe para
+    que `NegativeCaseTests` pueda apuntar el mismo recorrido a un
+    `tempfile.TemporaryDirectory()` en vez de escribir en el árbol de
+    producción real (ver esa clase).
+    """
     modules: list[Path] = []
     for package in SCANNED_PACKAGES:
-        for path in sorted((SERVER_ROOT / package).rglob("*.py")):
-            if SKIPPED_DIR_NAMES.intersection(path.relative_to(SERVER_ROOT).parts):
+        for path in sorted((root / package).rglob("*.py")):
+            if SKIPPED_DIR_NAMES.intersection(path.relative_to(root).parts):
                 continue
             modules.append(path)
     return modules
 
 
-def scan_repository() -> list[Violation]:
-    """Aplica `scan_source` a todo el código de producción no exento."""
+def scan_repository(root: Path = SERVER_ROOT) -> list[Violation]:
+    """Aplica `scan_source` a todo el código de producción no exento bajo `root`.
+
+    Mismo `root` opcional que `production_modules()` y por la misma razón.
+    """
     violations: list[Violation] = []
-    for path in production_modules():
-        relative_path = path.relative_to(SERVER_ROOT).as_posix()
+    for path in production_modules(root):
+        relative_path = path.relative_to(root).as_posix()
         if is_allowed(relative_path):
             continue
         violations.extend(scan_source(path.read_text(encoding="utf-8"), relative_path))
@@ -214,23 +226,38 @@ class WalkerTests(SimpleTestCase):
 class NegativeCaseTests(SimpleTestCase):
     """El caso negativo del brief, ejecutado de verdad y no solo descrito.
 
-    Escribe un módulo de servicios con la violación **dentro del árbol que se
-    analiza**, comprueba que `scan_repository()` la encuentra, y lo borra. Así
-    se prueba la cadena entera —descubrimiento de archivos, exenciones y
-    detector— y no solo el detector aislado.
+    Escribe un módulo de servicios con la violación en un `tempfile.
+    TemporaryDirectory()` que replica el único fragmento de layout que
+    `production_modules()`/`scan_repository()` necesitan (`visitacampo/core/`
+    bajo un `root`), y comprueba que `scan_repository(root=...)` la encuentra.
+    Así se prueba la cadena entera —descubrimiento de archivos, exenciones y
+    detector— sin escribir nunca un archivo dentro del paquete de producción
+    real: si el proceso muriera a mitad de la prueba (`SIGKILL`, timeout de
+    CI), lo único que queda huérfano es un directorio temporal que el sistema
+    operativo limpia, no un módulo con una violación real dentro de
+    `server/visitacampo/core/` que dejaría `UnscopedAccessTests` (y este mismo
+    test) en rojo hasta que alguien lo borrara a mano.
     """
 
-    PROBE = SERVER_ROOT / "visitacampo" / "core" / "_architecture_probe.py"
     PROBE_SOURCE = '"""Módulo temporal del test de arquitectura."""\n\n\ndef listar():\n    return Visit.objects.all()\n'  # noqa: E501
 
     def test_a_module_with_unscoped_access_breaks_the_build(self) -> None:
-        self.assertEqual(scan_repository(), [], "el repositorio debe partir limpio")
-        self.PROBE.write_text(self.PROBE_SOURCE, encoding="utf-8")
-        try:
-            violations = scan_repository()
+        self.assertEqual(scan_repository(), [], "el repositorio real debe partir limpio")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_root = Path(tmp_dir)
+            core_dir = tmp_root / "visitacampo" / "core"
+            core_dir.mkdir(parents=True)
+            probe = core_dir / "_architecture_probe.py"
+            probe.write_text(self.PROBE_SOURCE, encoding="utf-8")
+
+            violations = scan_repository(root=tmp_root)
             self.assertEqual(len(violations), 1)
             self.assertEqual(violations[0].path, "visitacampo/core/_architecture_probe.py")
             self.assertEqual(violations[0].expression, "Visit.objects")
-        finally:
-            self.PROBE.unlink()
-        self.assertEqual(scan_repository(), [], "el probe debe haberse borrado")
+            self.assertEqual(violations[0].line, 5)
+
+        # El `with` ya limpió el directorio temporal completo (probe incluido)
+        # sin que este test tocara nunca `SERVER_ROOT`.
+        self.assertFalse(probe.exists(), "el directorio temporal debe haberse borrado")
+        self.assertEqual(scan_repository(), [], "el repositorio real sigue limpio")
