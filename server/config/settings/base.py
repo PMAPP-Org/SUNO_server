@@ -40,6 +40,10 @@ INSTALLED_APPS = [
     "visitacampo.apps.VisitaCampoConfig",
     # Modelo de datos núcleo: doc 08 §4.4 + ADR-011 (Paso 5).
     "visitacampo.core.apps.CoreConfig",
+    # Autenticación: login + JWT Ed25519 + refresh hasheado (ADR-008, Paso 7).
+    # Se llama `authn` y no `auth` para no colisionar con `django.contrib.auth`
+    # (ver el docstring de visitacampo.authn.apps.AuthnConfig).
+    "visitacampo.authn.apps.AuthnConfig",
 ]
 
 # --- Usuario ---------------------------------------------------------------
@@ -140,6 +144,30 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
+
+# --- Autenticación JWT (ADR-008, Paso 7) -----------------------------------
+# Clave de firma Ed25519 de los access tokens. Nombres consistentes con
+# infra/.env.example (Paso 2): `JWT_SIGNING_KEY` ya estaba documentada allí y
+# este paso fija su formato (PEM PKCS#8, o su base64 para que quepa en una
+# línea de `.env`). `JWT_SIGNING_KEY_FILE` se añade aquí y es el camino
+# recomendado por ADR-008 ("montada como secreto de archivo"): gana sobre la
+# variable en línea cuando están las dos.
+#
+# **Sin valor por defecto a propósito**: una clave constante en el repositorio
+# permitiría a cualquiera firmar un token válido para cualquier usuario. Sin
+# clave, `visitacampo.authn.keys` falla en producción y genera una clave
+# efímera en memoria (con aviso) solo cuando DEBUG=True.
+JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY", "")
+JWT_SIGNING_KEY_FILE = os.environ.get("JWT_SIGNING_KEY_FILE", "")
+
+# TTL del access token: 15 min (ADR-008). Corto a propósito — es lo que acota
+# el daño de un token robado, ya que el access token no se persiste y por
+# tanto no se puede revocar; la revocación real vive en el refresh.
+JWT_ACCESS_TTL_SECONDS = 900
+
+# TTL del refresh: 60 días con uso (ADR-008). El dispositivo puede pasar
+# semanas offline y no debe verse obligado a re-loguearse por ello.
+JWT_REFRESH_TTL_SECONDS = 60 * 60 * 24 * 60
 
 # --- Internacionalización ---------------------------------------------------
 LANGUAGE_CODE = "es"

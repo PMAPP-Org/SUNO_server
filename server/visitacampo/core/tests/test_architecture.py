@@ -61,6 +61,12 @@ ALLOWED = {
     # es la consulta que lo construye, y va filtrada por (user_id, org_id) del
     # principal. No puede scoparse con algo que todavía no existe.
     "visitacampo/core/context.py": "construye el RequestContext (query de roles)",
+    # Paso 7: la búsqueda del refresh token por su `selector` ocurre **antes**
+    # de que exista un contexto — la organización a la que pertenece el token
+    # es precisamente lo que esa consulta averigua. Misma razón que
+    # `context.py`, y el módulo se mantiene con una sola función para que la
+    # exención siga siendo minúscula y revisable.
+    "visitacampo/authn/lookups.py": "consulta de bootstrap de identidad (pre-contexto)",
 }
 
 
@@ -194,6 +200,8 @@ class WalkerTests(SimpleTestCase):
             "visitacampo/core/scoping.py",
             "visitacampo/core/context.py",
             "visitacampo/health/api.py",
+            "visitacampo/authn/services.py",
+            "visitacampo/serverinfo/api.py",
             "config/api.py",
         ):
             with self.subTest(module=expected):
@@ -213,6 +221,7 @@ class WalkerTests(SimpleTestCase):
                 "visitacampo/core/models",
                 "visitacampo/core/scoping.py",
                 "visitacampo/core/context.py",
+                "visitacampo/authn/lookups.py",
             },
         )
 

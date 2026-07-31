@@ -8,3 +8,12 @@ Django==5.2.16
 django-ninja==1.6.2
 argon2-cffi==25.1.0
 psycopg[binary]==3.3.4
+
+# ADR-008: access token JWT firmado con EdDSA/Ed25519 (Paso 7).
+# PyJWT implementa `EdDSA` **solo** si `cryptography` está instalado, así que
+# esta última es una dependencia directa y no transitiva: se ancla aquí
+# explícitamente en vez de confiar en que PyJWT la arrastre.
+# La justificación de elegir PyJWT frente a python-jose / authlib /
+# djangorestframework-simplejwt está en visitacampo/authn/tokens.py.
+PyJWT==2.10.1
+cryptography==48.0.0
