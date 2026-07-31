@@ -38,7 +38,17 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # App principal de dominio (Paso 4: solo aloja el endpoint de salud).
     "visitacampo.apps.VisitaCampoConfig",
+    # Modelo de datos núcleo: doc 08 §4.4 + ADR-011 (Paso 5).
+    "visitacampo.core.apps.CoreConfig",
 ]
+
+# --- Usuario ---------------------------------------------------------------
+# ADR-011 (modelo de identidad plano): `AppUser` extiende `AbstractUser`, así
+# que es UNA tabla (`app_user`), no una jerarquía. El swap se hace aquí, antes
+# de la primera migración aplicada, que es el único momento barato de hacerlo.
+# La justificación completa está en el docstring de `visitacampo.core.models.
+# tenancy.AppUser`.
+AUTH_USER_MODEL = "core.AppUser"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

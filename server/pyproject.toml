@@ -24,7 +24,14 @@ select = [
     "DJ",  # flake8-django
 ]
 ignore = [
-    "DJ001", # nullable CharField/TextField: no hay modelos todavía (Paso 4)
+    # DJ001 ("evita null=True en CharField/TextField") se ignora a propósito
+    # desde el Paso 5. El contrato de API del Paso 1 distingue explícitamente
+    # `null` de cadena vacía en varios campos de texto opcionales
+    # (`UserProfile.display_name`, `VisitAttachment.caption`, `DeviceInfo.model`
+    # …), así que colapsar ambos a `""` perdería información que el cliente sí
+    # envía diferenciada. La regla asume la convención opuesta de Django y aquí
+    # no aplica.
+    "DJ001",
 ]
 
 [tool.ruff.lint.isort]

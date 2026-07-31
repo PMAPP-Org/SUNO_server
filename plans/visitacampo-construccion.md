@@ -227,7 +227,7 @@ graph TD
 **Tareas**:
 1. `django-admin startproject` (o estructura equivalente manual) dentro de `server/`, con app principal `visitacampo` y settings divididos: `server/config/settings/base.py`, `dev.py`, `prod.py`.
 2. Instalar y configurar Django Ninja; crear el router raíz `server/config/api.py` montado en `/v1/` que reflejará el contrato de Paso 1 (los endpoints concretos se implementan en Pasos 7–10, 17, 19–20; este paso solo monta la infraestructura del router y un endpoint trivial `GET /healthz` que responda 200 sin autenticación, para verificar que el montaje funciona).
-3. Configurar `AUTH_PASSWORD_HASHERS` con `Argon2PasswordHasher` primero en la lista (ADR-008).
+3. Configurar `PASSWORD_HASHERS` con `Argon2PasswordHasher` primero en la lista (ADR-008).
 4. Configurar conexión a PostgreSQL vía variables de entorno (usando el `.env.example` de Paso 2 como referencia).
 5. Añadir `ruff` y `mypy` con configuración base (`pyproject.toml`), consistente con lo que Paso 3 ya invoca.
 6. Implementar `GET /healthz` (liveness, sin auth, sin filtrar información — doc 08 §6) y dejar `GET /readyz` como placeholder que se completa cuando exista conexión real a BD/storage que verificar (Paso 5 en adelante).
@@ -241,7 +241,7 @@ graph TD
 
 **Criterios de salida/aceptación**:
 - Proyecto Django arranca y sirve `/healthz`.
-- Argon2id configurado como hasher primario (verificable inspeccionando `AUTH_PASSWORD_HASHERS[0]`).
+- Argon2id configurado como hasher primario (verificable inspeccionando `PASSWORD_HASHERS[0]`).
 - Ningún hallazgo de doc 07 se cierra completamente aquí (es scaffolding), pero **sienta la base para RD-09** (Argon2id es la mitad "hashing de contraseñas" de ADR-008; el hashing de refresh tokens llega en Paso 7/15).
 
 **Estrategia de rollback**: proyecto nuevo sin datos; revertir el commit elimina el scaffolding sin efectos colaterales.
