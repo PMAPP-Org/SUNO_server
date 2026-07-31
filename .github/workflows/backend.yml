@@ -38,6 +38,48 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
+    # Añadido tras el hallazgo "Important" de la revisión del Paso 5: sin
+    # esto, `_probe_database()` de `test_models.py` nunca encontraba una
+    # PostgreSQL real y la mitad 2 de la suite (el CHECK de ADR-005, la FK
+    # compuesta anti-cruce de organizaciones de ADR-011, y de paso
+    # `manage.py migrate` mismo) se saltaba en silencio en todo entorno,
+    # incluido CI — cero exigencia real detrás de un run en verde. Nombres
+    # de servicio/variables y valores por defecto calcados de
+    # `infra/.env.example` (Paso 2) y de `POSTGRES_*` en
+    # `server/config/settings/base.py` (Paso 4), no inventados aquí.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: visitacampo
+          POSTGRES_USER: visitacampo
+          # Valor ephemeral solo para este contenedor de CI — no es el
+          # placeholder real de infra/.env.example (ese nunca debe usarse
+          # fuera de una máquina de desarrollo) y no protege nada que
+          # sobreviva al job.
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        # Sin esto, los pasos siguientes podrían arrancar antes de que
+        # Postgres acepte conexiones y `_probe_database()` fallaría por una
+        # razón de arranque, no por falta de servicio — un falso negativo
+        # distinto del que este fix busca eliminar.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Mismos nombres que infra/.env.example y que lee
+      # server/config/settings/base.py (Paso 4) — no se inventan variables
+      # nuevas. HOST es "localhost" (no "db"): el runner de Actions habla con
+      # el contenedor de servicio por el puerto mapeado de arriba, no por la
+      # red interna de docker-compose que usa el hostname "db" en dev.
+      POSTGRES_DB: visitacampo
+      POSTGRES_USER: visitacampo
+      POSTGRES_PASSWORD: ci_postgres_password
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +116,13 @@ jobs:
           fi
 
       - name: pytest server/
+        # VISITACAMPO_REQUIRE_DB=1 (test_models.py, hallazgo de la revisión
+        # del Paso 5): con el servicio postgres:16 de arriba ya no hay
+        # excusa para que la mitad 2 de la suite se salte. Si algún día deja
+        # de haber PostgreSQL alcanzable aquí (servicio caído, credenciales
+        # mal, lo que sea), este paso debe fallar fuerte, no reportar verde.
+        env:
+          VISITACAMPO_REQUIRE_DB: "1"
         run: |
           if find server -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
             pytest server/

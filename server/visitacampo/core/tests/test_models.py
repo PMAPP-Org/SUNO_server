@@ -16,18 +16,36 @@ El archivo tiene **dos mitades deliberadamente separadas**:
    de la migración `0002` (tarea 12 del brief). Estos **necesitan una
    PostgreSQL alcanzable**.
 
-**Por qué el bloque de skip y no un fallo duro**: el proyecto no usa
-`pytest-django` (ver `server/conftest.py`: CI instala `pytest` a secas) y
-`.github/workflows/backend.yml` **no levanta un servicio de base de datos**
-para el job de lint-and-test. Sin el guard, añadir este archivo pondría el
-gate de CI del Paso 3 en rojo permanente. Con él, el comportamiento es:
+**Por qué el bloque de skip por defecto**: el proyecto no usa `pytest-django`
+(ver `server/conftest.py`: CI instala `pytest` a secas) y, hasta la revisión
+que introdujo `VISITACAMPO_REQUIRE_DB` (ver más abajo),
+`.github/workflows/backend.yml` no levantaba ningún servicio de base de
+datos para el job de lint-and-test. Sin guard, añadir este archivo habría
+dejado el gate de CI del Paso 3 en rojo permanente. Con él, el
+comportamiento por defecto (`VISITACAMPO_REQUIRE_DB` sin fijar, o fijado a
+`0`) es:
 
 - sin PostgreSQL alcanzable → la mitad 1 corre, la mitad 2 se **salta con un
   motivo explícito** (nunca "pasa" en falso);
-- con PostgreSQL alcanzable (`docker compose up db` del Paso 2) → se crea una
-  base de datos de test aparte (`test_<NAME>`), se le **aplican las
-  migraciones reales** —que es de paso la verificación de `manage.py migrate`
-  del brief— y la mitad 2 corre de verdad.
+- con PostgreSQL alcanzable (`docker compose up db` del Paso 2, o el servicio
+  `postgres:16` de CI) → se crea una base de datos de test aparte
+  (`test_<NAME>`), se le **aplican las migraciones reales** —que es de paso
+  la verificación de `manage.py migrate` del brief— y la mitad 2 corre de
+  verdad.
+
+**`VISITACAMPO_REQUIRE_DB=1` — modo estricto (hallazgo "Important" de la
+revisión del Paso 5)**: el skip silencioso de arriba tiene un defecto en CI —
+convierte *cualquier* problema de conexión (contraseña incorrecta, host mal
+configurado, Postgres caído) en el mismo verde que "todavía no hay Postgres
+disponible", ambos indistinguibles desde el resultado de la suite. Con esta
+variable en `1`, si al importar este módulo la BD no está alcanzable, el
+archivo entero **falla en la colección** (`RuntimeError`, no `unittest.skip`)
+en vez de reportar verde. `.github/workflows/backend.yml` levanta ahora un
+servicio `postgres:16` para el job de lint-and-test y fija esta variable a
+`1` en el paso `pytest server/` — así, un futuro skip de la mitad 2 en CI es
+un fallo duro, no un verde falso. Sin la variable (o con `0`, el valor por
+defecto), el desarrollo local sin PostgreSQL sigue funcionando exactamente
+como antes: mitad 1 en verde, mitad 2 saltada con motivo.
 
 Cada test de la mitad 2 se ejecuta dentro de una transacción que `TestCase`
 revierte al terminar: no deja residuo.
@@ -35,6 +53,7 @@ revierte al terminar: no deja residuo.
 
 from __future__ import annotations
 
+import os
 import unittest
 import uuid
 
@@ -69,6 +88,15 @@ from visitacampo.core.models import (
 # `OPTIONS.connect_timeout = 5` (settings/base.py) acota esta sonda: sin
 # servidor, falla en segundos en vez de colgar el arranque de la suite.
 
+# Hallazgo "Important" de la revisión del Paso 5: por defecto, cualquier
+# problema de conexión (sin servidor, contraseña mal, host mal configurado)
+# se traducía siempre en un skip silencioso — indistinguible de un verde
+# real, en cualquier entorno, incluida CI. Esta variable lo hace
+# opt-in-estricto: en CI (donde ahora sí hay un servicio `postgres:16`, ver
+# `.github/workflows/backend.yml`) se fija a `1` y convierte ese mismo
+# problema en un fallo duro de colección en vez de un skip.
+_REQUIRE_DB_ENV = "VISITACAMPO_REQUIRE_DB"
+
 
 def _probe_database() -> str | None:
     """Devuelve `None` si hay BD utilizable, o el motivo del skip si no."""
@@ -79,7 +107,26 @@ def _probe_database() -> str | None:
     return None
 
 
+def _require_db() -> bool:
+    """`VISITACAMPO_REQUIRE_DB=1`: ausencia de BD debe fallar, no saltarse."""
+    return os.environ.get(_REQUIRE_DB_ENV) == "1"
+
+
 _SKIP_REASON = _probe_database()
+
+if _SKIP_REASON is not None and _require_db():
+    # Fallo duro en tiempo de colección — no "un test falla", sino que la
+    # suite entera se niega a arrancar. Intencional: con
+    # VISITACAMPO_REQUIRE_DB=1 no existe un "verde parcial" aceptable; un
+    # wrong-password o wrong-host debe ser tan ruidoso como "no hay Postgres".
+    raise RuntimeError(
+        f"{_REQUIRE_DB_ENV}=1 exige PostgreSQL alcanzable y no lo está: "
+        f"{_SKIP_REASON}. Revisa el servicio `postgres:16` y las variables "
+        "POSTGRES_* del job lint-and-test en .github/workflows/backend.yml "
+        "(o, en local, exporta VISITACAMPO_REQUIRE_DB=0/sin fijar para "
+        "volver al modo con skip)."
+    )
+
 _DB_STATE: dict[str, object] = {}
 
 
