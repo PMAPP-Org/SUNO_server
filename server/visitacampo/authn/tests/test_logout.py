@@ -82,6 +82,36 @@ class LogoutTests(TestCase):
         self.assertEqual(response.status_code, 204, response.content)
         self.assertEqual(RefreshToken.objects.filter(revoked_at__isnull=True).count(), 0)
 
+    def test_revokes_a_prior_family_of_the_same_device(self) -> None:
+        """Un segundo login en el mismo dispositivo abre una familia nueva
+        (`family_id` distinto, ver `services.log_in`); el logout presentando
+        esa familia nueva debe revocar también la primera, no solo la
+        presentada — si no, "cerrar sesión" no cerraría un token robado de un
+        login anterior en el mismo dispositivo (ADR-008, "un refresh por
+        dispositivo", la misma regla que `refresh_session` ya hace cumplir)."""
+        first_family_token = self.refresh_token
+        second_login = login(self.client, device=device_info(self.device_id)).json()["tokens"]
+        second_family_token = second_login["refresh_token"]
+
+        first_family_id = RefreshToken.objects.get(
+            selector=first_family_token.split(".", 1)[0]
+        ).family_id
+        second_family_id = RefreshToken.objects.get(
+            selector=second_family_token.split(".", 1)[0]
+        ).family_id
+        self.assertNotEqual(first_family_id, second_family_id)
+
+        response = self.logout(refresh_token=second_family_token)
+        self.assertEqual(response.status_code, 204, response.content)
+        self.assertEqual(RefreshToken.objects.filter(revoked_at__isnull=True).count(), 0)
+
+        rejected = post_json(
+            self.client,
+            "/v1/auth/refresh",
+            {"refresh_token": first_family_token, "device_id": str(self.device_id)},
+        )
+        self.assertEqual(rejected.status_code, 401)
+
     def test_is_idempotent(self) -> None:
         self.assertEqual(self.logout().status_code, 204)
         first_revoked_at = RefreshToken.objects.get().revoked_at

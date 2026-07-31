@@ -149,8 +149,10 @@ paths:
       tags: [auth]
       summary: Revoca el refresh token del dispositivo
       description: |
-        Revoca la familia de refresh del dispositivo indicado. **No borra la outbox local**:
-        el trabajo pendiente del agente se conserva en el dispositivo.
+        Revoca **todo** refresh vivo del dispositivo indicado, no solo la familia del token
+        presentado (incluye sesiones de logins anteriores en el mismo dispositivo).
+        **No borra la outbox local**: el trabajo pendiente del agente se conserva en el
+        dispositivo.
       requestBody:
         required: true
         content:

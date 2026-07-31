@@ -265,7 +265,9 @@ def log_in(request, username: str, password: str, info: DeviceRegistration) -> L
             # Login nuevo ⇒ familia nueva. Las familias anteriores del mismo
             # dispositivo se dejan como están: revocarlas aquí echaría al
             # propio usuario de una sesión que quizá sigue usando, y la
-            # revocación explícita es lo que hace el logout.
+            # revocación explícita es lo que hace el logout — que revoca por
+            # `device_id`, así que cualquier familia anterior del mismo
+            # dispositivo cae con ella (ver `log_out_session`).
             family_id=uuid.uuid4(),
             now=now,
         )
@@ -335,17 +337,25 @@ def refresh_session(raw_token: str, device_id: uuid.UUID) -> IssuedSession:
 
 
 def log_out_session(ctx: RequestContext, raw_token: str) -> None:
-    """`POST /v1/auth/logout` — revoca la familia de refresco del dispositivo.
+    """`POST /v1/auth/logout` — revoca todo refresh vivo del dispositivo.
 
     **Idempotente y sin oráculo**: sale en silencio si el token está
     malformado, si no existe, si no es de quien lo presenta o si su verifier
     no coincide. La vista responde `204` en todos los casos, así que un
     atacante con un token ajeno no aprende nada sobre él.
 
-    **Se revoca la familia entera**, no solo la fila presentada, porque es lo
-    que dice el contrato ("revoca la familia de refresh del dispositivo
-    indicado") y porque revocar solo la última dejaría vivas las anteriores de
-    la cadena de rotación.
+    **Se revoca por `device_id`, no por `family_id`.** `log_in` empieza una
+    familia nueva en cada login y deja vivas las anteriores del mismo
+    dispositivo a propósito (comentario en `log_in`); si el logout solo
+    revocara la familia del token presentado, un segundo login en el mismo
+    dispositivo dejaría la familia del primero —viva hasta sus 60 días de TTL—
+    fuera del alcance de "cerrar sesión". Eso contradice ADR-008 ("un refresh
+    por dispositivo", la misma regla que `refresh_session` ya hace cumplir
+    rechazando un token presentado desde otro `device_id`) y el contrato
+    ("revoca... del dispositivo indicado"). Revocar por `device_id` cierra
+    **todas** las familias vivas del dispositivo —incluida la presentada, y
+    cualquier fila ya rotada de la cadena— con una sola consulta indexada
+    (`refresh_token_device_idx`).
 
     **No se toca nada más**: ni el `Device`, ni ningún dato de negocio. La
     outbox del cliente es responsabilidad del cliente y **no se borra** al
@@ -366,5 +376,5 @@ def log_out_session(ctx: RequestContext, raw_token: str) -> None:
         return
 
     scoped_qs(ctx, RefreshToken).filter(
-        family_id=row.family_id, revoked_at__isnull=True
+        device_id=row.device_id, user_id=ctx.user_id, revoked_at__isnull=True
     ).update(revoked_at=timezone.now())

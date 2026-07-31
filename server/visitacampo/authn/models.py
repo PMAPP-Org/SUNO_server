@@ -93,12 +93,15 @@ class RefreshToken(OrgScopedModel):
         verbose_name = "token de refresco"
         verbose_name_plural = "tokens de refresco"
         indexes = [
-            # Revocar la familia entera (logout, y la detección de reuso del
-            # Paso 15) es una consulta por `family_id` dentro de la
-            # organización: sin este índice sería un escaneo de toda la tabla
+            # La detección de reuso del Paso 15 revoca la familia entera del
+            # token reutilizado: una consulta por `family_id` dentro de la
+            # organización. Sin este índice sería un escaneo de toda la tabla
             # de sesiones del despliegue.
             models.Index(fields=["org", "family_id"], name="refresh_token_family_idx"),
-            # "Cerrar sesión en el dispositivo X" desde el back-office (Paso 17).
+            # "Cerrar sesión en el dispositivo X": lo usan tanto el logout
+            # propio (`authn/services.py::log_out_session`, que revoca **todo**
+            # refresh vivo del dispositivo, no solo la familia presentada) como
+            # el back-office del Paso 17 sobre el dispositivo de otro.
             models.Index(fields=["org", "device"], name="refresh_token_device_idx"),
         ]
 
