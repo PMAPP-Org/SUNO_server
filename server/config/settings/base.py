@@ -109,6 +109,25 @@ DATABASES = {
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- Tamaño máximo de cuerpo (ADR-003, Paso 8) -----------------------------
+# El contrato admite lotes de push de hasta **5 MiB** descomprimidos
+# (`visitacampo.serverinfo.capabilities.SYNC_PUSH_MAX_BYTES`). El valor por
+# defecto de Django son 2,5 MiB, así que sin esto un lote perfectamente
+# legítimo de 3 MiB moriría con el `400` de `RequestDataTooBig` antes de
+# llegar a la vista, y el cliente no recibiría el `413 payload_too_large` que
+# le dice que parta el lote.
+#
+# Se deja **exactamente** en el límite del contrato, no por encima: así el
+# corte de Django y el del endpoint son el mismo número, y un cuerpo mayor se
+# rechaza sin llegar a leerse entero en memoria. `RequestDataTooBig` se
+# traduce a `413` en `visitacampo/core/api_errors.py`, de modo que los dos
+# caminos dan la misma respuesta.
+#
+# El literal se repite aquí porque los settings se cargan **antes** que las
+# apps y no pueden importar `visitacampo.*`. `visitacampo/sync/tests/
+# test_limits.py` comprueba que ambos números siguen coincidiendo.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+
 # --- Contraseñas -----------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {

@@ -29,11 +29,19 @@ __all__ = [
     "RefreshRequest",
     "TokenPair",
     "UserProfile",
+    "rfc3339_utc",
 ]
 
 
-def _rfc3339_utc(value: datetime) -> str:
-    """RFC 3339 en UTC con `Z`, como exige `components.schemas.Timestamp`."""
+def rfc3339_utc(value: datetime) -> str:
+    """RFC 3339 en UTC con `Z`, como exige `components.schemas.Timestamp`.
+
+    Público desde el Paso 8: el push guarda su respuesta ya serializada en
+    `sync_op_log.result` (JSONB) para devolverla idéntica en un reenvío, así
+    que necesita el mismo formateador que usa el renderizador de respuestas.
+    Dos implementaciones del formato de instante acabarían divergiendo en el
+    `timespec`, y el cliente vería dos formatos distintos para la misma fecha.
+    """
     return (
         value.astimezone(UTC)
         .isoformat(timespec="milliseconds")
@@ -42,7 +50,7 @@ def _rfc3339_utc(value: datetime) -> str:
 
 
 #: Instante tal y como lo emite el servidor en el contrato.
-Timestamp = Annotated[datetime, PlainSerializer(_rfc3339_utc, return_type=str)]
+Timestamp = Annotated[datetime, PlainSerializer(rfc3339_utc, return_type=str)]
 
 
 class DeviceInfoSchema(Schema):

@@ -25,12 +25,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, HttpError
 from ninja.errors import ValidationError as NinjaValidationError
 
-__all__ = ["error_body", "register_error_handlers"]
+__all__ = ["error_body", "redacted_validation_details", "register_error_handlers"]
 
 #: `code` por defecto según el estado HTTP, para las excepciones que no traen
 #: uno propio. Los valores son los de `components.schemas.ErrorCode`; el
@@ -66,11 +67,17 @@ def error_body(code: str, message: str, details: Any | None = None) -> dict[str,
     return body
 
 
-def _redacted_validation_details(errors: list[dict[str, Any]]) -> dict[str, Any]:
+def redacted_validation_details(errors: list[Any]) -> dict[str, Any]:
     """`loc` + `type` de cada error, **sin** el valor que lo provocó (RD-12).
 
     Se envuelve en un objeto porque `Error.details` es `type: [object, 'null']`
     en el contrato, no un array.
+
+    Es **público** porque el Paso 8 lo reutiliza: una operación de push cuyo
+    payload no valida se devuelve como `rejected` con este mismo `details`, y
+    la redacción de RD-12 tiene que ser la misma la produzca el manejador
+    global de `422` o el bucle de sync. Duplicarla sería garantizar que un día
+    una de las dos copias empiece a filtrar el `input` de Pydantic.
     """
     return {
         "errors": [
@@ -114,9 +121,27 @@ def register_error_handlers(api: NinjaAPI) -> None:
             error_body(
                 "validation_error",
                 "Request body failed schema validation.",
-                _redacted_validation_details(errors),
+                redacted_validation_details(errors),
             ),
             status=422,
+        )
+
+    @api.exception_handler(RequestDataTooBig)
+    def _on_request_data_too_big(request: HttpRequest, exc: Exception) -> HttpResponse:
+        """413 en vez del 400 genérico de `SuspiciousOperation` (Paso 8).
+
+        Django corta la lectura del cuerpo en `DATA_UPLOAD_MAX_MEMORY_SIZE` y
+        lanza `RequestDataTooBig`, que sin este manejador acabaría en el `400`
+        de `SuspiciousOperation`. El contrato es explícito: un cuerpo por
+        encima del límite duro responde `413 payload_too_large` y el cliente
+        **parte el lote** (`components/responses/PayloadTooLarge`). Con un
+        `400` el cliente no sabría que dividir el lote es la salida, y la
+        outbox se quedaría atascada reintentando lo mismo.
+        """
+        return api.create_response(
+            request,
+            error_body("payload_too_large", "Request body exceeds the maximum allowed size."),
+            status=413,
         )
 
     @api.exception_handler(HttpError)

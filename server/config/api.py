@@ -1,10 +1,11 @@
 """Router raíz de la API HTTP (Django Ninja), montado en `/v1/` (`config/urls.py`).
 
 Paso 4 montó la infraestructura del router y el endpoint de salud. El Paso 7
-añade lo primero del contrato de verdad: autenticación (`/v1/auth/*`) y
-negociación de capacidades (`/v1/server/info`). El resto (sync, adjuntos,
-jobs, admin) llega en los Pasos 8-10, 17 y 19-20 — sigue sin adelantarse aquí
-(ADR-004: "la lógica vive en la capa de servicios, no en las vistas").
+añadió lo primero del contrato de verdad: autenticación (`/v1/auth/*`) y
+negociación de capacidades (`/v1/server/info`). El Paso 8 añade el motor de
+sincronización (`POST /v1/sync/push`). El resto (pull, adjuntos, jobs, admin)
+llega en los Pasos 9-10, 17 y 19-20 — sigue sin adelantarse aquí (ADR-004:
+"la lógica vive en la capa de servicios, no en las vistas").
 
 **Autenticación por defecto**: el contrato declara `security: [bearerAuth]` a
 nivel global y la desactiva operación por operación (`security: []` en
@@ -22,6 +23,7 @@ from visitacampo.authn.auth import JwtAuth
 from visitacampo.core.api_errors import register_error_handlers
 from visitacampo.health.api import router as health_router
 from visitacampo.serverinfo.api import router as server_info_router
+from visitacampo.sync.api import router as sync_router
 
 api = NinjaAPI(
     title="VisitaCampo API",
@@ -38,3 +40,4 @@ register_error_handlers(api)
 api.add_router("", health_router)
 api.add_router("", auth_router)
 api.add_router("", server_info_router)
+api.add_router("", sync_router)
