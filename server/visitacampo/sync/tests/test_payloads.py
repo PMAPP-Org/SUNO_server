@@ -10,6 +10,7 @@ objetos JSON.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from django.test import SimpleTestCase
@@ -211,6 +212,152 @@ class AnswersJsonTests(SimpleTestCase):
         for _ in range(5_000):
             answers = {"nested": answers}
         self.assertIsInstance(self._create(answers), VisitWrite)
+
+
+class UnpairedSurrogateTests(SimpleTestCase):
+    """Hallazgo C-1 de la revisión del Paso 8.
+
+    `json.loads` acepta `"\\ud800"` y devuelve un `str` de Python con un
+    surrogate suelto. No revienta en Python en ningún punto del camino: como
+    `sql.py` serializa con `json.dumps` y su `ensure_ascii=True` por defecto, el
+    surrogate llega a PostgreSQL como el escape literal `\\ud800` y es el cast
+    `::jsonb` el que lo rechaza —"Unicode low surrogate must follow a high
+    surrogate"— con un `DataError` **dentro de la transacción del lote**, es
+    decir un 500 que se lleva por delante las otras 499 operaciones.
+
+    Los payloads se construyen con `json.loads`, no con literales de Python, para
+    probar exactamente el camino que recorre un cuerpo de request real.
+    """
+
+    def _create(self, answers: object) -> object:
+        return parse_op("visit", "create", None, _create_payload(answers=answers))
+
+    #: `\\ud800` es un high surrogate suelto y `\\udfff` un low surrogate suelto:
+    #: los dos extremos del rango, en valor, en clave y anidados en una lista.
+    HOSTILE_JSON = (
+        '{"a": "\\ud800"}',
+        '{"a": "\\udfff"}',
+        '{"a": "antes\\ud800despues"}',
+        '{"clave\\ud800": "v"}',
+        '{"a": ["x\\udc00"]}',
+        '{"a": {"b": [{"c": "\\udbff"}]}}',
+    )
+
+    def test_json_loads_really_does_accept_them(self) -> None:
+        """La premisa del test, comprobada y no supuesta."""
+        for raw in self.HOSTILE_JSON:
+            with self.subTest(raw=raw):
+                self.assertIsInstance(json.loads(raw), dict)
+
+    def test_an_unpaired_surrogate_is_rejected(self) -> None:
+        for raw in self.HOSTILE_JSON:
+            with self.subTest(raw=raw):
+                self.assertIsInstance(self._create(json.loads(raw)), Rejection)
+
+    def test_the_same_gate_applies_to_an_update(self) -> None:
+        parsed = parse_op(
+            "visit",
+            "update",
+            3,
+            {"id": str(uuid.uuid4()), "answers": json.loads('{"a": "\\ud800"}')},
+        )
+        self.assertIsInstance(parsed, Rejection)
+
+    def test_legitimate_non_ascii_text_still_passes(self) -> None:
+        """La puerta no puede cerrarse sobre el español ni sobre los emoji.
+
+        El tercer caso es un par de surrogates **bien formado** (`\\ud83c\\udf3d`,
+        una mazorca): `json.loads` lo combina en un solo code point, así que es
+        texto perfectamente almacenable y tiene que pasar.
+        """
+        for raw in (
+            '{"observaciones": "plantación en ladera, ñ y tildes: áéíóú"}',
+            '{"estado": "🌽 sano"}',
+            '{"cultivo": "\\ud83c\\udf3d"}',
+        ):
+            with self.subTest(raw=raw):
+                parsed = self._create(json.loads(raw))
+                assert isinstance(parsed, VisitWrite)
+                # Y sigue siendo serializable, que es de lo que se trataba.
+                json.dumps(parsed.fields["answers"]).encode("utf-8")
+
+
+class FiniteFloatTests(SimpleTestCase):
+    """Hallazgo C-2 de la revisión del Paso 8: ningún `float` no finito entra.
+
+    `NaN`/`±Infinity` son valores legales de `double precision` en PostgreSQL,
+    así que no fallan al escribirse: la operación responde `applied` y la fila
+    queda envenenada. El daño llega después y lejos de su causa —al serializar
+    esa fila a `sync_op_log.result` (`jsonb` no admite el literal `NaN` que
+    emite el encoder de Django) o al devolverla en el pull, donde `NaN` desnudo
+    no es JSON válido y el `jsonDecode` de Dart lo rechaza, dejando al
+    dispositivo sin poder sincronizar.
+
+    Se cubren los cuatro campos, no solo los dos que estaban rotos: `lat`/`lon`
+    los rechazaban por accidente (toda comparación con `NaN` es falsa, así que
+    su guarda de rango los pillaba de rebote) y de ese accidente no se puede
+    depender.
+    """
+
+    FLOAT_FIELDS = ("lat", "lon", "accuracy_m", "altitude_m")
+    NON_FINITE = (("nan", float("nan")), ("inf", float("inf")), ("-inf", float("-inf")))
+
+    def test_no_float_field_accepts_a_non_finite_value_on_create(self) -> None:
+        for field in self.FLOAT_FIELDS:
+            for label, value in self.NON_FINITE:
+                with self.subTest(field=field, value=label):
+                    parsed = parse_op("visit", "create", None, _create_payload(**{field: value}))
+                    assert isinstance(parsed, Rejection)
+                    fields = [error["field"] for error in (parsed.details or {})["errors"]]
+                    self.assertEqual(fields, [field])
+
+    def test_no_float_field_accepts_a_non_finite_value_on_update(self) -> None:
+        for field in self.FLOAT_FIELDS:
+            for label, value in self.NON_FINITE:
+                with self.subTest(field=field, value=label):
+                    payload = {"id": str(uuid.uuid4()), field: value}
+                    self.assertIsInstance(parse_op("visit", "update", 3, payload), Rejection)
+
+    def test_the_two_cases_that_used_to_slip_through(self) -> None:
+        """Regresión literal del hallazgo, por si alguien quita `Finite`.
+
+        `accuracy_m: Infinity` pasaba porque `inf >= 0` es cierto, y
+        `altitude_m` pasaba con los tres porque no tenía guarda ninguna: era el
+        único `float` del contrato sin `ge`/`le`.
+        """
+        for field, value in (
+            ("accuracy_m", float("inf")),
+            ("altitude_m", float("nan")),
+            ("altitude_m", float("inf")),
+            ("altitude_m", float("-inf")),
+        ):
+            with self.subTest(field=field, value=value):
+                parsed = parse_op("visit", "create", None, _create_payload(**{field: value}))
+                self.assertIsInstance(parsed, Rejection)
+
+    def test_finite_values_and_nulls_are_untouched(self) -> None:
+        """La puerta no puede cerrarse sobre una ubicación legítima."""
+        payload = _create_payload(lat=4.60971, lon=-74.08175, accuracy_m=8.0, altitude_m=2625.0)
+        parsed = parse_op("visit", "create", None, payload)
+        assert isinstance(parsed, VisitWrite)
+        self.assertEqual(parsed.fields["altitude_m"], 2625.0)
+        self.assertEqual(parsed.fields["accuracy_m"], 8.0)
+
+        # Incluidas las altitudes que un rango "razonable" habría descartado:
+        # bajo el nivel del mar (mar Muerto) y en vuelo.
+        for altitude in (-430.0, 0.0, 11_000.0):
+            with self.subTest(altitude=altitude):
+                parsed = parse_op(
+                    "visit", "create", None, _create_payload(altitude_m=altitude)
+                )
+                self.assertIsInstance(parsed, VisitWrite)
+
+    def test_the_range_guards_still_work(self) -> None:
+        """`Finite` se **suma** a `ge`/`le`, no los reemplaza."""
+        for field, value in (("lat", 91.0), ("lon", -181.0), ("accuracy_m", -1.0)):
+            with self.subTest(field=field, value=value):
+                parsed = parse_op("visit", "create", None, _create_payload(**{field: value}))
+                self.assertIsInstance(parsed, Rejection)
 
 
 class DeleteTests(SimpleTestCase):

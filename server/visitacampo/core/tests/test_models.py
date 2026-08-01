@@ -310,6 +310,76 @@ class VisitSchemaTests(SimpleTestCase):
         self.assertIn("visit_id_org_uq", names)
 
 
+class VisitFloatFinitenessTests(SimpleTestCase):
+    """Ningún `float` de `visit` puede almacenar `NaN` ni `±Infinity` (C-2).
+
+    Sin base de datos: se comprueba el **texto** del `CHECK` que Django genera,
+    igual que `sync/tests/test_sql.py` hace con las sentencias del push. Es lo
+    máximo verificable en este entorno (no hay PostgreSQL) y no es poco: la
+    condición se compila de verdad, así que un `finite_q` mal escrito falla
+    aquí y no en la primera migración de CI.
+
+    El equivalente que sí ejercita a PostgreSQL —`IntegrityError` al insertar—
+    está en `VisitPersistenceTests`, y como el resto de esa clase requiere BD.
+    """
+
+    #: `NaN` no aparece en el SQL a propósito: en PostgreSQL se ordena como
+    #: **mayor que cualquier valor**, así que `NaN < 'Infinity'` ya es `false`
+    #: y la cota superior lo rechaza sin nombrarlo.
+    FINITE_BOUNDS = ("> '-Infinity'::float8", "< 'Infinity'::float8")
+
+    def _check_sql(self, constraint_name: str) -> str:
+        constraint = next(c for c in Visit._meta.constraints if c.name == constraint_name)
+        # `collect_sql=True` + `atomic=False`: genera DDL sin abrir conexión.
+        with connection.schema_editor(collect_sql=True, atomic=False) as editor:
+            return str(constraint.create_sql(Visit, editor))
+
+    def test_altitude_and_accuracy_declare_a_finiteness_check(self) -> None:
+        for name, column in (
+            ("visit_altitude_finite", "altitude_m"),
+            ("visit_accuracy_finite_non_negative", "accuracy_m"),
+        ):
+            with self.subTest(constraint=name):
+                sql = self._check_sql(name)
+                self.assertIn(f'"{column}" IS NULL', sql)
+                for bound in self.FINITE_BOUNDS:
+                    self.assertIn(f'"{column}" {bound}', sql)
+
+    def test_accuracy_keeps_its_non_negative_guard(self) -> None:
+        """La finitud se **suma** al `>= 0` de la migración 0001, no lo sustituye."""
+        self.assertIn('"accuracy_m" >= 0', self._check_sql("visit_accuracy_finite_non_negative"))
+
+    def test_latitude_and_longitude_are_covered_by_their_range(self) -> None:
+        """Por qué `lat`/`lon` no llevan `finite_q` y no es un olvido.
+
+        Sus dos cotas ya rechazan los tres valores no finitos: `NaN <= 90` es
+        `false` (NaN se ordena por encima de todo), `Infinity <= 90` también, y
+        `-Infinity >= -90` igual. Añadirles `finite_q` sería redundante.
+        """
+        for name, column in (("visit_lat_range", "lat"), ("visit_lon_range", "lon")):
+            with self.subTest(constraint=name):
+                sql = self._check_sql(name)
+                self.assertIn(f'"{column}" >=', sql)
+                self.assertIn(f'"{column}" <=', sql)
+
+    def test_every_nullable_float_column_of_visit_has_a_finiteness_guard(self) -> None:
+        """La red que impide que un `float` futuro se quede sin guarda.
+
+        Un campo `FloatField` nuevo sin `CHECK` que lo acote reproduce
+        exactamente el defecto C-2, y se notaría meses después en forma de un
+        `jsonb` imposible de escribir. Este test obliga a pasar por aquí.
+        """
+        float_columns = {
+            field.column for field in Visit._meta.fields if isinstance(field, models.FloatField)
+        }
+        self.assertEqual(float_columns, {"lat", "lon", "accuracy_m", "altitude_m"})
+
+        guarded = " ".join(self._check_sql(c.name) for c in Visit._meta.constraints)
+        for column in float_columns:
+            with self.subTest(column=column):
+                self.assertIn(f'"{column}"', guarded)
+
+
 class MigrationReversibilityTests(SimpleTestCase):
     """Criterio de aceptación: la migración es reversible (patrón C-18)."""
 
@@ -436,6 +506,30 @@ class VisitPersistenceTests(TestCase):
     def test_negative_accuracy_is_rejected_by_check(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
             Visit.objects.create(**self._visit_kwargs(accuracy_m=-1))
+
+    def test_non_finite_floats_are_rejected_by_check(self) -> None:
+        """C-2: `NaN`/`±Infinity` son legales en `double precision`; aquí no.
+
+        Este es el test que **solo** PostgreSQL puede decidir, porque lo que se
+        afirma es una propiedad de PostgreSQL: que `NaN` se ordene por encima
+        de `Infinity` es justo lo que hace que la cota superior lo rechace.
+        """
+        for field in ("lat", "lon", "accuracy_m", "altitude_m"):
+            for label, value in (
+                ("nan", float("nan")),
+                ("inf", float("inf")),
+                ("-inf", float("-inf")),
+            ):
+                with self.subTest(field=field, value=label):
+                    with self.assertRaises(IntegrityError), transaction.atomic():
+                        Visit.objects.create(**self._visit_kwargs(**{field: value}))
+
+    def test_a_finite_altitude_still_persists(self) -> None:
+        """Incluidas las que un rango de altitud arbitrario habría descartado."""
+        for altitude in (-430.0, 0.0, 2625.0, 11_000.0):
+            with self.subTest(altitude=altitude):
+                visit = Visit.objects.create(**self._visit_kwargs(altitude_m=altitude))
+                self.assertEqual(Visit.objects.get(pk=visit.pk).altitude_m, altitude)
 
 
 @unittest.skipUnless(_SKIP_REASON is None, _SKIP_REASON or "")

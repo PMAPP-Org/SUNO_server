@@ -14,6 +14,15 @@ de UI y **nunca** muestra `message` crudo al agente de campo (patrón
 endpoint: o lo trae la excepción (`InvalidCredentials.code`,
 `PolicyDenied.code`) o sale del mapa de este módulo.
 
+**Ninguna respuesta de `/v1/*` sale sin este cuerpo** (revisión del Paso 8). El
+manejador por defecto de Ninja para `Exception` **vuelve a lanzar** cuando
+`DEBUG=False` ("let django deal with it", `ninja/errors.py`), de modo que
+cualquier excepción no prevista producía la página de error de Django: un `500`
+sin `code` que el cliente no sabe interpretar. Los tres manejadores nuevos
+—`ValueError`, `RecursionError` y `DatabaseError`— cierran los caminos por los
+que eso pasaba de verdad; cada uno documenta en su docstring qué caso cubre y a
+costa de qué.
+
 **Redacción (RD-12)**: los errores de validación de Pydantic incluyen un campo
 `input` con **el valor que falló**. Devolverlo tal cual significaría que un
 `password` demasiado largo vuelve al cliente —y a los logs de quien lo
@@ -23,15 +32,19 @@ dónde falló y por qué, nunca con qué.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.core.exceptions import RequestDataTooBig
+from django.db import DatabaseError
 from django.http import HttpRequest, HttpResponse
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, HttpError
 from ninja.errors import ValidationError as NinjaValidationError
 
 __all__ = ["error_body", "redacted_validation_details", "register_error_handlers"]
+
+logger = logging.getLogger(__name__)
 
 #: `code` por defecto según el estado HTTP, para las excepciones que no traen
 #: uno propio. Los valores son los de `components.schemas.ErrorCode`; el
@@ -142,6 +155,92 @@ def register_error_handlers(api: NinjaAPI) -> None:
             request,
             error_body("payload_too_large", "Request body exceeds the maximum allowed size."),
             status=413,
+        )
+
+    @api.exception_handler(ValueError)
+    def _on_value_error(request: HttpRequest, exc: Exception) -> HttpResponse:
+        """Cuerpo que no se puede parsear ⇒ `400`, no un `500` desnudo.
+
+        Django Ninja lee el cuerpo con `json.loads` de la librería estándar
+        (`ninja/parser.py`) **dentro** del `try/except Exception` de
+        `Operation.run`, así que todo lo que ese parseo lance llega hasta aquí.
+        Sin este manejador terminaba en el `Exception` por defecto de Ninja,
+        que en `DEBUG=False` **vuelve a lanzar** para que lo recoja Django: un
+        `500` con la página de error de Django, sin el cuerpo `{code, message}`
+        que el contrato promete para toda respuesta de `/v1/*`. El contrato
+        declara `400 BadRequest` en este endpoint justamente para esto.
+
+        Un solo manejador cubre los tres casos porque los tres son `ValueError`
+        (comprobado, no supuesto):
+
+        - cuerpo mal formado ⇒ `json.JSONDecodeError` (subclase de `ValueError`);
+        - entero de más de 4300 dígitos ⇒ `ValueError` a secas, el límite de
+          `sys.set_int_max_str_digits` de CPython;
+        - cuerpo que no es UTF-8 válido ⇒ `UnicodeDecodeError`, también
+          subclase de `ValueError`.
+
+        **Contrapartida, explícita**: un `ValueError` nacido de un defecto del
+        servidor —no del cuerpo— también saldrá como `400`, y un `400` le dice
+        al cliente que el problema es suyo y que no reintente. Por eso se
+        registra en el log con la traza: el defecto sigue siendo visible para
+        quien opera el servidor aunque el cliente vea un `400`. Se prefiere
+        esta contrapartida al `500` desnudo porque la alternativa deja a la
+        outbox del agente de campo reintentando para siempre un lote que nunca
+        va a poder aplicarse.
+        """
+        logger.warning("Cuerpo de request no parseable: %s", type(exc).__name__, exc_info=exc)
+        return api.create_response(
+            request,
+            # Sin `str(exc)` (RD-12): el mensaje de un `ValueError` puede
+            # arrastrar fragmentos del propio cuerpo que lo provocó.
+            error_body("validation_error", "Request body could not be parsed as JSON."),
+            status=400,
+        )
+
+    @api.exception_handler(RecursionError)
+    def _on_recursion_error(request: HttpRequest, exc: Exception) -> HttpResponse:
+        """JSON con anidamiento extremo ⇒ `400`, mismo razonamiento que arriba.
+
+        El decodificador de `json` es recursivo, así que un cuerpo con unos
+        miles de niveles de anidamiento agota la pila **antes** de que exista
+        ningún dato que validar. No es un `ValueError` (`RecursionError` hereda
+        de `RuntimeError`), de ahí el manejador aparte.
+
+        Aquí no hay contrapartida que discutir: nada del servidor recurre sobre
+        datos del cliente —`payloads._json_safe` recorre `answers` con una pila
+        explícita justo por esto—, así que un `RecursionError` en una request
+        solo puede venir del parseo del cuerpo.
+        """
+        logger.warning("Anidamiento JSON excesivo en el cuerpo de la request.")
+        return api.create_response(
+            request,
+            error_body("validation_error", "Request body is nested too deeply to be parsed."),
+            status=400,
+        )
+
+    @api.exception_handler(DatabaseError)
+    def _on_database_error(request: HttpRequest, exc: Exception) -> HttpResponse:
+        """`500`, pero **con el cuerpo del contrato**. La red de seguridad final.
+
+        `IntegrityError`, `DataError` y `OperationalError` son todas
+        `DatabaseError`. Que este manejador se dispare significa que algo se
+        escapó de las puertas de `sync/payloads.py` —el sitio donde estos
+        errores se tienen que atajar, porque allí cuestan cero queries y aquí
+        ya se ha perdido el lote entero—, así que se registra con traza
+        completa: es un defecto del servidor, no del cliente.
+
+        `500` y no otra cosa a propósito: el estado tiene que seguir diciéndole
+        al cliente "esto es mío, reintenta". Lo que cambia respecto de antes es
+        únicamente que la respuesta ya no es la página de error de Django sino
+        el `{code, message}` uniforme, que es lo que el cliente sabe parsear.
+        """
+        logger.exception("Error de base de datos no capturado en la capa de servicios.")
+        return api.create_response(
+            request,
+            # Nunca `str(exc)`: el mensaje de PostgreSQL puede incluir el SQL,
+            # nombres de columna y hasta el valor que falló (RD-12).
+            error_body("internal_error", "The server could not process the request."),
+            status=500,
         )
 
     @api.exception_handler(HttpError)

@@ -13,6 +13,7 @@ from .base import (
     AttachmentRole,
     MimeType,
     SyncedModel,
+    finite_q,
     lat_validators,
     lon_validators,
 )
@@ -94,9 +95,21 @@ class Visit(SyncedModel):
                 | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
                 name="visit_lon_range",
             ),
+            # `accuracy_m` y `altitude_m`: no negativa la primera, y **finitas**
+            # las dos (revisión del Paso 8, ver `finite_q`). El `>= 0` a secas
+            # no bastaba: en PostgreSQL `NaN >= 0` e `Infinity >= 0` son las dos
+            # `true`, así que la guarda anterior dejaba entrar los dos venenos
+            # en `accuracy_m`; y `altitude_m`, sin ninguna guarda, los dejaba
+            # entrar todos. `lat`/`lon` sí quedan cubiertas por su rango
+            # (`NaN <= 90` es `false`), y por eso no se tocan.
             models.CheckConstraint(
-                condition=models.Q(accuracy_m__isnull=True) | models.Q(accuracy_m__gte=0),
-                name="visit_accuracy_non_negative",
+                condition=models.Q(accuracy_m__isnull=True)
+                | (models.Q(accuracy_m__gte=0) & finite_q("accuracy_m")),
+                name="visit_accuracy_finite_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(altitude_m__isnull=True) | finite_q("altitude_m"),
+                name="visit_altitude_finite",
             ),
             # Destino de la FK compuesta de `visit_attachment` (migración
             # 0002): Postgres exige un UNIQUE sobre exactamente las columnas

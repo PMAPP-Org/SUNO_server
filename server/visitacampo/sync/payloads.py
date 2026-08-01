@@ -49,8 +49,19 @@ antes de que el dato exista para `sql.py`:
    defina; `jsonb` de PostgreSQL los rechaza.
 3. **`U+0000` dentro de `answers`.** `jsonb` no puede representarlo
    ("unsupported Unicode escape sequence"), ni en una clave ni en un valor.
+4. **Surrogates Unicode no emparejados dentro de `answers`** (revisión del Paso
+   8). `json.loads` acepta `"\\ud800"` y produce un `str` de Python que contiene
+   un surrogate suelto; como `sql.py` serializa con `json.dumps` por defecto
+   (`ensure_ascii=True`), el surrogate viaja a PostgreSQL como el escape literal
+   `\\ud800` y el cast `::jsonb` lo rechaza con "Unicode low surrogate must
+   follow a high surrogate". Nótese que **no** revienta antes en Python: el
+   `json.dumps` no falla, así que sin esta puerta el único sitio donde se nota
+   es dentro de la transacción, en forma de `DataError`.
+5. **`NaN`/`Infinity` en los campos `float` del propio payload** (`Finite`,
+   revisión del Paso 8). Ver el comentario de `Finite`: `lat`/`lon` estaban a
+   salvo por accidente y `accuracy_m`/`altitude_m` no lo estaban.
 
-Los tres se comprueban sobre la estructura ya parseada, **sin base de datos**,
+Los cinco se comprueban sobre la estructura ya parseada, **sin base de datos**,
 y por eso `tests/test_payloads.py` sí los ejecuta en este entorno.
 """
 
@@ -139,10 +150,16 @@ def _json_safe(value: dict[str, Any]) -> dict[str, Any]:
     profundidad la elige el cliente, y una `RecursionError` aquí sería otra
     forma del mismo 500 que esta función existe para impedir.
 
-    Solo dos venenos son alcanzables. Los enteros gigantes —el tercer límite de
+    Solo tres venenos son alcanzables. Los enteros gigantes —el cuarto límite de
     `numeric`— no lo son: CPython corta la conversión decimal en 4300 dígitos
     (`sys.set_int_max_str_digits`) y `json.loads` ya falla al parsear, mucho
     antes de los 131072 dígitos que `jsonb` no soportaría.
+
+    El tercero (surrogates no emparejados) se detecta intentando codificar a
+    UTF-8, que es exactamente la operación que PostgreSQL no podrá hacer: un
+    `str` con un surrogate suelto es el **único** `str` de Python que
+    `.encode("utf-8")` no sabe representar, así que no hace falta ningún
+    recorrido de code points a mano.
     """
     stack: list[Any] = [value]
     while stack:
@@ -150,6 +167,10 @@ def _json_safe(value: dict[str, Any]) -> dict[str, Any]:
         if isinstance(item, str):
             if "\x00" in item:
                 raise ValueError("answers cannot contain the U+0000 character.")
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError as exc:
+                raise ValueError("answers cannot contain unpaired Unicode surrogates.") from exc
         elif isinstance(item, bool):
             continue  # `bool` es subclase de `int`, no de `float`: nada que mirar.
         elif isinstance(item, float):
@@ -166,6 +187,31 @@ def _json_safe(value: dict[str, Any]) -> dict[str, Any]:
 
 #: `answers` validado como JSON almacenable, no solo como "objeto".
 AnswersJson = Annotated[dict[str, Any], AfterValidator(_json_safe)]
+
+#: **Todo** campo `float` de este módulo, sin excepción (revisión del Paso 8).
+#:
+#: `NaN`/`±Infinity` son valores legales de `double precision` en PostgreSQL, así
+#: que un `altitude_m: NaN` se escribía **con éxito** y la operación respondía
+#: `applied`. La bomba estallaba después, lejos de su causa y sin nada que la
+#: relacionara con ella:
+#:
+#: - si esa fila entraba luego en un `conflict`, `records.visit_record()` la
+#:   serializaba a `sync_op_log.result` (`JSONField`→`jsonb`) y el encoder de
+#:   Django usa `allow_nan=True`, con lo que emitía el literal desnudo `NaN`
+#:   dentro del `jsonb` ⇒ `DataError` ⇒ 500 con pérdida del lote entero;
+#: - y el pull (Paso 9) devolvería un cuerpo con `NaN` desnudo, que **no es
+#:   JSON válido**: el `jsonDecode` de Dart lo rechaza y el dispositivo deja de
+#:   poder sincronizar del todo.
+#:
+#: Se aplica a los cuatro campos y no solo a los dos que estaban rotos. `lat` y
+#: `lon` ya rechazaban los no finitos, pero **por accidente**: sus guardas
+#: `ge`/`le` existen para el rango de coordenadas y en Python toda comparación
+#: con `NaN` es falsa. Confiar en ese accidente es lo que dejó pasar
+#: `accuracy_m: Infinity` (`inf >= 0` sí es cierto) y `altitude_m`, que no
+#: tiene rango que aplicar. Con `Finite` la propiedad "no entra un no finito"
+#: deja de depender de que el campo tenga además una guarda de rango, así que
+#: un campo `float` futuro no puede reintroducir el mismo defecto por omisión.
+Finite = Annotated[float, Field(allow_inf_nan=False)]
 
 #: Campos que un `update` puede omitir pero **no** enviar como `null`: su
 #: columna es `NOT NULL` en `Visit` (Paso 5) y el contrato tampoco los declara
@@ -189,10 +235,10 @@ class _VisitCreatePayload(BaseModel):
     assignment_id: uuid.UUID | None = None
     template_version_id: uuid.UUID
     answers: AnswersJson
-    lat: float | None = Field(default=None, ge=LAT_MIN, le=LAT_MAX)
-    lon: float | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
-    accuracy_m: float | None = Field(default=None, ge=0)
-    altitude_m: float | None = None
+    lat: Finite | None = Field(default=None, ge=LAT_MIN, le=LAT_MAX)
+    lon: Finite | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
+    accuracy_m: Finite | None = Field(default=None, ge=0)
+    altitude_m: Finite | None = None
     # `AwareDatetime` y no `datetime`: el contrato exige RFC 3339 **con offset
     # explícito**. Un instante sin zona no es un instante, y escribirlo con
     # `USE_TZ=True` solo produciría un aviso y un dato ambiguo para siempre.
@@ -209,10 +255,10 @@ class _VisitUpdatePayload(BaseModel):
     assignment_id: uuid.UUID | None = None
     template_version_id: uuid.UUID | None = None
     answers: AnswersJson | None = None
-    lat: float | None = Field(default=None, ge=LAT_MIN, le=LAT_MAX)
-    lon: float | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
-    accuracy_m: float | None = Field(default=None, ge=0)
-    altitude_m: float | None = None
+    lat: Finite | None = Field(default=None, ge=LAT_MIN, le=LAT_MAX)
+    lon: Finite | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
+    accuracy_m: Finite | None = Field(default=None, ge=0)
+    altitude_m: Finite | None = None
     captured_at: AwareDatetime | None = None
     device_id: uuid.UUID | None = None
 

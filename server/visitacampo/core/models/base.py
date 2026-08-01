@@ -97,6 +97,41 @@ class JobStatus(models.TextChoices):
     DEAD_LETTER = "dead_letter", "Dead letter"
 
 
+def finite_q(field_name: str) -> models.Q:
+    """`-Infinity < campo < Infinity`, es decir "el campo es un número real".
+
+    Existe porque `NaN` y `±Infinity` son valores **legales** de
+    `double precision` en PostgreSQL: una columna `FloatField` los admite
+    encantada y solo envenenan la fila más tarde, al serializarla a `jsonb`
+    (el encoder de Django emite el literal desnudo `NaN`, que `jsonb` rechaza)
+    o al devolverla en un cuerpo JSON que ningún cliente estricto —el
+    `jsonDecode` de Dart, ADR-008— puede parsear. Añadido en la revisión del
+    Paso 8.
+
+    **Por qué esta condición y no un rango "razonable"** (p. ej.
+    `altitude_m BETWEEN -500 AND 9000`): un rango arbitrario reintroduciría
+    exactamente la clase de defecto que se está cerrando. Una altitud
+    legítima fuera de ese rango pasaría la validación de Pydantic, fallaría el
+    `CHECK` en la BD y saldría como `IntegrityError` **dentro de la
+    transacción única del lote de push**, tumbando las otras 499 operaciones
+    con un 500 irrecuperable. La condición "es finito" es en cambio
+    exactamente congruente con `payloads.Finite` (`allow_inf_nan=False`): la
+    BD y la frontera de validación aceptan **el mismo conjunto de valores**,
+    así que el `CHECK` solo puede dispararse ante una escritura que no venga
+    del push (back-office, shell, migración de datos), que es justo para lo
+    que sirve una defensa en profundidad.
+
+    Cómo funciona en PostgreSQL, que no es obvio: `NaN` no se ordena como en
+    IEEE-754 sino como **mayor que cualquier otro valor**, incluido
+    `Infinity`. Por tanto `NaN < 'Infinity'` es `false` y `NaN` queda
+    rechazado; `Infinity < 'Infinity'` y `-Infinity > '-Infinity'` también son
+    `false`. Un `NULL` no lo cubre esta `Q` a propósito: quien la use debe
+    combinarla con su propio `__isnull=True` (en SQL un `NULL < x` evalúa a
+    `NULL` y un `CHECK` lo acepta, pero dejarlo implícito sería frágil).
+    """
+    return models.Q(**{f"{field_name}__gt": float("-inf"), f"{field_name}__lt": float("inf")})
+
+
 def lat_validators() -> list[object]:
     """Validadores Python del rango de latitud.
 
