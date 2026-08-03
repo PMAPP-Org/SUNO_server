@@ -42,8 +42,9 @@
 
 ### Track Móvil (Flutter)
 
-- [ ] **Paso 10** — Esqueleto Flutter: arquitectura en capas, freezed, Riverpod, CI — **siguiente paso**
-- [ ] **Paso 11** — Almacén local: Drift + SQLCipher, escritor único, migraciones
+- [x] **Paso 10** — Esqueleto Flutter: arquitectura en capas, freezed, Riverpod, CI
+  `82af44c` Crea el esqueleto Flutter: arquitectura en capas, freezed, Riverpod (Paso 10)
+- [ ] **Paso 11** — Almacén local: Drift + SQLCipher, escritor único, migraciones — **siguiente paso**
 - [ ] **Paso 12** — `SyncEngine`: dominio puro del protocolo de sync (outbox, CAS, cursor)
 - [ ] **Paso 13** — Autenticación cliente mínima + base de TLS estricto
 
@@ -87,10 +88,10 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 
 | Fase | Pasos completados | Total |
 |---|---|---|
-| Fase 0 | 10 (Pasos 0–9) | 15 (Pasos 0–14) |
+| Fase 0 | 11 (Pasos 0–10) | 15 (Pasos 0–14) |
 | Fase 1 | 0 | 11 (Pasos 15–25) |
-| **Total** | **10** | **26** |
+| **Total** | **11** | **26** |
 
-**Estado de verificación del último paso cerrado (Paso 9)**: PostgreSQL real ya disponible en este entorno (Docker Desktop, `docker compose up db` desde `infra/`) — por primera vez la suite corre completa en vez de saltarse los tests que lo requieren. `ruff check server/` limpio, `mypy server/` limpio, `pytest` **362 passed / 0 skipped** contra Postgres real, `makemigrations --check --dry-run` sin cambios pendientes, `ci_local.sh` PASS=7 SKIP=2 (los dos skips son `dart analyze`/`flutter test`, esperados hasta que `app/` exista en el Paso 10).
+**Estado de verificación del último paso cerrado (Paso 10)**: `dart analyze app/` limpio (con `strict-casts`/`strict-inference`/`strict-raw-types` activados), `flutter test app/` 5/5 verde (incluye el modelo `Visit` freezed de humo: roundtrip JSON, `copyWith`, igualdad estructural), `dart run build_runner build` genera código sin error. `ci_local.sh` **PASS=9 SKIP=0 FAIL=0** — primera vez que el pipeline completo (backend + mobile) corre sin ningún check omitido.
 
-**Entorno de desarrollo, actualizado en esta sesión**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo. El toolchain móvil queda listo para arrancar el Paso 10.
+**Entorno de desarrollo, actualizado en esta sesión**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo; el PATH de usuario también incluye ahora el directorio de scripts de pip (`ruff`/`mypy`/`pytest` ejecutables directamente). `riverpod_generator` quedó fuera del stack móvil por un conflicto de versiones con `freezed`/macros — documentado en `app/DEPENDENCIES.md`.
