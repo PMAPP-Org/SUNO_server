@@ -1,8 +1,25 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-01
+**Última actualización**: 2026-08-03
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
+
+---
+
+## Cómo continuar en una nueva sesión
+
+**Modo de ejecución exigido: paso a paso, con confirmación explícita del usuario antes de pasar al siguiente paso.** No se debe encadenar la ejecución de varios pasos del plan en una sola tanda sin que el usuario apruebe cada transición — esto reemplaza el modo "continua sin parar" usado en sesiones anteriores.
+
+Para cada paso del plan (`visitacampo-construccion.md`):
+
+1. Releer la sección del paso correspondiente en `visitacampo-construccion.md` (tareas, comandos de verificación, criterios de salida) — no asumir de memoria.
+2. Implementar el paso completo (código + tests).
+3. Correr los comandos de verificación del propio paso **y** la suite completa relevante (`pytest`/`ruff`/`mypy` para `server/`, `flutter analyze`/`flutter test` para `app/`, `ci_local.sh` cuando toque ambos lados) — en verde de verdad, no asumido.
+4. Hacer commit del paso (mensaje descriptivo, ver convención en `README.md`).
+5. Actualizar este archivo (`visitacampo-progreso.md`): marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
+6. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo paso propuesto (según el orden topológico de `visitacampo-construccion.md §1`). No avanzar sin que el usuario confirme.
+
+El **próximo paso a ejecutar es el Paso 13** (ver checklist abajo) — sigue en orden mientras no se indique lo contrario.
 
 ---
 
