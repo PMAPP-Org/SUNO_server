@@ -21,6 +21,7 @@ __all__ = [
     "ATTACHMENT_MAX_BYTES",
     "MIN_SUPPORTED_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "SYNC_PULL_DEFAULT_LIMIT",
     "SYNC_PULL_MAX_LIMIT",
     "SYNC_PUSH_MAX_BYTES",
     "SYNC_PUSH_MAX_OPS",
@@ -41,8 +42,14 @@ MIN_SUPPORTED_SCHEMA_VERSION = 1
 SYNC_PUSH_MAX_OPS = 500
 #: ADR-003: máximo de bytes por lote **ya descomprimido** (5 MiB).
 SYNC_PUSH_MAX_BYTES = 5 * 1024 * 1024
-#: Máximo de entidades por página de pull (contrato: ejemplo 1000).
+#: Máximo de entidades por página de pull (contrato: `maximum: 1000`).
 SYNC_PULL_MAX_LIMIT = 1000
+#: `limit` de `GET /v1/sync/pull` cuando el cliente no lo especifica
+#: (contrato: `default: 500`). No se anuncia en `ServerCapabilities` —el
+#: contrato solo declara el límite duro, no el valor por defecto de un query
+#: param opcional— así que vive aquí como constante interna del servidor, no
+#: como parte de la superficie que el cliente negocia.
+SYNC_PULL_DEFAULT_LIMIT = 500
 
 #: ADR-007: tamaño máximo por adjunto individual (25 MiB). El contrato lo deja
 #: "configurable" y sin ejemplo, así que este es el valor de partida de Fase 0:

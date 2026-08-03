@@ -16,6 +16,7 @@ escribir como función pura se ejecuta siempre (`test_payloads.py`,
 
 from __future__ import annotations
 
+import re
 import unittest
 import uuid
 
@@ -47,12 +48,26 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 
+#: `INSERT INTO "visit"` / `UPDATE "visit"`: la tabla en posición de tabla,
+#: no en cualquier otra parte de la sentencia.
+_VISIT_TABLE_WRITE = re.compile(r'(?:INSERT INTO|UPDATE)\s+"visit"\b')
+
+
 def visit_writes(captured: CaptureQueriesContext) -> list[str]:
-    """Sentencias que **escriben** en `visit`. El "contador de escrituras" del brief."""
+    """Sentencias que **escriben** en la tabla `visit`. El "contador de escrituras" del brief.
+
+    Ancla la búsqueda a `INSERT INTO "visit"`/`UPDATE "visit"` (la tabla,
+    entrecomillada por Postgres, justo tras el verbo) y no a la subcadena
+    `visit` en cualquier parte: un `INSERT INTO "sync_op_log"` para una
+    operación rechazada guarda `result` como `jsonb`, y ese JSON serializado
+    contiene literalmente `"entity": "visit"` — la subcadena `"visit"`
+    (incluso ya entrecomillada) aparece ahí como **dato**, no como nombre de
+    tabla, y un helper menos anclado la contaría por error.
+    """
     return [
         query["sql"]
         for query in captured.captured_queries
-        if ("INSERT INTO" in query["sql"] or "UPDATE" in query["sql"]) and "visit" in query["sql"]
+        if _VISIT_TABLE_WRITE.search(query["sql"])
     ]
 
 

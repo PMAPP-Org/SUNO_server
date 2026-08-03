@@ -1,28 +1,30 @@
-"""Router de Ninja para `POST /v1/sync/push` (contrato `server/openapi/v1.yaml`).
+"""Router de Ninja para `/v1/sync/*` (contrato `server/openapi/v1.yaml`).
 
-ADR-004: la vista no decide nada. Aquí solo viven los **límites del lote**
-—que son una propiedad del transporte, no del protocolo de sync— y la
-traducción JSON; la transacción entera está en `services.py`.
+ADR-004: la vista no decide nada. Aquí solo viven los **límites de
+transporte** (tamaño de lote del push, rango de `limit` del pull) y la
+traducción JSON; la lógica de negocio vive en `services.py` (push) y
+`pull.py` (bootstrap/pull, Paso 9).
 
-**Autenticación**: el contrato no le pone `security: []`, así que hereda el
-`bearerAuth` global montado en `config/api.py` (`JwtAuth`, Paso 7). Con él,
-`RequestContextAuth` deja el `RequestContext` resuelto —una sola query de
-roles— **antes** de que corra el cuerpo de la vista, que es el requisito
-literal de ADR-013 y lo que hace posible que el bucle no consulte permisos.
+**Autenticación**: el contrato no le pone `security: []` a ninguno de los
+tres endpoints, así que los tres heredan el `bearerAuth` global montado en
+`config/api.py` (`JwtAuth`, Paso 7). Con él, `RequestContextAuth` deja el
+`RequestContext` resuelto —una sola query de roles— **antes** de que corra el
+cuerpo de la vista, que es el requisito literal de ADR-013.
 """
 
 from __future__ import annotations
 
 from django.utils import timezone
-from ninja import Router
+from ninja import Query, Router
 from ninja.errors import HttpError
 
 from visitacampo.core.context import get_request_context
 from visitacampo.serverinfo import capabilities as caps
-from visitacampo.sync import services
-from visitacampo.sync.schemas import PushRequest, PushResponse
+from visitacampo.sync import pull, services
+from visitacampo.sync.cursor import InvalidCursor, decode_cursor
+from visitacampo.sync.schemas import BootstrapResponse, PullResponse, PushRequest, PushResponse
 
-__all__ = ["PayloadTooLarge", "SchemaVersionUnsupported", "router"]
+__all__ = ["CursorInvalid", "PayloadTooLarge", "SchemaVersionUnsupported", "router"]
 
 router = Router(tags=["sync"])
 
@@ -59,6 +61,22 @@ class SchemaVersionUnsupported(HttpError):
             f"schema_version {schema_version} is not supported "
             f"(supported: {caps.MIN_SUPPORTED_SCHEMA_VERSION}..{caps.SCHEMA_VERSION}).",
         )
+
+
+class CursorInvalid(HttpError):
+    """400 `validation_error`: el `cursor` no tiene la forma que este servidor emite.
+
+    Se traduce aquí —y no se deja caer al manejador global de `ValueError`
+    (`core/api_errors.py`)— porque ese manejador está pensado para un cuerpo
+    JSON ilegible y su mensaje sería confuso para un `cursor` de query string
+    con mala forma. `sync.cursor.InvalidCursor` hereda de `ValueError` por
+    conveniencia interna, no para que este endpoint dependa de esa relación.
+    """
+
+    code = "validation_error"
+
+    def __init__(self, exc: InvalidCursor) -> None:
+        super().__init__(400, str(exc))
 
 
 def _check_batch_limits(request, payload: PushRequest) -> None:
@@ -116,4 +134,51 @@ def sync_push(request, payload: PushRequest):
         "schema_version": caps.SCHEMA_VERSION,
         "server_time": timezone.now(),
         "results": results,
+    }
+
+
+@router.get(
+    "/sync/bootstrap",
+    response={200: BootstrapResponse},
+    summary="Estado inicial completo + cursor",
+    operation_id="syncBootstrap",
+)
+def sync_bootstrap(request):
+    """`GET /v1/sync/bootstrap`. Se invoca tras instalar la app o tras un `409 cursor_expired`."""
+    state = pull.bootstrap_state(get_request_context(request))
+    return {
+        "schema_version": caps.SCHEMA_VERSION,
+        "server_time": timezone.now(),
+        **state,
+    }
+
+
+@router.get(
+    "/sync/pull",
+    response={200: PullResponse},
+    summary="Filas cambiadas + tombstones + next_cursor",
+    operation_id="syncPull",
+)
+def sync_pull(
+    request,
+    cursor: str = Query(..., min_length=1),
+    limit: int = Query(caps.SYNC_PULL_DEFAULT_LIMIT, ge=1, le=caps.SYNC_PULL_MAX_LIMIT),
+):
+    """`GET /v1/sync/pull?cursor=&limit=`.
+
+    `cursor` es opaco (`sync/cursor.py`): se decodifica aquí, en el borde de
+    transporte, para que `pull.pull_page` trabaje siempre con el `int` real —
+    igual que `sync_push` decide el límite de lote en esta capa y deja la
+    transacción a `services.py`.
+    """
+    try:
+        cursor_value = decode_cursor(cursor)
+    except InvalidCursor as exc:
+        raise CursorInvalid(exc) from exc
+
+    page = pull.pull_page(get_request_context(request), cursor_value=cursor_value, limit=limit)
+    return {
+        "schema_version": caps.SCHEMA_VERSION,
+        "server_time": timezone.now(),
+        **page.as_dict(),
     }

@@ -1,4 +1,4 @@
-"""Formas del contrato para `POST /v1/sync/push` (`server/openapi/v1.yaml`).
+"""Formas del contrato de `/v1/sync/*` (`server/openapi/v1.yaml`), Pasos 8-9.
 
 El contrato del Paso 1 es la fuente de verdad. Aquí no se inventa ningún campo
 ni se renombra ninguno. Dos decisiones merecen explicación porque **se apartan
@@ -26,10 +26,13 @@ quien lo pide:
    es el enum `EntityType` del contrato y emitir ahí una cadena arbitraria
    sería devolver una respuesta que no valida contra el propio contrato.
 
-`server_row` se tipa como `VisitRecord` y no como la unión `EntityRecord`
-porque `Visit` es la única entidad escribible del MVP (brief, tarea 3). Es un
-estrechamiento compatible: todo `VisitRecord` es un `EntityRecord` válido.
-Cuando el Paso 10 añada adjuntos, esto pasa a ser una unión discriminada.
+`server_row` (push, `OpResultSchema`) se tipa como `VisitRecord` y no como la
+unión `EntityRecord` porque `Visit` es la única entidad escribible del MVP
+(brief del Paso 8, tarea 3). Es un estrechamiento compatible: todo
+`VisitRecord` es un `EntityRecord` válido. La propia unión `EntityRecord` sí
+existe desde el Paso 9, para `PullResponse.rows` — el pull, a diferencia del
+push, **lee** las cuatro entidades sincronizables, no solo la que se puede
+escribir.
 """
 
 from __future__ import annotations
@@ -41,15 +44,27 @@ from ninja import Schema
 from pydantic import Field
 
 from visitacampo.authn.schemas import Timestamp
+from visitacampo.authn.schemas import UserProfile as AuthUserProfile
 
 __all__ = [
+    "AssignmentData",
+    "AssignmentRecord",
+    "BootstrapResponse",
+    "EntityRecord",
     "EntityType",
+    "FormTemplateVersionData",
+    "FormTemplateVersionRecord",
     "OpErrorSchema",
     "OpResultSchema",
     "OpStatus",
+    "OrganizationSchema",
+    "PullResponse",
     "PushRequest",
     "PushResponse",
     "RawSyncOp",
+    "TombstoneSchema",
+    "VisitAttachmentData",
+    "VisitAttachmentRecord",
     "VisitData",
     "VisitRecord",
 ]
@@ -162,3 +177,135 @@ class PushResponse(Schema):
     schema_version: int
     server_time: Timestamp
     results: list[OpResultSchema]
+
+
+# --------------------------------------------------------- pull / bootstrap ----
+# Paso 9. `VisitData` se reutiliza tal cual para `BootstrapResponse.visits`: el
+# contrato declara ahí el mismo `Visit` que en `VisitRecord.data`, sin envoltorio
+# `{entity, data}` — el bootstrap ya sabe de qué tipo es cada array por su clave.
+
+
+class VisitAttachmentData(Schema):
+    """Contrato `VisitAttachment`. Ver la nota de `VisitData` sobre `required`."""
+
+    id: uuid.UUID
+    org_id: uuid.UUID
+    version: int
+    change_seq: int
+    deleted_at: Timestamp | None
+    visit_id: uuid.UUID
+    sha256: str
+    role: Literal["foto", "firma", "doc"]
+    caption: str | None
+    captured_at: Timestamp
+    order: int
+
+
+class AssignmentData(Schema):
+    """Contrato `Assignment`."""
+
+    id: uuid.UUID
+    org_id: uuid.UUID
+    version: int
+    change_seq: int
+    deleted_at: Timestamp | None
+    template_version_id: uuid.UUID
+    assigned_to: uuid.UUID
+    title: str | None
+    scheduled_for: Timestamp | None
+    lat: float | None
+    lon: float | None
+
+
+class FormTemplateVersionData(Schema):
+    """Contrato `FormTemplateVersion`. `definition` es JSON declarativo (ADR-012)."""
+
+    id: uuid.UUID
+    org_id: uuid.UUID
+    version: int
+    change_seq: int
+    deleted_at: Timestamp | None
+    template_id: uuid.UUID
+    name: str | None
+    version_number: int
+    definition: dict[str, Any]
+    published_at: Timestamp | None
+
+
+class VisitAttachmentRecord(Schema):
+    """Contrato `VisitAttachmentRecord` — la rama `visit_attachment` de `EntityRecord`."""
+
+    entity: Literal["visit_attachment"] = "visit_attachment"
+    data: VisitAttachmentData
+
+
+class AssignmentRecord(Schema):
+    """Contrato `AssignmentRecord` — la rama `assignment` de `EntityRecord`."""
+
+    entity: Literal["assignment"] = "assignment"
+    data: AssignmentData
+
+
+class FormTemplateVersionRecord(Schema):
+    """Contrato `FormTemplateVersionRecord` — la rama `form_template_version` de `EntityRecord`."""
+
+    entity: Literal["form_template_version"] = "form_template_version"
+    data: FormTemplateVersionData
+
+
+#: Contrato `EntityRecord`: unión discriminada por `entity`. `Field(discriminator=...)`
+#: hace que Pydantic elija la rama exacta por el valor de `entity` en vez de
+#: probar cada `Schema` en orden hasta que uno valide — más rápido y, sobre
+#: todo, sin el riesgo de que una forma más permissiva (p. ej. una con más
+#: campos opcionales) "robe" una fila que en realidad era de otra rama.
+EntityRecord = Annotated[
+    VisitRecord | VisitAttachmentRecord | AssignmentRecord | FormTemplateVersionRecord,
+    Field(discriminator="entity"),
+]
+
+
+class TombstoneSchema(Schema):
+    """Contrato `Tombstone`. Sin `data`: le dice al cliente que borre, no qué poner."""
+
+    entity: EntityType
+    id: uuid.UUID
+    change_seq: int
+    deleted_at: Timestamp
+
+
+class OrganizationSchema(Schema):
+    """Contrato `Organization`."""
+
+    id: uuid.UUID
+    name: str
+
+
+class BootstrapResponse(Schema):
+    """Contrato `BootstrapResponse`: estado inicial completo, sin paginación en v1.
+
+    `has_more` se fija siempre en `False`: es el campo **reservado** que el
+    contrato documenta para poder paginar el bootstrap en el futuro sin romper
+    a los clientes ya desplegados (`v1.yaml`, descripción de `BootstrapResponse`).
+    """
+
+    schema_version: int
+    server_time: Timestamp
+    cursor: str
+    organization: OrganizationSchema
+    user: AuthUserProfile
+    form_template_versions: list[FormTemplateVersionData]
+    assignments: list[AssignmentData]
+    visits: list[VisitData]
+    visit_attachments: list[VisitAttachmentData]
+    has_more: bool = False
+
+
+class PullResponse(Schema):
+    """Contrato `PullResponse`: página de cambios en orden estricto de `change_seq`."""
+
+    schema_version: int
+    server_time: Timestamp
+    rows: list[EntityRecord]
+    tombstones: list[TombstoneSchema]
+    next_cursor: str
+    has_more: bool

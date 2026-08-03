@@ -68,6 +68,7 @@ __all__ = [
     "SYNC_LOCK_NAMESPACE",
     "ChangeSeqAllocator",
     "acquire_org_lock",
+    "highest_change_seq",
     "org_lock_key",
 ]
 
@@ -136,6 +137,24 @@ def acquire_org_lock(org_id: uuid.UUID) -> None:
         )
 
 
+def highest_change_seq(ctx: RequestContext) -> int:
+    """`MAX(change_seq)` sobre las entidades sincronizadas de la org, o 0.
+
+    Una query por tabla (cuatro hoy), servidas por el índice `(org_id,
+    change_seq)` que el Paso 5 creó para el pull: un `MAX` sobre un B-tree es
+    un descenso por el extremo, no un escaneo. Es la misma cuenta que necesita
+    `ChangeSeqAllocator.for_org` (el siguiente número a repartir) y el
+    bootstrap del pull (Paso 9: el cursor inicial es "hasta dónde ya se ha
+    entregado todo", es decir, exactamente este valor).
+    """
+    highest = 0
+    for model in SYNCED_MODELS:
+        current = scoped_qs(ctx, model).aggregate(top=models.Max("change_seq"))["top"]
+        if current is not None and current > highest:
+            highest = current
+    return highest
+
+
 class ChangeSeqAllocator:
     """Reparte `change_seq` consecutivos dentro de un lote ya bajo el lock.
 
@@ -163,15 +182,5 @@ class ChangeSeqAllocator:
 
     @classmethod
     def for_org(cls, ctx: RequestContext) -> ChangeSeqAllocator:
-        """`MAX(change_seq) + 1` sobre las entidades sincronizadas de la org.
-
-        Una query por tabla (cuatro hoy), **fuera** del bucle y servidas por el
-        índice `(org_id, change_seq)` que el Paso 5 creó para el pull: un
-        `MAX` sobre un B-tree es un descenso por el extremo, no un escaneo.
-        """
-        highest = 0
-        for model in SYNCED_MODELS:
-            current = scoped_qs(ctx, model).aggregate(top=models.Max("change_seq"))["top"]
-            if current is not None and current > highest:
-                highest = current
-        return cls(highest + 1)
+        """`MAX(change_seq) + 1` sobre las entidades sincronizadas de la org."""
+        return cls(highest_change_seq(ctx) + 1)

@@ -32,9 +32,9 @@ from django.db import models
 from django.db.models import QuerySet
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import OrgScopedModel
+from visitacampo.core.models import AppUser, Organization, OrgScopedModel
 
-__all__ = ["NotOrgScopedError", "scoped_qs"]
+__all__ = ["NotOrgScopedError", "get_app_user", "get_organization", "scoped_qs"]
 
 
 class NotOrgScopedError(TypeError):
@@ -77,3 +77,34 @@ def scoped_qs[M: models.Model](ctx: RequestContext, model: type[M]) -> QuerySet[
             "se resuelve por la tabla que sí lleva `org_id`."
         )
     return model._default_manager.filter(org_id=ctx.org_id)
+
+
+def get_organization(ctx: RequestContext) -> Organization:
+    """La fila `Organization` del contexto — la única que puede leer.
+
+    `Organization` es la raíz del scoping (ver `NotOrgScopedError` arriba): no
+    tiene `org_id` que comparar porque **es** el `org_id`, así que
+    `scoped_qs(ctx, Organization)` no tendría sentido y de hecho falla a
+    propósito. `ctx.org_id` ya viene resuelto y verificado contra `Membership`
+    al construir el `RequestContext` (`core/context.py`, una query, antes de
+    cualquier bucle), así que este `get(pk=...)` no es una fuga de aislamiento
+    — es leer la única fila que el propio contexto ya nombra por su clave
+    primaria. Introducido para el bootstrap del pull (Paso 9,
+    `BootstrapResponse.organization`).
+    """
+    return Organization._default_manager.get(pk=ctx.org_id)
+
+
+def get_app_user(ctx: RequestContext) -> AppUser:
+    """El `AppUser` autenticado del contexto (perfil devuelto por login/bootstrap).
+
+    `AppUser` tampoco hereda `OrgScopedModel` (es `AUTH_USER_MODEL`; su `org`
+    es "organización de origen", no la clave que lo aísla — la membresía real
+    vive en `Membership`, ver el docstring de `AppUser`). No hace falta
+    filtrar también por `org`: `ctx.roles` ya viene resuelto de
+    `Membership.objects.filter(user_id=ctx.user_id, org_id=ctx.org_id)`
+    (`core/context.py`), así que un `ctx` con roles no vacíos ya certificó la
+    pertenencia de este usuario a esta organización antes de que este
+    accesor se llame.
+    """
+    return AppUser._default_manager.get(pk=ctx.user_id)

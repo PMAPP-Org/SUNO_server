@@ -57,11 +57,24 @@ _STATE: dict[str, object] = {}
 
 
 def setup_test_database() -> None:
-    """Crea y migra la BD de test (`test_<NAME>`) una vez por módulo."""
+    """Crea y migra la BD de test (`test_<NAME>`) una vez por módulo.
+
+    `create_test_db()` devuelve el nombre de la BD de test **nueva** (p.ej.
+    `test_visitacampo`), no el original — hay que capturar
+    `connection.settings_dict["NAME"]` **antes** de llamarlo. Guardar el
+    valor de retorno como si fuera "el nombre a restaurar" (como hacía este
+    módulo antes de esta corrección) hace que `teardown_test_database()`
+    "restaure" el nombre ya prefijado con `test_`, y el siguiente módulo que
+    llame a `create_test_db()` le añade otro prefijo encima — con varios
+    módulos de test en una sola sesión de pytest, el nombre acumula un
+    `test_` por módulo hasta superar el límite de 63 caracteres de
+    PostgreSQL.
+    """
     if SKIP_REASON is not None:
         return
     setup_test_environment()
-    _STATE["old_name"] = connection.creation.create_test_db(verbosity=0, autoclobber=True)
+    _STATE["old_name"] = connection.settings_dict["NAME"]
+    connection.creation.create_test_db(verbosity=0, autoclobber=True)
 
 
 def teardown_test_database() -> None:

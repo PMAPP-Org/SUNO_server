@@ -1,8 +1,9 @@
-"""Tablas operativas: `SyncOpLog`, `Job` y `AuditEvent` (doc 08 §4.4).
+"""Tablas operativas: `SyncOpLog`, `Job`, `AuditEvent` y `SyncCursorFloor`.
 
 Ninguna lleva lógica en este paso: la idempotencia del push es del Paso 8,
 la cola con `SKIP LOCKED` + lease del Paso 19 y la escritura de auditoría
-se va añadiendo desde el Paso 7.
+se va añadiendo desde el Paso 7. `SyncCursorFloor` es del Paso 9 — ver su
+docstring para el porqué existe.
 """
 
 from __future__ import annotations
@@ -151,3 +152,51 @@ class AuditEvent(OrgScopedModel):
 
     def __str__(self) -> str:
         return f"{self.action} -> {self.target}"
+
+
+class SyncCursorFloor(OrgScopedModel):
+    """Por debajo de qué `change_seq` el pull ya **no puede** garantizar completitud.
+
+    Existe por un problema muy concreto de doc 08 §4.4: la purga física de
+    tombstones (`sync/retention.py`, Paso 9; el job periódico que la invoca es
+    el Paso 19) borra filas cuyo `deleted_at` supera los 90 días
+    (`base.RETENTION_DAYS`). Una vez borrada, esa fila **desaparece** de
+    `WHERE change_seq > cursor` — no queda ni rastro de que existió. Un
+    cliente cuyo cursor sea anterior al `change_seq` de esa fila nunca se
+    enteraría de que algo se borró: la misma clase de pérdida silenciosa que
+    `changeseq.py` documenta para el push, solo que por el lado del pull.
+
+    La única forma de detectarlo sin reintroducir la fila es recordar, por
+    organización, **hasta dónde ha llegado la última purga**. `floor` es
+    monótono no decreciente —una purga solo puede subirlo, nunca bajarlo— y es
+    la **única** fuente de verdad para decidir `409 cursor_expired`
+    (`sync/retention.cursor_is_expired`): `cursor < floor` ⇒ expirado. No hay
+    una segunda señal (p. ej. "han pasado 90 días desde tal fecha") con la que
+    esta pueda desincronizarse — es exactamente el principio de RD-14 que
+    `changeseq.py` ya aplica al lock de organización, trasladado al lado de
+    lectura.
+
+    Una fila por organización (`UniqueConstraint`), creada perezosamente por
+    `retention.py` la primera vez que purga algo para esa organización: una
+    organización que nunca ha purgado nada no la necesita (su `floor` implícito
+    es 0, ningún cursor puede ser menor que eso).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    floor = models.PositiveBigIntegerField(
+        default=0,
+        verbose_name="piso de purga",
+        help_text="Todo change_seq por debajo de este valor puede tener tombstones ya purgados.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "sync_cursor_floor"
+        verbose_name = "piso de cursor de sync"
+        verbose_name_plural = "pisos de cursor de sync"
+        constraints = [
+            models.UniqueConstraint(fields=["org"], name="sync_cursor_floor_org_uq"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.org_id}:{self.floor}"

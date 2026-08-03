@@ -28,6 +28,8 @@ from visitacampo.core.models import (
 from visitacampo.serverinfo import capabilities as caps
 
 PUSH_URL = "/v1/sync/push"
+PULL_URL = "/v1/sync/pull"
+BOOTSTRAP_URL = "/v1/sync/bootstrap"
 
 #: `change_seq` de la `FormTemplateVersion` del escenario. No es 0 a propósito:
 #: obliga a que el asignador de `change_seq` mire también las entidades que no
@@ -154,3 +156,14 @@ def push(
 
 def visit_of(visit_id: uuid.UUID) -> Visit:
     return Visit.objects.get(pk=visit_id)
+
+
+def pull(scenario: Scenario, cursor: str, limit: int | None = None):
+    params: dict[str, Any] = {"cursor": cursor}
+    if limit is not None:
+        params["limit"] = limit
+    return scenario.client.get(PULL_URL, params, **scenario.auth())
+
+
+def bootstrap(scenario: Scenario):
+    return scenario.client.get(BOOTSTRAP_URL, **scenario.auth())

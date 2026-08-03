@@ -8,7 +8,7 @@ al del propio doc 08:
 - `tenancy`  — `Organization`, `AppUser`, `Membership`, `Device`.
 - `catalog`  — `FormTemplate`, `FormTemplateVersion`, `Assignment`.
 - `visit`    — `Visit`, `Blob`, `VisitAttachment`.
-- `ops`      — `SyncOpLog`, `Job`, `AuditEvent`.
+- `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
 
 Todos los modelos se reexportan aquí para que `from visitacampo.core.models
 import Visit` funcione igual que con un `models.py` plano.
@@ -31,7 +31,7 @@ from .base import (
     SyncEntityType,
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
-from .ops import AuditEvent, Job, SyncOpLog
+from .ops import AuditEvent, Job, SyncCursorFloor, SyncOpLog
 from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment
 
@@ -58,6 +58,7 @@ __all__ = [
     "Organization",
     "Platform",
     "Role",
+    "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",
     "SyncedModel",
