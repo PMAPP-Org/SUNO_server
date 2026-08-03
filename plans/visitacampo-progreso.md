@@ -37,11 +37,12 @@
 - [x] **Paso 8** — Endpoint `POST /v1/sync/push` (aplicación transaccional síncrona)
   `fa0834a` Añade el motor de sincronización: POST /v1/sync/push (Paso 8)
   `6979f4e` Corrige hallazgos C-1/C-2/I-1 de la revisión del Paso 8 (surrogates Unicode no emparejados, floats no finitos en lat/lon/accuracy_m/altitude_m, manejadores de error para que ningún /v1/* responda el 500 desnudo de Django)
-- [ ] **Paso 9** — Endpoint `GET /v1/sync/pull` (cursor incremental, tombstones, bootstrap) — **siguiente paso**
+- [x] **Paso 9** — Endpoint `GET /v1/sync/pull` (cursor incremental, tombstones, bootstrap)
+  `bdee2b0` Añade GET /v1/sync/pull y GET /v1/sync/bootstrap (Paso 9)
 
 ### Track Móvil (Flutter)
 
-- [ ] **Paso 10** — Esqueleto Flutter: arquitectura en capas, freezed, Riverpod, CI
+- [ ] **Paso 10** — Esqueleto Flutter: arquitectura en capas, freezed, Riverpod, CI — **siguiente paso**
 - [ ] **Paso 11** — Almacén local: Drift + SQLCipher, escritor único, migraciones
 - [ ] **Paso 12** — `SyncEngine`: dominio puro del protocolo de sync (outbox, CAS, cursor)
 - [ ] **Paso 13** — Autenticación cliente mínima + base de TLS estricto
@@ -86,8 +87,10 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 
 | Fase | Pasos completados | Total |
 |---|---|---|
-| Fase 0 | 9 (Pasos 0–8) | 15 (Pasos 0–14) |
+| Fase 0 | 10 (Pasos 0–9) | 15 (Pasos 0–14) |
 | Fase 1 | 0 | 11 (Pasos 15–25) |
-| **Total** | **9** | **26** |
+| **Total** | **10** | **26** |
 
-**Estado de verificación del último paso cerrado (Paso 8 + fixes de revisión)**: `ruff check server/` limpio, `mypy` limpio, `pytest` 206 passed / 133 skipped (skips son los tests que requieren PostgreSQL real, no disponible en este entorno de desarrollo — mismo patrón que Pasos 5–8), `makemigrations --check --dry-run` sin cambios pendientes.
+**Estado de verificación del último paso cerrado (Paso 9)**: PostgreSQL real ya disponible en este entorno (Docker Desktop, `docker compose up db` desde `infra/`) — por primera vez la suite corre completa en vez de saltarse los tests que lo requieren. `ruff check server/` limpio, `mypy server/` limpio, `pytest` **362 passed / 0 skipped** contra Postgres real, `makemigrations --check --dry-run` sin cambios pendientes, `ci_local.sh` PASS=7 SKIP=2 (los dos skips son `dart analyze`/`flutter test`, esperados hasta que `app/` exista en el Paso 10).
+
+**Entorno de desarrollo, actualizado en esta sesión**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo. El toolchain móvil queda listo para arrancar el Paso 10.
