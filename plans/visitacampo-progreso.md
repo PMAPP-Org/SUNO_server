@@ -44,8 +44,9 @@
 
 - [x] **Paso 10** — Esqueleto Flutter: arquitectura en capas, freezed, Riverpod, CI
   `82af44c` Crea el esqueleto Flutter: arquitectura en capas, freezed, Riverpod (Paso 10)
-- [ ] **Paso 11** — Almacén local: Drift + SQLCipher, escritor único, migraciones — **siguiente paso**
-- [ ] **Paso 12** — `SyncEngine`: dominio puro del protocolo de sync (outbox, CAS, cursor)
+- [x] **Paso 11** — Almacén local: Drift + SQLCipher, escritor único, migraciones
+  `169694a` Añade el almacén local: Drift + SQLCipher, escritor único, migraciones (Paso 11)
+- [ ] **Paso 12** — `SyncEngine`: dominio puro del protocolo de sync (outbox, CAS, cursor) — **siguiente paso**
 - [ ] **Paso 13** — Autenticación cliente mínima + base de TLS estricto
 
 ### Integración
@@ -88,10 +89,12 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 
 | Fase | Pasos completados | Total |
 |---|---|---|
-| Fase 0 | 11 (Pasos 0–10) | 15 (Pasos 0–14) |
+| Fase 0 | 12 (Pasos 0–11) | 15 (Pasos 0–14) |
 | Fase 1 | 0 | 11 (Pasos 15–25) |
-| **Total** | **11** | **26** |
+| **Total** | **12** | **26** |
 
-**Estado de verificación del último paso cerrado (Paso 10)**: `dart analyze app/` limpio (con `strict-casts`/`strict-inference`/`strict-raw-types` activados), `flutter test app/` 5/5 verde (incluye el modelo `Visit` freezed de humo: roundtrip JSON, `copyWith`, igualdad estructural), `dart run build_runner build` genera código sin error. `ci_local.sh` **PASS=9 SKIP=0 FAIL=0** — primera vez que el pipeline completo (backend + mobile) corre sin ningún check omitido.
+**Estado de verificación del último paso cerrado (Paso 11)**: `flutter test app/` 10/10 verde (incluye el test de atomicidad transaccional visita+outbox — forzar una excepción a mitad de la transacción no deja huérfanos — y el test de cifrado real: un archivo `.sqlite` escrito con `createEncryptedExecutor` es ilegible con `sqlite3.open()` sin la clave), `flutter analyze app/` limpio, `ci_local.sh` **PASS=9 SKIP=0 FAIL=0**.
 
-**Entorno de desarrollo, actualizado en esta sesión**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo; el PATH de usuario también incluye ahora el directorio de scripts de pip (`ruff`/`mypy`/`pytest` ejecutables directamente). `riverpod_generator` quedó fuera del stack móvil por un conflicto de versiones con `freezed`/macros — documentado en `app/DEPENDENCIES.md`.
+**Hallazgo de este paso, documentado en `app/DEPENDENCIES.md`**: `sqlcipher_flutter_libs`/`sqlite3_flutter_libs` (los paquetes que ADR-002 nombra literalmente) están descontinuados desde `sqlite3` v3.x — el cifrado SQLCipher se activa ahora vía `pubspec.yaml: hooks.user_defines.sqlite3.source: sqlcipher` (sistema de hooks/native-assets de Dart). La decisión arquitectónica de ADR-002 (SQLCipher) no cambia, solo el mecanismo de empaquetado — verificado funcionando de extremo a extremo en este host Windows.
+
+**Entorno de desarrollo, actualizado en sesiones recientes**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo; PATH de usuario también incluye el directorio de scripts de pip (`ruff`/`mypy`/`pytest` ejecutables directamente). `riverpod_generator` quedó fuera del stack móvil por un conflicto de versiones con `freezed`/macros — documentado en `app/DEPENDENCIES.md`. Sigue sin haber emulador/dispositivo Android configurado en esta máquina (relevante para Paso 14 en adelante).
