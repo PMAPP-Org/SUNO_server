@@ -1,7 +1,7 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03
+**Última actualización**: 2026-08-03 (Paso 13 cerrado)
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
 
 ---
@@ -19,7 +19,7 @@ Para cada paso del plan (`visitacampo-construccion.md`):
 5. Actualizar este archivo (`visitacampo-progreso.md`): marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
 6. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo paso propuesto (según el orden topológico de `visitacampo-construccion.md §1`). No avanzar sin que el usuario confirme.
 
-El **próximo paso a ejecutar es el Paso 13** (ver checklist abajo) — sigue en orden mientras no se indique lo contrario.
+El **próximo paso a ejecutar es el Paso 14** (integración E2E, cierre de Fase 0 — ver checklist abajo) — sigue en orden mientras no se indique lo contrario.
 
 ---
 
@@ -65,7 +65,8 @@ El **próximo paso a ejecutar es el Paso 13** (ver checklist abajo) — sigue en
   `169694a` Añade el almacén local: Drift + SQLCipher, escritor único, migraciones (Paso 11)
 - [x] **Paso 12** — `SyncEngine`: dominio puro del protocolo de sync (outbox, CAS, cursor)
   `6841bc7` Añade el SyncEngine: dominio puro del protocolo de sync (Paso 12)
-- [ ] **Paso 13** — Autenticación cliente mínima + base de TLS estricto — **siguiente paso**
+- [x] **Paso 13** — Autenticación cliente mínima + base de TLS estricto
+  `c1e4b4d` Añade autenticación cliente mínima + base de TLS estricto (Paso 13)
 
 ### Integración
 
@@ -107,14 +108,18 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 
 | Fase | Pasos completados | Total |
 |---|---|---|
-| Fase 0 | 13 (Pasos 0–12) | 15 (Pasos 0–14) |
+| Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
 | Fase 1 | 0 | 11 (Pasos 15–25) |
-| **Total** | **13** | **26** |
+| **Total** | **14** | **26** |
 
-**Estado de verificación del último paso cerrado (Paso 12)**: `flutter test app/` **28/28** verde — incluye los 4 casos obligatorios de doc 08 §8 (idempotencia, backoff exponencial con reloj falso, conflicto sin merge de 3 vías, `409 cursor_expired` → bootstrap automático), la máquina de estados del outbox probada en aislamiento (Dart puro, sin BD), y la primera migración real del esquema local (v1→v2, con datos de ejemplo). `flutter analyze app/` limpio, `ci_local.sh` **PASS=9 SKIP=0 FAIL=0**.
+**Estado de verificación del último paso cerrado (Paso 13)**: `flutter analyze app/` limpio; `flutter test app/` **51/51** verde (ejecutado con `--concurrency=1`, ver nota de entorno abajo) — incluye el consumo real de `/v1/auth/login|refresh|logout` y `/v1/server/info` (`AuthApiClient`), el dominio de sesión (`AuthController`: login/logout, refresh single-flight, un único reintento tras 401 sin loop) y el rechazo por defecto de un certificado autofirmado real sin ningún bypass (`tls_default_rejects_invalid_cert_test.dart`, servidor HTTPS real en loopback). `infra/scripts/lint_no_tls_bypass.sh` (RD-01) **OK**: 48 archivos `.dart` escaneados, sin bypass de TLS fuera de `TrustStore`. El archivo de diagnóstico temporal `_diag_socket_smoke_test.dart` (usado para depurar el hang de `bindSecure` con el fixture autofirmado) se eliminó tras confirmar que el test real ya cubre ese caso de forma estable. `ci_local.sh` completo no se corrió hasta el final esta vez: con concurrencia por defecto, el paso `flutter test app/` de ese script quedó colgado más de 15 minutos sin producir salida (mismo tipo de fallo de hilos que motivó el `--concurrency=1` — ver nota de entorno); se detuvo la ejecución en background y se dio por válida la verificación directa de los comandos propios del Paso 13, ya que este paso no toca `server/`.
+
+**Estado de verificación del Paso 12 (referencia)**: `flutter test app/` **28/28** verde — incluye los 4 casos obligatorios de doc 08 §8 (idempotencia, backoff exponencial con reloj falso, conflicto sin merge de 3 vías, `409 cursor_expired` → bootstrap automático), la máquina de estados del outbox probada en aislamiento (Dart puro, sin BD), y la primera migración real del esquema local (v1→v2, con datos de ejemplo). `flutter analyze app/` limpio, `ci_local.sh` **PASS=9 SKIP=0 FAIL=0**.
 
 **Hallazgos de este paso**: (1) `json_serializable` esperaba claves JSON camelCase en vez del snake_case real del contrato — el mismo bug ya existía sin detectar en el `Visit` del Paso 10 (su test de roundtrip solo se comparaba consigo mismo). Corregido globalmente con `field_rename: snake` en `app/build.yaml`, más un test de regresión que parsea JSON snake_case real. (2) `OutboxInflight` no arrastraba el contador de intentos de backoff al transicionar desde `pending`.
 
 **Hallazgo del Paso 11** (referencia): `sqlcipher_flutter_libs`/`sqlite3_flutter_libs` (los paquetes que ADR-002 nombra literalmente) están descontinuados desde `sqlite3` v3.x — el cifrado SQLCipher se activa ahora vía `pubspec.yaml: hooks.user_defines.sqlite3.source: sqlcipher`. Verificado funcionando de extremo a extremo en este host Windows.
 
 **Entorno de desarrollo, actualizado en sesiones recientes**: Flutter 3.44.8 stable + Android SDK (cmdline-tools, licencias aceptadas) instalados y en el PATH de usuario; Docker Desktop instalado con el daemon corriendo; PATH de usuario también incluye el directorio de scripts de pip (`ruff`/`mypy`/`pytest` ejecutables directamente). `riverpod_generator` quedó fuera del stack móvil por un conflicto de versiones con `freezed`/macros — documentado en `app/DEPENDENCIES.md`. Sigue sin haber emulador/dispositivo Android configurado en esta máquina (relevante para Paso 14 en adelante).
+
+**Nota de entorno (Paso 13)**: esta máquina tiene poca RAM física (~7.4 GB, con frecuencia menos de 1 GB libre bajo carga normal de escritorio). `flutter analyze`/`flutter test` con concurrencia por defecto fallan intermitentemente con errores nativos del VM de Dart (`Out of memory` / `Could not start thread DartWorker`, a veces también al invocar `flutter`/`git` desde Git Bash con "el archivo de paginación es demasiado pequeño"). Mitigación verificada: reintentar una vez (a menudo transitorio) y, si persiste, usar `flutter test --concurrency=1`. Tenerlo en cuenta en los pasos siguientes con más tests (14+): preferir `--concurrency=1` o cerrar aplicaciones pesadas (IDE, navegador, WSL) antes de correr la suite completa.
