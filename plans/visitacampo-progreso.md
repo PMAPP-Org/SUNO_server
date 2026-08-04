@@ -1,14 +1,15 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03 (decisión: separar fase de construcción / fase de testeo en emulador — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación)")
+**Última actualización**: 2026-08-03 (ajuste: construcción continua sin confirmación por paso + dependencias de Grupo C relajadas + harness engineering — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación 2)")
 
-## Fase actual: construcción de código (emulador diferido)
+## Fase actual: construcción de código continua (emulador diferido)
 
-**Decisión de esta sesión**: dejar de intercalar verificación en emulador por checkpoint (14c se cerró parcialmente — el emulador llegó a booteear pero no había harness de debug para insertar una visita, y cada sesión de emulador cuesta reconquistar RAM manualmente). A partir de aquí: construir código de los pasos restantes con toda su verificación no-emulador (`pytest`/`ruff`/`mypy`, `dart analyze`/`flutter test` headless) y diferir todo lo que exija el emulador/dispositivo real a una fase de testeo dedicada, en bloque, más adelante.
+**Decisión de esta sesión**: dejar de intercalar verificación en emulador por checkpoint (14c se cerró parcialmente — el emulador llegó a booteear pero no había harness de debug para insertar una visita, y cada sesión de emulador cuesta reconquistar RAM manualmente). A partir de aquí: construir código de los pasos restantes con toda su verificación no-emulador (`pytest`/`ruff`/`mypy`, `dart analyze`/`flutter test` headless) y diferir todo lo que exija el emulador/dispositivo real a una fase de testeo dedicada, en bloque, más adelante. Además (continuación 2), se retira la confirmación obligatoria por paso: se ejecuta en continuo, commiteando cada paso verificado, pausando solo en los casos listados en el plan §12 (fallo de verificación no resuelto, ambigüedad de diseño real, o paso siguiente que exige emulador).
 
 - **Paso 14**: 14a ✅ y 14b ✅ cerrados (backend real probado de punta a punta). **14c queda a medio camino** — el emulador booteó pero no se insertó ninguna visita (no existe todavía un harness de debug en `app/lib/main.dart`, que sigue siendo el demo `flutter create` sin modificar). 14c/14d se retoman en la fase de testeo. No bloquean el resto del plan (ver justificación en §12).
-- **Siguiente paso de construcción**: **Paso 20 — Formularios declarativos backend** (`form_template` + JSON Schema versionado). Se elige primero porque depende solo del Paso 6 (ya cerrado) — cero dependencias pendientes de la fase de testeo, a diferencia de Paso 17 (que depende de Paso 14) o cualquier paso móvil (que eventualmente necesitará `flutter test`, sin emulador, pero conviene empezar por el lado más "limpio").
+- **Grupo C completo desbloqueado**: Pasos 15 (auth hardening), 17 (adjuntos backend), 19 (cola de jobs) y 20 (formularios backend) ya no esperan a 14c/14d — su dependencia real es Paso 7/5/6, todos cerrados (plan §12, "continuación 2"). Los cuatro son construibles ahora, sin emulador.
+- **Orden de construcción de esta sesión**: **Paso 20** primero (ya en curso al momento de este ajuste, cero fricción con los otros tres), seguido de 17, 19 y 15 — cada uno commiteado por separado en cuanto su propia verificación esté en verde, sin pausar a confirmar entre pasos (ver "Fase actual" arriba).
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
 
 ---
@@ -32,19 +33,19 @@ La ejecución se detuvo entre el cierre del Paso 13 (2026-08-03) y el Paso 14: h
 
 ## Cómo continuar en una nueva sesión
 
-**Modo de ejecución exigido: paso a paso, con confirmación explícita del usuario antes de pasar al siguiente paso.** No se debe encadenar la ejecución de varios pasos del plan en una sola tanda sin que el usuario apruebe cada transición — esto reemplaza el modo "continua sin parar" usado en sesiones anteriores. A partir de este ajuste, cada **checkpoint** (14a, 14b, ... no solo cada paso completo) es la unidad natural de confirmación cuando un paso está desglosado en checkpoints.
+**Modo de ejecución vigente (2026-08-03, continuación 2): construcción continua, sin confirmación obligatoria por paso.** El modo "paso a paso, con confirmación explícita" de la revisión anterior aplicaba al riesgo de las sesiones de emulador/Docker (caras de RAM, valía la pena revisar antes de seguir); ese riesgo no existe en pasos de construcción pura de backend/Dart headless. Se mantiene la unidad de **checkpoint** (14a, 14b, ...) donde un paso esté desglosado, pero ya no se pausa a pedir aprobación entre pasos/checkpoints salvo los casos listados abajo.
 
 Para cada paso (o checkpoint) del plan (`visitacampo-construccion.md`):
 
-1. Releer la sección correspondiente en `visitacampo-construccion.md` (tareas, comandos de verificación, criterios de salida — y §12 si el paso tiene una nota de secuenciación de entorno) — no asumir de memoria.
-2. Correr el checklist de entorno de arriba si el checkpoint usa Docker y/o el emulador.
-3. Implementar el paso/checkpoint completo (código + tests).
-4. Correr los comandos de verificación propios **y** la suite completa relevante (`pytest`/`ruff`/`mypy` para `server/`, `flutter analyze`/`flutter test` para `app/`, `ci_local.sh` cuando toque ambos lados) — en verde de verdad, no asumido.
+1. Releer la sección correspondiente en `visitacampo-construccion.md` (tareas, comandos de verificación, criterios de salida — y §12 si el paso tiene una nota de secuenciación de entorno) — no asumir de memoria. No hace falta releer el plan completo, solo el bloque del paso.
+2. Correr el checklist de entorno de arriba si el checkpoint usa Docker y/o el emulador (en fase de construcción, normalmente no aplica).
+3. Implementar el paso/checkpoint completo (código + tests) — delegar a un subagente con el bloque del paso como contexto autocontenido cuando el paso sea sustancial, para mantener esta sesión liviana en tokens (ver "harness engineering" en plan §12).
+4. Correr los comandos de verificación propios **y** la suite relevante con alcance acotado al módulo tocado primero; la suite completa (`pytest`/`ruff`/`mypy`, `flutter analyze`/`flutter test`, `ci_local.sh`) se reserva para el cierre de una Meta — en verde de verdad, no asumido.
 5. Hacer commit (mensaje descriptivo, ver convención en `README.md`).
 6. Actualizar este archivo: marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
-7. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso/checkpoint** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo propuesto. No avanzar sin que el usuario confirme.
+7. **Continuar directamente con el siguiente paso/checkpoint** — se pausa a pedir confirmación solo si: el paso siguiente exige emulador/dispositivo real (se salta a la fase de testeo, no se pregunta), una verificación falla sin resolverse tras diagnóstico razonable, aparece una ambigüedad de diseño real no cubierta por doc 08, o se cierra una Meta completa (checkpoint natural de resumen).
 
-El **próximo paso a ejecutar es el Paso 20 — Formularios declarativos backend** (construcción de código, sin emulador; ver "Fase actual" arriba). El Paso 14 (checkpoints 14c/14d) queda diferido a la fase de testeo en emulador, no es el próximo paso mientras estemos en fase de construcción.
+El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C completo, ver "Fase actual" arriba), seguido del Grupo D móvil (18/21/16) cuando corresponda. El Paso 14 (checkpoints 14c/14d) queda diferido a la fase de testeo en emulador.
 
 ---
 
