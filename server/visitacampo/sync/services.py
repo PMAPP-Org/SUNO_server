@@ -46,13 +46,15 @@ tuviera una política que dependiera de la fila, la llamada baja al bucle y
 sigue costando cero queries — que es la garantía que RD-07 pide y la que mide
 `tests/test_query_budget.py`.
 
-**Qué no hace este paso** (y dónde vive): validar `answers` contra el JSON
-Schema de su `template_version` es el Paso 20; el pull y su cursor, el Paso 9;
-los adjuntos, el Paso 10.
+**Qué se añadió después** (y dónde vive lo que no está aquí): la validación de
+`answers` contra la definición de su `template_version` la incorporó el Paso 20
+—`_AnswersGate`, más abajo; las reglas viven en `visitacampo.forms`—; el pull y
+su cursor son el Paso 9; los adjuntos, el Paso 10.
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -65,6 +67,13 @@ from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Assignment, Device, FormTemplateVersion, SyncOpLog, Visit
 from visitacampo.core.policies import PolicyDenied, check_write_visit
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.forms.answers import validate_answers, violation_details
+from visitacampo.forms.definition import (
+    FormDefinition,
+    TemplateDefinitionError,
+    has_declared_schema,
+    validate_definition,
+)
 from visitacampo.sync import sql
 from visitacampo.sync.changeseq import ChangeSeqAllocator, acquire_org_lock
 from visitacampo.sync.payloads import (
@@ -78,6 +87,8 @@ from visitacampo.sync.records import visit_record
 from visitacampo.sync.schemas import RawSyncOp
 
 __all__ = ["apply_push"]
+
+logger = logging.getLogger(__name__)
 
 #: `code` del contrato para un resultado `conflict` ("Presente en `rejected`
 #: (y en `conflict` con `code: conflict`)").
@@ -193,8 +204,8 @@ def _existing_ids(ctx: RequestContext, model: Any, ids: set[uuid.UUID]) -> set[u
 class _References:
     """Qué referencias del lote existen **en esta organización**.
 
-    Se resuelven en bloque, antes del bucle: tres queries como mucho, sean 1 o
-    500 operaciones. No es una optimización, es corrección en dos frentes:
+    Se resuelven en bloque, antes del bucle: cuatro queries como mucho, sean 1
+    o 500 operaciones. No es una optimización, es corrección en dos frentes:
 
     - **RD-11**: las FK del esquema son globales, así que sin esta
       comprobación una organización podría crear una visita apuntando a la
@@ -203,11 +214,20 @@ class _References:
     - **Nunca un 500**: una FK inexistente reventaría el `INSERT` con
       `IntegrityError` y, dentro de una transacción, dejaría el resto del lote
       inservible. Comprobado antes, es un `rejected` con detalle.
+
+    `template_versions` es un **mapa** `id → definition` y no un conjunto
+    (Paso 20): la misma query que comprueba que la versión de plantilla existe
+    trae su definición, que es lo que hace falta para validar `answers`. Una
+    segunda query para lo mismo sería el N+1 que este archivo evita.
+    `visit_template_versions` cubre el caso del `update` que cambia `answers`
+    **sin** repetir `template_version_id` en el payload: se resuelve de la fila
+    existente, también en bloque.
     """
 
-    template_versions: set[uuid.UUID]
+    template_versions: dict[uuid.UUID, Any]
     assignments: set[uuid.UUID]
     devices: set[uuid.UUID]
+    visit_template_versions: dict[uuid.UUID, uuid.UUID]
 
     def missing(self, fields: dict[str, Any]) -> str | None:
         """Nombre del primer campo con una referencia inexistente, o `None`."""
@@ -222,6 +242,32 @@ class _References:
         return None
 
 
+def _visit_template_versions(
+    ctx: RequestContext, writes: list[VisitWrite]
+) -> dict[uuid.UUID, uuid.UUID]:
+    """`visit_id → template_version_id` de los `update` que reescriben `answers`.
+
+    Solo para las operaciones que cambian `answers` sin decir contra qué
+    plantilla: sin este dato no habría con qué validarlas, y dejarlas pasar
+    sería un agujero por el que el cliente podría escribir cualquier cosa en
+    `answers` con solo omitir un campo (RD-03: el cliente no es la autoridad).
+
+    Una query para todo el lote, y **cero** si ningún `update` toca `answers`
+    (el caso de un lote de altas, que es el que mide `test_query_budget.py`).
+    """
+    ids = {
+        write.entity_id
+        for write in writes
+        if write.op_type == "update"
+        and "answers" in write.fields
+        and write.fields.get("template_version_id") is None
+    }
+    if not ids:
+        return {}
+    rows = scoped_qs(ctx, Visit).filter(pk__in=ids).values_list("pk", "template_version_id")
+    return dict(rows)
+
+
 def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _References:
     wanted: dict[str, set[uuid.UUID]] = {
         "template_version_id": set(),
@@ -233,13 +279,134 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
             value = write.fields.get(field)
             if value is not None:
                 bucket.add(value)
+
+    visit_template_versions = _visit_template_versions(ctx, writes)
+    definitions: dict[uuid.UUID, Any] = {}
+    known = wanted["template_version_id"] | set(visit_template_versions.values())
+    if known:
+        definitions = dict(
+            scoped_qs(ctx, FormTemplateVersion)
+            .filter(pk__in=known)
+            .values_list("pk", "definition")
+        )
+
     return _References(
-        template_versions=_existing_ids(
-            ctx, FormTemplateVersion, wanted["template_version_id"]
-        ),
+        template_versions=definitions,
         assignments=_existing_ids(ctx, Assignment, wanted["assignment_id"]),
         devices=_existing_ids(ctx, Device, wanted["device_id"]),
+        visit_template_versions=visit_template_versions,
     )
+
+
+class _BrokenTemplate:
+    """Centinela: la definición guardada no cumple el meta-schema.
+
+    Hace falta un centinela propio porque `None` ya significa otra cosa
+    ("esta versión no declara esquema", ver `has_declared_schema`), y las dos
+    situaciones se resuelven de forma opuesta: sin esquema se acepta, rota se
+    rechaza.
+    """
+
+
+_BROKEN = _BrokenTemplate()
+
+
+class _AnswersGate:
+    """Valida `answers` contra la definición de su versión de plantilla (Paso 20).
+
+    **El servidor es la autoridad** (RD-03/ADR-012): el cliente valida en el
+    dispositivo para dar UX inmediata, pero la escritura solo ocurre si esta
+    puerta la deja pasar.
+
+    Compila cada definición **una vez por lote** y la cachea: un lote de 500
+    visitas de la misma plantilla compila una plantilla, no quinientas. Cero
+    queries — las definiciones llegan ya resueltas en `_References`, como el
+    resto de referencias (RD-07).
+
+    **Retrocompatibilidad histórica**: se valida contra la definición de la
+    versión que la operación referencia, nunca contra "la última". Publicar una
+    versión nueva no puede por tanto invalidar una visita antigua ni obliga a
+    migrar nada (ADR-012, estrategia de rollback del Paso 20).
+    """
+
+    __slots__ = ("_compiled", "_raw")
+
+    def __init__(self, definitions: dict[uuid.UUID, Any]) -> None:
+        self._raw = definitions
+        self._compiled: dict[uuid.UUID, FormDefinition | None | _BrokenTemplate] = {}
+
+    def _template(self, template_version_id: uuid.UUID) -> FormDefinition | None | _BrokenTemplate:
+        if template_version_id not in self._compiled:
+            raw = self._raw.get(template_version_id)
+            compiled: FormDefinition | None | _BrokenTemplate
+            if not has_declared_schema(raw):
+                compiled = None
+            else:
+                try:
+                    compiled = validate_definition(raw)
+                except TemplateDefinitionError:
+                    # Defecto del **servidor** (una definición que se publicó
+                    # sin pasar por el meta-schema), no del cliente: se registra
+                    # con traza. Se rechaza la operación en vez de aceptarla sin
+                    # validar — "no puedo comprobarlo" nunca puede significar
+                    # "adelante" en la puerta que hace de autoridad.
+                    logger.exception(
+                        "form_template_version %s tiene una definición que no cumple "
+                        "el meta-schema; las respuestas contra ella se rechazan.",
+                        template_version_id,
+                    )
+                    compiled = _BROKEN
+            self._compiled[template_version_id] = compiled
+        return self._compiled[template_version_id]
+
+    def check(self, parsed: VisitWrite, references: _References) -> Rejection | None:
+        """`None` si `answers` es aceptable; el `Rejection` del contrato si no."""
+        if "answers" not in parsed.fields:
+            return None
+        template_version_id = parsed.fields.get("template_version_id")
+        if template_version_id is None:
+            # `update` que reescribe `answers` sin repetir la plantilla: es la
+            # de la fila existente. Si la fila no existe, no hay nada que
+            # validar y el CAS contestará `not_found` unas líneas más abajo.
+            template_version_id = references.visit_template_versions.get(parsed.entity_id)
+        if template_version_id is None:
+            return None
+
+        template = self._template(template_version_id)
+        if template is None:
+            return None
+        if isinstance(template, _BrokenTemplate):
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="The referenced form template version has an invalid definition.",
+                details={"field": "template_version_id", "reason": "invalid_template"},
+                entity_id=parsed.entity_id,
+            )
+
+        violations = validate_answers(template, parsed.fields["answers"])
+        if not violations:
+            return None
+        return Rejection(
+            # **Decisión de código de error** (el plan admitía `schema_unsupported`
+            # "o similar del contrato de Paso 1"): `validation_error`, no
+            # `schema_unsupported`. Motivo: en este contrato
+            # `schema_unsupported` es el código de **negociación de versión del
+            # protocolo** — lo emite `api.py` cuando el `schema_version` del
+            # envelope no está entre los soportados, y el cliente lo negocia
+            # contra `GET /v1/server/info`. Su acción de recuperación es "este
+            # servidor no habla mi versión: deja de sincronizar y actualiza la
+            # app". Reutilizarlo aquí le diría eso a un cliente perfectamente
+            # al día cuya única falta es un campo fuera de rango, y pararía la
+            # sincronización entera por una respuesta mal rellenada. Lo que
+            # esto es —un payload que no cumple su esquema— es literalmente
+            # `validation_error`, y el propio contrato usa este caso como
+            # ejemplo de `Error.details`:
+            # `{"field": "answers.altura_cm", "reason": "out_of_range"}`.
+            code=CODE_VALIDATION_ERROR,
+            message="Answers do not match the form template version schema.",
+            details=violation_details(violations),
+            entity_id=parsed.entity_id,
+        )
 
 
 def _execute(cursor: Any, statement: sql.Statement) -> tuple[int, ...] | None:
@@ -305,6 +472,7 @@ def apply_push(
         references = _resolve_references(
             ctx, [item for item in parsed.values() if isinstance(item, VisitWrite)]
         )
+        answers_gate = _AnswersGate(references.template_versions)
         allocator = ChangeSeqAllocator.for_org(ctx)
         now = timezone.now()
 
@@ -324,6 +492,7 @@ def apply_push(
                     op=op,
                     parsed=parsed[key],
                     references=references,
+                    answers_gate=answers_gate,
                     allocator=allocator,
                     now=now,
                 )
@@ -368,6 +537,7 @@ def _process(
     op: RawSyncOp,
     parsed: VisitWrite | Rejection,
     references: _References,
+    answers_gate: _AnswersGate,
     allocator: ChangeSeqAllocator,
     now: datetime,
 ) -> dict[str, Any]:
@@ -386,6 +556,14 @@ def _process(
                 entity_id=parsed.entity_id,
             ),
         )
+
+    # `answers` contra el esquema de **su** versión de plantilla (Paso 20). Va
+    # después de resolver referencias —hace falta saber que la plantilla existe
+    # en esta organización antes de validar contra ella— y antes de tomar un
+    # `change_seq`: una operación que no va a aplicarse no gasta número.
+    invalid_answers = answers_gate.check(parsed, references)
+    if invalid_answers is not None:
+        return _rejected_result(op, invalid_answers)
 
     # `take()` antes de saber si el CAS va a coincidir: el número tiene que
     # viajar dentro de la propia sentencia. Un conflicto deja por tanto un

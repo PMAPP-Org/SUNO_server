@@ -36,6 +36,24 @@ BOOTSTRAP_URL = "/v1/sync/bootstrap"
 #: son `visit` (doc 08 §4.4, cursor único por organización).
 TEMPLATE_CHANGE_SEQ = 41
 
+#: Definición de la plantilla del escenario (Paso 20). Declara de verdad el
+#: `altura_cm` que usan los payloads de estos tests: desde el Paso 20 el push
+#: valida `answers` contra la definición de su versión de plantilla, así que un
+#: escenario con `{"fields": []}` estaría probando el camino "plantilla sin
+#: campos declarados" y no el real.
+SCENARIO_DEFINITION: dict[str, Any] = {
+    "dsl": "visitacampo/form@1",
+    "fields": [
+        {
+            "key": "altura_cm",
+            "type": "number",
+            "label": {"es": "Altura (cm)"},
+            "min": 0,
+            "max": 500,
+        }
+    ],
+}
+
 
 @dataclass(frozen=True)
 class Scenario:
@@ -66,7 +84,7 @@ def build_scenario(
         org=organization,
         template=template,
         version_number=1,
-        definition={"fields": []},
+        definition=SCENARIO_DEFINITION,
         change_seq=TEMPLATE_CHANGE_SEQ,
     )
     return Scenario(

@@ -44,10 +44,12 @@ __all__ = [
     "WRITE_VISIT_ROLES",
     "PolicyDenied",
     "can_manage_device",
+    "can_publish_form_template",
     "can_read_members",
     "can_read_visit",
     "can_write_visit",
     "check_manage_device",
+    "check_publish_form_template",
     "check_read_members",
     "check_read_visit",
     "check_write_visit",
@@ -191,6 +193,22 @@ def can_read_members(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
 
 
+def can_publish_form_template(ctx: RequestContext, template: OrgScopedResource) -> bool:
+    """Publicar una versión de plantilla de formulario (Paso 20, ADR-012).
+
+    Solo administración (`OWNER`/`ADMIN`), y no `SUPERVISOR`: una plantilla
+    define **qué datos se capturan y con qué validaciones** para toda la
+    organización, y una versión publicada es inmutable y llega a todos los
+    dispositivos por el pull. Es una decisión de configuración del tenant, no
+    de operación de campo, así que se agrupa con el resto de la administración.
+
+    No existe `can_edit_form_template`: una versión publicada **no se edita**,
+    se publica otra (`forms/services.py`). Una política para editar sería una
+    política para algo que el diseño no permite hacer.
+    """
+    return user_has_organization_roles(ctx, template.org_id, ADMIN_ROLES)
+
+
 def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
     """Administrar un dispositivo (renombrar, revocar su sesión, darlo de baja).
 
@@ -227,6 +245,11 @@ def check_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
 def check_read_members(ctx: RequestContext, org_id: UUID) -> None:
     if not can_read_members(ctx, org_id):
         raise _denial(ctx, org_id)
+
+
+def check_publish_form_template(ctx: RequestContext, template: OrgScopedResource) -> None:
+    if not can_publish_form_template(ctx, template):
+        raise _denial(ctx, template.org_id)
 
 
 def check_manage_device(ctx: RequestContext, device: DeviceLike) -> None:

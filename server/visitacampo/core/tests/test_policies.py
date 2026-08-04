@@ -25,9 +25,10 @@ from ninja.errors import HttpError
 
 from visitacampo.core import policies
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Device, Role, Visit
+from visitacampo.core.models import Device, FormTemplate, Role, Visit
 from visitacampo.core.policies import (
     can_manage_device,
+    can_publish_form_template,
     can_read_members,
     can_read_visit,
     can_write_visit,
@@ -54,6 +55,10 @@ def visit(org_id: uuid.UUID = ORG) -> Visit:
 
 def device(org_id: uuid.UUID = ORG, owner_id: uuid.UUID = USER) -> Device:
     return Device(id=uuid.uuid4(), org_id=org_id, owner_id=owner_id)
+
+
+def form_template(org_id: uuid.UUID = ORG) -> FormTemplate:
+    return FormTemplate(id=uuid.uuid4(), org_id=org_id)
 
 
 # --- La primitiva -----------------------------------------------------------
@@ -207,6 +212,26 @@ class CanManageDeviceTests(SimpleTestCase):
         self.assertEqual(raised.exception.status_code, 404)
 
 
+class CanPublishFormTemplateTests(SimpleTestCase):
+    """Paso 20: publicar una versión de plantilla es administración del tenant."""
+
+    def test_true_for_administration(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(can_publish_form_template(ctx(role), form_template()))
+
+    def test_false_for_everyone_else(self) -> None:
+        """Un formulario define qué captura toda la organización, no una visita."""
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(can_publish_form_template(ctx(role), form_template()))
+
+    def test_false_across_organizations(self) -> None:
+        self.assertFalse(
+            can_publish_form_template(ctx(Role.OWNER), form_template(org_id=OTHER_ORG))
+        )
+
+
 # --- Deny-by-default, para toda política presente y futura ------------------
 
 
@@ -226,6 +251,7 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_write_visit": visit(),
             "can_read_members": ORG,
             "can_manage_device": device(),
+            "can_publish_form_template": form_template(),
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

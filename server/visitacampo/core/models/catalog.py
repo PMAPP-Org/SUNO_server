@@ -8,8 +8,11 @@ sitio donde su forma ya estaba decidida. Se mantienen deliberadamente
 mínimas:
 
 - `FormTemplate`/`FormTemplateVersion`: la **definición declarativa** y su
-  validación JSON Schema son del Paso 20 (ADR-012). Aquí `definition` es
-  un `JSONField` sin validación de contenido.
+  meta-schema viven en `visitacampo.forms` (Paso 20, ADR-012). Aquí
+  `definition` sigue siendo un `JSONField` —la columna no cambia—, y lo que
+  el Paso 20 añadió es `FormTemplateVersion.clean()`: valida la definición
+  contra el meta-schema y hace cumplir la **inmutabilidad** de una versión
+  publicada.
 - `Assignment`: la planificación completa (rutas, reasignación, estados)
   **no es alcance del MVP estricto**. Este modelo es el placeholder que el
   brief autoriza: existe para que `Visit.assignment_id` sea una FK real y
@@ -80,7 +83,8 @@ class FormTemplateVersion(SyncedModel):
     name = models.CharField(max_length=256, null=True, blank=True)
     version_number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     # Definición declarativa; **nunca** contiene código ejecutable (ADR-012).
-    # El JSON Schema que la valida se implementa en el Paso 20.
+    # El meta-schema que la valida es `visitacampo.forms.definition`
+    # (Paso 20), aplicado en `clean()` y en `forms.services.publish_version()`.
     definition = models.JSONField(default=dict, blank=True)
     published_at = models.DateTimeField(null=True, blank=True, default=None)
 
@@ -105,6 +109,66 @@ class FormTemplateVersion(SyncedModel):
 
     def __str__(self) -> str:
         return f"{self.name or self.template_id} v{self.version_number}"
+
+    def clean(self) -> None:
+        """Meta-schema + inmutabilidad de versión publicada (Paso 20, ADR-012).
+
+        Es la capa que cubre el **Django Admin** (Paso 24), que valida por
+        `ModelForm` y por tanto llama a `full_clean()`. El camino sancionado
+        para crear versiones sigue siendo `forms.services.publish_version()`;
+        esto es la red para la edición manual.
+
+        Dos comprobaciones:
+
+        1. Si la definición declara campos, tiene que cumplir el meta-schema
+           (`visitacampo.forms.definition`). Una definición vacía (`{}`) es
+           válida y significa "esta versión no declara esquema" — ver
+           `has_declared_schema()` para por qué no se convierte en un error.
+        2. Una versión **ya publicada** no admite cambios en su definición ni
+           en su identidad. Corregir un formulario es publicar otra versión;
+           reescribir una versión en uso reinterpretaría en silencio las
+           visitas históricas que la referencian, que es exactamente lo que
+           ADR-012 existe para impedir.
+
+        El import va dentro de la función a propósito: `visitacampo.forms`
+        importa `visitacampo.core.models` (rangos de coordenadas, modelos), así
+        que hacerlo arriba cerraría un ciclo de imports en el arranque de
+        Django.
+        """
+        from django.core.exceptions import ValidationError
+
+        from visitacampo.forms.definition import (
+            TemplateDefinitionError,
+            has_declared_schema,
+            validate_definition,
+        )
+
+        super().clean()
+
+        if has_declared_schema(self.definition):
+            try:
+                validate_definition(self.definition)
+            except TemplateDefinitionError as exc:
+                raise ValidationError({"definition": exc.message}) from exc
+
+        if self._state.adding:
+            return
+        stored = type(self)._base_manager.filter(pk=self.pk).first()
+        if stored is None or stored.published_at is None:
+            return
+        changed = [
+            field
+            for field in ("definition", "version_number", "template_id", "org_id")
+            if getattr(stored, field) != getattr(self, field)
+        ]
+        if changed:
+            raise ValidationError(
+                dict.fromkeys(
+                    changed,
+                    "Una versión publicada es inmutable (ADR-012): publica una versión "
+                    "nueva en vez de editar esta.",
+                )
+            )
 
 
 class Assignment(SyncedModel):
