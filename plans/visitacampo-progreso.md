@@ -1,7 +1,7 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03 (ajuste: construcción continua sin confirmación por paso + dependencias de Grupo C relajadas + harness engineering — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación 2)")
+**Última actualización**: 2026-08-04 (Paso 20 cerrado — formularios declarativos backend; anterior: 2026-08-03, ajuste: construcción continua sin confirmación por paso + dependencias de Grupo C relajadas + harness engineering — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación 2)")
 
 ## Fase actual: construcción de código continua (emulador diferido)
 
@@ -115,7 +115,8 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 - [ ] **Paso 15** — Endurecimiento de autenticación: rotación, detección de reuso, rate limiting
 - [ ] **Paso 17** — Adjuntos backend: `BlobStore`, presign/commit, verificación
 - [ ] **Paso 19** — Cola de trabajos: `SKIP LOCKED` + lease + heartbeat + reaper
-- [ ] **Paso 20** — Formularios declarativos: `form_template` + JSON Schema versionado
+- [x] **Paso 20** — Formularios declarativos: `form_template` + JSON Schema versionado
+  `1268240` Añade formularios declarativos: DSL restringido + meta-schema versionado (Paso 20)
 
 ### Móvil
 
@@ -143,8 +144,14 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 0 | 11 (Pasos 15–25) |
-| **Total** | **14** | **26** |
+| Fase 1 | 1 (Paso 20) | 11 (Pasos 15–25) |
+| **Total** | **15** | **26** |
+
+**Estado de verificación del Paso 20 (backend, último paso cerrado)**: `pytest server/` **452 passed** (+634 subtests) contra PostgreSQL real, `ruff check server/` y `mypy server/ --config-file server/pyproject.toml` limpios, `manage.py makemigrations --check` sin cambios (el paso no altera ninguna columna: la validación vive en `FormTemplateVersion.clean()` y en el paquete nuevo `visitacampo/forms/`). Los tres comandos de verificación del plan corren de verdad: plantilla mal formada rechazada al publicar (`forms/tests/test_templates.py`), `answers` fuera del schema rechazada en el push con `code: validation_error` y `details {"field": "answers.<clave>", "reason": ...}` (`sync/tests/test_push_answers.py`), retrocompatibilidad histórica verificada con dos versiones incompatibles de la misma plantilla, y test de seguridad de H-06/RD-06 con 10 expresiones hostiles (`{"op": "eval"...}`, llamadas a función, acceso a atributos, regex) todas rechazadas al validar la plantilla y **nunca evaluadas**, más una comprobación por AST de que el paquete no contiene `eval`/`exec`/`compile`/`__import__` ni importa `os`/`subprocess`/`pickle`.
+
+**Entorno**: se levantó **solo** el servicio `db` (`docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.dev.yml up -d db`, patrón del Paso 14b), nunca el stack completo; RAM libre al arrancar ~1.3 GB. El contenedor `infra-db-1` se deja **corriendo** para los Pasos 17/19/15. Las variables `POSTGRES_*` de `infra/.env` se exportan al entorno del shell con `POSTGRES_HOST=localhost` para que `pytest` alcance el contenedor (sin ellas, `dbsupport.SKIP_REASON` salta los tests de integración en silencio).
+
+**Decisiones de diseño registradas (Paso 20)**: (a) el DSL de visibilidad es **JSON con discriminador `op`**, no un lenguaje de expresiones en texto — sin gramática no hay parser que desbordar; (b) referencias **solo hacia atrás**, lo que hace el grafo de dependencias acíclico por construcción; (c) se descarta `schema_unsupported` como código de rechazo de `answers` (en este contrato significa "no hablo tu versión del protocolo" y pararía la sincronización entera por un campo fuera de rango) en favor de `validation_error`; (d) **sin API pública de CRUD de plantillas en el MVP** — el contrato de Paso 1 no la declara y el back-office es el Django Admin del Paso 24 sobre `forms.services.publish_version()`; (e) sin expresiones regulares en el meta-schema (ReDoS); (f) una definición vacía (`{}`, las filas anteriores a este paso) significa "sin esquema declarado" y no restringe `answers`, para no invalidar dato histórico. Todas están escritas en el código, no solo aquí.
 
 **Estado de verificación del último paso cerrado (Paso 13)**: `flutter analyze app/` limpio; `flutter test app/` **51/51** verde (ejecutado con `--concurrency=1`, ver nota de entorno abajo) — incluye el consumo real de `/v1/auth/login|refresh|logout` y `/v1/server/info` (`AuthApiClient`), el dominio de sesión (`AuthController`: login/logout, refresh single-flight, un único reintento tras 401 sin loop) y el rechazo por defecto de un certificado autofirmado real sin ningún bypass (`tls_default_rejects_invalid_cert_test.dart`, servidor HTTPS real en loopback). `infra/scripts/lint_no_tls_bypass.sh` (RD-01) **OK**: 48 archivos `.dart` escaneados, sin bypass de TLS fuera de `TrustStore`. El archivo de diagnóstico temporal `_diag_socket_smoke_test.dart` (usado para depurar el hang de `bindSecure` con el fixture autofirmado) se eliminó tras confirmar que el test real ya cubre ese caso de forma estable. `ci_local.sh` completo no se corrió hasta el final esta vez: con concurrencia por defecto, el paso `flutter test app/` de ese script quedó colgado más de 15 minutos sin producir salida (mismo tipo de fallo de hilos que motivó el `--concurrency=1` — ver nota de entorno); se detuvo la ejecución en background y se dio por válida la verificación directa de los comandos propios del Paso 13, ya que este paso no toca `server/`.
 
