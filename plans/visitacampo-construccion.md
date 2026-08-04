@@ -538,6 +538,8 @@ graph TD
 
 ### Paso 14 — Integración end-to-end: cierre de Fase 0
 
+> **Actualización 2026-08-03**: la sección de Tareas de este paso se reescribió como checkpoints ejecutables (14a–14e) por una restricción de entorno real (RAM insuficiente para Docker + emulador + Flutter a la vez). Ver [§12](#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias) — usar esa versión, no la lista de tareas original de abajo.
+
 **Dependencias**: Paso 9, Paso 12, Paso 13, Paso 7 (todo lo mínimo de ambos tracks).
 **Paralelizable**: no (es un paso de integración serial por definición — necesita ambos codebases funcionando juntos).
 **Tier de modelo**: **fuerte** (es la primera verificación real de que el contrato de Paso 1 y las dos implementaciones independientes encajan; los defectos de integración son los más caros de diagnosticar a ciegas).
@@ -794,6 +796,8 @@ graph TD
 
 ### Paso 22 — Captura de visita: UI de formulario + GPS + fotos + firma
 
+> **Nota de entorno (2026-08-03)**: aplica la misma regla de secuenciación Docker/emulador del [§12](#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias) — verificar la UI de captura en el emulador con el backend apagado primero, activar el backend solo para probar la subida real después.
+
 **Dependencias**: Paso 21, Paso 18.
 **Paralelizable**: no con Paso 23 estrictamente (23 construye sobre el flujo de guardado que 22 establece), pero sí paralelizable con Paso 24 (Admin backend).
 **Tier de modelo**: estándar (integración de widgets/plugins Flutter maduros — cámara, GPS, firma — sobre patrones ya establecidos en pasos anteriores; sin decisiones de arquitectura nuevas).
@@ -883,6 +887,8 @@ graph TD
 ---
 
 ### Paso 25 — Suite de seguridad, prueba de carga y validación de criterios de aceptación MVP
+
+> **Nota de entorno (2026-08-03)**: la prueba de carga de 50 dispositivos concurrentes (tareas 9–11) casi con certeza no es representativa en la máquina de desarrollo local (7.4 GB RAM, Docker limitado a ~900 MB). Ejecutarla en un entorno con más recursos (VM en la nube o runner de CI). Detalle: [§12](#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias).
 
 **Dependencias**: Paso 15, 16, 18, 19, 22, 23, 24 (esencialmente todo lo demás — es el paso de cierre de Fase 1).
 **Paralelizable**: no (es el gate final; requiere que todos los demás pasos estén integrados).
@@ -1003,3 +1009,43 @@ Se listan como referencia, **sin desglosar en pasos**, siguiendo la instrucción
 - **Un agente sin contexto previo** debe poder tomar cualquier paso de este documento, leer su bloque completo más los documentos de `docs/` que cita, y ejecutarlo sin necesitar el resto de esta conversación. Si al ejecutar un paso resulta que falta información, la fuente de verdad es siempre `docs/08-arquitectura-propuesta-visitacampo.md` (para decisiones de arquitectura) y `docs/07-hallazgos-revision-codigo.md` (para restricciones de seguridad) — este plan no reabre ni contradice ninguna decisión de esos documentos, solo las secuencia en pasos ejecutables.
 - **Ningún paso se considera completo sin sus comandos de verificación en verde.** Esto es deliberado: la lista de anti-patrones de planificación a evitar incluye explícitamente "testing solo al final" — por eso cada paso de este plan (incluyendo los de scaffolding) tiene su propio comando de verificación, no se difiere todo a Paso 25.
 - **Integración continua, no pospuesta**: los Pasos 14 (cierre Fase 0) y 25 (cierre Fase 1) son los únicos puntos de integración "grande", pero ambos están diseñados para **consolidar y re-verificar** trabajo que los pasos individuales ya probaron por su cuenta, no para descubrir por primera vez si las piezas encajan.
+
+---
+
+## 12. Ajuste post-diagnóstico (2026-08-03) — restricción de entorno, resecuenciación y metas intermedias
+
+**Motivo de este ajuste**: tras cerrar el Paso 13 (5 días, 14 de 26 pasos), la ejecución se detuvo antes de completar el Paso 14. Diagnóstico realizado sobre la máquina real de desarrollo (no sobre el plan en abstracto): el Paso 14, tal como estaba escrito originalmente, exige levantar el stack Docker completo (`db`+`api`+`caddy`) **y** un emulador Android **y** herramientas Flutter, todo simultáneamente. Esto es incompatible con el hardware disponible, y es la causa raíz más probable del estancamiento — no una falla de diseño del protocolo de sync ni del código ya escrito.
+
+**Hallazgos de entorno (verificados, no estimados)**:
+- La máquina tiene **7.4 GB de RAM física total**, con frecuencia menos de 400 MB libres incluso sin ningún servicio del proyecto corriendo (confirmado con `Get-CimInstance Win32_OperatingSystem` al momento de este diagnóstico).
+- Docker Desktop tiene su VM limitada a **~900 MB de RAM y 1 CPU** (confirmado con `docker info`) — ya de por sí insuficiente para `db`+`api`+`worker`+`caddy` corriendo a la vez bajo cualquier carga real, y sin margen si además hay que compartir memoria con un emulador.
+- El AVD `visitacampo_e2e` (ya creado, disponible vía `flutter emulators`) reserva **2 GB de RAM** (`hw.ramSize=2G` en su `config.ini`) él solo, sin contar el proceso `qemu`/aceleración gráfica ni Android Studio si estuviera abierto.
+- Esto coincide exactamente con los problemas ya documentados en `visitacampo-progreso.md` para los Pasos 11–13: errores nativos `Out of memory`/`Could not start thread DartWorker` en `flutter test` con concurrencia por defecto, y `ci_local.sh` colgado >15 min en el paso de `flutter test` durante el Paso 13. No son fallos aislados — son la misma restricción de RAM manifestándose en cada paso que exige ejecución real (no solo análisis estático).
+- Hay un archivo sin commitear (`server/visitacampo/core/admin.py`, tarea 1 del Paso 14) — evidencia de que una sesión anterior llegó a empezar el Paso 14 y no pudo cerrarlo, consistente con este diagnóstico.
+
+**Regla operativa nueva (aplica a todo paso restante que combine backend + emulador)**: **nunca correr el stack Docker completo y el emulador Android a la vez si además se va a compilar/testear Flutter en esa misma ventana.** Secuenciar: (1) verificar el backend solo, con Docker arriba y el emulador apagado; (2) apagar Docker (`docker compose down`), liberar RAM, y verificar el cliente Flutter solo, con el emulador arriba y el backend apagado; (3) solo en el último sub-paso, con ambos ya verificados por separado, levantar el backend con el emulador ya corriendo (no al revés) para la prueba de integración real, y cerrar todo inmediatamente después de verificar. Esto convierte un solo paso "todo junto" en checkpoints que sí caben en la RAM disponible, cada uno verificable y commiteable por separado — y encaja bien con el modo de ejecución "paso a paso con confirmación explícita" ya vigente (cada checkpoint es una unidad natural de confirmación).
+
+**Acción recomendada, no bloqueante**: si se quiere más margen para los Pasos 17/19 (backend con `worker` real) o para futuras pruebas de carga, subir el límite de memoria de Docker Desktop (Configuración → Resources) de ~900 MB a 2–3 GB liberaría presión — pero como el techo real es 7.4 GB totales, esto **desplaza** el cuello de botella, no lo elimina; la regla de secuenciación de arriba sigue siendo necesaria independientemente de cuánta RAM se le dé a Docker. No se aplica este cambio de configuración de sistema sin que el usuario lo pida explícitamente.
+
+**Paso 14 — reescrito en checkpoints** (reemplaza la ejecución "todo en un solo paso" de la sección original; los criterios de salida y el objetivo del paso no cambian, solo su secuenciación):
+
+- **14a — Registrar en Admin y commitear** (ya implementado en `server/visitacampo/core/admin.py`, pendiente de commit): `admin.site.register` para `Visit`, `VisitAttachment`, `SyncOpLog`. Verificación: `python manage.py check`. Commit inmediato — es trabajo ya hecho, cerrarlo primero evita perderlo.
+- **14b — Backend solo, sin emulador**: `docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.dev.yml up db api` (sin `worker`/`caddy` si no son estrictamente necesarios para este checkpoint). Con el emulador **apagado**, verificar manualmente (`curl`/Postman/httpie, no Flutter) el flujo completo de auth+sync: login → push de una visita de prueba con payload JSON a mano → pull → aparece en `/admin/`. Esto prueba el 90% de la lógica de integración (contrato Paso 1 cumplido de extremo a extremo) sin necesitar el emulador en absoluto. `docker compose down` al terminar.
+- **14c — Cliente solo, sin backend**: con Docker **apagado**, lanzar el emulador (`flutter emulators --launch visitacampo_e2e`), correr la app en modo avión, insertar una visita vía el harness de debug temporal (dato dummy de GPS/foto, tal como ya preveía la tarea 3 original), verificar en la BD local (Drift) que la visita y su operación de outbox se guardaron atómicamente (reutilizando el test/inspección de Paso 11). Cerrar el emulador al terminar si la RAM lo exige para el siguiente checkpoint.
+- **14d — Integración real (el único checkpoint que junta ambos lados)**: con el emulador ya arriba y estabilizado, levantar el backend (`db`+`api` como mínimo) y reactivar la red del emulador. Verificar que `SyncEngine` drena la outbox contra `/v1/sync/push` y que la visita aparece en Django Admin con los datos correctos. Si la máquina no soporta ambos a la vez ni en este punto, es una señal real (no un error de configuración) de que este checkpoint debe ejecutarse en un dispositivo Android físico conectado por USB en vez de emulador (consume mucha menos RAM del host que un AVD) — documentar la decisión si se toma ese camino.
+- **14e — Documentación y cierre**: escribir `docs/testing/e2e-fase0.md` con el procedimiento reproducible (incluyendo la secuencia de checkpoints 14b–14d, no solo el resultado final), commit de cierre del Paso 14.
+
+**Nota para el Paso 22** (captura de visita: UI + GPS + fotos + firma): depende de emulador + `AttachmentQueue` subiendo contra el backend — aplica la misma regla de secuenciación de este ajuste. Verificar primero la UI de captura en el emulador con el backend apagado (guardado local optimista, que es justamente lo que doc 08 exige probar primero), y solo después activar el backend para probar la subida real.
+
+**Nota para el Paso 25** (prueba de carga de 50 dispositivos concurrentes): en esta máquina (7.4 GB RAM, Docker a ~900 MB) simular 50 dispositivos concurrentes contra el propio Postgres/API local casi con certeza no es representativo (el cuello de botella medido sería la máquina de desarrollo, no el `pg_advisory_xact_lock(org_id)` que el test quiere medir) y probablemente ni siquiera complete sin agotar recursos. Recomendación: cuando se llegue al Paso 25, ejecutar la tarea 9–11 (prueba de carga) en un entorno con más recursos (una VM temporal en la nube, o un runner de CI con más RAM/CPU) en vez de en esta máquina local — documentarlo como parte del propio Paso 25 en vez de descubrirlo tarde. El resto de la suite de seguridad (aislamiento, traversal, checksum, reuso de token) sí es viable localmente porque son tests automatizados ligeros, no simulación de concurrencia real.
+
+### Metas intermedias para lo que resta (Pasos 14–25)
+
+El plan original agrupa Fase 1 por dependencia técnica (backend vs. móvil), pero no define puntos de recompensa visibles — razonable para no sobre-planificar, pero contribuye a la sensación de "no se termina nunca" cuando quedan 12 pasos sin ningún hito intermedio nombrado. Se definen 4 metas, reutilizando el orden topológico ya válido del plan (§1) pero **recomendando** una secuencia dentro de cada meta que prioriza tener algo demostrable pronto:
+
+1. **Meta A — Fase 0 cerrada de verdad** (Paso 14, checkpoints 14a–14e arriba). Resultado tangible: una visita creada offline llega al Django Admin. Es la meta más cercana — se recomienda cerrarla antes de tocar cualquier otra cosa.
+2. **Meta B — Demo interna funcional** (Pasos 17, 20 en paralelo → 18, 21 en paralelo → 22). Estos seis pasos **no dependen** de los Pasos 15/16/19 (auth hardening, TrustStore, cola de jobs) según el grafo de dependencias ya existente en §1 — se pueden hacer primero sin violar ningún orden del plan. Resultado tangible: un agente de campo puede llenar un formulario real, tomar una foto, capturar GPS y ver la visita sincronizada — el primer momento en que el proyecto es "mostrable" a alguien fuera de la ejecución del plan, y una señal de progreso mucho más motivante que cerrar pasos de endurecimiento invisibles.
+3. **Meta C — Endurecimiento de seguridad** (Pasos 15, 19 en paralelo → 16). Se hace después de Meta B a propósito: son los pasos que corrigen los hallazgos CRITICAL/MEDIUM restantes (H-01 por completo, H-14/H-15, H-12/H-13/H-17) pero no producen ninguna funcionalidad nueva visible — mejor moral hacerlos con una app ya demostrable de fondo que como los primeros seis pasos tras el Paso 14.
+4. **Meta D — Cierre MVP** (Pasos 23, 24 en paralelo → 25). Incluye la nota de entorno alternativo para la prueba de carga arriba.
+
+Esta resecuenciación **no reabre ninguna decisión de doc 08** ni cambia ningún criterio de salida de ningún paso — solo reordena grupos de pasos ya marcados como paralelos/independientes entre sí en la tabla de §1, priorizando los que no dependen de 15/16/19 antes que los que sí.

@@ -1,25 +1,43 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03 (Paso 13 cerrado)
+**Última actualización**: 2026-08-03 (checkpoint 14a cerrado — commit `43e4c29`)
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
 
 ---
 
+## Diagnóstico de estancamiento (2026-08-03)
+
+La ejecución se detuvo entre el cierre del Paso 13 (2026-08-03) y el Paso 14: hay un archivo sin commitear (`server/visitacampo/core/admin.py`, la tarea 1 del Paso 14) pero ningún commit posterior. Causa raíz identificada: el Paso 14 original exige Docker completo + emulador Android + Flutter corriendo a la vez, y esta máquina tiene 7.4 GB de RAM totales con Docker limitado a ~900 MB/1 CPU y el AVD `visitacampo_e2e` reservando 2 GB él solo — combinación que no cabe en la memoria disponible (coincide con los `Out of memory`/hangs ya registrados en los Pasos 11–13 más abajo). Detalle completo, regla de secuenciación nueva, el Paso 14 reescrito en checkpoints (14a–14e) y las metas intermedias A–D: [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias).
+
+### Checklist de entorno (correr antes de cualquier checkpoint que use Docker o el emulador)
+
+- [ ] ¿Cuánta RAM libre hay ahora mismo? (`Get-CimInstance Win32_OperatingSystem | Select FreePhysicalMemory` en PowerShell). Si hay menos de ~2 GB libres, cerrar navegador/IDE pesado antes de continuar.
+- [ ] ¿Está el checkpoint anterior realmente cerrado (Docker abajo / emulador cerrado según corresponda) antes de levantar el siguiente? Nunca Docker completo + emulador + `flutter test` a la vez.
+- [ ] Si `flutter test`/`flutter analyze` falla con errores nativos de memoria: reintentar una vez, y si persiste usar `--concurrency=1` (mitigación ya validada en el Paso 13).
+
+### Metas intermedias (Pasos 14–25)
+
+- [ ] **Meta A — Fase 0 cerrada de verdad**: Paso 14 vía checkpoints 14a ✅ (commitear `admin.py`, `43e4c29`) → **14b (siguiente)** (backend solo) → 14c (cliente solo) → 14d (integración real) → 14e (documentar y cerrar).
+- [ ] **Meta B — Demo interna funcional**: Pasos 17, 20 → 18, 21 → 22. No dependen de 15/16/19; se priorizan porque producen el primer resultado mostrable (formulario + foto + GPS + sync visible).
+- [ ] **Meta C — Endurecimiento de seguridad**: Pasos 15, 19 → 16.
+- [ ] **Meta D — Cierre MVP**: Pasos 23, 24 → 25 (prueba de carga de 50 dispositivos: ejecutar fuera de esta máquina, ver §12).
+
 ## Cómo continuar en una nueva sesión
 
-**Modo de ejecución exigido: paso a paso, con confirmación explícita del usuario antes de pasar al siguiente paso.** No se debe encadenar la ejecución de varios pasos del plan en una sola tanda sin que el usuario apruebe cada transición — esto reemplaza el modo "continua sin parar" usado en sesiones anteriores.
+**Modo de ejecución exigido: paso a paso, con confirmación explícita del usuario antes de pasar al siguiente paso.** No se debe encadenar la ejecución de varios pasos del plan en una sola tanda sin que el usuario apruebe cada transición — esto reemplaza el modo "continua sin parar" usado en sesiones anteriores. A partir de este ajuste, cada **checkpoint** (14a, 14b, ... no solo cada paso completo) es la unidad natural de confirmación cuando un paso está desglosado en checkpoints.
 
-Para cada paso del plan (`visitacampo-construccion.md`):
+Para cada paso (o checkpoint) del plan (`visitacampo-construccion.md`):
 
-1. Releer la sección del paso correspondiente en `visitacampo-construccion.md` (tareas, comandos de verificación, criterios de salida) — no asumir de memoria.
-2. Implementar el paso completo (código + tests).
-3. Correr los comandos de verificación del propio paso **y** la suite completa relevante (`pytest`/`ruff`/`mypy` para `server/`, `flutter analyze`/`flutter test` para `app/`, `ci_local.sh` cuando toque ambos lados) — en verde de verdad, no asumido.
-4. Hacer commit del paso (mensaje descriptivo, ver convención en `README.md`).
-5. Actualizar este archivo (`visitacampo-progreso.md`): marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
-6. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo paso propuesto (según el orden topológico de `visitacampo-construccion.md §1`). No avanzar sin que el usuario confirme.
+1. Releer la sección correspondiente en `visitacampo-construccion.md` (tareas, comandos de verificación, criterios de salida — y §12 si el paso tiene una nota de secuenciación de entorno) — no asumir de memoria.
+2. Correr el checklist de entorno de arriba si el checkpoint usa Docker y/o el emulador.
+3. Implementar el paso/checkpoint completo (código + tests).
+4. Correr los comandos de verificación propios **y** la suite completa relevante (`pytest`/`ruff`/`mypy` para `server/`, `flutter analyze`/`flutter test` para `app/`, `ci_local.sh` cuando toque ambos lados) — en verde de verdad, no asumido.
+5. Hacer commit (mensaje descriptivo, ver convención en `README.md`).
+6. Actualizar este archivo: marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
+7. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso/checkpoint** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo propuesto. No avanzar sin que el usuario confirme.
 
-El **próximo paso a ejecutar es el Paso 14** (integración E2E, cierre de Fase 0 — ver checklist abajo) — sigue en orden mientras no se indique lo contrario.
+El **próximo paso a ejecutar es el Paso 14, checkpoint 14b** (backend solo, sin emulador: levantar `db`+`api` y verificar login→push→pull→Admin manualmente) — ver el Paso 14 reescrito en [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias). Antes de arrancarlo, correr el checklist de entorno de arriba (usa Docker).
 
 ---
 
@@ -70,7 +88,13 @@ El **próximo paso a ejecutar es el Paso 14** (integración E2E, cierre de Fase 
 
 ### Integración
 
-- [ ] **Paso 14** — Integración end-to-end: cierre de Fase 0
+- [ ] **Paso 14** — Integración end-to-end: cierre de Fase 0 (checkpoints 14a–14e, ver §12 del plan)
+  - [x] 14a — Registrar Visit/VisitAttachment/SyncOpLog en Admin
+    `43e4c29` Registra Visit/VisitAttachment/SyncOpLog en Django Admin (Paso 14, checkpoint 14a)
+  - [ ] 14b — Backend solo, sin emulador (siguiente)
+  - [ ] 14c — Cliente solo, sin backend
+  - [ ] 14d — Integración real (ambos a la vez)
+  - [ ] 14e — Documentación y cierre
 
 ---
 
