@@ -1,7 +1,14 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03 (checkpoint 14b cerrado — commit `2a5ee36`)
+**Última actualización**: 2026-08-03 (decisión: separar fase de construcción / fase de testeo en emulador — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación)")
+
+## Fase actual: construcción de código (emulador diferido)
+
+**Decisión de esta sesión**: dejar de intercalar verificación en emulador por checkpoint (14c se cerró parcialmente — el emulador llegó a booteear pero no había harness de debug para insertar una visita, y cada sesión de emulador cuesta reconquistar RAM manualmente). A partir de aquí: construir código de los pasos restantes con toda su verificación no-emulador (`pytest`/`ruff`/`mypy`, `dart analyze`/`flutter test` headless) y diferir todo lo que exija el emulador/dispositivo real a una fase de testeo dedicada, en bloque, más adelante.
+
+- **Paso 14**: 14a ✅ y 14b ✅ cerrados (backend real probado de punta a punta). **14c queda a medio camino** — el emulador booteó pero no se insertó ninguna visita (no existe todavía un harness de debug en `app/lib/main.dart`, que sigue siendo el demo `flutter create` sin modificar). 14c/14d se retoman en la fase de testeo. No bloquean el resto del plan (ver justificación en §12).
+- **Siguiente paso de construcción**: **Paso 20 — Formularios declarativos backend** (`form_template` + JSON Schema versionado). Se elige primero porque depende solo del Paso 6 (ya cerrado) — cero dependencias pendientes de la fase de testeo, a diferencia de Paso 17 (que depende de Paso 14) o cualquier paso móvil (que eventualmente necesitará `flutter test`, sin emulador, pero conviene empezar por el lado más "limpio").
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
 
 ---
@@ -37,7 +44,7 @@ Para cada paso (o checkpoint) del plan (`visitacampo-construccion.md`):
 6. Actualizar este archivo: marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
 7. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso/checkpoint** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo propuesto. No avanzar sin que el usuario confirme.
 
-El **próximo paso a ejecutar es el Paso 14, checkpoint 14c** (cliente solo, sin backend: con Docker/`manage.py runserver` apagados, lanzar el emulador `visitacampo_e2e` en modo avión, insertar una visita vía el harness de debug, verificar guardado atómico en Drift) — ver el Paso 14 reescrito en [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias). Antes de arrancarlo, correr el checklist de entorno de arriba (el AVD reserva 2 GB él solo).
+El **próximo paso a ejecutar es el Paso 20 — Formularios declarativos backend** (construcción de código, sin emulador; ver "Fase actual" arriba). El Paso 14 (checkpoints 14c/14d) queda diferido a la fase de testeo en emulador, no es el próximo paso mientras estemos en fase de construcción.
 
 ---
 
@@ -94,9 +101,9 @@ El **próximo paso a ejecutar es el Paso 14, checkpoint 14c** (cliente solo, sin
   - [x] 14b — Backend solo, sin emulador
     `2a5ee36` Reduce memory_cost de Argon2 en dev.py para máquinas con RAM escasa (Paso 14, checkpoint 14b)
     Verificado con `manage.py runserver` (127.0.0.1:8000) contra el `db` de `docker compose` ya corriendo — **no** se activó el placeholder Docker del servicio `api` (sigue como placeholder de `infra/docker-compose.yml`, `sleep infinity`; construir su imagen es scope de un paso futuro si hace falta correrlo en contenedor, no bloqueante aquí). Flujo real por `curl`: `POST /v1/auth/login` → JWT real; `POST /v1/sync/push` de una visita → `status: applied`, `server_version: 1`; `GET /v1/sync/pull?cursor=c1:00…0` → devuelve la visita con `change_seq` correcto; confirmado en BD que `admin.site.is_registered(Visit)` es `True` y los datos persistidos coinciden. Bloqueo encontrado y resuelto en el camino: Argon2 fallaba con `HashingError: Memory allocation error` por falta de RAM real (~350-450 MB libres) — mitigado con `DevArgon2PasswordHasher` (memory_cost 19 MiB, solo dev.py, ver commit).
-  - [ ] 14c — Cliente solo, sin backend (siguiente)
-  - [ ] 14d — Integración real (ambos a la vez)
-  - [ ] 14e — Documentación y cierre
+  - [~] 14c — Cliente solo, sin backend — **diferido a la fase de testeo**: el emulador `visitacampo_e2e` booteó correctamente (con Docker Desktop detenido para liberar RAM: ~290 MB → ~900 MB libres), pero no se insertó ninguna visita porque `app/lib/main.dart` sigue siendo el demo `flutter create` sin modificar (no existe el harness de debug que la tarea supone). Retomar en la fase de testeo, momento en el que ya debería existir código de dominio adicional (Meta B) que dar de alta ahí también.
+  - [ ] 14d — Integración real (ambos a la vez) — diferido a la fase de testeo
+  - [ ] 14e — Documentación y cierre — diferido a la fase de testeo
 
 ---
 
