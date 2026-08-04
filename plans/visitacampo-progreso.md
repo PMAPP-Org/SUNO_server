@@ -1,7 +1,7 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-03 (checkpoint 14a cerrado — commit `43e4c29`)
+**Última actualización**: 2026-08-03 (checkpoint 14b cerrado — commit `2a5ee36`)
 **Cómo mantener este archivo**: al cerrar un paso (commit + comandos de verificación en verde), marcar su casilla aquí y anotar el/los commit(s) correspondientes. Si un paso se reabre por un hallazgo de revisión posterior, anotarlo como sub-ítem bajo el paso original en vez de crear una entrada nueva — el plan no numera "pasos de corrección" aparte.
 
 ---
@@ -18,7 +18,7 @@ La ejecución se detuvo entre el cierre del Paso 13 (2026-08-03) y el Paso 14: h
 
 ### Metas intermedias (Pasos 14–25)
 
-- [ ] **Meta A — Fase 0 cerrada de verdad**: Paso 14 vía checkpoints 14a ✅ (commitear `admin.py`, `43e4c29`) → **14b (siguiente)** (backend solo) → 14c (cliente solo) → 14d (integración real) → 14e (documentar y cerrar).
+- [ ] **Meta A — Fase 0 cerrada de verdad**: Paso 14 vía checkpoints 14a ✅ (`43e4c29`) → 14b ✅ (`2a5ee36`) → **14c (siguiente)** (cliente solo) → 14d (integración real) → 14e (documentar y cerrar).
 - [ ] **Meta B — Demo interna funcional**: Pasos 17, 20 → 18, 21 → 22. No dependen de 15/16/19; se priorizan porque producen el primer resultado mostrable (formulario + foto + GPS + sync visible).
 - [ ] **Meta C — Endurecimiento de seguridad**: Pasos 15, 19 → 16.
 - [ ] **Meta D — Cierre MVP**: Pasos 23, 24 → 25 (prueba de carga de 50 dispositivos: ejecutar fuera de esta máquina, ver §12).
@@ -37,7 +37,7 @@ Para cada paso (o checkpoint) del plan (`visitacampo-construccion.md`):
 6. Actualizar este archivo: marcar la casilla, anotar el/los commit(s), actualizar la tabla de "Resumen" y la fecha de "Última actualización".
 7. **Parar y pedir confirmación al usuario antes de empezar el siguiente paso/checkpoint** — reportar qué se hizo, qué quedó verificado, y cuál es el próximo propuesto. No avanzar sin que el usuario confirme.
 
-El **próximo paso a ejecutar es el Paso 14, checkpoint 14b** (backend solo, sin emulador: levantar `db`+`api` y verificar login→push→pull→Admin manualmente) — ver el Paso 14 reescrito en [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias). Antes de arrancarlo, correr el checklist de entorno de arriba (usa Docker).
+El **próximo paso a ejecutar es el Paso 14, checkpoint 14c** (cliente solo, sin backend: con Docker/`manage.py runserver` apagados, lanzar el emulador `visitacampo_e2e` en modo avión, insertar una visita vía el harness de debug, verificar guardado atómico en Drift) — ver el Paso 14 reescrito en [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias). Antes de arrancarlo, correr el checklist de entorno de arriba (el AVD reserva 2 GB él solo).
 
 ---
 
@@ -91,8 +91,10 @@ El **próximo paso a ejecutar es el Paso 14, checkpoint 14b** (backend solo, sin
 - [ ] **Paso 14** — Integración end-to-end: cierre de Fase 0 (checkpoints 14a–14e, ver §12 del plan)
   - [x] 14a — Registrar Visit/VisitAttachment/SyncOpLog en Admin
     `43e4c29` Registra Visit/VisitAttachment/SyncOpLog en Django Admin (Paso 14, checkpoint 14a)
-  - [ ] 14b — Backend solo, sin emulador (siguiente)
-  - [ ] 14c — Cliente solo, sin backend
+  - [x] 14b — Backend solo, sin emulador
+    `2a5ee36` Reduce memory_cost de Argon2 en dev.py para máquinas con RAM escasa (Paso 14, checkpoint 14b)
+    Verificado con `manage.py runserver` (127.0.0.1:8000) contra el `db` de `docker compose` ya corriendo — **no** se activó el placeholder Docker del servicio `api` (sigue como placeholder de `infra/docker-compose.yml`, `sleep infinity`; construir su imagen es scope de un paso futuro si hace falta correrlo en contenedor, no bloqueante aquí). Flujo real por `curl`: `POST /v1/auth/login` → JWT real; `POST /v1/sync/push` de una visita → `status: applied`, `server_version: 1`; `GET /v1/sync/pull?cursor=c1:00…0` → devuelve la visita con `change_seq` correcto; confirmado en BD que `admin.site.is_registered(Visit)` es `True` y los datos persistidos coinciden. Bloqueo encontrado y resuelto en el camino: Argon2 fallaba con `HashingError: Memory allocation error` por falta de RAM real (~350-450 MB libres) — mitigado con `DevArgon2PasswordHasher` (memory_cost 19 MiB, solo dev.py, ver commit).
+  - [ ] 14c — Cliente solo, sin backend (siguiente)
   - [ ] 14d — Integración real (ambos a la vez)
   - [ ] 14e — Documentación y cierre
 
