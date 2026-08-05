@@ -19,6 +19,7 @@ from visitacampo.core.models import MimeType
 __all__ = [
     "ATTACHMENT_ALLOWED_MIME",
     "ATTACHMENT_MAX_BYTES",
+    "ATTACHMENT_MAX_BYTES_PER_VISIT",
     "MIN_SUPPORTED_SCHEMA_VERSION",
     "SCHEMA_VERSION",
     "SYNC_PULL_DEFAULT_LIMIT",
@@ -59,6 +60,18 @@ SYNC_PULL_DEFAULT_LIMIT = 500
 #: justo la razón de que se anuncie aquí.
 ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 
+#: ADR-007 punto 5 / tarea 5 del Paso 17: tope **acumulado** por visita (200
+#: MiB). El límite por archivo no basta: sin este, una sola visita podría
+#: acumular miles de adjuntos de 25 MiB y convertir la cuota de
+#: almacenamiento en un problema de una tarde. 200 MiB deja sitio de sobra
+#: para el reportaje fotográfico completo de una visita de campo (≈ 8 fotos
+#: en el peor caso, decenas en el realista) y sigue siendo un techo.
+#:
+#: **Se cuenta sobre blobs ya confirmados y adjuntos vivos**: los adjuntos con
+#: tombstone no ocupan cuota, porque el agente que corrige una foto no debería
+#: pagar dos veces por el mismo hueco.
+ATTACHMENT_MAX_BYTES_PER_VISIT = 200 * 1024 * 1024
+
 #: Allow-list de MIME (ADR-007). Se deriva de `MimeType` para que la lista que
 #: se anuncia y la que el modelo acepta no puedan divergir.
 ATTACHMENT_ALLOWED_MIME: tuple[str, ...] = tuple(MimeType.values)
@@ -72,4 +85,11 @@ def capabilities() -> dict[str, object]:
         "sync_pull_max_limit": SYNC_PULL_MAX_LIMIT,
         "attachment_max_bytes": ATTACHMENT_MAX_BYTES,
         "attachment_allowed_mime": list(ATTACHMENT_ALLOWED_MIME),
+        # No está entre las `required` de `components.schemas.
+        # ServerCapabilities`, pero el esquema declara
+        # `additionalProperties: true`, así que anunciarlo es válido contra el
+        # contrato. Y merece anunciarse: sin este número el cliente no puede
+        # saber que una foto más va a ser rechazada hasta haberla subido, que
+        # es exactamente el gasto de datos móviles que ADR-007 quiere evitar.
+        "attachment_max_bytes_per_visit": ATTACHMENT_MAX_BYTES_PER_VISIT,
     }

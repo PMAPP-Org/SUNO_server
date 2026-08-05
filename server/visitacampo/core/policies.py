@@ -47,11 +47,13 @@ __all__ = [
     "can_publish_form_template",
     "can_read_members",
     "can_read_visit",
+    "can_upload_attachment",
     "can_write_visit",
     "check_manage_device",
     "check_publish_form_template",
     "check_read_members",
     "check_read_visit",
+    "check_upload_attachment",
     "check_write_visit",
     "user_has_organization_roles",
 ]
@@ -209,6 +211,29 @@ def can_publish_form_template(ctx: RequestContext, template: OrgScopedResource) 
     return user_has_organization_roles(ctx, template.org_id, ADMIN_ROLES)
 
 
+def can_upload_attachment(ctx: RequestContext, org_id: UUID) -> bool:
+    """Pedir una URL prefirmada de subida (Paso 17, ADR-007).
+
+    Mismos roles que escribir una visita —un adjunto **es** trabajo de campo—,
+    así que un `VIEWER` no obtiene URL de subida: no captura, no sube.
+
+    Existe como política propia en vez de reutilizar `can_write_visit` porque
+    el contrato hace `visit_id` **opcional** en `PresignRequest`: el dispositivo
+    puede pedir la firma de una foto antes de decidir a qué visita la adjunta.
+    Sin `visit_id` no hay recurso que pasar a `can_write_visit`, y forzar uno
+    ficticio para poder llamarla sería justo el tipo de puenteo que ADR-013
+    prohíbe. Cuando **sí** viene `visit_id`, el servicio llama además a
+    `check_write_visit` sobre la visita real: esta política es el suelo, no el
+    techo.
+
+    Lo que **no** hace, y es deliberado: no mira el `sha256`. Autorizar por
+    contenido no tendría sentido (el hash aún no existe en el servidor) y
+    tampoco haría falta — el aislamiento real de los adjuntos vive en
+    `visit_attachment`, que sí lleva `org_id`.
+    """
+    return user_has_organization_roles(ctx, org_id, WRITE_VISIT_ROLES)
+
+
 def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
     """Administrar un dispositivo (renombrar, revocar su sesión, darlo de baja).
 
@@ -250,6 +275,11 @@ def check_read_members(ctx: RequestContext, org_id: UUID) -> None:
 def check_publish_form_template(ctx: RequestContext, template: OrgScopedResource) -> None:
     if not can_publish_form_template(ctx, template):
         raise _denial(ctx, template.org_id)
+
+
+def check_upload_attachment(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_upload_attachment(ctx, org_id):
+        raise _denial(ctx, org_id)
 
 
 def check_manage_device(ctx: RequestContext, device: DeviceLike) -> None:

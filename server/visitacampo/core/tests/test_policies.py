@@ -252,6 +252,11 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_read_members": ORG,
             "can_manage_device": device(),
             "can_publish_form_template": form_template(),
+            # Paso 17: el recurso es la organización, no una visita, porque
+            # `visit_id` es opcional en `PresignRequest` (ver el docstring de
+            # la política). Queda igualmente sujeta a los dos invariantes de
+            # H-16/RD-11 que comprueban los tests de esta clase.
+            "can_upload_attachment": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

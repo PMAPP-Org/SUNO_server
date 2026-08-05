@@ -34,6 +34,9 @@ server/**/__pycache__/
 venv/
 server/staticfiles/
 server/media/
+# Raíz del adaptador `LocalFsBlobStore` (ADR-007, Paso 17): adjuntos de
+# desarrollo depositados en el filesystem. Nunca se versionan.
+server/.blobstore/
 *.sqlite3
 .pytest_cache/
 .ruff_cache/

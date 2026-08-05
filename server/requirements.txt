@@ -17,3 +17,22 @@ psycopg[binary]==3.3.4
 # djangorestframework-simplejwt está en visitacampo/authn/tokens.py.
 PyJWT==2.10.1
 cryptography==48.0.0
+
+# ADR-007: adjuntos en object storage S3-compatible (Cloudflare R2), con
+# subida directa por URL prefirmada (Paso 17).
+#
+# **Por qué una dependencia y no SigV4 a mano.** Firmar una URL es un
+# algoritmo de una página, pero su resultado es un hash: o coincide byte a
+# byte o el store responde `403`, sin decir por qué. Una implementación propia
+# —sin un R2 real contra el que contrastarla— solo se podría verificar con
+# vectores de prueba transcritos a mano, y cualquier detalle mal recordado
+# (orden de las cabeceras canónicas, `UNSIGNED-PAYLOAD`, escapado del path)
+# daría un backend que **pasa en local y falla en producción**. `boto3` es el
+# cliente canónico de la API S3, R2 lo documenta como el recomendado, y
+# —decisivo para este proyecto— **firma sin red**: `generate_presigned_url` es
+# cálculo local, así que los tests de `S3BlobStore` corren offline de verdad
+# (ver visitacampo/attachments/s3.py).
+#
+# Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
+# dependencias suyas y las resuelve pip con las versiones que boto3 declara.
+boto3==1.43.63

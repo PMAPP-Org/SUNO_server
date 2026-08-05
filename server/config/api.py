@@ -3,9 +3,10 @@
 Paso 4 montó la infraestructura del router y el endpoint de salud. El Paso 7
 añadió lo primero del contrato de verdad: autenticación (`/v1/auth/*`) y
 negociación de capacidades (`/v1/server/info`). El Paso 8 añade el motor de
-sincronización (`POST /v1/sync/push`). El resto (pull, adjuntos, jobs, admin)
-llega en los Pasos 9-10, 17 y 19-20 — sigue sin adelantarse aquí (ADR-004:
-"la lógica vive en la capa de servicios, no en las vistas").
+sincronización (`POST /v1/sync/push`) y el Paso 9 el pull. El Paso 17 añade el
+carril de adjuntos (`/v1/attachments/*`). Falta el de jobs (`/v1/jobs/{id}`,
+Paso 19) — sigue sin adelantarse aquí (ADR-004: "la lógica vive en la capa de
+servicios, no en las vistas").
 
 **Autenticación por defecto**: el contrato declara `security: [bearerAuth]` a
 nivel global y la desactiva operación por operación (`security: []` en
@@ -18,6 +19,7 @@ lo deja cerrado (deny-by-default, ADR-013).
 
 from ninja import NinjaAPI
 
+from visitacampo.attachments.api import router as attachments_router
 from visitacampo.authn.api import router as auth_router
 from visitacampo.authn.auth import JwtAuth
 from visitacampo.core.api_errors import register_error_handlers
@@ -41,3 +43,4 @@ api.add_router("", health_router)
 api.add_router("", auth_router)
 api.add_router("", server_info_router)
 api.add_router("", sync_router)
+api.add_router("", attachments_router)

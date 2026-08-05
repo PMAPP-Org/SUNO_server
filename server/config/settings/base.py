@@ -188,6 +188,53 @@ JWT_ACCESS_TTL_SECONDS = 900
 # semanas offline y no debe verse obligado a re-loguearse por ello.
 JWT_REFRESH_TTL_SECONDS = 60 * 60 * 24 * 60
 
+# --- Adjuntos: object storage S3-compatible (ADR-007, Paso 17) --------------
+# Nombres de variable idénticos a infra/.env.example (Paso 2), que ya las
+# documentaba para el MinIO del override de desarrollo — no se inventan
+# nombres nuevos, solo se añade `STORAGE_BACKEND` para poder elegir adaptador.
+#
+# `s3` es el backend de producción (Cloudflare R2 por su API compatible) y
+# también el de desarrollo con `docker compose` (MinIO). `localfs` es el
+# adaptador sin red de ADR-007 punto 1: lo usan la suite de tests y quien
+# desarrolle sin levantar contenedores.
+#
+# El valor por defecto se **deriva** en vez de fijarse a `s3` a secas: sin
+# bucket configurado, un `s3` por defecto haría fallar cualquier `pytest` o
+# `manage.py` local con un `ImproperlyConfigured` que no aporta nada. Con esta
+# derivación, el entorno que tiene credenciales usa S3 y el que no las tiene
+# cae al adaptador local — sin que ninguno de los dos tenga que declarar nada.
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND") or (
+    "s3" if os.environ.get("STORAGE_S3_BUCKET_NAME") else "localfs"
+)
+STORAGE_S3_ENDPOINT_URL = os.environ.get("STORAGE_S3_ENDPOINT_URL", "")
+STORAGE_S3_ACCESS_KEY_ID = os.environ.get("STORAGE_S3_ACCESS_KEY_ID", "")
+STORAGE_S3_SECRET_ACCESS_KEY = os.environ.get("STORAGE_S3_SECRET_ACCESS_KEY", "")
+STORAGE_S3_BUCKET_NAME = os.environ.get("STORAGE_S3_BUCKET_NAME", "")
+# R2 ignora la región pero SigV4 la exige en la firma; `auto` es lo que
+# documenta Cloudflare.
+STORAGE_S3_REGION = os.environ.get("STORAGE_S3_REGION", "auto")
+# MinIO necesita rutas `path-style`; R2 y S3 usan `virtual-hosted`.
+STORAGE_S3_USE_PATH_STYLE = os.environ.get("STORAGE_S3_USE_PATH_STYLE", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+# Raíz del adaptador `localfs`. Bajo BASE_DIR y no en `/tmp` para que un
+# desarrollador vea dónde han ido a parar sus adjuntos; `.gitignore` la excluye.
+STORAGE_LOCAL_ROOT = os.environ.get("STORAGE_LOCAL_ROOT", str(BASE_DIR / ".blobstore"))
+
+# Caducidad de las URLs prefirmadas. La de subida es la de ADR-007 (15 min):
+# suficiente para una foto en 3G rural, corta para que una URL filtrada sirva
+# de poco. La de descarga es mucho más corta porque el back-office la consume
+# de inmediato: la URL solo tiene que sobrevivir al `redirect` del navegador.
+ATTACHMENT_UPLOAD_URL_TTL_SECONDS = 900
+ATTACHMENT_DOWNLOAD_URL_TTL_SECONDS = 300
+
+# ADR-007 (consecuencias): un objeto subido pero nunca confirmado es basura
+# pasadas 24 h. El job que lo aplica lo engancha el Paso 19; la lógica vive en
+# `visitacampo/attachments/services.py::collect_unconfirmed_uploads`.
+ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS = 24
+
 # --- Internacionalización ---------------------------------------------------
 LANGUAGE_CODE = "es"
 TIME_ZONE = "America/Bogota"

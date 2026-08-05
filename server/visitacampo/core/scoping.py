@@ -32,9 +32,15 @@ from django.db import models
 from django.db.models import QuerySet
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import AppUser, Organization, OrgScopedModel
+from visitacampo.core.models import AppUser, Blob, Organization, OrgScopedModel
 
-__all__ = ["NotOrgScopedError", "get_app_user", "get_organization", "scoped_qs"]
+__all__ = [
+    "NotOrgScopedError",
+    "blob_registry",
+    "get_app_user",
+    "get_organization",
+    "scoped_qs",
+]
 
 
 class NotOrgScopedError(TypeError):
@@ -93,6 +99,34 @@ def get_organization(ctx: RequestContext) -> Organization:
     `BootstrapResponse.organization`).
     """
     return Organization._default_manager.get(pk=ctx.org_id)
+
+
+def blob_registry() -> QuerySet[Blob]:
+    """La tabla `blob` **sin filtrar por organización**, porque no tiene `org_id`.
+
+    Es la tercera —y última— excepción documentada de este módulo, junto con
+    `get_organization` y `get_app_user`, y la que `NotOrgScopedError` ya
+    anticipaba en su docstring desde el Paso 6: `Blob` no lleva `org_id` **a
+    propósito** (RD-08), porque su razón de ser es deduplicar contenido entre
+    dispositivos y entre organizaciones. Un `scoped_qs(ctx, Blob)` no es que
+    esté prohibido: es que no significa nada, y por eso falla ruidosamente.
+
+    **No recibe `ctx`, y eso es la advertencia, no un olvido.** Una firma
+    `blob_registry(ctx)` sugeriría que el contexto acota algo, y no acota nada.
+    Quien llame a esta función es responsable de haber resuelto la autorización
+    **antes**, y solo hay una forma sancionada de hacerlo: comprobar con
+    `scoped_qs(ctx, VisitAttachment)` que existe un adjunto de la organización
+    del solicitante que referencie ese `sha256` (Paso 10 / ADR-007 punto 6, y
+    es exactamente lo que hace `attachments/services.py::download_url`). El
+    riesgo real es acotado incluso si alguien se saltara ese paso: conocer un
+    `sha256` implica poseer ya los bytes exactos que lo producen, así que la
+    tabla no revela por sí sola nada que quien pregunta no tuviera ya.
+
+    Se devuelve el `QuerySet` completo y no el manager para que el llamador
+    tenga `filter`/`get`/`bulk_create` sin que este módulo tenga que ir
+    exponiendo un método por operación.
+    """
+    return Blob._default_manager.all()
 
 
 def get_app_user(ctx: RequestContext) -> AppUser:
