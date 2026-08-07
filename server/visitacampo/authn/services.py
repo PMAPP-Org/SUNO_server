@@ -27,6 +27,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from axes.helpers import get_client_ip_address
+from axes.utils import reset as reset_axes_attempts
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.db import IntegrityError, transaction
@@ -250,6 +252,22 @@ def log_in(request, username: str, password: str, info: DeviceRegistration) -> L
     user = authenticate(request, username=username, password=password)
     if not isinstance(user, AppUser):
         raise InvalidCredentials
+
+    # django-axes (ADR-004): `AXES_RESET_ON_SUCCESS` solo se dispara con la
+    # señal `django.contrib.auth.signals.user_logged_in`, que únicamente
+    # emite `django.contrib.auth.login()`. Este endpoint es JWT sin sesión y
+    # nunca llama a esa función, así que sin esta línea axes jamás olvidaría
+    # los intentos fallidos de una cuenta/IP tras un login legítimo — el
+    # contador crecería para siempre y un usuario real podría acabar
+    # bloqueado por fallos de tecleo antiguos ya sin relevancia. Se usa la
+    # API pública de axes (`axes.utils.reset`), no lógica de rate limiting
+    # propia; verificado en `authn/tests/test_axes_lockout.py`
+    # (`test_a_successful_login_resets_the_failure_counter`).
+    if settings.AXES_RESET_ON_SUCCESS:
+        reset_axes_attempts(
+            ip=get_client_ip_address(request),
+            username=user.get_username(),
+        )
 
     ctx = resolve_request_context(Principal(user_id=user.pk, org_id=user.org_id))
     if not ctx.is_member:

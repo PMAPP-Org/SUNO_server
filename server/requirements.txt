@@ -36,3 +36,10 @@ cryptography==48.0.0
 # Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
 # dependencias suyas y las resuelve pip con las versiones que boto3 declara.
 boto3==1.43.63
+
+# ADR-004: rate limiting de login (Paso de endurecimiento del demo — ver
+# plans/visitacampo-despliegue-demo-implementacion.md). Se instala y
+# configura la librería en vez de escribir rate limiting a mano: el login
+# (visitacampo/authn/services.py::log_in) ya llama a
+# django.contrib.auth.authenticate(), el mismo hook que axes necesita.
+django-axes==7.0.2

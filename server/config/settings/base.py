@@ -8,6 +8,7 @@ Variables de entorno leídas aquí consistentes con `infra/.env.example`
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 # server/ es la raíz del proyecto Django (BASE_DIR = server/, no el repo).
@@ -44,6 +45,11 @@ INSTALLED_APPS = [
     # Se llama `authn` y no `auth` para no colisionar con `django.contrib.auth`
     # (ver el docstring de visitacampo.authn.apps.AuthnConfig).
     "visitacampo.authn.apps.AuthnConfig",
+    # 3rd-party — rate limiting de login (ADR-004). Reutiliza el hook de
+    # `django.contrib.auth.authenticate()` que `authn/services.py::log_in`
+    # ya invoca (ver el bloque `AXES_*` más abajo para los dos ajustes que
+    # sí necesitó ese archivo).
+    "axes",
 ]
 
 # --- Usuario ---------------------------------------------------------------
@@ -163,6 +169,58 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
     "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 ]
+
+# --- django-axes: rate limiting de login (ADR-004) --------------------------
+# Bloque adaptado de qfieldcloud/docker-app/qfieldcloud/settings.py (líneas
+# ~72-77 AUTHENTICATION_BACKENDS, ~140 INSTALLED_APPS, ~169 MIDDLEWARE,
+# ~588-602 AXES_*), con dos ajustes verificados empíricamente contra el login
+# JWT propio de este proyecto (no el login basado en sesión de qfieldcloud):
+#
+# 1. **No se instala `axes.middleware.AxesMiddleware`**, a pesar de que la
+#    documentación de axes lo pide. Ese middleware no participa en el
+#    bloqueo (lo hace `AxesBackend.authenticate()`, más abajo); su único
+#    efecto es *sustituir* la respuesta ya generada por un `429 Too Many
+#    Requests` con cuerpo propio de axes cuando `request.axes_locked_out` es
+#    verdadero — y ese flag se marca en la request que hace saltar el
+#    límite, no solo en las posteriores. Con el middleware puesto, se
+#    comprobó (ejecutando `test_axes_lockout.py` de verdad) que la 5ª
+#    petición fallida devuelve `429` con un cuerpo distinto en vez del `401
+#    invalid_credentials` que pide esta tarea; sin el middleware, el
+#    bloqueo lo sigue haciendo `AxesBackend` exactamente igual (verificado:
+#    sigue devolviendo `401` tras el límite), pero la respuesta la sigue
+#    generando `authn/services.py::log_in` con su manejo de errores de
+#    siempre — que es justo el comportamiento pedido.
+# 2. **`authn/services.py::log_in` SÍ gana una línea** (no queda intacto del
+#    todo, a pesar de lo que dice el plan): `AXES_RESET_ON_SUCCESS` solo se
+#    dispara con la señal `user_logged_in`, que solo emite
+#    `django.contrib.auth.login()` — función que este endpoint JWT sin
+#    sesión nunca llama. Sin invocar la API pública `axes.utils.reset()` a
+#    mano tras un login válido, un usuario legítimo no recupera nunca su
+#    cupo de intentos (verificado: `test_a_successful_login_resets_the_
+#    failure_counter` falla con 401 en vez de 200 sin esa línea). Ver el
+#    comentario en `log_in` para el detalle; sigue sin ser rate limiting
+#    propio, es la API pública de axes invocada en el único punto que le
+#    falta una señal de Django para activarse sola.
+#
+# `AxesBackend`, antepuesto aquí, es quien decide si la llamada a
+# `django.contrib.auth.authenticate()` que ya hacía `log_in` debe siquiera
+# intentar validar la contraseña o devolver "bloqueado" sin mirarla.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+# Intentos fallidos permitidos antes de bloquear. Igual que qfieldcloud.
+AXES_FAILURE_LIMIT = 5
+# Bloquea por la combinación (username, IP): un atacante con muchas IPs no
+# agota el límite de una cuenta ajena tan rápido como con solo IP, y un
+# usuario legítimo detrás de una IP compartida no bloquea a sus compañeros.
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+# Ventana de inactividad tras la que los intentos fallidos antiguos se
+# olvidan solos.
+AXES_COOLOFF_TIME = lambda _request: timedelta(minutes=30)  # noqa: E731
+# Un login correcto reinicia el contador de fallos de esa cuenta/IP.
+AXES_RESET_ON_SUCCESS = True
 
 # --- Autenticación JWT (ADR-008, Paso 7) -----------------------------------
 # Clave de firma Ed25519 de los access tokens. Nombres consistentes con
