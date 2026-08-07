@@ -1,0 +1,6 @@
+# VisitaCampo backend — dependencias del proceso servidor (gunicorn + worker
+# ASGI), separadas de server/requirements.txt (dependencias de la aplicación).
+# Patrón adaptado de qfieldcloud/docker-app/requirements/requirements_runtime.txt.
+gunicorn==23.0.0
+uvicorn[standard]==0.34.0
+uvicorn-worker==0.3.0
