@@ -36,10 +36,23 @@ class ProdSettingsTests(unittest.TestCase):
     def test_static_root_is_set_for_collectstatic(self) -> None:
         self.assertTrue(str(self.prod.STATIC_ROOT).endswith("staticfiles"))
 
-    def test_staticfiles_storage_uses_the_manifest_backend(self) -> None:
+    def test_staticfiles_storage_uses_whitenoise_compressed_manifest_backend(self) -> None:
+        # Hallazgo Importante de la revisión final: nada servía `/static/*` en
+        # producción (sin whitenoise, sin `file_server` en Caddy). El backend
+        # de staticfiles pasa de `ManifestStaticFilesStorage` (Tarea 3) al de
+        # whitenoise, que además comprime y es el que `WhiteNoiseMiddleware`
+        # (`config/settings/base.py`) espera para servir los archivos ya
+        # comprimidos.
         self.assertEqual(
             self.prod.STORAGES["staticfiles"]["BACKEND"],
-            "django.contrib.staticfiles.storage.ManifestStaticFilesStorage",
+            "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        )
+
+    def test_whitenoise_middleware_is_installed_right_after_security_middleware(self) -> None:
+        security_index = self.prod.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware")
+        self.assertEqual(
+            self.prod.MIDDLEWARE[security_index + 1],
+            "whitenoise.middleware.WhiteNoiseMiddleware",
         )
 
 

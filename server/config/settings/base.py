@@ -62,6 +62,17 @@ AUTH_USER_MODEL = "core.AppUser"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # whitenoise: sirve `/static/*` (CSS/JS de Django Admin) directamente
+    # desde el proceso de gunicorn (hallazgo Importante de la revisión final
+    # de despliegue del demo -- nada servía esos archivos en producción, ver
+    # el comentario de `requirements.txt`). Va en `base.py` (compartido por
+    # `dev.py`/`prod.py`) porque `STATIC_ROOT`/`STATIC_URL`, más abajo en
+    # este mismo archivo, ya son compartidos por los dos entornos desde la
+    # revisión del Task 2 de este plan ("hardcode STATIC_ROOT instead of
+    # undocumented env override") -- inmediatamente después de
+    # `SecurityMiddleware`, tal como exige la documentación oficial de
+    # whitenoise (debe ejecutarse lo antes posible en la cadena).
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

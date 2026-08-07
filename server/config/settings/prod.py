@@ -56,7 +56,15 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 # --- Estáticos (Django Admin: CSS/JS de `django.contrib.admin`) ------------
+# `staticfiles` usa el backend de whitenoise (no el `ManifestStaticFilesStorage`
+# de Django a secas): mismo manifiesto con hash por contenido para cache
+# busting, más compresión gzip/Brotli pregenerada en `collectstatic`, que es
+# lo que permite a `WhiteNoiseMiddleware` (`config/settings/base.py`) servir
+# los archivos ya comprimidos sin comprimirlos en cada request. Solo en
+# `prod.py` (no en `base.py`/`dev.py`): requiere que `collectstatic` ya haya
+# corrido y generado el manifiesto (`staticfiles.json`), y `dev.py` no lo
+# garantiza fuera de los contenedores de `infra/docker-compose.yml`.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }

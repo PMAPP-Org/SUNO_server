@@ -43,3 +43,21 @@ boto3==1.43.63
 # (visitacampo/authn/services.py::log_in) ya llama a
 # django.contrib.auth.authenticate(), el mismo hook que axes necesita.
 django-axes==7.0.2
+
+# Hallazgo Importante de la revisión final de despliegue del demo: nada
+# servía `/static/*` (CSS/JS de Django Admin) en producción -- `collectstatic`
+# corre en `entrypoint.sh` (Tarea 2) y `config/settings/prod.py` configura
+# `STATIC_ROOT`/`STORAGES`, pero sin whitenoise ni un `file_server` de Caddy
+# esos archivos no tienen quién los sirva detrás de gunicorn. Se elige
+# whitenoise en vez de añadir un `file_server`/volumen compartido en
+# `infra/Caddyfile` (la otra opción estándar): sirve los estáticos desde el
+# propio proceso de Django sin tocar la infraestructura de Caddy ni añadir un
+# volumen nuevo que sincronizar entre `api` y `caddy` (patrón recomendado por
+# la propia documentación de whitenoise para despliegues de un solo proceso
+# como este, ADR-006: sin Redis/Celery, sin componentes adicionales).
+# Versión verificada contra el índice de PyPI en este entorno (6.12.0 es la
+# última estable a la fecha) -- confirmar de todas formas contra PyPI antes
+# de desplegar, mismo criterio que el resto de versiones ancladas nuevas de
+# este plan (ver plans/visitacampo-despliegue-demo-implementacion.md, Global
+# Constraints, punto 4).
+whitenoise==6.12.0
