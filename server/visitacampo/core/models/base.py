@@ -97,6 +97,19 @@ class JobStatus(models.TextChoices):
     DEAD_LETTER = "dead_letter", "Dead letter"
 
 
+#: Estados en los que un job **ocupa** su clave de idempotencia (ADR-006,
+#: RD-14): está pendiente de ejecutarse o ejecutándose. Los tres restantes son
+#: historial y no bloquean un reencolado — si lo bloquearan, un job periódico
+#: no podría volver a ejecutarse nunca.
+#:
+#: Van como literales de cadena y no como `JobStatus.PENDING` para que la
+#: migración que crea el índice parcial no arrastre un import del enum (y para
+#: no pelearse con cómo mypy lee los miembros de `TextChoices`, ver
+#: `core/context.RoleValue`). `jobs/tests/test_queue.py` comprueba que estos
+#: dos valores siguen siendo exactamente los de `JobStatus`.
+ACTIVE_JOB_STATUSES: tuple[str, ...] = ("pending", "running")
+
+
 def finite_q(field_name: str) -> models.Q:
     """`-Infinity < campo < Infinity`, es decir "el campo es un número real".
 

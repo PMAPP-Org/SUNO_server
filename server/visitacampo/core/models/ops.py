@@ -13,7 +13,7 @@ import uuid
 from django.core.validators import MinValueValidator
 from django.db import models
 
-from .base import JobStatus, OrgScopedModel, SyncEntityType
+from .base import ACTIVE_JOB_STATUSES, JobStatus, OrgScopedModel, SyncEntityType
 
 
 class SyncOpLog(OrgScopedModel):
@@ -66,9 +66,16 @@ class SyncOpLog(OrgScopedModel):
 class Job(OrgScopedModel):
     """Trabajo asíncrono. Cola sobre Postgres con **lease** (ADR-006, RD-13).
 
-    Este paso crea **solo las columnas**. El `SELECT ... FOR UPDATE SKIP
-    LOCKED`, el reaper de leases vencidos y el back-off son del Paso 19.
-    Sin Redis, sin Celery, sin docker-in-docker.
+    El Paso 5 creó las columnas; el Paso 19 añadió `idempotency_key` (abajo) y
+    toda la lógica: `SELECT ... FOR UPDATE SKIP LOCKED`, lease con heartbeat,
+    reaper, back-off y `dead_letter` viven en `visitacampo/jobs/queue.py`, y el
+    proceso que las consume es `manage.py run_worker`. Sin Redis, sin Celery,
+    sin docker-in-docker.
+
+    **Por qué la lógica no está aquí**: la cola se manipula con sentencias SQL
+    únicas y atómicas (el `take` es un `UPDATE ... FROM (SELECT ... FOR UPDATE
+    SKIP LOCKED)`), que es precisamente lo que el ORM no sabe expresar — misma
+    razón, y mismo patrón, que `sync/sql.py` documenta para el CAS del push.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -91,6 +98,19 @@ class Job(OrgScopedModel):
     error = models.JSONField(null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     finished_at = models.DateTimeField(null=True, blank=True, default=None)
+    # Unicidad lógica del Paso 19 (ADR-006, RD-14). Ver `ACTIVE_STATUSES`.
+    idempotency_key = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name="clave de idempotencia",
+        help_text=(
+            "Identifica el trabajo lógico (tipo + entidad). Mientras exista un job "
+            "activo con esta clave en la organización, no se puede encolar otro. "
+            "NULL = sin invariante de unicidad."
+        ),
+    )
 
     class Meta:
         db_table = "job"
@@ -101,6 +121,26 @@ class Job(OrgScopedModel):
                 condition=models.Q(max_attempts__gte=1),
                 name="job_max_attempts_gte_1",
             ),
+            # **El único** mecanismo del invariante "un job activo por
+            # tipo/entidad" (RD-14, corrige H-13). No hay un segundo "check de
+            # concurrencia" en Python que pueda desincronizarse con este: el
+            # encolado es un `INSERT ... ON CONFLICT DO NOTHING` que se apoya
+            # justo en este índice, así que dos workers arrancando a la vez no
+            # tienen ventana TOCTOU entre "¿existe ya?" y "lo creo" — no hay
+            # dos sentencias, hay una.
+            #
+            # Es **parcial** porque el invariante solo habla de jobs *activos*:
+            # un job terminado (`succeeded`/`failed`/`dead_letter`) es
+            # historial, y prohibir su reencolado impediría que un periódico
+            # vuelva a ejecutarse nunca. `idempotency_key = NULL` queda fuera
+            # del índice por la semántica de PostgreSQL (los NULL son
+            # distintos entre sí), que es exactamente lo que se quiere: un job
+            # sin clave no compite con nadie.
+            models.UniqueConstraint(
+                fields=["org", "idempotency_key"],
+                condition=models.Q(status__in=ACTIVE_JOB_STATUSES),
+                name="job_active_idempotency_uq",
+            ),
         ]
         indexes = [
             # Índice del `take` de la cola (Paso 19): pendientes por org,
@@ -108,6 +148,11 @@ class Job(OrgScopedModel):
             models.Index(fields=["org", "status", "run_after"], name="job_org_status_run_idx"),
             # Reaper de leases vencidos (RD-13).
             models.Index(fields=["locked_until"], name="job_locked_until_idx"),
+            # El `take` barre **todas** las organizaciones (un worker no es de
+            # nadie), así que el índice de arriba —que empieza por `org`— no lo
+            # sirve. Este sí: `WHERE status = 'pending' AND run_after <= now()`
+            # ordenado por `run_after`.
+            models.Index(fields=["status", "run_after"], name="job_status_run_idx"),
         ]
 
     def __str__(self) -> str:

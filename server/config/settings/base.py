@@ -235,6 +235,89 @@ ATTACHMENT_DOWNLOAD_URL_TTL_SECONDS = 300
 # `visitacampo/attachments/services.py::collect_unconfirmed_uploads`.
 ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS = 24
 
+# --- Cola de trabajos (ADR-006, Paso 19) ------------------------------------
+# El worker es `python manage.py run_worker`: un proceso Python normal, sin
+# Redis, sin Celery y sin `docker.sock` (N-02 doc 08 §7.2).
+
+# Duración del lease al tomar un job. Es, literalmente, **cuánto puede tardar
+# el sistema en darse cuenta de que un worker murió**: hasta que `locked_until`
+# no queda en el pasado, el reaper no toca la fila (RD-13). Un minuto es el
+# equilibrio entre no reprocesar jobs vivos por una pausa del SO y no dejar
+# trabajo parado tras un `kill -9`.
+JOB_LEASE_SECONDS = 60
+
+# El heartbeat renueva el lease **antes** de que caduque, con margen para que
+# un latido perdido (una consulta lenta, un GC) no baste para perderlo: a un
+# tercio del lease caben dos fallos seguidos sin consecuencias.
+JOB_HEARTBEAT_INTERVAL_SECONDS = 20
+
+# Sondeo cuando la cola está vacía. ADR-006 ya asume esta latencia ("polling
+# añade latencia ~1 s (irrelevante para PDFs)"); subirlo ahorraría un `SELECT`
+# por segundo que PostgreSQL sirve por índice sin despeinarse.
+JOB_POLL_INTERVAL_SECONDS = 1.0
+
+# Reintentos de un job antes de `dead_letter`. Es el valor por defecto de la
+# columna `job.max_attempts` (Paso 5) repetido aquí porque quien encola puede
+# pedir otro; los dos números tienen que coincidir y `test_queue.py` lo
+# comprueba.
+JOB_MAX_ATTEMPTS = 5
+
+# Back-off exponencial entre reintentos: 5 s, 10 s, 20 s… con techo de 15 min.
+JOB_BACKOFF_BASE_SECONDS = 5
+JOB_BACKOFF_MAX_SECONDS = 900
+
+# Cadencia de los tres periódicos (`visitacampo/jobs/periodic.py`). El reaper
+# es el más frecuente porque es la red de seguridad de todos los demás; la
+# purga de tombstones y el GC de blobs miden ventanas de 90 días y 24 h
+# respectivamente, así que correrlos más a menudo no adelantaría nada.
+JOB_REAP_INTERVAL_SECONDS = 60
+JOB_PURGE_TOMBSTONES_INTERVAL_SECONDS = 24 * 60 * 60
+JOB_ATTACHMENT_GC_INTERVAL_SECONDS = 6 * 60 * 60
+
+# --- Logging con redacción (RD-12, doc 08 §7.4) -----------------------------
+# doc 08 RD-12 pide la redacción de claves conocidas **en los logs**, no solo
+# en `job.output`; la tarea 7 del Paso 19 lo repite. Se instala aquí, en la
+# configuración raíz, para que la cubra todo el backend: la API, el worker y
+# cualquier librería que emita por `logging`.
+#
+# Dos piezas y no una, porque hay dos momentos en los que se puede escapar un
+# secreto (ver `visitacampo/core/scrub.py`): el filtro redacta el mensaje y sus
+# argumentos antes de que lo vea ningún handler; el formatter redacta el texto
+# ya renderizado, que es lo único que ve el **traceback** de una excepción.
+#
+# `disable_existing_loggers: False` es obligatorio: a `False` los loggers que
+# los módulos ya crearon (`api_errors`, `sync/services`, `jobs/*`) siguen
+# funcionando; a `True` se quedarían mudos y la redacción sería perfecta
+# porque no habría nada que redactar.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "scrub": {"()": "visitacampo.core.scrub.ScrubbingFilter"},
+    },
+    "formatters": {
+        "scrubbed": {
+            "()": "visitacampo.core.scrub.ScrubbingFormatter",
+            "format": "{asctime} {levelname} {name}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["scrub"],
+            "formatter": "scrubbed",
+        },
+    },
+    # WARNING en la raíz para no ahogar la consola con el INFO de terceros;
+    # los módulos propios que quieran ser visibles en operación (el worker,
+    # sobre todo) se declaran uno a uno.
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "visitacampo": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}
+
 # --- Internacionalización ---------------------------------------------------
 LANGUAGE_CODE = "es"
 TIME_ZONE = "America/Bogota"

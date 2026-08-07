@@ -25,14 +25,16 @@ from ninja.errors import HttpError
 
 from visitacampo.core import policies
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Device, FormTemplate, Role, Visit
+from visitacampo.core.models import Device, FormTemplate, Job, Role, Visit
 from visitacampo.core.policies import (
     can_manage_device,
     can_publish_form_template,
+    can_read_job_output,
     can_read_members,
     can_read_visit,
     can_write_visit,
     check_manage_device,
+    check_read_job_output,
     check_read_members,
     check_read_visit,
     check_write_visit,
@@ -59,6 +61,10 @@ def device(org_id: uuid.UUID = ORG, owner_id: uuid.UUID = USER) -> Device:
 
 def form_template(org_id: uuid.UUID = ORG) -> FormTemplate:
     return FormTemplate(id=uuid.uuid4(), org_id=org_id)
+
+
+def job(org_id: uuid.UUID = ORG) -> Job:
+    return Job(id=uuid.uuid4(), org_id=org_id, type="export_visits_csv")
 
 
 # --- La primitiva -----------------------------------------------------------
@@ -232,6 +238,35 @@ class CanPublishFormTemplateTests(SimpleTestCase):
         )
 
 
+class CanReadJobOutputTests(SimpleTestCase):
+    """Paso 19 / RD-12 (H-17): `job.output` es ADMIN-only, y punto."""
+
+    def test_true_for_administration(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(can_read_job_output(ctx(role), job()))
+
+    def test_false_for_every_non_administrative_role(self) -> None:
+        """El caso literal del plan: un `REPORTER`/no-ADMIN no lee la salida."""
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(can_read_job_output(ctx(role), job()))
+
+    def test_false_across_organizations_even_for_an_owner(self) -> None:
+        self.assertFalse(can_read_job_output(ctx(Role.OWNER), job(org_id=OTHER_ORG)))
+
+    def test_check_raises_403_within_the_organization(self) -> None:
+        with self.assertRaises(HttpError) as raised:
+            check_read_job_output(ctx(Role.VIEWER), job())
+        self.assertEqual(raised.exception.status_code, 403)
+
+    def test_check_raises_404_across_organizations(self) -> None:
+        """RD-11: el job de otra organización no existe, no está prohibido."""
+        with self.assertRaises(HttpError) as raised:
+            check_read_job_output(ctx(Role.ADMIN), job(org_id=OTHER_ORG))
+        self.assertEqual(raised.exception.status_code, 404)
+
+
 # --- Deny-by-default, para toda política presente y futura ------------------
 
 
@@ -257,6 +292,11 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             # la política). Queda igualmente sujeta a los dos invariantes de
             # H-16/RD-11 que comprueban los tests de esta clase.
             "can_upload_attachment": ORG,
+            # Paso 19: el recurso es la fila `job`, que lleva `org_id` como
+            # cualquier tabla de negocio (ADR-011). La política es ADMIN-only
+            # (RD-12/H-17), pero lo que esta clase comprueba es el suelo común:
+            # sin membresía, y desde otra organización, no concede nada.
+            "can_read_job_output": job(),
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

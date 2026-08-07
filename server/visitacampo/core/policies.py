@@ -45,12 +45,14 @@ __all__ = [
     "PolicyDenied",
     "can_manage_device",
     "can_publish_form_template",
+    "can_read_job_output",
     "can_read_members",
     "can_read_visit",
     "can_upload_attachment",
     "can_write_visit",
     "check_manage_device",
     "check_publish_form_template",
+    "check_read_job_output",
     "check_read_members",
     "check_read_visit",
     "check_upload_attachment",
@@ -234,6 +236,28 @@ def can_upload_attachment(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, WRITE_VISIT_ROLES)
 
 
+def can_read_job_output(ctx: RequestContext, job: OrgScopedResource) -> bool:
+    """Leer el estado y la **salida** de un job asíncrono (Paso 19, RD-12).
+
+    Solo administración (`OWNER`/`ADMIN`), que es lo que ADR-006 exige
+    literalmente ("`job.output` … solo es legible por ADMIN") como segunda
+    mitad de la mitigación de **H-17**: la primera es que la salida se
+    persiste ya redactada (`core/scrub.py`), y esta es que ni siquiera la
+    salida redactada se enseña a quien no administra el tenant.
+
+    **Por qué esta política gobierna el endpoint entero** y no solo el campo:
+    el contrato declara `Job` con `output` entre sus propiedades `required`
+    (`GET /v1/jobs/{id}`), así que no existe una vista "job sin output" que
+    ofrecer a un `SUPERVISOR`. Inventar aquí una segunda política más laxa
+    para el resto de los campos sería exactamente el double-bookkeeping que
+    RD-14 prohíbe en la puerta de al lado: dos reglas para un mismo recurso
+    que un día divergen. Un miembro sin rol de administración recibe `403`
+    (hay recurso, le falta rol) y uno de otra organización `404` (RD-11) — los
+    dos códigos que el contrato declara para este endpoint.
+    """
+    return user_has_organization_roles(ctx, job.org_id, ADMIN_ROLES)
+
+
 def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
     """Administrar un dispositivo (renombrar, revocar su sesión, darlo de baja).
 
@@ -280,6 +304,11 @@ def check_publish_form_template(ctx: RequestContext, template: OrgScopedResource
 def check_upload_attachment(ctx: RequestContext, org_id: UUID) -> None:
     if not can_upload_attachment(ctx, org_id):
         raise _denial(ctx, org_id)
+
+
+def check_read_job_output(ctx: RequestContext, job: OrgScopedResource) -> None:
+    if not can_read_job_output(ctx, job):
+        raise _denial(ctx, job.org_id)
 
 
 def check_manage_device(ctx: RequestContext, device: DeviceLike) -> None:

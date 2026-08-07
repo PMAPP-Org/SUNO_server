@@ -15,6 +15,7 @@ import Visit` funcione igual que con un `models.py` plano.
 """
 
 from .base import (
+    ACTIVE_JOB_STATUSES,
     INITIAL_VERSION,
     LAT_MAX,
     LAT_MIN,
@@ -36,6 +37,7 @@ from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment
 
 __all__ = [
+    "ACTIVE_JOB_STATUSES",
     "INITIAL_VERSION",
     "LAT_MAX",
     "LAT_MIN",

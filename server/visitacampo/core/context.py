@@ -173,6 +173,39 @@ def resolve_request_context(principal: Principal) -> RequestContext:
     )
 
 
+#: Actor de las acciones que no ejecuta ninguna persona (Paso 19). Es el mismo
+#: concepto que el `actor = NULL` de `AuditEvent` ("nulo cuando la acción la
+#: ejecuta el propio sistema"), expresado como UUID porque `RequestContext`
+#: exige uno. El UUID nulo no puede colisionar con un usuario real:
+#: `AppUser.id` se genera con `uuid4`, que nunca produce ceros.
+SYSTEM_USER_ID = UUID(int=0)
+
+
+def system_context(org_id: UUID) -> RequestContext:
+    """Contexto de una tarea de **fondo** para `scoped_qs`, sin ningún rol.
+
+    Existe por una necesidad muy concreta del Paso 19: los jobs periódicos
+    reutilizan lógica escrita para el ciclo request/response —
+    `sync/retention.purge_expired_tombstones(ctx)` es literal— y esa lógica
+    necesita saber sobre **qué organización** opera. Fuera de una request no
+    hay token del que sacarlo, pero sí lo hay en la fila `job` que se está
+    ejecutando (`job.org_id`, ADR-011), y eso es todo lo que este contexto
+    transporta.
+
+    **`roles` va vacío a propósito, y no es un descuido.** Un "contexto de
+    sistema" con todos los roles sería una forma de saltarse `policies.py` sin
+    que se note, justo lo que ADR-013 prohíbe ("las políticas se extienden,
+    nunca se puentean"). Con el conjunto vacío, `has_any_role` devuelve
+    `False` para cualquier consulta y **ninguna** política puede conceder nada
+    a este contexto: lo único que habilita es el aislamiento por organización
+    de `scoped_qs`, que es lo que un job de fondo necesita y nada más. Si algún
+    día un job tuviera que ejecutar una acción sujeta a política, la respuesta
+    correcta es que la ejecute con el contexto del usuario que la pidió (que
+    viajará en el `payload`), no ampliar este.
+    """
+    return RequestContext(user_id=SYSTEM_USER_ID, org_id=org_id, roles=frozenset())
+
+
 def get_request_context(request: Any) -> RequestContext:
     """Devuelve el contexto que la dependencia dejó en la request.
 
