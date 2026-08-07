@@ -326,4 +326,4 @@ USE_TZ = True
 
 # --- Estáticos ---------------------------------------------------------------
 STATIC_URL = "static/"
-STATIC_ROOT = os.environ.get("STATIC_ROOT", str(BASE_DIR / "staticfiles"))
+STATIC_ROOT = BASE_DIR / "staticfiles"
