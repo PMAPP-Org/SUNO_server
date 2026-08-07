@@ -67,6 +67,13 @@ ALLOWED = {
     # `context.py`, y el módulo se mantiene con una sola función para que la
     # exención siga siendo minúscula y revisable.
     "visitacampo/authn/lookups.py": "consulta de bootstrap de identidad (pre-contexto)",
+    # Revisión final de despliegue del demo (hallazgo Crítico): `bootstrap_demo`
+    # es un comando de aprovisionamiento offline (`python manage.py
+    # bootstrap_demo`), nunca invocado dentro de una request. Su primera
+    # escritura es exactamente la `Organization` que un `RequestContext`
+    # necesitaría para poder scopear -- no existe todavía ningún `ctx` que
+    # pasarle a `scoped_qs` (misma razón que `context.py`/`authn/lookups.py`).
+    "visitacampo/management/commands/bootstrap_demo.py": "aprovisionamiento offline, pre-contexto",
 }
 
 
@@ -222,6 +229,7 @@ class WalkerTests(SimpleTestCase):
                 "visitacampo/core/scoping.py",
                 "visitacampo/core/context.py",
                 "visitacampo/authn/lookups.py",
+                "visitacampo/management/commands/bootstrap_demo.py",
             },
         )
 
