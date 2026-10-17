@@ -62,3 +62,11 @@ infra/**/data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Artefactos de calidad / DAST (CI y local) ---
+.coverage
+coverage*.xml
+app/coverage/
+.schemathesis/
+reports/
+zap/
