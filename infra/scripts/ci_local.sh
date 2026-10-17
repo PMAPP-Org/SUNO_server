@@ -98,18 +98,50 @@ else
 	fail "pytest server/"
 fi
 
-section "Backend (server/) — manage.py check --deploy"
+section "Backend (server/) — manage.py check --deploy (settings de producción)"
+# Mismo criterio que backend.yml: contra prod.py y con --fail-level WARNING;
+# contra dev.py el comando solo señalaría lo que dev.py hace a propósito.
 if [ ! -f server/manage.py ]; then
 	skip "manage.py check --deploy" "server/manage.py todavía no existe (Paso 4)"
 elif ! command_exists python && ! command_exists python3; then
 	skip "manage.py check --deploy" "python no está instalado en este entorno"
 else
 	PY="$(command -v python || command -v python3)"
-	if "$PY" server/manage.py check --deploy; then
+	if DJANGO_SETTINGS_MODULE=config.settings.prod DJANGO_ALLOWED_HOSTS=ci.invalid \
+		DJANGO_SECRET_KEY="$("$PY" -c 'import secrets; print(secrets.token_urlsafe(64))')" \
+		"$PY" server/manage.py check --deploy --fail-level WARNING; then
 		pass "manage.py check --deploy"
 	else
 		fail "manage.py check --deploy"
 	fi
+fi
+
+section "Backend (server/) — lockfiles coherentes con sus fuentes"
+if ! command_exists python && ! command_exists python3; then
+	skip "check_lockfiles.py" "python no está instalado en este entorno"
+elif "$(command -v python || command -v python3)" "$SCRIPT_DIR/check_lockfiles.py"; then
+	pass "check_lockfiles.py"
+else
+	fail "check_lockfiles.py"
+fi
+
+section "Backend (server/) — bandit (SAST)"
+if ! command_exists bandit; then
+	skip "bandit" "bandit no está instalado (pip install --require-hashes -r server/requirements-dev.lock)"
+elif bandit -q -r server/visitacampo server/config -x '*/tests/*,*/migrations/*'; then
+	pass "bandit"
+else
+	fail "bandit"
+fi
+
+section "Backend (server/) — pip-audit"
+if ! command_exists pip-audit; then
+	skip "pip-audit" "pip-audit no está instalado (pip install --require-hashes -r server/requirements-dev.lock)"
+elif pip-audit --require-hashes --disable-pip --progress-spinner off \
+	-r server/requirements.lock -r server/requirements-dev.lock; then
+	pass "pip-audit"
+else
+	fail "pip-audit"
 fi
 
 section "Backend (server/) — manage.py makemigrations --check --dry-run"
@@ -132,7 +164,9 @@ if ! has_dart_files; then
 	skip "dart analyze app/" "app/ todavía no tiene archivos .dart (Paso 10)"
 elif ! command_exists dart; then
 	skip "dart analyze app/" "dart no está instalado en este entorno"
-elif dart analyze app/; then
+# Igual que mobile.yml: el código generado no se versiona, así que se
+# genera antes de analizar.
+elif (cd app && dart run build_runner build --delete-conflicting-outputs) && dart analyze app/; then
 	pass "dart analyze app/"
 else
 	fail "dart analyze app/"
@@ -143,7 +177,7 @@ if ! has_dart_tests; then
 	skip "flutter test app/" "app/ todavía no tiene tests (Paso 10+)"
 elif ! command_exists flutter; then
 	skip "flutter test app/" "flutter no está instalado en este entorno"
-elif (cd app && flutter test); then
+elif (cd app && flutter test --concurrency=1); then
 	pass "flutter test app/"
 else
 	fail "flutter test app/"

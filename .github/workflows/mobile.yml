@@ -1,73 +1,71 @@
 name: Mobile CI
 
-# Paso 3 del plan: gate de CI para app/ (Flutter, se inicializa en el
-# Paso 10) y el lint anti-TLS-bypass RD-01 (ADR-009), que aplica a
-# cualquier archivo .dart del repo desde ya, no solo a app/.
-#
-# Igual que backend.yml: sin remoto de GitHub en este entorno, este
-# workflow todavía no se ha ejecutado en Actions real. El equivalente local
-# es `infra/scripts/ci_local.sh`. Se activa automáticamente en cuanto el
-# repo tenga remoto en GitHub, sin cambios adicionales.
+# Gate de CI de app/ (Paso 3 del plan) y del lint anti-TLS-bypass RD-01
+# (ADR-009), que aplica a cualquier archivo .dart del repo. Endurecido en la
+# línea base de seguridad ISO 27001 (A.8.9, A.8.25, A.8.29) con las mismas
+# reglas que backend.yml: sin filtro de `paths`, sin pasos "si no existe,
+# omitir", actions fijadas por SHA y `permissions` mínimos.
 
 on:
   push:
-    branches: ["**"]
-    paths:
-      - "app/**"
-      - "infra/scripts/lint_no_tls_bypass.sh"
-      - ".github/workflows/mobile.yml"
+    branches: [master]
   pull_request:
-    paths:
-      - "app/**"
-      - "infra/scripts/lint_no_tls_bypass.sh"
-      - ".github/workflows/mobile.yml"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze-and-test:
-    name: dart analyze + flutter test
+    name: build_runner + dart analyze + flutter test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: subosito/flutter-action@v2
+      # Versión exacta, no "el stable de hoy": el mismo commit tiene que dar
+      # el mismo resultado mañana. 3.44.x es la serie con la que se generó
+      # pubspec.lock (Dart 3.12.2); Dependabot no actualiza Flutter, se sube a
+      # mano junto con pubspec.lock.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: 3.44.9
 
-      - name: flutter pub get
-        run: |
-          if [ -f app/pubspec.yaml ]; then
-            (cd app && flutter pub get)
-          else
-            echo "app/pubspec.yaml todavía no existe (se crea en el Paso 10) — pub get omitido."
-          fi
+      - name: flutter pub get (respetando pubspec.lock)
+        run: flutter pub get --enforce-lockfile
 
-      - name: dart analyze app/
-        run: |
-          if find app -name '*.dart' | grep -q .; then
-            dart analyze app/
-          else
-            echo "app/ todavía no tiene archivos .dart (se crea en el Paso 10) — dart analyze pasa vacío."
-          fi
+      # Los *.g.dart / *.freezed.dart no se versionan (.gitignore, decisión
+      # del Paso 0): sin generarlos aquí `dart analyze` falla con símbolos
+      # inexistentes, que es exactamente por lo que este job estaba en rojo.
+      - name: build_runner (código generado de freezed/json_serializable/drift)
+        run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: flutter test app/
-        run: |
-          if [ -f app/pubspec.yaml ] && find app/test -name '*_test.dart' 2>/dev/null | grep -q .; then
-            (cd app && flutter test)
-          else
-            echo "app/ todavía no tiene tests (se crean a partir del Paso 10) — flutter test pasa vacío."
-          fi
+      - name: dart analyze
+        run: dart analyze
+
+      # --concurrency=1: mitigación ya validada en el Paso 13 contra los
+      # cuelgues de hilos del VM de Dart con el fixture TLS autofirmado.
+      - name: flutter test
+        run: flutter test --concurrency=1
 
   rd01-tls-bypass-lint:
     name: "RD-01: lint anti-TLS-bypass (ADR-009)"
     runs-on: ubuntu-latest
-    # Job independiente y deliberadamente sin dependencia de que exista
-    # pubspec.yaml/Flutter instalado: solo necesita bash/grep, así que se
-    # ejecuta siempre, incluso hoy que app/ está casi vacío. Ver
-    # infra/scripts/lint_no_tls_bypass.sh para la regla completa y su
-    # justificación (docs/07 hallazgo CRITICAL, docs/08 ADR-009, RD-01).
+    # Solo necesita bash/grep: corre siempre, sin depender de Flutter. Regla
+    # completa y justificación en infra/scripts/lint_no_tls_bypass.sh.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: bash infra/scripts/lint_no_tls_bypass.sh
         run: bash infra/scripts/lint_no_tls_bypass.sh
