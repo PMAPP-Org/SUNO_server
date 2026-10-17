@@ -6,7 +6,7 @@
 
 ## Estado al 2026-10-17
 
-**Qué cambió desde agosto.** Antes de seguir con los pasos pendientes se paró a dejar el proyecto con buenas prácticas y alineado con ISO/IEC 27001:2022 y OWASP Top 10:2025. Todo está en una **cadena de PR apilados que se integran en orden**, cada uno con el CI en verde salvo *Dependency Review*, que necesita que un admin active el Dependency graph (issue #5):
+**Qué cambió desde agosto.** Antes de seguir con los pasos pendientes se paró a dejar el proyecto con buenas prácticas y alineado con ISO/IEC 27001:2022 y OWASP Top 10:2025. Todo está en una **cadena de PR apilados que se integran en orden**, cada uno con el CI en verde salvo *Dependency Review*, que necesita que un admin active el Dependency graph (issue #7):
 
 | PR | Contenido |
 |---|---|
@@ -32,7 +32,7 @@
 
 Las rutas `app/…` que citan los pasos anteriores corresponden ahora a la raíz de SUNO_client (`app/lib/…` → `lib/…`, `infra/scripts/lint_*.sh` → `tool/lint_*.sh`). Los dos repositorios se versionan por separado. La compatibilidad entre ellos la dan el contrato (`contract.yml` en el cliente) y la negociación de `schema_version` en `/v1/server/info`.
 
-**Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
+**Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #7); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
 **Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
 

@@ -23,7 +23,7 @@
 
 ## 3. Gestión de cambios (A.8.32)
 
-1. **Aprobación por una persona distinta del autor**, exigida por la protección de rama (pendiente de Admin, issue #5).
+1. **Aprobación por una persona distinta del autor**, exigida por la protección de rama (pendiente de Admin, issue #7).
 2. Título del PR en Conventional Commits. De él salen la versión (SemVer), el tag y el CHANGELOG (release-please).
 3. Un cambio que rompe compatibilidad (app instalada, datos o contrato de API) lleva `!` en el título y su plan de migración en el PR.
 4. Despliegue solo de artefactos de una release con atestación de procedencia verificada (`gh attestation verify`).
