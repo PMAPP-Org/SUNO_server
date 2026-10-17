@@ -1,0 +1,136 @@
+name: Backup
+
+# Simulacro de restauración (ISO 27001 A.8.13): un backup que nunca se ha
+# restaurado no prueba nada. En cada PR que pueda afectarlo y cada semana:
+#
+#   datos sembrados → backup.sh (cifrado age) → se BORRA la BD →
+#   restore.sh latest → los datos son idénticos byte a byte.
+#
+# Además: el volcado subido está cifrado (no es un pg_dump legible), una
+# llave equivocada no lo descifra, y queda la métrica que vigila el monitoreo.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "37 6 * * 1" # lunes 06:37 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  restore-drill:
+    name: backup → borrar → restaurar → comparar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE: >-
+        docker compose --project-directory infra --env-file infra/.env
+        -f infra/docker-compose.yml -f infra/ci/docker-compose.backup-drill.yml
+      HADOLINT_VERSION: 2.15.1
+      HADOLINT_SHA256: c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck + hadolint
+        run: |
+          shellcheck infra/backup/*.sh infra/scripts/*.sh
+          curl -sSfL -o hadolint \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+          chmod +x hadolint
+          ./hadolint --config .hadolint.yaml infra/backup/Dockerfile
+
+      - name: Entorno efímero + par de llaves age de un solo uso
+        run: |
+          bash infra/scripts/ci_dast_env.sh > /dev/null
+          mkdir -p .ci-backups && chmod 777 .ci-backups
+          $COMPOSE build backup
+          $COMPOSE run --rm --no-deps --entrypoint age-keygen backup > age-identity.txt 2>/dev/null
+          RECIPIENT="$(grep -o 'age1[0-9a-z]*' age-identity.txt | head -1)"
+          test -n "$RECIPIENT"
+          sed -i "s|^BACKUP_AGE_RECIPIENT=.*|BACKUP_AGE_RECIPIENT=${RECIPIENT}|" infra/.env
+          # Una segunda llave para probar que la equivocada no descifra.
+          $COMPOSE run --rm --no-deps --entrypoint age-keygen backup > wrong-identity.txt 2>/dev/null
+          # El contenedor corre como UID 999: la llave de CI tiene que poder leerse.
+          chmod 644 age-identity.txt wrong-identity.txt
+
+      - name: BD con datos (migraciones + siembra)
+        run: |
+          $COMPOSE up -d --build --wait db api
+          DEMO_PASSWORD="$(openssl rand -hex 16)"
+          $COMPOSE exec -T api python manage.py bootstrap_demo --password "$DEMO_PASSWORD" > /dev/null
+          # Nadie más escribe durante el simulacro.
+          $COMPOSE stop api
+          . infra/.env
+          echo "PGU=${POSTGRES_USER}" >> "$GITHUB_ENV"
+          echo "PGD=${POSTGRES_DB}" >> "$GITHUB_ENV"
+
+      # PostgreSQL ≥ 16.10 (CVE-2025-8714) escribe en cada volcado plano una
+      # línea `\restrict <clave aleatoria>` (y su `\unrestrict`): dos volcados de
+      # los mismos datos nunca son idénticos byte a byte. Se excluyen de la huella;
+      # todo lo demás (filas, secuencias) se compara entero.
+      - name: Huella de los datos antes del backup
+        run: |
+          $COMPOSE exec -T db pg_dump -U "$PGU" -d "$PGD" --data-only --no-owner \
+            | grep -v -E '^[\\](un)?restrict ' \
+            | sha256sum | tee before.sha256
+          rows="$($COMPOSE exec -T db psql -U "$PGU" -d "$PGD" -tAc 'SELECT count(*) FROM organization')"
+          test "$rows" -ge 1
+
+      - name: backup.sh
+        run: $COMPOSE run --rm backup backup.sh
+
+      - name: El volcado está cifrado y la métrica existe
+        run: |
+          f="$(ls .ci-backups/db/*.dump.age)"
+          echo "$f"
+          test "$(head -c 21 "$f")" = "age-encryption.org/v1"
+          if grep -a -q PGDMP "$f"; then echo "El volcado contiene la firma de pg_dump en claro"; exit 1; fi
+          $COMPOSE run --rm --no-deps --entrypoint cat backup /metrics/backup.prom \
+            | grep -E '^visitacampo_backup_last_success_timestamp_seconds [0-9]+$'
+
+      - name: Desastre — se borra toda la BD
+        run: |
+          $COMPOSE exec -T db psql -U "$PGU" -d "$PGD" -v ON_ERROR_STOP=1 \
+            -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+          tables="$($COMPOSE exec -T db psql -U "$PGU" -d "$PGD" -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")"
+          test "$tables" = "0"
+
+      - name: Una llave equivocada no restaura
+        run: |
+          if $COMPOSE run --rm -v "$PWD/wrong-identity.txt:/run/secrets/age-identity:ro" \
+              -e BACKUP_AGE_IDENTITY_FILE=/run/secrets/age-identity backup restore.sh latest; then
+            echo "restore.sh tuvo éxito con una llave que no corresponde"; exit 1
+          fi
+
+      - name: restore.sh latest
+        run: |
+          $COMPOSE run --rm -v "$PWD/age-identity.txt:/run/secrets/age-identity:ro" \
+            -e BACKUP_AGE_IDENTITY_FILE=/run/secrets/age-identity backup restore.sh latest
+
+      - name: Los datos restaurados son idénticos
+        run: |
+          $COMPOSE exec -T db pg_dump -U "$PGU" -d "$PGD" --data-only --no-owner \
+            | grep -v -E '^[\\](un)?restrict ' \
+            | sha256sum | tee after.sha256
+          diff before.sha256 after.sha256
+
+      - name: Logs (si algo falló)
+        if: failure()
+        run: $COMPOSE logs --no-color db api backup | tail -200
+
+      - name: Limpiar
+        if: always()
+        run: |
+          $COMPOSE down -v
+          rm -f age-identity.txt wrong-identity.txt

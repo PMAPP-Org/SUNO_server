@@ -1,0 +1,7 @@
+# Alertmanager sin destino de avisos (ALERT_EMAIL_TO vacío). Las alertas se
+# ven en http://localhost:9093 por túnel SSH, pero no llega ningún aviso:
+# en producción, configurar ALERT_EMAIL_TO (infra/monitoring/README.md).
+route:
+  receiver: "null"
+receivers:
+  - name: "null"

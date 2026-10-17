@@ -568,7 +568,7 @@ S-07 (una persona), S-10 (99%, el cliente offline absorbe caídas) y presupuesto
 - **`.env.example` exhaustivo + `scripts/check_envvars.sh` en CI** — patrón adoptado de [05 §6.2](05-infraestructura-despliegue.md#6-patrón-a-replicar-en-visitacampo).
 - **Backups**: `pg_dump` diario cifrado (age/gpg) → R2 con retención 7/4/12 (diarios/semanales/mensuales) + snapshot del VPS del proveedor. **Restauración probada trimestralmente** con procedimiento escrito. Un backup no probado no es un backup.
 - **Despliegue**: GitHub Actions construye la imagen → GHCR → `ssh` + `docker compose pull && up -d` + `migrate`. Sin blue/green en MVP; ventana de segundos que el cliente offline no percibe.
-- **Observabilidad de bajo coste**: Sentry (plan gratuito), logs JSON con redacción (RD-12), `/healthz` (liveness) y `/readyz` (BD+storage), monitor de uptime externo gratuito, y `docker compose logs` con rotación. Sin Prometheus/Grafana en MVP.
+- **Observabilidad de bajo coste**: Sentry (plan gratuito), logs JSON con redacción (RD-12), `/healthz` (liveness) y `/readyz` (BD+storage), monitor de uptime externo gratuito, y `docker compose logs` con rotación. Sin Prometheus/Grafana en MVP. *(Enmendado por ADR-014: monitoreo interno opcional con Prometheus + Grafana.)*
 
 **Alternativas consideradas**
 
@@ -665,6 +665,33 @@ QField permite plugins **QML dinámicos** con permisos por plugin ([01 §5](01-a
 *Negativas*: hay que recordar refrescar el `ctx` si los roles cambian a mitad de request (caso inexistente en la práctica; los cambios de rol invalidan el access token en el siguiente refresh, ≤15 min).
 
 **RD satisfechas**: RD-07, RD-11, RD-16.
+
+---
+
+### ADR-014 — Monitoreo de salud del servidor: Prometheus + Alertmanager + Grafana opcionales, y vigilancia externa
+
+**Estado**: Aceptado (2026-10-17). **Enmienda** a ADR-010 en el punto "Sin Prometheus/Grafana en MVP".
+
+**Contexto**: El equipo necesita saber si el servidor está sano y recibir un aviso cuando no lo está, con evidencia para ISO 27001 A.8.16. ADR-010 preveía solo un monitor de uptime externo y Sentry. Eso detecta "la API no responde", pero no avisa de que el disco se está llenando, el certificado no se renueva, los backups dejaron de hacerse o PostgreSQL está saturado, que son justo los fallos que en un VPS único terminan en pérdida de datos.
+
+**Decisión**:
+- **Capa interna opcional** en `infra/docker-compose.monitoring.yml`: Prometheus, Alertmanager (avisos por correo con el SMTP de la app), node-exporter, blackbox-exporter (sondas HTTPS a `/v1/healthz` y `/v1/readyz` por el dominio a través de Caddy, con verificación TLS real), postgres-exporter y Grafana con dashboard provisionado. Las interfaces solo escuchan en `127.0.0.1` y se usan por túnel SSH.
+- **Capa externa**: `.github/workflows/uptime.yml`, cada 15 min, desde fuera del servidor. Abre y cierra un issue `incidente` automáticamente.
+- Reglas de alerta con **pruebas unitarias** (`promtool test rules`) y una prueba de integración en CI que detiene la API y exige que la alerta llegue a Alertmanager.
+
+**Alternativas consideradas**:
+
+| Opción | Pros | Contras | Veredicto |
+|---|---|---|---|
+| Solo uptime externo + Sentry (ADR-010 original) | Cero RAM en el servidor | Ciego a disco, certificado, backups, saturación de BD | Insuficiente como única capa |
+| Netdata / Beszel | Muy poca configuración | Reglas y paneles menos portables y menos fáciles de versionar y probar | Descartada |
+| SaaS (Grafana Cloud, Better Stack) | Sin operar nada | Coste, datos de infraestructura en un tercero (A.5.23), dependencia de cuenta externa | Descartada para MVP |
+| **Prometheus + Alertmanager + Grafana, opcionales** | Estándar, configuración como código, reglas probables, sin coste de licencias | ~400–500 MB de RAM: exige VPS ≥ 2 GB | **Elegida** |
+| Añadir cAdvisor | Métricas por contenedor | Necesita el socket de Docker (equivale a root en el host) | Descartada |
+
+**Consecuencias**: El VPS mínimo pasa a 2 GB si se activa el monitoreo. La salud de cada servicio se infiere por sus efectos (sondas, `pg_up`, métrica del backup) y no por métricas de contenedor. Sentry sigue siendo el complemento para errores de aplicación cuando se integre.
+
+**RD satisfechas**: RD-12 (sin secretos en la configuración renderizada: la contraseña SMTP va a un archivo efímero).
 
 ---
 

@@ -41,6 +41,19 @@
 	# cualquier `X-Forwarded-Proto` enviado por el cliente llega descartado.
 	# La verificación funcional completa (Django confiando en este único
 	# proxy) se hace en el Paso 25.
+	# --- Back-office (/admin/) solo desde orígenes autorizados ------------------
+	# Django Admin no tiene MFA (ADR-004, fase 1): exponerlo a internet deja la
+	# contraseña como única barrera. Fuera de CADDY_ADMIN_ALLOWED_IPS (CIDR
+	# separados por espacio: IP de la oficina, de la VPN o 127.0.0.1 para un
+	# túnel SSH) responde 404, sin confirmar que el panel existe. Por defecto
+	# solo 127.0.0.1: cerrado salvo que se configure (OWASP A01/A07,
+	# ISO 27001 A.8.5).
+	@admin_denied {
+		path /admin /admin/*
+		not remote_ip {$CADDY_ADMIN_ALLOWED_IPS:127.0.0.1/32}
+	}
+	respond @admin_denied 404
+
 	reverse_proxy api:8000 {
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-Host {host}

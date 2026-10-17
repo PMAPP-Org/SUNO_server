@@ -1,0 +1,8 @@
+# Override SOLO para .github/workflows/monitoring.yml. En CI Caddy firma con
+# su CA interna (dominio bajo .localhost); en vez de desactivar la
+# verificación TLS de la sonda, blackbox confía en esa CA concreta, así la
+# prueba sigue validando el certificado como en producción.
+services:
+  blackbox:
+    volumes:
+      - ../.ci-ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro

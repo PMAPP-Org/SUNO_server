@@ -12,9 +12,37 @@ from __future__ import annotations
 
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
+
+
+def _require_strong_secret_key(value: str | None) -> str:
+    """`DJANGO_SECRET_KEY` obligatoria y fuerte en producción (fail-closed).
+
+    `base.py` cae a un valor `django-insecure-…` para que el desarrollo local
+    funcione sin configurar nada. Si producción heredara ese valor (o el
+    placeholder de `infra/.env.example`), cualquiera que lea el repositorio
+    podría firmar cookies de sesión del Admin y demás datos firmados por
+    Django (OWASP A02/A04). Criterios de `check --deploy` (security.W009):
+    al menos 50 caracteres y 5 distintos, sin el prefijo `django-insecure-`.
+    """
+    if not value:
+        raise ImproperlyConfigured("DJANGO_SECRET_KEY es obligatoria en producción.")
+    if value.startswith("django-insecure-") or "CAMBIAR" in value.upper():
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY tiene el valor de desarrollo o de la plantilla .env.example."
+        )
+    if len(value) < 50 or len(set(value)) < 5:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY es demasiado débil (mínimo 50 caracteres, 5 distintos)."
+        )
+    return value
+
+
+SECRET_KEY = _require_strong_secret_key(os.environ.get("DJANGO_SECRET_KEY"))
 
 # Sin valor por defecto a propósito: en producción esta variable debe venir
 # siempre declarada explícitamente (infra/.env.example / despliegue), un
@@ -27,13 +55,18 @@ ALLOWED_HOSTS = [
 ]
 
 # --- RD-15: cabeceras de proxy confiable detrás de Caddy (doc 08 §5, ADR-010) ---
-# `infra/Caddyfile` sobrescribe INCONDICIONALMENTE X-Forwarded-Proto/Host/For
-# con el valor real de la conexión entrante a Caddy (ver los comentarios de
-# ese archivo) — Django puede confiar en estas cabeceras precisamente porque
-# Caddy es el único borde de la red que las escribe; un cliente en HTTP plano
-# no puede spoofear "https" porque Caddy la reemplaza, nunca la reenvía.
+# `infra/Caddyfile` sobrescribe INCONDICIONALMENTE X-Forwarded-Proto/For con
+# el valor real de la conexión entrante a Caddy (ver los comentarios de ese
+# archivo) — Django puede confiar en `X-Forwarded-Proto` precisamente porque
+# Caddy es el único borde de la red que la escribe (el servicio `api` no
+# publica puertos); un cliente en HTTP plano no puede spoofear "https"
+# porque Caddy la reemplaza, nunca la reenvía.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-USE_X_FORWARDED_HOST = True
+# RD-15 literal: `USE_X_FORWARDED_HOST=False`. Caddy ya entrega el Host
+# original (`header_up Host {host}`) y Django lo valida contra ALLOWED_HOSTS;
+# una segunda fuente de verdad para el host solo añadiría superficie de
+# envenenamiento de URLs absolutas.
+USE_X_FORWARDED_HOST = False
 
 # Redirige cualquier request HTTP plano que llegue a Django (no debería
 # ocurrir nunca detrás de Caddy, que ya solo expone 80/443 con TLS

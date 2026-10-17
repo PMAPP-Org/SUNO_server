@@ -8,12 +8,44 @@
 # override.dev.yml y, en pasos posteriores de infraestructura, en
 # override.selfhosted.yml / override.managed.yml.
 #
-# `api` y `worker` todavía no tienen código real (Django se crea en el Paso 4,
-# la cola de trabajos en el Paso 19): aquí quedan como placeholders funcionales
-# (imagen base + comando de espera) para que `docker compose up` no falle y
-# para que la topología de red/servicios ya exista y no haya que reescribir
-# este archivo cuando llegue el código real. Ver comentarios inline en cada
-# servicio para instrucciones de activación.
+# `api` y `worker` comparten imagen y entorno (ancla `x-server`); `worker` es
+# el consumidor de la cola del Paso 19.
+
+# Definición común de `api` y `worker`: misma imagen, mismo entorno. Un
+# ancla YAML para que una variable nueva no llegue a uno y se olvide en el otro.
+x-server: &server
+  build:
+    context: ../server
+    dockerfile: Dockerfile
+  image: visitacampo-api:local
+  restart: unless-stopped
+  environment:
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+    DJANGO_DEBUG: ${DJANGO_DEBUG}
+    DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+    POSTGRES_DB: ${POSTGRES_DB}
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    POSTGRES_HOST: ${POSTGRES_HOST}
+    POSTGRES_PORT: ${POSTGRES_PORT}
+    JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+    JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE}
+    STORAGE_BACKEND: ${STORAGE_BACKEND}
+    STORAGE_S3_ENDPOINT_URL: ${STORAGE_S3_ENDPOINT_URL}
+    STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
+    STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
+    STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
+    STORAGE_S3_REGION: ${STORAGE_S3_REGION}
+    STORAGE_S3_USE_PATH_STYLE: ${STORAGE_S3_USE_PATH_STYLE}
+    # Opcionales, con valor por defecto (config/settings/base.py).
+    JOB_BOOTSTRAP_INTERVAL_SECONDS: ${JOB_BOOTSTRAP_INTERVAL_SECONDS:-300}
+    AUDIT_EVENT_RETENTION_DAYS: ${AUDIT_EVENT_RETENTION_DAYS:-365}
+    AXES_LOG_RETENTION_DAYS: ${AXES_LOG_RETENTION_DAYS:-90}
+  volumes:
+    # Solo se usa con STORAGE_BACKEND=localfs; compartido para que el GC del
+    # worker vea los mismos adjuntos que la API.
+    - blobstore:/usr/src/app/.blobstore
 
 services:
   db:
@@ -50,53 +82,95 @@ services:
       # Ver infra/Caddyfile y infra/README.md para el significado de cada uno.
       CADDY_DOMAIN: ${CADDY_DOMAIN}
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+      CADDY_ADMIN_ALLOWED_IPS: ${CADDY_ADMIN_ALLOWED_IPS}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   api:
-    build:
-      context: ../server
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-      DJANGO_DEBUG: ${DJANGO_DEBUG}
-      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
-      JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE}
-      STORAGE_BACKEND: ${STORAGE_BACKEND}
-      STORAGE_S3_ENDPOINT_URL: ${STORAGE_S3_ENDPOINT_URL}
-      STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
-      STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
-      STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
-      STORAGE_S3_REGION: ${STORAGE_S3_REGION}
-      STORAGE_S3_USE_PATH_STYLE: ${STORAGE_S3_USE_PATH_STYLE}
+    <<: *server
+    healthcheck:
+      # server/healthcheck.py: /v1/healthz con las cabeceras que pone Caddy
+      # (Host permitido + X-Forwarded-Proto), sin curl en la imagen.
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     depends_on:
       db:
         condition: service_healthy
 
   worker:
-    # PLACEHOLDER — sin código real hasta el Paso 19 (cola de trabajos SKIP LOCKED).
-    # Activación en el Paso 19: análoga a `api` (build del mismo Dockerfile de
-    # `server/`, pero con `command` apuntando al entrypoint del worker en vez
-    # del servidor HTTP).
-    image: python:3.12-slim
+    # Paso 19: el consumidor de la cola (ADR-006), misma imagen que `api`,
+    # otro proceso. Ejecuta los periódicos: reaper de leases, purga de
+    # tombstones, GC de adjuntos y retención de trazas de seguridad.
+    <<: *server
+    # Sin el entrypoint de `api` (migrate + collectstatic): las migraciones
+    # las aplica `api`, y este servicio arranca cuando `api` ya está sano,
+    # así nunca hay dos `migrate` en carrera.
+    entrypoint: ["python", "manage.py"]
+    command: ["run_worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  backup:
+    # Backups cifrados de la BD y de los adjuntos hacia un bucket S3/R2
+    # separado (ISO 27001 A.8.13). Ver infra/backup/README.md. Sin
+    # BACKUP_AGE_RECIPIENT queda desactivado (desarrollo); en producción el
+    # monitoreo alerta si no hay backups recientes.
+    build:
+      context: ./backup
+    image: visitacampo-backup:local
     restart: unless-stopped
-    command: ["sh", "-c", "echo 'worker: placeholder sin codigo (activar en Paso 19, ver infra/docker-compose.yml)'; sleep infinity"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-      DJANGO_DEBUG: ${DJANGO_DEBUG}
+      PGHOST: db
+      PGPORT: ${POSTGRES_PORT}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT}
+      BACKUP_REMOTE: ${BACKUP_REMOTE}
+      BACKUP_BLOBS_SOURCE: ${BACKUP_BLOBS_SOURCE}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS}
+      # rclone sin archivo de configuración: remotos `backup` (destino) y
+      # `blobs` (bucket de adjuntos de la API) definidos por entorno.
+      HOME: /tmp
+      RCLONE_CONFIG: /tmp/rclone.conf
+      RCLONE_S3_NO_CHECK_BUCKET: "true"
+      RCLONE_CONFIG_BACKUP_TYPE: s3
+      RCLONE_CONFIG_BACKUP_PROVIDER: ${BACKUP_S3_PROVIDER}
+      RCLONE_CONFIG_BACKUP_ENDPOINT: ${BACKUP_S3_ENDPOINT_URL}
+      RCLONE_CONFIG_BACKUP_REGION: ${BACKUP_S3_REGION}
+      RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID}
+      RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY}
+      RCLONE_CONFIG_BLOBS_TYPE: s3
+      RCLONE_CONFIG_BLOBS_PROVIDER: ${BACKUP_S3_PROVIDER}
+      RCLONE_CONFIG_BLOBS_ENDPOINT: ${STORAGE_S3_ENDPOINT_URL}
+      RCLONE_CONFIG_BLOBS_REGION: ${STORAGE_S3_REGION}
+      RCLONE_CONFIG_BLOBS_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
+      RCLONE_CONFIG_BLOBS_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
+    volumes:
+      - blobstore:/blobs:ro # origen de adjuntos con STORAGE_BACKEND=localfs
+      - backup_metrics:/metrics # textfile collector del monitoreo
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   pgdata:
+  blobstore:
+  backup_metrics:
   caddy_data:
   caddy_config:

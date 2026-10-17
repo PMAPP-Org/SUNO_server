@@ -40,6 +40,7 @@ que es aceptable. `metadata` pasa por `scrub()` (RD-12) antes de guardarse.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -50,7 +51,7 @@ from visitacampo.core.models import AuditEvent
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.core.scrub import scrub
 
-__all__ = ["AuditAction", "hash_ip", "record"]
+__all__ = ["AuditAction", "hash_ip", "purge_expired", "record"]
 
 _IP_HASH_SALT = "visitacampo.core.audit.ip_hash"
 
@@ -94,3 +95,15 @@ def record(
         metadata=scrub(metadata or {}),
         ip_hash=hash_ip(ip),
     )
+
+
+def purge_expired(ctx: RequestContext, *, older_than: datetime) -> int:
+    """Borra los `AuditEvent` de la organización de `ctx` anteriores a `older_than`.
+
+    Es la única vía de borrado de la traza: el Admin no tiene permiso de
+    borrado (`core/admin.py`) y lo invoca el periódico `security.purge_logs`
+    (`jobs/periodic.py`) con el plazo de `AUDIT_EVENT_RETENTION_DAYS`.
+    Devuelve cuántos se borraron.
+    """
+    deleted, _ = scoped_qs(ctx, AuditEvent).filter(created_at__lt=older_than).delete()
+    return deleted

@@ -1,0 +1,11 @@
+# Dashboards versionados en infra/monitoring/grafana/dashboards: cualquier
+# cambio pasa por PR (ISO 27001 A.8.32); los editados en la UI no persisten.
+apiVersion: 1
+providers:
+  - name: visitacampo
+    folder: VisitaCampo
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

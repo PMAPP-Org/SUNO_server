@@ -1,0 +1,101 @@
+name: Uptime
+
+# Vigilancia EXTERNA de producción (ADR-014, ISO 27001 A.8.16): corre en
+# GitHub, fuera del servidor, así avisa también cuando cae el servidor entero
+# (y con él Prometheus y Alertmanager). Cada 15 minutos comprueba
+# /v1/healthz, /v1/readyz y los días que le quedan al certificado TLS.
+#
+# - Falla → abre (o comenta) un issue con la etiqueta `incidente`; GitHub
+#   notifica a quien vigila el repositorio.
+# - Se recupera → comenta y cierra ese issue.
+#
+# Inactivo hasta que se defina la variable de repositorio PRODUCTION_URL
+# (Settings → Secrets and variables → Actions → Variables), p. ej.
+# `https://visitas.example.com`.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: healthz + readyz + certificado
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      GH_TOKEN: ${{ github.token }}
+      LABEL: incidente
+    steps:
+      - name: ¿Hay producción configurada?
+        id: cfg
+        run: |
+          if [ -z "$PRODUCTION_URL" ]; then
+            echo "Sin PRODUCTION_URL: no hay producción que vigilar." >> "$GITHUB_STEP_SUMMARY"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sondear
+        id: probe
+        if: steps.cfg.outputs.enabled == 'true'
+        run: |
+          problems=""
+          for path in /v1/healthz /v1/readyz; do
+            # Dos intentos: un único timeout de red no es una caída.
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --retry 1 --retry-delay 20 "${PRODUCTION_URL}${path}" || true)"
+            [ "$code" = "200" ] || problems="${problems}- \`${path}\` respondió \`${code:-sin respuesta}\`\n"
+          done
+          host="$(echo "$PRODUCTION_URL" | sed -E 's|^https?://([^/:]+).*|\1|')"
+          end="$(echo | openssl s_client -servername "$host" -connect "${host}:443" 2>/dev/null \
+            | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)"
+          if [ -z "$end" ]; then
+            problems="${problems}- no se pudo leer el certificado TLS de \`${host}\`\n"
+          else
+            days=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+            echo "Certificado: caduca en ${days} días (${end})" >> "$GITHUB_STEP_SUMMARY"
+            [ "$days" -ge 14 ] || problems="${problems}- el certificado TLS caduca en ${days} días\n"
+          fi
+          {
+            echo "problems<<EOF"
+            printf '%b' "$problems"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          [ -z "$problems" ] && echo "Todo en orden." >> "$GITHUB_STEP_SUMMARY" || printf '%b' "$problems" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Abrir o actualizar el incidente
+        if: steps.cfg.outputs.enabled == 'true' && steps.probe.outputs.problems != ''
+        env:
+          PROBLEMS: ${{ steps.probe.outputs.problems }}
+        run: |
+          gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "Caída o degradación detectada por uptime.yml" 2>/dev/null || true
+          body="$(printf 'Detectado %s UTC desde fuera del servidor:\n\n%s\nRun: %s/%s/actions/runs/%s' \
+            "$(date -u +'%Y-%m-%d %H:%M')" "$PROBLEMS" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open --json number --jq '.[0].number')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label "$LABEL" \
+              --title "Producción: caída o degradación detectada" --body "$body"
+          fi
+          exit 1
+
+      - name: Cerrar el incidente si se recuperó
+        if: steps.cfg.outputs.enabled == 'true' && steps.probe.outputs.problems == ''
+        run: |
+          open="$(gh issue list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open --json number --jq '.[0].number')"
+          if [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" \
+              --comment "Recuperado $(date -u +'%Y-%m-%d %H:%M') UTC: healthz, readyz y certificado en orden."
+          fi

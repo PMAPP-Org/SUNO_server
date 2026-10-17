@@ -38,7 +38,15 @@ updates:
       interval: weekly
       day: monday
 
-  # Imágenes de infra/docker-compose*.yml (postgres, caddy).
+  # Digest de la imagen base del servicio backup (infra/backup/Dockerfile);
+  # debe seguir al de `db` (misma versión mayor de PostgreSQL).
+  - package-ecosystem: docker
+    directory: /infra/backup
+    schedule:
+      interval: weekly
+      day: monday
+
+  # Imágenes de infra/docker-compose*.yml (postgres, caddy, monitoreo).
   - package-ecosystem: docker-compose
     directory: /infra
     schedule:
