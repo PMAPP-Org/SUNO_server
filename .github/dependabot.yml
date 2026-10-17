@@ -14,6 +14,11 @@
 # requirements*.lock (uv). Quien revise el PR regenera el lock con el comando
 # de su cabecera; `infra/scripts/check_lockfiles.py` deja el PR en rojo
 # mientras tanto.
+#
+# Migraciones planificadas, no semanales: los `ignore` de abajo dejan fuera
+# los saltos que exigen preparar algo más que un PR (código, datos o CI). Se
+# retiran cuando se planifica la migración correspondiente; las alertas de
+# SEGURIDAD de Dependabot no se ven afectadas por ellos.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -27,6 +32,17 @@ updates:
       python:
         patterns: ["*"]
     open-pull-requests-limit: 5
+    ignore:
+      # Django 5.2 es LTS (soporte hasta 2028-04); el salto de mayor se hace
+      # junto con django-axes (8.x) en una migración propia.
+      - dependency-name: "django"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "django-axes"
+        update-types: ["version-update:semver-major"]
+      # Servidor de aplicación: se cambia junto con uvicorn/uvicorn-worker y
+      # se valida con el stack de producción (deploy.sh + DAST).
+      - dependency-name: "gunicorn"
+        update-types: ["version-update:semver-major"]
 
   # Digest de la imagen base de server/Dockerfile.
   - package-ecosystem: docker
@@ -36,6 +52,11 @@ updates:
       day: monday
     cooldown:
       default-days: 7
+    ignore:
+      # La imagen corre la misma versión de Python que CI y los lockfiles
+      # (`--python-version 3.12`); subirla es un cambio de todo eso a la vez.
+      - dependency-name: "python"
+        versions: [">=3.13"]
 
   # Digest de la imagen base del servicio backup (infra/backup/Dockerfile);
   # debe seguir al de `db` (misma versión mayor de PostgreSQL).
@@ -46,6 +67,12 @@ updates:
       day: monday
     cooldown:
       default-days: 7
+    ignore:
+      # Una versión mayor de PostgreSQL exige `pg_upgrade` (o volcado y
+      # restauración) del volumen de datos: migración planificada, junto con
+      # la imagen de `db` y la de backup, que deben ir a la par.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   # Imágenes de infra/docker-compose*.yml (postgres, caddy, monitoreo).
   - package-ecosystem: docker-compose
@@ -55,6 +82,12 @@ updates:
       day: monday
     cooldown:
       default-days: 7
+    ignore:
+      # Una versión mayor de PostgreSQL exige `pg_upgrade` (o volcado y
+      # restauración) del volumen de datos: migración planificada, junto con
+      # la imagen de `db` y la de backup, que deben ir a la par.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   # Actions fijadas por SHA en .github/workflows/: Dependabot actualiza el
   # SHA y el comentario de versión a la vez.
