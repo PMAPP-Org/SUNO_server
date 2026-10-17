@@ -14,7 +14,7 @@
 | 🏢 | Organizacional: aplica, pero se cumple fuera del repositorio (procesos, personas, contratos) y lo debe documentar la organización |
 | ➖ | No aplica (con justificación) |
 
-**Resumen:** de 93 controles, 26 implementados, 33 parciales, 2 pendientes, 29 organizacionales y 3 que no aplican. El código y el CI cubren bien la familia 8 (tecnológicos). Lo que más falta para certificar está en las familias 5 a 7, que son procesos y personas.
+**Resumen:** de 93 controles, 29 implementados, 31 parciales, 1 pendiente, 29 organizacionales y 3 que no aplican. El código y el CI cubren bien la familia 8 (tecnológicos). Lo que más falta para certificar está en las familias 5 a 7, que son procesos y personas.
 
 ## 5. Controles organizacionales
 
@@ -42,7 +42,7 @@
 | 5.20 Seguridad en los acuerdos con proveedores | Sí | 🏢 | Revisión de términos de GitHub, el proveedor del VPS y Cloudflare |
 | 5.21 Seguridad en la cadena de suministro TIC | Sí | ✅ | Lockfiles con hashes, digests, actions por SHA, binarios con checksum, Dependency Review, SBOM, atestaciones SLSA, espera de 7 días en Dependabot |
 | 5.22 Seguimiento de servicios de proveedores | Sí | 🏢 | Revisión anual de proveedores |
-| 5.23 Seguridad en el uso de servicios en la nube | Sí | 🟡 | R2 con bucket de backups separado y token acotado; VPS con aprovisionamiento endurecido (pendiente). Falta evaluar al proveedor |
+| 5.23 Seguridad en el uso de servicios en la nube | Sí | 🟡 | R2 con bucket de backups separado y token acotado; VPS con aprovisionamiento endurecido como código (`infra/provision/provision.sh`, probado en CI). Falta evaluar al proveedor |
 | 5.24 Planificación de la gestión de incidentes | Sí | 🟡 | Procedimiento en [`politicas.md`](politicas.md) §8 (borrador); detección con alertas (ADR-014) e issue `incidente` (uptime.yml) |
 | 5.25 Evaluación de eventos de seguridad | Sí | 🟡 | Clasificación de severidad en [`politicas.md`](politicas.md) §8 |
 | 5.26 Respuesta a incidentes | Sí | 🟡 | Procedimiento ([`politicas.md`](politicas.md) §8) y runbook por alerta ([`docs/operacion/incidentes.md`](../operacion/incidentes.md)). Falta ensayarlos |
@@ -112,10 +112,10 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | 8.14 Redundancia de las instalaciones | Sí | 🟡 | VPS único por decisión de coste (ADR-010): riesgo R-21 en [`registro-riesgos.md`](registro-riesgos.md), pendiente de aceptación formal, mitigado con backups fuera del servidor |
 | 8.15 Registro (logging) | Sí | ✅ | `AuditEvent` de autenticación, `AccessFailureLog`, logs JSON de Caddy, todo con redacción de secretos |
 | 8.16 Actividades de monitorización | Sí | 🟡 | ADR-014: monitoreo interno con alertas probadas en CI y vigilancia externa (`uptime.yml`). Falta desplegarlo |
-| 8.17 Sincronización de relojes | Sí | ⬜ | Necesaria para correlacionar logs y validar tokens. Configurar NTP en el aprovisionamiento del VPS |
+| 8.17 Sincronización de relojes | Sí | ✅ | chrony instalado y activo por `provision.sh`; el CI (`infra.yml`) comprueba que el servicio queda en marcha. Necesaria para correlacionar logs y validar tokens |
 | 8.18 Uso de programas de utilidad privilegiados | Sí | 🟡 | Contenedores con `cap_drop: ALL` y `no-new-privileges`; sin acceso al socket de Docker (ADR-014). Falta la política de acceso al host |
-| 8.19 Instalación de software en sistemas operativos | Sí | 🟡 | Solo imágenes fijadas por digest. Falta el script de aprovisionamiento del VPS |
-| 8.20 Seguridad de las redes | Sí | 🟡 | Solo Caddy publica 80 y 443; PostgreSQL sin puertos expuestos; paneles en `127.0.0.1`. Falta el firewall del host |
+| 8.19 Instalación de software en sistemas operativos | Sí | ✅ | Servidor: paquetes mínimos y Docker del repositorio oficial con la llave verificada por huella (`provision.sh`), actualizaciones de seguridad automáticas. Aplicación: solo imágenes fijadas por digest con procedencia verificada antes de desplegar (`deploy.yml`) |
+| 8.20 Seguridad de las redes | Sí | ✅ | Solo Caddy publica 80 y 443; PostgreSQL sin puertos expuestos; paneles en `127.0.0.1`. Firewall del host (ufw: entrada denegada salvo 22, 80, 443), SSH solo con llave y sin root, fail2ban (`provision.sh`, verificado en CI) |
 | 8.21 Seguridad de los servicios de red | Sí | ✅ | TLS automático con HSTS y preload, cabeceras de seguridad verificadas por DAST, redirección HTTPS |
 | 8.22 Segregación de redes | Sí | 🟡 | Red interna de Compose sin exposición; pendiente separar en redes frontend y backend |
 | 8.23 Filtrado web | Sí | 🏢 | Para los equipos del personal |
@@ -127,6 +127,6 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | 8.29 Pruebas de seguridad en desarrollo y aceptación | Sí | ✅ | Tests de seguridad, DAST (Schemathesis + ZAP) contra el stack de producción, simulacros de backup y alertas |
 | 8.30 Desarrollo externalizado | Sí | 🟡 | Se usan asistentes de IA para programar: todo cambio pasa por los mismos gates y por revisión humana (pendiente de exigir, 5.3). Reuso de código de terceros solo con licencia compatible (qfieldcloud, MIT) |
 | 8.31 Separación de los entornos | Sí | ✅ | Settings dev y prod separados; el CI usa secretos efímeros de un solo uso; `.env` fuera de git |
-| 8.32 Gestión de cambios | Sí | 🟡 | PR, CI obligatorio, Conventional Commits, CHANGELOG y releases trazables con procedencia firmada. Falta la aprobación independiente obligatoria (issue #5) |
+| 8.32 Gestión de cambios | Sí | 🟡 | PR, CI obligatorio, Conventional Commits, CHANGELOG y releases trazables con procedencia firmada; despliegue solo de releases, con la procedencia verificada, backup previo y rollback automático probado en CI (`deploy.yml`, `deploy.sh`). Falta la aprobación independiente obligatoria (issue #5) |
 | 8.33 Información de prueba | Sí | ✅ | Los tests y el CI usan datos sintéticos; nunca datos de producción |
 | 8.34 Protección durante las pruebas de auditoría | Sí | ✅ | El DAST y los escaneos activos corren contra un stack efímero de CI, nunca contra producción |

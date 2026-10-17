@@ -1,0 +1,15 @@
+# Override de PRODUCCIÓN: `api` y `worker` corren la imagen publicada por la
+# release (GHCR, con atestación de procedencia verificada por deploy.yml), fijada
+# por digest, en vez de construirla en el servidor. Se activa con
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml[:docker-compose.monitoring.yml]
+# y lo usa infra/scripts/deploy.sh. Ver docs/operacion/despliegue.md.
+services:
+  api:
+    image: ${VISITACAMPO_API_IMAGE:?define VISITACAMPO_API_IMAGE (ghcr.io/…/visitacampo-api@sha256:…)}
+    build: !reset null
+    pull_policy: missing
+
+  worker:
+    image: ${VISITACAMPO_API_IMAGE:?define VISITACAMPO_API_IMAGE (ghcr.io/…/visitacampo-api@sha256:…)}
+    build: !reset null
+    pull_policy: missing
