@@ -80,10 +80,15 @@ MAX_DEPTH = 12
 #: `clave = valor` / `"clave": "valor"` dentro de un texto libre. El valor se
 #: toma hasta el primer separador razonable para no comerse el resto de la
 #: línea (un traceback tiene mucho texto detrás del secreto).
+#:
+#: El esquema de una cabecera `Authorization` (`Bearer`, `Basic`…) se conserva
+#: y se redacta la credencial que lo sigue: sin ese grupo, el "valor" tomado
+#: era la palabra `Bearer` y el token salía en claro justo detrás.
 _KEY_VALUE_RE = re.compile(
     r"(?i)"
     r"(['\"]?\b(?:" + "|".join(SENSITIVE_KEY_PARTS) + r")[a-z0-9_\-]*['\"]?)"
     r"(\s*[=:]\s*)"
+    r"((?:bearer|basic|digest|token|jwt)\s+)?"
     r"(\"[^\"]*\"|'[^']*'|[^\s,;&)\]}>]+)"
 )
 
@@ -108,7 +113,7 @@ def scrub_text(text: str) -> str:
     además introducida por `dsn=`, y no al revés.
     """
     redacted = _URL_CREDENTIALS_RE.sub(rf"\1\2:{REDACTED}@", text)
-    return _KEY_VALUE_RE.sub(rf"\1\2{REDACTED}", redacted)
+    return _KEY_VALUE_RE.sub(rf"\1\2\3{REDACTED}", redacted)
 
 
 def scrub(value: Any, *, _depth: int = 0) -> Any:
