@@ -25,5 +25,5 @@ Los **controles tecnológicos y de desarrollo** (familia 8 del Anexo A) están i
 2. Aprobación de la dirección: alcance, política general, estos borradores y asignación de roles.
 3. Aviso de privacidad y plazos de conservación de visitas y fotos (R-25).
 4. MFA en el back-office (R-20) y Paso 15: revocación de familia ante reuso de tokens (R-24).
-5. Runbooks de despliegue, rollback, restauración e incidentes; publicar `SECURITY.md`.
+5. Ensayar los runbooks de [`docs/operacion/`](../operacion/README.md) y activar el reporte privado de vulnerabilidades (`SECURITY.md`).
 6. Al contratar el VPS: aprovisionamiento endurecido (firewall, SSH solo con llave, NTP, rotación de logs), despliegue del monitoreo y primer simulacro real de restauración.

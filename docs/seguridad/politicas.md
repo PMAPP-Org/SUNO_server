@@ -77,7 +77,7 @@ Una vulnerabilidad que no es explotable en el contexto (p. ej. EXC-001) se docum
 
 **Cómo se notifica:**
 - Cualquier persona lo comunica de inmediato al responsable de seguridad.
-- Desde fuera, por el canal de `SECURITY.md` (pendiente de publicar).
+- Desde fuera, por el canal de [`SECURITY.md`](../../SECURITY.md).
 - Las alertas críticas y el issue `incidente` de `uptime.yml` son detección automática.
 
 **Severidad y tiempos de respuesta**
@@ -91,7 +91,7 @@ Una vulnerabilidad que no es explotable en el contexto (p. ej. EXC-001) se docum
 **Pasos:**
 1. **Contener.** Revocar sesiones o llaves, aislar el servicio o restringir el acceso.
 2. **Preservar evidencias.** `AuditEvent`, logs y estado del sistema antes de tocarlo (A.5.28).
-3. **Erradicar y recuperar**, con los runbooks de despliegue y restauración (pendientes).
+3. **Erradicar y recuperar**, con los runbooks de [`docs/operacion/`](../operacion/README.md).
 4. **Notificar.** Si hay datos personales afectados, avisar a la organización cliente responsable y a la SIC en los plazos y la forma que esta establezca. Se registra qué se notificó, a quién y cuándo.
 5. **Post-mortem** en un máximo de 5 días hábiles: causa raíz, cronología y acciones, con un issue por cada acción. Riesgos nuevos o reevaluados al registro.
 
