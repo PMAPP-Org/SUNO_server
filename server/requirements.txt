@@ -4,7 +4,7 @@
 # ADR-004: Django 5.x LTS + Django Ninja (Pydantic v2) + PostgreSQL, sin DRF.
 # ADR-008: Argon2id (`argon2-cffi`) como hasher de contraseñas primario.
 
-Django==5.2.16
+Django==5.2.18
 django-ninja==1.6.2
 argon2-cffi==25.1.0
 psycopg[binary]==3.3.4
@@ -15,8 +15,8 @@ psycopg[binary]==3.3.4
 # explícitamente en vez de confiar en que PyJWT la arrastre.
 # La justificación de elegir PyJWT frente a python-jose / authlib /
 # djangorestframework-simplejwt está en visitacampo/authn/tokens.py.
-PyJWT==2.10.1
-cryptography==48.0.0
+PyJWT==2.15.1
+cryptography==50.0.2
 
 # ADR-007: adjuntos en object storage S3-compatible (Cloudflare R2), con
 # subida directa por URL prefirmada (Paso 17).
