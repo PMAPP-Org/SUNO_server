@@ -34,7 +34,21 @@ Las rutas `app/…` que citan los pasos anteriores corresponden ahora a la raíz
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #7); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
-**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 (en curso) → 23 (en curso) → 24 → 16 → 25.
+
+### Lo que falta, verificado contra el código (2026-10-18)
+
+Revisado paso a paso contra lo que hay de verdad en SUNO_server y SUNO_client, no contra este documento:
+
+| Paso | Qué falta | ¿Se puede hacer sin hardware? |
+|---|---|---|
+| **23** Revisión de cuarentena | En [SUNO_client#4](https://github.com/PMAPP-Org/SUNO_client/pull/4): pantalla, corrección, reintento, descarte con confirmación y conflictos. El PR corrige además dos fallos: un conflicto pisaba la versión del agente, y el reintento reutilizaba el `op_uuid` y nunca podía funcionar. **Falta** el flujo de conflicto contra el backend real (entorno del Paso 14). | Sí, salvo esa prueba |
+| **24** Back-office | El Admin solo tiene el registro por defecto de 8 modelos. Faltan:<br>• filtros y columnas;<br>• vista previa de fotos con URL prefirmada;<br>• gestión de plantillas y versiones;<br>• registrar `Device` y la acción "revocar dispositivo" (familia de refresh tokens);<br>• `Job` y dead-letters según rol;<br>• exportación CSV/Excel con límite de filas;<br>• aislamiento por organización en el Admin (`test_admin_scoping.py`);<br>• la herramienta de **derechos del titular** (consulta, rectificación y supresión, Ley 1581).<br>`Assignment` y `FormTemplate` tampoco están registrados. | Sí |
+| **16** TLS y tokens del cliente | `lib/core/security/trust_store.dart` no existe: ni pinning SPKI ni TOFU. Faltan `network_security_config.xml` (sí está `usesCleartextTraffic=false`) y el ATS de iOS. `FlutterSecureStorage` usa opciones por defecto, sin Keychain *ThisDeviceOnly*. Tampoco hay reacción del cliente a una familia de tokens revocada (forzar un re-login limpio sin borrar el outbox). | Sí, salvo la prueba contra un certificado real (tarea 8 del Paso 25) |
+| **25** Suite final | Ya hay tests de aislamiento, presupuesto de queries, traversal, checksum, reuso de token y spoof de `X-Forwarded-Proto`, pero dispersos. Faltan la suite consolidada, el **mapa H-01…H-21 → test** y un script de carga (no hay locust ni k6). | En parte: la carga y las mediciones de dispositivo van fuera de esta máquina |
+| **18** (resto) | Subida con la app cerrada (WorkManager/BGTask) y medición en iOS. | No: dispositivo real |
+| **14** E2E Fase 0 | No existen `docs/testing/e2e-fase0.md` ni `integration_test`. | No: emulador y Docker |
+| **Ley 1581 en la app** | La app no muestra aviso de privacidad ni pide autorización antes del primer login y antes de capturar ubicación o fotos (`docs/seguridad/tratamiento-datos-personales.md` §1). | La mecánica sí; el texto lo valida un abogado |
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
 
@@ -165,7 +179,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 - [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento (en curso: cola, reintento y streaming hechos en [SUNO_client#3](https://github.com/PMAPP-Org/SUNO_client/pull/3); falta la subida con la app cerrada y su medición en dispositivo)
 - [x] **Paso 21** — Renderer dinámico de formularios en Flutter
 - [x] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma (falta la prueba manual en emulador)
-- [ ] **Paso 23** — UI de conflictos: `quarantine` y reenvío
+- [ ] **Paso 23** — UI de conflictos: `quarantine` y reenvío (en curso: [SUNO_client#4](https://github.com/PMAPP-Org/SUNO_client/pull/4); falta el flujo contra el backend real)
 
 ### Integración final y cierre
 
@@ -213,7 +227,7 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 - **Atomicidad:** visita + adjuntos + outbox + cola de subida se guardan en una transacción. El test fuerza un fallo a mitad y comprueba que no queda nada (`test/core/capture/visit_capture_test.dart`).
 - **UI optimista:** la visita aparece en la pantalla de inicio en cuanto se guarda, con estado *Pendiente* y sus adjuntos por subir, sin red.
 - **Prueba preliminar de carga:** 50 visitas × 10 fotos (500 adjuntos, 550 operaciones) sin degradación. Se compara el tiempo medio de las 10 últimas contra las 10 primeras. La validación completa es el Paso 25.
-- **Pendiente:** la prueba manual en emulador (sin emulador en esta máquina) y la subida en segundo plano con reintento (Paso 18; hoy sube al pulsar *Sincronizar*).
+- **Pendiente:** la prueba manual en emulador (sin emulador en esta máquina). La subida automática con reintento llegó después, en el Paso 18 (SUNO_client#3).
 
 **Hallazgos del Paso 22** (corregidos):
 - (1) **El servidor no creaba nunca un `visit_attachment`**: el push los rechazaba como `unsupported_entity` aunque el contrato los declara. Una respuesta de foto o firma guardaba un `id` que no apuntaba a nada. Ahora el push acepta su **alta** (`sync/payloads.py`, `services.py`, `sql.py`):
