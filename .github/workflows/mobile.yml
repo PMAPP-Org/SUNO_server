@@ -57,6 +57,70 @@ jobs:
       - name: flutter test
         run: flutter test --concurrency=1
 
+  android-release:
+    name: APK release firmado (no con la clave de debug)
+    runs-on: ubuntu-latest
+    # Construye el APK de release como se construiría para publicar, pero
+    # con una llave de subida de usar y tirar generada aquí, y comprueba lo
+    # que un APK publicable tiene que cumplir: firmado con esa llave y no
+    # con la de debug, y con el permiso INTERNET (que faltaba en el manifest
+    # principal). La llave real nunca pasa por CI.
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+
+      - name: flutter pub get + build_runner
+        run: |
+          flutter pub get --enforce-lockfile
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Sin key.properties, el build de release se niega a firmar
+        run: |
+          if flutter build apk --release > no-key.log 2>&1; then
+            echo "El build de release terminó sin key.properties (¿firmó con debug?)"
+            exit 1
+          fi
+          grep -q "sin android/key.properties" no-key.log
+
+      - name: Llave de subida efímera (solo CI)
+        run: |
+          STOREPASS="$(openssl rand -hex 24)"
+          keytool -genkeypair -noprompt -keystore android/app/ci-upload.jks \
+            -alias ci -keyalg RSA -keysize 2048 -validity 1 \
+            -storepass "$STOREPASS" -keypass "$STOREPASS" \
+            -dname "CN=VisitaCampo CI, O=VisitaCampo"
+          printf 'storeFile=ci-upload.jks\nkeyAlias=ci\nstorePassword=%s\nkeyPassword=%s\n' \
+            "$STOREPASS" "$STOREPASS" > android/key.properties
+
+      - name: flutter build apk --release
+        run: flutter build apk --release
+
+      - name: Verificar firma y permisos del APK
+        run: |
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          "$BT/apksigner" verify --print-certs "$APK" | tee certs.txt
+          grep -q "CN=VisitaCampo CI" certs.txt
+          if grep -q "CN=Android Debug" certs.txt; then
+            echo "APK firmado con la clave de debug"; exit 1
+          fi
+          "$BT/aapt" dump permissions "$APK" | tee perms.txt
+          grep -q "android.permission.INTERNET" perms.txt
+
   rd01-tls-bypass-lint:
     name: "RD-01: lint anti-TLS-bypass (ADR-009)"
     runs-on: ubuntu-latest

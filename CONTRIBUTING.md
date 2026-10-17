@@ -131,6 +131,18 @@ en `.gitleaksignore` para gitleaks—, nunca desactivando una regla entera.
 comentario (`uses: actions/checkout@<sha> # v7.0.1`); Dependabot actualiza
 ambos a la vez.
 
+## Firma de releases Android
+
+El APK/AAB de release se firma con la llave de subida definida en
+`app/android/key.properties` (`storeFile`, `keyAlias`, `storePassword`,
+`keyPassword`) y el `.jks` al que apunta. **Ninguno de los dos se versiona**
+(`app/android/.gitignore`) y deben guardarse en un gestor de secretos con
+copia de seguridad: perder la llave de subida obliga a un proceso de
+recuperación con Google Play. Sin `key.properties`, `flutter build apk
+--release` falla a propósito en vez de firmar con la clave de debug. El job
+`android-release` de `mobile.yml` lo comprueba en cada PR con una llave
+efímera.
+
 ## Estilo de commits
 
 Ver [`README.md`](README.md#convención-de-commits): mensajes descriptivos en
