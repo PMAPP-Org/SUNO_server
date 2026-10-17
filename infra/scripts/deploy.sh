@@ -45,7 +45,9 @@ image="${2:-}"
 log() { printf '%s deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-[ -n "$version" ] && [ -n "$image" ] || die "uso: deploy.sh vX.Y.Z <imagen@sha256:digest>"
+if [ -z "$version" ] || [ -z "$image" ]; then
+	die "uso: deploy.sh vX.Y.Z <imagen@sha256:digest>"
+fi
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "versión inválida: $version"
 if [ "${DEPLOY_ALLOW_TAG:-0}" != 1 ] && [[ "$image" != *@sha256:* ]]; then
 	die "la imagen debe ir fijada por digest (…@sha256:…): $image"
@@ -61,7 +63,9 @@ grep -qE '^COMPOSE_FILE=.*docker-compose\.prod\.yml' "$ENV_FILE" \
 domain="$(sed -n 's/^CADDY_DOMAIN=//p' "$ENV_FILE" | tail -1)"
 [ -n "$domain" ] || die "falta CADDY_DOMAIN en infra/.env"
 
-compose() { docker compose --project-directory infra "$@"; }
+# Desde infra/: las rutas relativas de COMPOSE_FILE (en infra/.env) se
+# resuelven contra el directorio actual, no contra --project-directory.
+compose() { (cd "$REPO_DIR/infra" && docker compose "$@"); }
 
 checkout() {
 	[ "${DEPLOY_NO_FETCH:-0}" = 1 ] || git fetch --tags --quiet

@@ -141,7 +141,7 @@ jobs:
   deploy:
     name: Desplegar en producción
     needs: [release-please, image]
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] actionlint no admite `$/`
     permissions:
       contents: read
       packages: read

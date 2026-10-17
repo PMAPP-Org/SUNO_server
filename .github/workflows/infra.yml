@@ -149,9 +149,9 @@ jobs:
           set +e; bash infra/scripts/deploy.sh v0.0.2-ci visitacampo-api:broken; code=$?; set -e
           test "$code" = 2 || { echo "esperado 2 (rollback correcto), fue $code"; exit 1; }
           test "$(cat .deploy-state)" = "v0.0.1-ci visitacampo-api:good"
-          test "$(docker inspect --format '{{.Config.Image}}' "$(docker compose --project-directory infra ps -q api)")" = visitacampo-api:good
+          test "$(docker inspect --format '{{.Config.Image}}' "$(cd infra && docker compose ps -q api)")" = visitacampo-api:good
           curl -fsSk --resolve "${DAST_HOST}:443:127.0.0.1" "https://${DAST_HOST}/v1/readyz"
 
       - name: Logs si falla
         if: failure()
-        run: docker compose --project-directory infra logs --no-color --tail 100
+        run: cd infra && docker compose logs --no-color --tail 100
