@@ -1,0 +1,8 @@
+# Archivos que se ejecutan o se copian a una imagen Linux: siempre LF en la
+# copia de trabajo, aunque el clon sea en Windows con core.autocrlf=true. Un
+# entrypoint.sh con CRLF construido desde Windows hace que el contenedor no
+# arranque ("/bin/sh^M: not found").
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Caddyfile   text eol=lf
+*.lock      text eol=lf
