@@ -99,9 +99,7 @@ def _check_batch_limits(request, payload: PushRequest) -> None:
             f"Batch has {len(payload.ops)} operations; the limit is {caps.SYNC_PUSH_MAX_OPS}."
         )
     if len(request.body) > caps.SYNC_PUSH_MAX_BYTES:
-        raise PayloadTooLarge(
-            f"Batch body exceeds {caps.SYNC_PUSH_MAX_BYTES} bytes."
-        )
+        raise PayloadTooLarge(f"Batch body exceeds {caps.SYNC_PUSH_MAX_BYTES} bytes.")
 
 
 @router.post(
@@ -118,9 +116,7 @@ def sync_push(request, payload: PushRequest):
     de ADR-003 con la referencia — no hay un job asíncrono al que preguntarle
     después qué pasó; cuando esta respuesta vuelve, la transacción ya commiteó.
     """
-    if not (
-        caps.MIN_SUPPORTED_SCHEMA_VERSION <= payload.schema_version <= caps.SCHEMA_VERSION
-    ):
+    if not (caps.MIN_SUPPORTED_SCHEMA_VERSION <= payload.schema_version <= caps.SCHEMA_VERSION):
         raise SchemaVersionUnsupported(payload.schema_version)
     _check_batch_limits(request, payload)
 

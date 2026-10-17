@@ -108,9 +108,7 @@ def bootstrap_state(ctx: RequestContext) -> dict[str, Any]:
     organization = get_organization(ctx)
     user = get_app_user(ctx)
 
-    live_by_entity = {
-        entity: _live_rows(ctx, entity, model) for entity, model in _ENTITY_MODELS
-    }
+    live_by_entity = {entity: _live_rows(ctx, entity, model) for entity, model in _ENTITY_MODELS}
 
     # `max(...)`: si la fila con el `change_seq` más alto de la organización
     # fue justo la que se purgó físicamente, `highest_change_seq` por sí solo

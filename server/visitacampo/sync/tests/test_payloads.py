@@ -347,9 +347,7 @@ class FiniteFloatTests(SimpleTestCase):
         # bajo el nivel del mar (mar Muerto) y en vuelo.
         for altitude in (-430.0, 0.0, 11_000.0):
             with self.subTest(altitude=altitude):
-                parsed = parse_op(
-                    "visit", "create", None, _create_payload(altitude_m=altitude)
-                )
+                parsed = parse_op("visit", "create", None, _create_payload(altitude_m=altitude))
                 self.assertIsInstance(parsed, VisitWrite)
 
     def test_the_range_guards_still_work(self) -> None:
@@ -408,8 +406,8 @@ class HostileInputTests(SimpleTestCase):
                 )
 
     def test_a_non_writable_entity_is_rejected_not_crashed(self) -> None:
-        """`Visit` es la única entidad escribible del MVP (brief, tarea 3)."""
-        parsed = parse_op("visit_attachment", "create", None, {"id": str(uuid.uuid4())})
+        """`assignment` llega por el pull pero no es escribible."""
+        parsed = parse_op("assignment", "create", None, {"id": str(uuid.uuid4())})
         assert isinstance(parsed, Rejection)
         self.assertEqual(parsed.details, {"field": "entity", "reason": "unsupported_entity"})
 

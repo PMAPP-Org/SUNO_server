@@ -1405,6 +1405,9 @@ components:
       description: |
         Campos de `visit_attachment` que el cliente puede escribir. El `sha256` puede referenciar
         un blob **aún no subido**: el dato estructurado no espera a los bytes.
+        En el MVP solo se admite `op_type: create` (con `visit_id`, `sha256`, `role` y
+        `captured_at`); `update`/`delete` se rechazan con `reason: unsupported_op_type`. La visita
+        tiene que existir en la organización o crearse antes en el mismo lote.
       required: [id]
       properties:
         id:

@@ -7,7 +7,7 @@
 | Rol | Responsabilidad | Persona |
 |---|---|---|
 | Responsable de seguridad del proyecto | Mantener este documento, el registro de riesgos y las excepciones; coordinar incidentes | Por designar |
-| Mantenedores (CODEOWNERS) | Revisar y aprobar PR; ninguno aprueba los suyos | Victor-Pulido, gabriel0820gs-dev |
+| Mantenedores (CODEOWNERS) | Revisar y aprobar PR; ninguno aprueba los suyos (excepción temporal de auto-integración: EXC-002 en [`excepciones.md`](excepciones.md)) | Victor-Pulido, gabriel0820gs-dev |
 | Operador de producción | Despliegues, backups, monitoreo, acceso al VPS | Por designar |
 | Custodio de llaves | Llave privada de backups (age) y llave de subida de Android | Por designar (dos personas: ninguna llave depende de una sola) |
 | Responsable del tratamiento de datos | Avisos de privacidad, plazos de conservación, derechos de titulares | Cada organización cliente; enlace por designar |

@@ -78,6 +78,8 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
+    StringConstraints,
     ValidationError,
     field_validator,
 )
@@ -88,6 +90,7 @@ from visitacampo.core.models import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
 __all__ = [
     "CODE_NOT_FOUND",
     "CODE_VALIDATION_ERROR",
+    "AttachmentWrite",
     "OpType",
     "Rejection",
     "VisitWrite",
@@ -102,11 +105,18 @@ OpType = Literal["create", "update", "delete"]
 
 _OP_TYPES: frozenset[str] = frozenset({"create", "update", "delete"})
 
-#: Entidades escribibles por el push en el MVP (brief, tarea 3: "`Visit` en el
-#: MVP"). El resto del enum del contrato existe porque el **pull** las entrega;
-#: escribirlas es alcance de pasos posteriores y hasta entonces una operación
-#: sobre ellas se rechaza con detalle, nunca se descarta en silencio.
-WRITABLE_ENTITIES: frozenset[str] = frozenset({"visit"})
+#: Entidades escribibles por el push. `visit` desde el Paso 8; `visit_attachment`
+#: desde el Paso 22, porque una respuesta de tipo foto/firma guarda el `id` de un
+#: adjunto y sin esta escritura ese `id` no apuntaría a nada. `assignment` y
+#: `form_template_version` existen en el enum porque el **pull** las entrega;
+#: una operación sobre ellas se rechaza con detalle, nunca se descarta en silencio.
+WRITABLE_ENTITIES: frozenset[str] = frozenset({"visit", "visit_attachment"})
+
+#: Operaciones admitidas sobre `visit_attachment`. Solo el alta: el adjunto se
+#: crea junto a su visita y, en el MVP, nada en la app lo modifica ni lo borra
+#: después (repetir una foto antes de guardar no llega a crear el primero).
+#: `update`/`delete` se rechazan con detalle hasta que exista ese caso de uso.
+ATTACHMENT_OP_TYPES: frozenset[str] = frozenset({"create"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +151,22 @@ class VisitWrite:
     op_type: OpType
     base_version: int | None
     fields: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class AttachmentWrite:
+    """Alta de `visit_attachment` ya validada (Paso 22).
+
+    `fields` usa los nombres del contrato (`visit_id`, `sha256`, `role`,
+    `caption`, `captured_at`, `order`). Que la visita exista **en esta
+    organización** no se sabe aquí —es una consulta—: lo comprueba
+    `services.py` en bloque, antes del bucle.
+    """
+
+    entity_id: uuid.UUID
+    fields: dict[str, Any]
+    op_type: OpType = "create"
+    base_version: None = None
 
 
 def _json_safe(value: dict[str, Any]) -> dict[str, Any]:
@@ -212,6 +238,50 @@ AnswersJson = Annotated[dict[str, Any], AfterValidator(_json_safe)]
 #: deja de depender de que el campo tenga además una guarda de rango, así que
 #: un campo `float` futuro no puede reintroducir el mismo defecto por omisión.
 Finite = Annotated[float, Field(allow_inf_nan=False)]
+
+
+def _text_safe(value: str) -> str:
+    """Texto que una columna `varchar` de PostgreSQL puede guardar.
+
+    Las mismas dos trampas que `_json_safe` caza dentro de `answers`, aquí en
+    un campo de texto plano: `U+0000` y los surrogates sueltos revientan el
+    `INSERT` con un `DataError` dentro de la transacción del lote.
+    """
+    if "\x00" in value:
+        raise ValueError("text cannot contain the U+0000 character.")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("text cannot contain unpaired Unicode surrogates.") from exc
+    return value
+
+
+#: `sha256` hexadecimal en minúsculas: la misma forma que la clave de `Blob`.
+Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+#: Pie de foto: `varchar(512)` sin los caracteres que PostgreSQL no admite.
+Caption = Annotated[str, StringConstraints(max_length=512), AfterValidator(_text_safe)]
+
+#: Mayor valor de `PositiveIntegerField` en PostgreSQL (`integer`).
+_MAX_ORDER = 2_147_483_647
+
+
+class _AttachmentCreatePayload(BaseModel):
+    """Contrato `VisitAttachmentPayload` en su forma completa (alta)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    visit_id: uuid.UUID
+    # El blob puede no estar subido todavía (contrato): la fila referencia el
+    # hash y la subida llega después por el carril de adjuntos.
+    sha256: Sha256Hex
+    role: Literal["foto", "firma", "doc"]
+    caption: Caption | None = None
+    captured_at: AwareDatetime
+    # `StrictInt`: `true` no es la posición 1.
+    order: StrictInt = Field(default=0, ge=0, le=_MAX_ORDER)
+
 
 #: Campos que un `update` puede omitir pero **no** enviar como `null`: su
 #: columna es `NOT NULL` en `Visit` (Paso 5) y el contrato tampoco los declara
@@ -368,7 +438,7 @@ def parse_op(
     op_type: Any,
     base_version: Any,
     payload: Any,
-) -> VisitWrite | Rejection:
+) -> VisitWrite | AttachmentWrite | Rejection:
     """Valida una operación del lote. Nunca lanza; devuelve dato o rechazo."""
     entity_id = target_id(payload)
 
@@ -404,6 +474,9 @@ def parse_op(
             reason="not_an_object",
             entity_id=entity_id,
         )
+
+    if entity == "visit_attachment":
+        return _parse_attachment(op_type, payload, entity_id)
 
     validated: _VisitCreatePayload | _VisitUpdatePayload | _VisitDeletePayload
     try:
@@ -447,3 +520,28 @@ def parse_op(
         base_version=parsed_base,
         fields=fields,
     )
+
+
+def _parse_attachment(
+    op_type: str, payload: dict[str, Any], entity_id: uuid.UUID | None
+) -> AttachmentWrite | Rejection:
+    """`visit_attachment`: solo `create` (ver `ATTACHMENT_OP_TYPES`)."""
+    if op_type not in ATTACHMENT_OP_TYPES:
+        return _rejection(
+            "visit_attachment only supports create in this server version.",
+            field="op_type",
+            reason="unsupported_op_type",
+            entity_id=entity_id,
+        )
+    try:
+        validated = _AttachmentCreatePayload.model_validate(payload)
+    except ValidationError as exc:
+        return Rejection(
+            code=CODE_VALIDATION_ERROR,
+            message="Operation payload failed schema validation.",
+            details=redacted_validation_details(exc.errors()),
+            entity_id=entity_id,
+        )
+    fields = validated.model_dump()
+    fields.pop("id")
+    return AttachmentWrite(entity_id=validated.id, fields=fields)

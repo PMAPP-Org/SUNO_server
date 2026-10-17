@@ -20,7 +20,7 @@
 | Cuentas de usuario y membresías | Confidencial | PostgreSQL | Argon2id, bloqueo por fallos, auditoría | Por designar |
 | Traza de auditoría y logs de axes | Confidencial | PostgreSQL | Solo lectura en el Admin, IP como HMAC, retención ([`retencion.md`](retencion.md)) | Por designar |
 | Backups de BD y adjuntos | Confidencial | Bucket R2 de backups | Cifrado age (llave pública en el servidor), bucket y token separados | Por designar |
-| Código fuente, CI y documentación | Público (repo público) | GitHub `Victor-Pulido/Seguimiento_Proyectos` | Gates de CI, gitleaks, CODEOWNERS; protección de rama pendiente | Victor-Pulido |
+| Código fuente, CI y documentación | Público (repo público) | GitHub `PMAPP-Org/Seguimiento_Proyectos` | Gates de CI, gitleaks, CODEOWNERS; protección de rama pendiente | Victor-Pulido |
 | Imágenes y artefactos de release | Interno | GHCR y GitHub Releases | Atestaciones SLSA firmadas, SBOM | Por designar |
 | Métricas y alertas | Interno | Prometheus y Grafana en el VPS | Solo `127.0.0.1` (túnel SSH), admin con contraseña | Por designar |
 

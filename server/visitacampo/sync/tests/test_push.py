@@ -154,9 +154,7 @@ class AppliedTests(TestCase):
     def test_results_keep_the_order_of_the_ops(self) -> None:
         ops = [create_op(self.scenario) for _ in range(4)]
         results = push(self.scenario, ops).json()["results"]
-        self.assertEqual(
-            [result["op_uuid"] for result in results], [op["op_uuid"] for op in ops]
-        )
+        self.assertEqual([result["op_uuid"] for result in results], [op["op_uuid"] for op in ops])
 
     def test_every_operation_is_recorded_in_the_op_log(self) -> None:
         op = create_op(self.scenario)
@@ -303,9 +301,9 @@ class ConflictTests(TestCase):
 
     def test_a_create_over_an_existing_id_conflicts(self) -> None:
         """Un alta sobre un `id` que ya existe es un fallo de CAS, no un 500."""
-        result = push(
-            self.scenario, [create_op(self.scenario, visit_id=self.visit_id)]
-        ).json()["results"][0]
+        result = push(self.scenario, [create_op(self.scenario, visit_id=self.visit_id)]).json()[
+            "results"
+        ][0]
         self.assertEqual(result["status"], "conflict")
         self.assertIsNotNone(result["server_row"])
 
@@ -363,7 +361,7 @@ class RejectionTests(TestCase):
 
     def test_an_unsupported_entity_is_rejected(self) -> None:
         op = create_op(self.scenario)
-        op["entity"] = "visit_attachment"
+        op["entity"] = "assignment"
         self._reject(op)
 
     def test_a_reference_to_another_organization_is_rejected(self) -> None:
@@ -389,9 +387,7 @@ class RejectionTests(TestCase):
         push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
         base = visit_of(visit_id).version
 
-        result = self._reject(
-            update_op(visit_id, base_version=base, template_version_id=None)
-        )
+        result = self._reject(update_op(visit_id, base_version=base, template_version_id=None))
         self.assertEqual(result["error"]["code"], "validation_error")
         # La fila no se tocó y el lote siguió vivo.
         self.assertEqual(visit_of(visit_id).version, base)
@@ -510,9 +506,7 @@ class TenantIsolationTests(TestCase):
         their_visit = uuid.uuid4()
         push(self.theirs, [create_op(self.theirs, visit_id=their_visit)])
 
-        result = push(
-            self.mine, [create_op(self.mine, visit_id=their_visit)]
-        ).json()["results"][0]
+        result = push(self.mine, [create_op(self.mine, visit_id=their_visit)]).json()["results"][0]
         # `rejected` y no `conflict`: un `conflict` tendría que adjuntar la
         # fila autoritativa, es decir la fila de la otra organización.
         self.assertEqual(result["status"], "rejected")

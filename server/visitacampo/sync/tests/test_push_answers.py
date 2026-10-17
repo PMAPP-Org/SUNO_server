@@ -160,7 +160,7 @@ class AnswersValidationTests(TestCase):
         self.assertEqual(result["status"], "applied")
 
     def test_a_stored_definition_that_is_broken_rejects_instead_of_accepting(self) -> None:
-        """"No puedo comprobarlo" nunca puede significar "adelante"."""
+        """ "No puedo comprobarlo" nunca puede significar "adelante"."""
         broken = FormTemplateVersion.objects.create(
             org=self.scenario.org,
             template=self.scenario.template_version.template,
@@ -195,9 +195,9 @@ class HistoricalCompatibilityTests(TestCase):
 
     def test_a_visit_on_the_old_version_is_still_accepted(self) -> None:
         visit_id = uuid.uuid4()
-        result = push(
-            self.scenario, [create_op(self.scenario, visit_id=visit_id)]
-        ).json()["results"][0]
+        result = push(self.scenario, [create_op(self.scenario, visit_id=visit_id)]).json()[
+            "results"
+        ][0]
         self.assertEqual(result["status"], "applied", result)
         self.assertEqual(visit_of(visit_id).answers, {"altura_cm": 12})
 

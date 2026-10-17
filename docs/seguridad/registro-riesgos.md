@@ -31,7 +31,7 @@
 
 | ID | Riesgo | P×I | Nivel | Tratamiento propuesto | Estado | Responsable |
 |---|---|---|---|---|---|---|
-| R-17 | **Cambios sin revisión independiente**: hoy cualquiera con permiso de escritura puede integrar en `master` | 4×4 = 16 | Alto | Mitigar: protección de rama con aprobación de otra persona y checks requeridos | Pendiente de Admin (issue #5) | Por designar |
+| R-17 | **Cambios sin revisión independiente**: hoy cualquiera con permiso de escritura puede integrar en `master` | 4×4 = 16 | Alto | Mitigar: protección de rama con aprobación de otra persona y checks requeridos; bypass de admin aceptado como EXC-002 (equipo de dos) | Admin concedido; falta aplicar la protección de `master` (issue #5) | Por designar |
 | R-18 | **Pérdida o filtración de la llave privada de backups (age)**: sin ella los backups son irrecuperables; con ella filtrada son legibles | 2×5 = 10 | Medio | Mitigar: gestor de secretos + copia offline, nunca en el servidor ([`politicas.md`](politicas.md) §5) | Pendiente de generar y custodiar | Por designar |
 | R-19 | **Pérdida de la llave de subida de Android**: no se pueden publicar actualizaciones de la app | 2×4 = 8 | Medio | Mitigar: custodia como R-18; Play App Signing | Pendiente | Por designar |
 | R-20 | **Acceso no autorizado al back-office** | 3×5 = 15 → residual 1×5 = 5 | Bajo (residual) | Mitigar: restricción por origen + MFA obligatorio (TOTP, alta solo desde el servidor) | Implementado | Por designar |

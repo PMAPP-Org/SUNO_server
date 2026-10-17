@@ -52,7 +52,7 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
 
 1. **Aprovisionar** el VPS (Ubuntu 24.04 o Debian 12) como root, desde la consola del proveedor o la primera sesión SSH:
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/Victor-Pulido/Seguimiento_Proyectos/vX.Y.Z/infra/provision/provision.sh
+   curl -fsSLO https://raw.githubusercontent.com/PMAPP-Org/Seguimiento_Proyectos/vX.Y.Z/infra/provision/provision.sh
    less provision.sh   # léelo antes de ejecutarlo como root
    DEPLOY_SSH_PUBKEY="ssh-ed25519 AAAA… github-deploy" bash provision.sh
    ```
@@ -67,7 +67,7 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
 2. Apuntar el DNS del dominio a la IP del VPS.
 3. Clonar el código, como `deploy`:
    ```bash
-   git clone https://github.com/Victor-Pulido/Seguimiento_Proyectos.git /opt/visitacampo
+   git clone https://github.com/PMAPP-Org/Seguimiento_Proyectos.git /opt/visitacampo
    ```
    Si el repositorio es privado, clonar con una *deploy key* de solo lectura.
 4. Dar acceso a la imagen. Si el paquete `visitacampo-api` de GHCR es privado, ejecutar `docker login ghcr.io` como `deploy` con un token *fine-grained* que solo tenga `read:packages`. Si el paquete es público, no hace falta.
@@ -86,7 +86,7 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
    ```bash
    bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/visitacampo-api@sha256:<digest>
    ```
-   Si lo haces a mano, verifica antes la procedencia desde tu equipo: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api@sha256:<digest> --repo Victor-Pulido/Seguimiento_Proyectos`.
+   Si lo haces a mano, verifica antes la procedencia desde tu equipo: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api@sha256:<digest> --repo PMAPP-Org/Seguimiento_Proyectos`.
 7. Crear la organización y el primer usuario: `cd infra && docker compose exec api python manage.py bootstrap_demo --org-name "<cliente>" --username "<usuario>"`. La contraseña generada se muestra una sola vez.
 8. Crear el **usuario del back-office con MFA**. El Admin exige segundo factor, sin excepciones.
    ```bash

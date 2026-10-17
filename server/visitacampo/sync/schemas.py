@@ -26,10 +26,10 @@ quien lo pide:
    es el enum `EntityType` del contrato y emitir ahí una cadena arbitraria
    sería devolver una respuesta que no valida contra el propio contrato.
 
-`server_row` (push, `OpResultSchema`) se tipa como `VisitRecord` y no como la
-unión `EntityRecord` porque `Visit` es la única entidad escribible del MVP
-(brief del Paso 8, tarea 3). Es un estrechamiento compatible: todo
-`VisitRecord` es un `EntityRecord` válido. La propia unión `EntityRecord` sí
+`server_row` (push, `OpResultSchema`) se tipa como `PushServerRow` (`visit` o
+`visit_attachment`, las entidades escribibles desde el Paso 22) y no como la
+unión `EntityRecord` completa. Es un estrechamiento compatible: toda rama de
+`PushServerRow` es un `EntityRecord` válido. La propia unión `EntityRecord` sí
 existe desde el Paso 9, para `PullResponse.rows` — el pull, a diferencia del
 push, **lee** las cuatro entidades sincronizables, no solo la que se puede
 escribir.
@@ -167,7 +167,8 @@ class OpResultSchema(Schema):
     entity_id: uuid.UUID | None = None
     status: OpStatus
     server_version: int | None = None
-    server_row: VisitRecord | None = None
+    # Definido más abajo (necesita `VisitAttachmentRecord`); ver `PushServerRow`.
+    server_row: PushServerRow | None = None
     error: OpErrorSchema | None = None
 
 
@@ -262,6 +263,16 @@ EntityRecord = Annotated[
     VisitRecord | VisitAttachmentRecord | AssignmentRecord | FormTemplateVersionRecord,
     Field(discriminator="entity"),
 ]
+
+#: `server_row` del push: solo las entidades **escribibles** (`visit` y, desde el
+#: Paso 22, `visit_attachment`). Estrechamiento compatible de `EntityRecord`.
+PushServerRow = Annotated[
+    VisitRecord | VisitAttachmentRecord,
+    Field(discriminator="entity"),
+]
+
+OpResultSchema.model_rebuild()
+PushResponse.model_rebuild()
 
 
 class TombstoneSchema(Schema):

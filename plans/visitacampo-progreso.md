@@ -20,11 +20,12 @@
 | #10 | Runbooks de operación, `SECURITY.md`, este seguimiento |
 | #11 | MFA obligatorio en el Admin; Paso 15 (rotación con detección de reutilización) y límites de tasa en la API |
 | #12 | Aprovisionamiento endurecido del VPS y despliegue automático con verificación de procedencia y rollback, ambos probados en CI |
-| este | Paso 21: renderer dinámico de formularios en Flutter, con paridad servidor ↔ cliente comprobada por un fixture común |
+| #13 | Paso 21: renderer dinámico de formularios en Flutter, con paridad servidor ↔ cliente comprobada por un fixture común |
+| este | Paso 22: captura de visita completa offline (formulario, GPS, fotos, firma) y alta de `visit_attachment` en el push |
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
-**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
 
@@ -154,7 +155,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 - [ ] **Paso 16** — Autenticación cliente completa: `TrustStore`, TOFU explícito, pinning SPKI
 - [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento
 - [x] **Paso 21** — Renderer dinámico de formularios en Flutter
-- [ ] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma
+- [x] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma (falta la prueba manual en emulador)
 - [ ] **Paso 23** — UI de conflictos: `quarantine` y reenvío
 
 ### Integración final y cierre
@@ -175,10 +176,34 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 5 (Pasos 15, 17, 19, 20, 21) | 11 (Pasos 15–25) |
-| **Total** | **19** | **26** |
+| Fase 1 | 6 (Pasos 15, 17, 19, 20, 21, 22) | 11 (Pasos 15–25) |
+| **Total** | **20** | **26** |
 
-**Estado de verificación del Paso 21 (móvil, último paso cerrado)**:
+**Estado de verificación del Paso 22 (móvil + servidor, último paso cerrado)**:
+- **Pruebas:** `flutter test` **159 passed**, cobertura 83,3 → 83,6 %; `dart analyze` y los tres lints limpios. Servidor: `pytest` completo **715 passed**, `ruff` y `mypy` limpios.
+- **Atomicidad:** visita + adjuntos + outbox + cola de subida se guardan en una transacción. El test fuerza un fallo a mitad y comprueba que no queda nada (`test/core/capture/visit_capture_test.dart`).
+- **UI optimista:** la visita aparece en la pantalla de inicio en cuanto se guarda, con estado *Pendiente* y sus adjuntos por subir, sin red.
+- **Prueba preliminar de carga:** 50 visitas × 10 fotos (500 adjuntos, 550 operaciones) sin degradación. Se compara el tiempo medio de las 10 últimas contra las 10 primeras. La validación completa es el Paso 25.
+- **Pendiente:** la prueba manual en emulador (sin emulador en esta máquina) y la subida en segundo plano con reintento (Paso 18; hoy sube al pulsar *Sincronizar*).
+
+**Hallazgos del Paso 22** (corregidos):
+- (1) **El servidor no creaba nunca un `visit_attachment`**: el push los rechazaba como `unsupported_entity` aunque el contrato los declara. Una respuesta de foto o firma guardaba un `id` que no apuntaba a nada. Ahora el push acepta su **alta** (`sync/payloads.py`, `services.py`, `sql.py`):
+  - payload sellado;
+  - la visita tiene que existir y estar viva en la organización, o crearse antes en el mismo lote;
+  - si no, `not_found` sin tumbar el lote;
+  - idempotencia, y conflicto con su `server_row`;
+  - `update`/`delete` se rechazan con detalle.
+- (2) **El cliente leía `server_row` como si fuera el `data` de la visita.** El contrato lo envía como `{entity, data}`, y los tests usaban la forma equivocada. Un `conflict` real lanzaba un `TypeError` dentro de la transacción y la operación quedaba atascada en `inflight`. Ahora se interpreta como `EntityRecord`; si no tiene esa forma, la op va a cuarentena con motivo.
+- (3) **El outbox se ordenaba solo por `createdAt`**, que Drift guarda con precisión de segundos. Una visita y sus adjuntos empataban y el adjunto podía viajar antes que su visita. Desempata el `rowid` (orden de inserción).
+- (4) **La subida de adjuntos fijaba `image/jpeg`**, y la firma es PNG: el servidor la habría rechazado por magic bytes. La cola guarda ahora el MIME de cada archivo (`attachment_queue.mime`, esquema v4).
+
+**Decisiones de diseño registradas (Paso 22)**:
+- (a) **Solo viajan las respuestas de campos visibles** y los adjuntos referenciados. Una foto repetida antes de guardar no se crea.
+- (b) **La firma es un lienzo propio** (`SignaturePad`, PNG con tinta y papel fijos) y no un paquete externo: menos dependencias que auditar.
+- (c) **Fotos adicionales** fuera de la plantilla, para el caso "10 fotos por visita".
+- (d) **Tabla local `visit_attachments`** (esquema v4, con test de migración v3→v4) que enlaza cada adjunto con su fila de subida. Es lo que permite mostrar "sincronizada con fotos por subir".
+
+**Estado de verificación del Paso 21 (móvil)**:
 - **Pruebas:** `flutter test` **140 passed**; cobertura de líneas 83,3 % (gate 75 %). `dart analyze` limpio. En el servidor, `pytest visitacampo/forms visitacampo/sync` 236 passed.
 - **Paridad servidor ↔ cliente:** `server/openapi/fixtures/forms_parity.json` es la fuente única de casos. Lo ejecutan `forms/tests/test_parity.py` y `app/test/core/forms/parity_test.dart`, y ambos coinciden en los 35 casos:
   - 2 plantillas válidas con 9 combinaciones de respuestas: visibilidad y violaciones idénticas;

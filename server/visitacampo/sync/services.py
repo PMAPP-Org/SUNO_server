@@ -64,7 +64,14 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Assignment, Device, FormTemplateVersion, SyncOpLog, Visit
+from visitacampo.core.models import (
+    Assignment,
+    Device,
+    FormTemplateVersion,
+    SyncOpLog,
+    Visit,
+    VisitAttachment,
+)
 from visitacampo.core.policies import PolicyDenied, check_write_visit
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.forms.answers import validate_answers, violation_details
@@ -79,11 +86,12 @@ from visitacampo.sync.changeseq import ChangeSeqAllocator, acquire_org_lock
 from visitacampo.sync.payloads import (
     CODE_NOT_FOUND,
     CODE_VALIDATION_ERROR,
+    AttachmentWrite,
     Rejection,
     VisitWrite,
     parse_op,
 )
-from visitacampo.sync.records import visit_record
+from visitacampo.sync.records import visit_attachment_record, visit_record
 from visitacampo.sync.schemas import RawSyncOp
 
 __all__ = ["apply_push"]
@@ -159,20 +167,21 @@ def _applied_result(op: RawSyncOp, entity_id: uuid.UUID, version: int) -> dict[s
     }
 
 
-def _conflict_result(op: RawSyncOp, visit: Visit) -> dict[str, Any]:
+def _conflict_result(op: RawSyncOp, row: Visit | VisitAttachment) -> dict[str, Any]:
     """Conflicto **con la fila autoritativa completa** adjunta (contrato).
 
     Sin `server_row` el cliente tendría que re-descargar el proyecto entero
     para reconciliar, que es exactamente el comportamiento de QFieldCloud que
     ADR-003 rechaza.
     """
+    record = visit_record(row) if isinstance(row, Visit) else visit_attachment_record(row)
     return {
         "op_uuid": str(op.op_uuid),
         "entity": op.entity,
-        "entity_id": str(visit.pk),
+        "entity_id": str(row.pk),
         "status": STATUS_CONFLICT,
-        "server_version": visit.version,
-        "server_row": visit_record(visit),
+        "server_version": row.version,
+        "server_row": record,
         "error": {
             "code": CODE_CONFLICT,
             "message": "The row changed on the server since base_version.",
@@ -285,9 +294,7 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
     known = wanted["template_version_id"] | set(visit_template_versions.values())
     if known:
         definitions = dict(
-            scoped_qs(ctx, FormTemplateVersion)
-            .filter(pk__in=known)
-            .values_list("pk", "definition")
+            scoped_qs(ctx, FormTemplateVersion).filter(pk__in=known).values_list("pk", "definition")
         )
 
     return _References(
@@ -462,7 +469,7 @@ def apply_push(
         saved = _saved_results(ctx, [op.op_uuid for op in ops])
 
         # Paso puro: validar todo lo que no venga ya resuelto del log.
-        parsed: dict[str, VisitWrite | Rejection] = {}
+        parsed: dict[str, VisitWrite | AttachmentWrite | Rejection] = {}
         for op in ops:
             key = str(op.op_uuid)
             if key in saved or key in parsed:
@@ -473,6 +480,13 @@ def apply_push(
             ctx, [item for item in parsed.values() if isinstance(item, VisitWrite)]
         )
         answers_gate = _AnswersGate(references.template_versions)
+        # Visitas vivas a las que apuntan los adjuntos del lote: una query, y
+        # ninguna si el lote no trae adjuntos. Las que se crean dentro de este
+        # mismo lote se añaden en el bucle (el cliente envía la visita antes
+        # que sus adjuntos).
+        live_visits = _live_visit_ids(
+            ctx, [item for item in parsed.values() if isinstance(item, AttachmentWrite)]
+        )
         allocator = ChangeSeqAllocator.for_org(ctx)
         now = timezone.now()
 
@@ -493,11 +507,13 @@ def apply_push(
                     parsed=parsed[key],
                     references=references,
                     answers_gate=answers_gate,
+                    live_visits=live_visits,
                     allocator=allocator,
                     now=now,
                 )
                 results.append(outcome)
                 saved[key] = outcome  # un `op_uuid` repetido en el mismo lote
+                _track_visit(live_visits, op, outcome)
 
                 entity_id = outcome["entity_id"]
                 if entity_id is not None:
@@ -530,20 +546,101 @@ def apply_push(
     return results
 
 
+def _live_visit_ids(ctx: RequestContext, writes: list[AttachmentWrite]) -> set[uuid.UUID]:
+    """Visitas **vivas de esta organización** a las que apuntan los adjuntos."""
+    ids = {write.fields["visit_id"] for write in writes}
+    if not ids:
+        return set()
+    return set(
+        scoped_qs(ctx, Visit)
+        .filter(pk__in=ids, deleted_at__isnull=True)
+        .values_list("pk", flat=True)
+    )
+
+
+def _track_visit(live_visits: set[uuid.UUID], op: RawSyncOp, outcome: dict[str, Any]) -> None:
+    """Mantiene `live_visits` al día con lo que el propio lote acaba de aplicar."""
+    if op.entity != "visit" or outcome["status"] != STATUS_APPLIED:
+        return
+    visit_id = uuid.UUID(outcome["entity_id"])
+    if op.op_type == "create":
+        live_visits.add(visit_id)
+    elif op.op_type == "delete":
+        live_visits.discard(visit_id)
+
+
+def _process_attachment(
+    ctx: RequestContext,
+    *,
+    cursor: Any,
+    op: RawSyncOp,
+    parsed: AttachmentWrite,
+    live_visits: set[uuid.UUID],
+    allocator: ChangeSeqAllocator,
+) -> dict[str, Any]:
+    """Alta de `visit_attachment` (Paso 22). Misma forma que la de `visit`.
+
+    La visita tiene que existir y estar viva **en esta organización**, o
+    haberse creado antes en este mismo lote. Si no, `rejected` con
+    `not_found`: dejarlo al `INSERT` sería un `IntegrityError` de la FK
+    compuesta, que dentro de la transacción tumbaría el lote entero.
+    """
+    if parsed.fields["visit_id"] not in live_visits:
+        return _rejected_result(
+            op,
+            Rejection(
+                code=CODE_NOT_FOUND,
+                message="Referenced visit_id does not exist in this organization.",
+                details={"field": "visit_id", "reason": "unknown_reference"},
+                entity_id=parsed.entity_id,
+            ),
+        )
+
+    statement = sql.build_attachment_insert(
+        org_id=ctx.org_id,
+        attachment_id=parsed.entity_id,
+        change_seq=allocator.take(),
+        fields=parsed.fields,
+    )
+    applied = _execute(cursor, statement)
+    if applied is not None:
+        return _applied_result(op, parsed.entity_id, version=applied[0])
+
+    server_row = scoped_qs(ctx, VisitAttachment).filter(pk=parsed.entity_id).first()
+    if server_row is None:
+        # El `id` pertenece a otra organización: mismo trato que en `visit`
+        # (RD-11, sin oráculo de existencia).
+        return _rejected_result(
+            op,
+            Rejection(
+                code=CODE_NOT_FOUND,
+                message="Target row does not exist in this organization.",
+                details={"field": "payload.id", "reason": "unknown_row"},
+                entity_id=parsed.entity_id,
+            ),
+        )
+    return _conflict_result(op, server_row)
+
+
 def _process(
     ctx: RequestContext,
     *,
     cursor: Any,
     op: RawSyncOp,
-    parsed: VisitWrite | Rejection,
+    parsed: VisitWrite | AttachmentWrite | Rejection,
     references: _References,
     answers_gate: _AnswersGate,
+    live_visits: set[uuid.UUID],
     allocator: ChangeSeqAllocator,
     now: datetime,
 ) -> dict[str, Any]:
     """Resuelve **una** operación ya validada. Cero queries de permisos."""
     if isinstance(parsed, Rejection):
         return _rejected_result(op, parsed)
+    if isinstance(parsed, AttachmentWrite):
+        return _process_attachment(
+            ctx, cursor=cursor, op=op, parsed=parsed, live_visits=live_visits, allocator=allocator
+        )
 
     missing = references.missing(parsed.fields)
     if missing is not None:
