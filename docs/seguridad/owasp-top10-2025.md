@@ -12,7 +12,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 |---|---|---|---|
 | ruff, mypy, `dart analyze` | `backend.yml`, `mobile.yml` | PR, `master` | Sí |
 | pytest contra PostgreSQL real + cobertura de ramas ≥ 90 % | `backend.yml` | PR, `master` | Sí |
-| `flutter test` + cobertura de líneas | `mobile.yml` | PR, `master` | Sí |
+| `flutter test` + cobertura de líneas ≥ 75 % | `mobile.yml` | PR, `master` | Sí |
+| Sistema de diseño de la app: sin colores, estilos, medidas ni textos sueltos en pantallas | `mobile.yml` (`lint_ui_tokens.sh`) | PR, `master` | Sí |
 | `check --deploy --fail-level WARNING` con `config.settings.prod` | `backend.yml` | PR, `master` | Sí |
 | Bandit (SAST por patrones) | `backend.yml` | PR, `master` | Sí |
 | CodeQL `security-and-quality` (Python + workflows) | `codeql.yml` | PR, `master`, semanal | Sí (alertas en Code scanning) |

@@ -140,6 +140,28 @@ de caducidad.
 comentario (`uses: actions/checkout@<sha> # v7.0.1`); Dependabot actualiza
 ambos a la vez.
 
+## Sistema de diseño de la app (Flutter)
+
+Las pantallas (`app/lib/features/`) no deciden cómo se ven: lo decide el tema.
+`infra/scripts/lint_ui_tokens.sh` deja el CI en rojo si una pantalla escribe un
+color, un estilo de texto, una medida o un texto literal.
+
+| Necesito… | Dónde | Cómo se usa |
+|---|---|---|
+| Un color | `app/lib/ui/theme/app_colors.dart` (único sitio con colores literales) | `Theme.of(context).colorScheme.primary`; estados de dominio con `context.statusColors.warning` |
+| Un espaciado o tamaño | `app/lib/ui/theme/app_tokens.dart` | `AppSpacing.md`, `const AppGap.sm()`, `AppSizes.minTouchTarget` |
+| Un estilo de texto | El `textTheme` de Material 3 | `Theme.of(context).textTheme.titleMedium` |
+| El aspecto de un componente | `app/lib/ui/theme/app_theme.dart` | Se cambia una vez para toda la app (claro y oscuro) |
+| Un texto visible | `app/lib/l10n/app_es.arb` | `context.l10n.loginSubmit`; con plurales ICU (`{n, plural, =1{…} other{…}}`), nunca "visita(s)" |
+| Un botón con carga | `app/lib/ui/widgets/app_button.dart` | `AppButton(label:, isLoading:, loadingLabel:)` |
+| Una pantalla con formulario | `app/lib/ui/widgets/app_page_body.dart` | `AppPageBody(children: …)`: márgenes, scroll y ancho máximo en tabletas |
+
+Tras añadir o cambiar un texto en el `.arb`, `flutter pub get` regenera
+`app_localizations*.dart` (no se versionan, como los `*.g.dart`). Accesibilidad
+que el tema ya garantiza, con tests en `app/test/ui/theme_test.dart`: botones
+de al menos 48 dp, contraste WCAG AA en los colores de estado y etiqueta para
+lectores de pantalla mientras un botón carga.
+
 ## Firma de releases Android
 
 El APK/AAB de release se firma con la llave de subida definida en
