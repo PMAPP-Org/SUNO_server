@@ -117,8 +117,60 @@ services:
       api:
         condition: service_healthy
 
+  backup:
+    # Backups cifrados de la BD y de los adjuntos hacia un bucket S3/R2
+    # separado (ISO 27001 A.8.13). Ver infra/backup/README.md. Sin
+    # BACKUP_AGE_RECIPIENT queda desactivado (desarrollo); en producción el
+    # monitoreo alerta si no hay backups recientes.
+    build:
+      context: ./backup
+    image: visitacampo-backup:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      PGHOST: db
+      PGPORT: ${POSTGRES_PORT}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT}
+      BACKUP_REMOTE: ${BACKUP_REMOTE}
+      BACKUP_BLOBS_SOURCE: ${BACKUP_BLOBS_SOURCE}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS}
+      # rclone sin archivo de configuración: remotos `backup` (destino) y
+      # `blobs` (bucket de adjuntos de la API) definidos por entorno.
+      HOME: /tmp
+      RCLONE_CONFIG: /tmp/rclone.conf
+      RCLONE_S3_NO_CHECK_BUCKET: "true"
+      RCLONE_CONFIG_BACKUP_TYPE: s3
+      RCLONE_CONFIG_BACKUP_PROVIDER: ${BACKUP_S3_PROVIDER}
+      RCLONE_CONFIG_BACKUP_ENDPOINT: ${BACKUP_S3_ENDPOINT_URL}
+      RCLONE_CONFIG_BACKUP_REGION: ${BACKUP_S3_REGION}
+      RCLONE_CONFIG_BACKUP_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID}
+      RCLONE_CONFIG_BACKUP_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY}
+      RCLONE_CONFIG_BLOBS_TYPE: s3
+      RCLONE_CONFIG_BLOBS_PROVIDER: ${BACKUP_S3_PROVIDER}
+      RCLONE_CONFIG_BLOBS_ENDPOINT: ${STORAGE_S3_ENDPOINT_URL}
+      RCLONE_CONFIG_BLOBS_REGION: ${STORAGE_S3_REGION}
+      RCLONE_CONFIG_BLOBS_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID}
+      RCLONE_CONFIG_BLOBS_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
+    volumes:
+      - blobstore:/blobs:ro # origen de adjuntos con STORAGE_BACKEND=localfs
+      - backup_metrics:/metrics # textfile collector del monitoreo
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
   blobstore:
+  backup_metrics:
   caddy_data:
   caddy_config:

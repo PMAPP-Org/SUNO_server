@@ -70,3 +70,8 @@ app/coverage/
 .schemathesis/
 reports/
 zap/
+
+# Simulacro de backup en CI (.github/workflows/backup.yml)
+.ci-backups/
+age-identity.txt
+wrong-identity.txt

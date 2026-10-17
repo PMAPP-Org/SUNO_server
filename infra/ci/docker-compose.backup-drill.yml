@@ -1,0 +1,11 @@
+# Override SOLO para el simulacro de restauración de CI (.github/workflows/backup.yml).
+# El destino de los backups es un directorio local en vez de S3/R2: rclone
+# trata igual un remoto local y uno S3 para las operaciones que usan los
+# scripts (copyto, lsf, delete), así que el simulacro prueba la lógica real de
+# backup.sh / restore.sh sin depender de un servicio S3 de terceros en CI.
+services:
+  backup:
+    environment:
+      BACKUP_REMOTE: /backups
+    volumes:
+      - ../.ci-backups:/backups

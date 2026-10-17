@@ -57,6 +57,17 @@ CADDY_ADMIN_ALLOWED_IPS=203.0.113.0/24
 # El DAST crea la organización después de arrancar el worker: con 5 s se
 # comprueba en segundos que el worker la descubre sin reiniciarse.
 JOB_BOOTSTRAP_INTERVAL_SECONDS=5
+# Backups: desactivados salvo que el workflow los configure (backup.yml).
+BACKUP_AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}
+BACKUP_REMOTE=${BACKUP_REMOTE:-backup:visitacampo-backups}
+BACKUP_S3_PROVIDER=${BACKUP_S3_PROVIDER:-Minio}
+BACKUP_S3_ENDPOINT_URL=${BACKUP_S3_ENDPOINT_URL:-http://minio:9000}
+BACKUP_S3_REGION=us-east-1
+BACKUP_S3_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY_ID:-}
+BACKUP_S3_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_ACCESS_KEY:-}
+BACKUP_BLOBS_SOURCE=${BACKUP_BLOBS_SOURCE:-}
+BACKUP_RETENTION_DAYS=30
+BACKUP_INTERVAL_HOURS=24
 EOF
 chmod 600 "$ENV_FILE"
 
