@@ -254,4 +254,9 @@ def register_error_handlers(api: NinjaAPI) -> None:
         """
         status = getattr(exc, "status_code", 500)
         code = getattr(exc, "code", None) or CODE_BY_STATUS.get(status, DEFAULT_CODE)
-        return api.create_response(request, error_body(code, str(exc)), status=status)
+        response = api.create_response(request, error_body(code, str(exc)), status=status)
+        # 429 del contrato (`components.responses.TooManyRequests`).
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is not None:
+            response["Retry-After"] = str(retry_after)
+        return response

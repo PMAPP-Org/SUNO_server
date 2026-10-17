@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import unittest
 import uuid
+from datetime import timedelta
 
 from axes.models import AccessFailureLog
 from django.contrib import admin
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase
+from django.utils import timezone
 
+from visitacampo.authn.models import RefreshToken
 from visitacampo.core.audit import AuditAction, hash_ip
 from visitacampo.core.models import AuditEvent
 from visitacampo.core.tests.dbsupport import (
@@ -176,17 +179,20 @@ class SessionAuditTests(TestCase):
         self.assertEqual(event.metadata["presented_device_id"], str(other_device))
         self.assertEqual(event.target, f"device:{self.device_id}")
 
-    def test_reusing_an_already_rotated_token_is_recorded(self) -> None:
-        """La señal que el Paso 15 convertirá en revocación de familia."""
+    def test_reusing_a_rotated_token_after_the_grace_window_is_recorded(self) -> None:
+        """Reuso: se revoca la familia y queda la traza (Paso 15, `test_rotation.py`)."""
         self.assertEqual(self.refresh(self.refresh_token, self.device_id).status_code, 200)
+        RefreshToken.objects.filter(rotated_at__isnull=False).update(
+            rotated_at=timezone.now() - timedelta(seconds=31)
+        )
         AuditEvent.objects.all().delete()
 
         response = self.refresh(self.refresh_token, self.device_id)
         self.assertEqual(response.status_code, 401)
 
         event = AuditEvent.objects.get()
-        self.assertEqual(event.action, AuditAction.REFRESH_REJECTED)
-        self.assertEqual(event.metadata["reason"], "not_usable")
+        self.assertEqual(event.action, AuditAction.REFRESH_REUSE_DETECTED)
+        self.assertEqual(event.metadata["revoked"], 2)
 
     def test_a_garbage_token_writes_no_audit_event(self) -> None:
         response = self.refresh("no-es-un-token", self.device_id)

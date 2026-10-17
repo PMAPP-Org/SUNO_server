@@ -58,7 +58,7 @@ Una vulnerabilidad que no es explotable en el contexto (p. ej. EXC-001) se docum
 ## 6. Control de acceso (A.5.15–A.5.18, A.8.2, A.8.5)
 
 1. Mínimo privilegio. Los datos de cada organización solo los ve esa organización (`scoped_qs`, RD-11).
-2. **MFA obligatorio** en GitHub para todos los colaboradores. En el Admin de Django, cuando se implemente (R-20).
+2. **MFA obligatorio** en GitHub para todos los colaboradores y en el Admin de Django (impuesto por el código; alta con `enroll_admin_totp`, solo desde el servidor).
 3. El back-office (`/admin/`) y los paneles de monitoreo solo son accesibles desde orígenes autorizados o por túnel SSH.
 4. Acceso SSH al VPS solo con llave, sin contraseña y sin `root` (aprovisionamiento pendiente).
 5. **Revisión de accesos trimestral**: colaboradores de GitHub, usuarios con `is_staff`/`is_superuser`, llaves SSH autorizadas, tokens de R2 y de GitHub. Se registra la fecha y el resultado.

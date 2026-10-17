@@ -136,7 +136,8 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 
 ### Backend
 
-- [ ] **Paso 15** — Endurecimiento de autenticación: rotación, detección de reuso, rate limiting
+- [x] **Paso 15** — Endurecimiento de autenticación: rotación, detección de reuso, rate limiting
+  Rotación con `SELECT FOR UPDATE`, ventana de gracia de 30 s y revocación de toda la familia ante reuso (con auditoría); rate limiting sobre PostgreSQL en login, refresh y presign (`429` + `Retry-After`); trabajo de hash uniforme en el login; logs de auth sin secretos. Además, MFA obligatorio en el Admin (django-otp). Verificación: `test_rotation.py` (incluye concurrencia con hilos), `test_rate_limit.py`, `test_admin_mfa.py`; 701 tests en verde.
 - [x] **Paso 17** — Adjuntos backend: `BlobStore`, presign/commit, verificación
   `076567e` Añade el carril de adjuntos: BlobStore, presign/commit verificado y GC (Paso 17)
 - [x] **Paso 19** — Cola de trabajos: `SKIP LOCKED` + lease + heartbeat + reaper
@@ -171,8 +172,8 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 3 (Pasos 17, 19, 20) | 11 (Pasos 15–25) |
-| **Total** | **17** | **26** |
+| Fase 1 | 4 (Pasos 15, 17, 19, 20) | 11 (Pasos 15–25) |
+| **Total** | **18** | **26** |
 
 **Estado de verificación del Paso 17 (backend, último paso cerrado)**: `pytest server/` **553 passed** (+744 subtests) contra PostgreSQL real (452 antes de este paso: +101 tests nuevos), `ruff check server/` y `mypy server/ --config-file server/pyproject.toml` limpios, `manage.py makemigrations --check --dry-run` sin cambios y `manage.py check` sin incidencias — el paso **no añade ninguna tabla**: `Blob` y `VisitAttachment` ya existían desde el Paso 5. Los comandos de verificación del plan corren de verdad, en `attachments/tests/`: (a) presign de un `sha256` ya existente → `already_present: true`, sin URL y **sin tocar el object storage**; (b) commit con checksum que no coincide con el `HEAD` real → `422 attachment_checksum_mismatch` y el `Blob` **no** se registra (ídem para el tamaño); (c) commit válido → `Blob` creado, y doble commit idempotente devolviendo la misma fila byte a byte. Más: **test de traversal explícito** con 15 familias de entrada hostil (`../`, rutas absolutas POSIX y Windows, UNC, URL-encoding, byte nulo, mayúsculas, longitud incorrecta) contra `bucket_key_for()` y contra la resolución de ruta del adaptador local, comprobando además que no se crea nada en el filesystem; y **test de concurrencia** (`TransactionTestCase` + `ThreadPoolExecutor`) con dos y con ocho commits simultáneos del mismo `sha256`: todos resuelven sin error de constraint, queda **una** fila y **exactamente uno** reporta haberla creado.
 

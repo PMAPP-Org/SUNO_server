@@ -32,7 +32,13 @@ Cómo poner una versión en producción y cómo volver a la anterior. Producció
    Que no quede ningún `CAMBIAR_EN_PRODUCCION`: `grep CAMBIAR infra/.env` no debe devolver nada.
 5. Arrancar: `cd infra && docker compose up -d --build`.
 6. Organización y primer usuario: `docker compose exec api python manage.py bootstrap_demo --org-name "<cliente>" --username "<usuario>"`. La contraseña generada se muestra una sola vez.
-7. Verificar (sección *Comprobaciones*).
+7. **Usuario del back-office con MFA**: el Admin exige segundo factor, sin excepciones.
+   ```bash
+   docker compose exec api python manage.py createsuperuser
+   docker compose exec api python manage.py enroll_admin_totp <usuario>
+   ```
+   El segundo comando muestra **una sola vez** la URI para la app de autenticación y 10 códigos de respaldo. Guárdalos en el gestor de contraseñas. Si se pierde el teléfono, vuelve a ejecutarlo con `--replace`.
+8. Verificar (sección *Comprobaciones*).
 
 ## Actualizar a una versión nueva
 
@@ -51,7 +57,7 @@ La API aplica las migraciones al arrancar (`entrypoint.sh`) y el worker espera a
 - [ ] `curl -s -o /dev/null -w '%{http_code}' https://<dominio>/v1/readyz` devuelve `200`.
 - [ ] `curl -sI https://<dominio>/v1/healthz` incluye una sola cabecera `strict-transport-security`.
 - [ ] Un login de prueba desde la app funciona.
-- [ ] `/admin/` responde 404 desde fuera de `CADDY_ADMIN_ALLOWED_IPS` y funciona por túnel SSH.
+- [ ] `/admin/` responde 404 desde fuera de `CADDY_ADMIN_ALLOWED_IPS` y, por túnel SSH, pide usuario, contraseña **y código** de la app de autenticación.
 - [ ] En Grafana todo está en verde y en Alertmanager no hay alertas críticas.
 
 ## Rollback

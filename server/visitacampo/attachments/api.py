@@ -10,17 +10,14 @@ endpoints, así que los tres heredan el `bearerAuth` global montado en
 `config/api.py`. Un adjunto es dato de un tenant; no hay aquí ninguna
 operación anónima.
 
-**Rate limiting, dicho explícitamente**: el contrato anota "Endpoint
-rate-limited (ADR-008)" en `presign`. El proyecto todavía no tiene ninguna
-infraestructura de *throttling* —no la ha introducido ningún paso hasta ahora,
-ni siquiera para `login`, que es donde ADR-008 la exige primero—, así que este
-paso **no la inventa aquí**: montarla solo en este endpoint dejaría la del
-login sin hacer y dispersaría la política en dos sitios. Queda anotado como
-deuda del paso de endurecimiento que la aborde para toda la API.
+**Rate limiting** (contrato: "Endpoint rate-limited (ADR-008)"): `presign`
+cuenta por usuario y por IP con el limitador común de la API
+(`core/ratelimit.py`, Paso 15), el mismo que usan login y refresh.
 """
 
 from __future__ import annotations
 
+from axes.helpers import get_client_ip_address
 from django.utils import timezone
 from ninja import Path, Router, Status
 
@@ -33,6 +30,7 @@ from visitacampo.attachments.schemas import (
     PresignRequest,
     PresignResponse,
 )
+from visitacampo.core import ratelimit
 from visitacampo.core.context import get_request_context
 
 __all__ = ["router"]
@@ -53,8 +51,11 @@ def attachments_presign(request, payload: PresignRequest):
     contenido ya está, el dispositivo no sube nada y el agente de campo no gasta
     datos móviles en una foto que otro compañero ya subió (ADR-007 punto 2).
     """
+    ctx = get_request_context(request)
+    ratelimit.hit("presign:user", str(ctx.user_id))
+    ratelimit.hit("presign:ip", get_client_ip_address(request))
     result = services.presign(
-        get_request_context(request),
+        ctx,
         sha256=payload.sha256,
         size=payload.size,
         mime=payload.mime,

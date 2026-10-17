@@ -15,8 +15,11 @@ quedaría en un solo sitio y nadie lo vería.
   revocaron.
 - `auth.refresh_rejected`: refresh con `selector.verifier` **auténtico** pero
   rechazado. `reason` dice por qué: `wrong_device` (material robado),
-  `not_usable` (ya rotado, revocado o caducado: el reuso que el Paso 15
-  convertirá en revocación de familia), `rotation_race` o `no_membership`.
+  `not_usable` (revocado o caducado) o `no_membership`.
+- `auth.refresh_grace_replay`: el mismo refresh repetido dentro de la
+  ventana de gracia (reintento legítimo); se emitió otro par.
+- `auth.refresh_reuse_detected`: un refresh ya rotado reutilizado fuera de
+  la ventana de gracia: se revocó toda su familia (`revoked` tokens).
 
 **Qué no, a propósito**
 
@@ -64,6 +67,9 @@ class AuditAction:
     DEVICE_CONFLICT = "auth.device_conflict"
     LOGOUT = "auth.logout"
     REFRESH_REJECTED = "auth.refresh_rejected"
+    REFRESH_GRACE_REPLAY = "auth.refresh_grace_replay"
+    REFRESH_REUSE_DETECTED = "auth.refresh_reuse_detected"
+    ADMIN_MFA_ENROLLED = "admin.mfa_enrolled"
 
 
 def hash_ip(ip: str | None) -> str | None:

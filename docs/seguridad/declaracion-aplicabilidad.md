@@ -97,10 +97,10 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | Control | Aplica | Estado | Justificación / evidencia |
 |---|---|---|---|
 | 8.1 Dispositivos finales de usuario | Sí | 🟡 | App: BD cifrada, tokens en almacenamiento seguro, TLS estricto, sin backup ni tráfico en claro. Falta MDM y bloqueo de pantalla obligatorio |
-| 8.2 Derechos de acceso privilegiado | Sí | 🟡 | Superusuario del Admin y acceso SSH al VPS. Falta MFA en el Admin y un inventario de cuentas privilegiadas |
+| 8.2 Derechos de acceso privilegiado | Sí | 🟡 | El Admin exige MFA (TOTP + códigos de respaldo, `OtpAdminConfig`), con alta solo desde el servidor (`enroll_admin_totp`) y auditada; acceso SSH al VPS solo con llave. Falta un inventario de cuentas privilegiadas y su revisión trimestral |
 | 8.3 Restricción del acceso a la información | Sí | ✅ | `scoped_qs` + test de arquitectura (RD-11); `404` para recursos de otra organización (ADR-013) |
 | 8.4 Acceso al código fuente | Sí | 🟡 | CODEOWNERS y gitleaks en todo el historial. Falta la protección de rama (issue #5) y decidir si el repo público debe pasar a privado |
-| 8.5 Autenticación segura | Sí | ✅ | Bloqueo tras 5 fallos (django-axes), `401` genérico sin enumeración, JWT EdDSA corto, rotación con CAS (RD-10), refresh atado al dispositivo. Falta MFA en el Admin (ver 8.2) |
+| 8.5 Autenticación segura | Sí | ✅ | Bloqueo tras 5 fallos (django-axes); rate limiting por IP, token y usuario en login, refresh y presign; `401` genérico y el mismo trabajo de hash con usuario inexistente o contraseña incorrecta; JWT EdDSA corto; rotación con `SELECT FOR UPDATE` y revocación de la familia ante reuso (RD-10, Paso 15); MFA obligatorio en el Admin |
 | 8.6 Gestión de la capacidad | Sí | 🟡 | Alertas de CPU, memoria y disco (incluida la proyección a 24 h) en `infra/monitoring/`. Falta desplegarlas |
 | 8.7 Protección contra el malware | Sí | 🟡 | Imágenes escaneadas con grype; contenedores sin privilegios y con código de solo lectura. Endpoints del personal a cargo de la organización |
 | 8.8 Gestión de vulnerabilidades técnicas | Sí | ✅ | pip-audit, osv-scanner, grype, Dependency Review, Dependabot, escaneos semanales; plazos de corrección en [`politicas.md`](politicas.md) §4; [`excepciones.md`](excepciones.md) con caducidad |
