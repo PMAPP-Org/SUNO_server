@@ -82,3 +82,4 @@ rendered/
 # Textos generados por flutter gen-l10n desde app/lib/l10n/*.arb (se regeneran
 # en cada `flutter pub get`, igual que los *.g.dart con build_runner).
 app/lib/l10n/app_localizations*.dart
+.deploy-state

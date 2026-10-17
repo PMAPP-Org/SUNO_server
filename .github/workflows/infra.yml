@@ -1,0 +1,157 @@
+name: Infra
+
+# Pruebas reales de la automatización del servidor (ISO 27001 A.8.9, A.8.32):
+#
+# - provision: infra/provision/provision.sh se ejecuta DOS veces sobre la VM
+#   del runner (Ubuntu 24.04, como el VPS) y se comprueba lo que deja: SSH sin
+#   contraseña ni root, firewall, Docker con rotación de logs, fail2ban, NTP,
+#   actualizaciones automáticas y el usuario `deploy` entrando solo con llave.
+# - deploy: infra/scripts/deploy.sh contra el stack de producción (db + api +
+#   worker + caddy con docker-compose.prod.yml). Despliega una versión buena,
+#   luego una rota, y exige que vuelva sola a la buena con el servicio en pie.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - infra/**
+      - server/Dockerfile
+      - .github/workflows/infra.yml
+  pull_request:
+    paths:
+      - infra/**
+      - server/Dockerfile
+      - .github/workflows/infra.yml
+  schedule:
+    - cron: "17 6 * * 1" # lunes 06:17 UTC: detecta cambios del SO o de Docker
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provision:
+    name: provision.sh (dos veces) + comprobaciones
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: shellcheck infra/provision/*.sh infra/scripts/deploy.sh
+
+      - name: Sin llave pública no toca nada
+        run: |
+          if sudo bash infra/provision/provision.sh; then echo "debía fallar sin DEPLOY_SSH_PUBKEY"; exit 1; fi
+          test ! -f /etc/ssh/sshd_config.d/10-visitacampo.conf
+
+      - name: Aprovisionar (1.ª vez y 2.ª vez, idempotente)
+        run: |
+          ssh-keygen -t ed25519 -N '' -q -f ci_deploy_key
+          for run in 1 2; do
+            echo "::group::provision.sh, ejecución ${run}"
+            sudo DEPLOY_SSH_PUBKEY="$(cat ci_deploy_key.pub)" bash infra/provision/provision.sh
+            echo "::endgroup::"
+          done
+          # La llave no se duplica al repetir.
+          test "$(sudo grep -c -F "$(cat ci_deploy_key.pub)" /home/deploy/.ssh/authorized_keys)" = 1
+
+      - name: SSH endurecido
+        run: |
+          cfg="$(sudo sshd -T)"
+          for want in "passwordauthentication no" "permitrootlogin no" "kbdinteractiveauthentication no" \
+                      "maxauthtries 3" "x11forwarding no" "allowtcpforwarding local"; do
+            echo "$cfg" | grep -qx "$want" || { echo "sshd: falta '$want'"; exit 1; }
+          done
+
+      - name: Firewall, servicios y Docker
+        run: |
+          status="$(sudo ufw status verbose)"
+          echo "$status"
+          echo "$status" | grep -q "Status: active"
+          echo "$status" | grep -q "Default: deny (incoming)"
+          for rule in "22/tcp" "80/tcp" "443/tcp" "443/udp"; do
+            echo "$status" | grep -q "^${rule} .*ALLOW IN" || { echo "ufw: falta ${rule}"; exit 1; }
+          done
+          for svc in docker fail2ban chrony unattended-upgrades; do
+            systemctl is-active --quiet "$svc" || { echo "$svc no está activo"; exit 1; }
+          done
+          sudo fail2ban-client status sshd
+          test "$(docker info --format '{{.LoggingDriver}}')" = json-file
+          sudo python3 -c 'import json; c = json.load(open("/etc/docker/daemon.json")); assert c["log-opts"]["max-size"] == "10m" and c["live-restore"] is True, c'
+          test "$(sysctl -n net.ipv4.conf.all.accept_redirects)" = 0
+
+      - name: Usuario deploy (solo llave, en el grupo docker)
+        run: |
+          id -nG deploy | grep -qw docker
+          sudo passwd -S deploy | grep -qE '^deploy (L|LK) '
+          test "$(sudo stat -c %a /opt/visitacampo)" = 750
+          ssh -i ci_deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes deploy@127.0.0.1 'docker ps > /dev/null && echo ok-docker'
+          # Sin llave (solo contraseña) el servidor ni siquiera ofrece el método.
+          if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o PubkeyAuthentication=no \
+               -o PreferredAuthentications=password deploy@127.0.0.1 true 2> ssh_err.txt; then
+            echo "entró sin llave"; exit 1
+          fi
+          cat ssh_err.txt
+          grep -q "Permission denied (publickey)" ssh_err.txt
+
+  deploy:
+    name: deploy.sh (versión buena → rota → rollback)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DAST_HOST: api.visitacampo.localhost
+      # El script se prueba entero salvo la red: tags e imágenes ya locales.
+      DEPLOY_NO_FETCH: "1"
+      DEPLOY_SKIP_PULL: "1"
+      DEPLOY_ALLOW_TAG: "1"
+      SKIP_BACKUP: "1"
+      READYZ_CURL_OPTS: "-k" # CA interna de Caddy
+      DEPLOY_WAIT_TIMEOUT: "120"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Entorno efímero de producción (con docker-compose.prod.yml)
+        run: |
+          bash infra/scripts/ci_dast_env.sh > /dev/null
+          sed -i 's|^COMPOSE_FILE=.*|COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml|' infra/.env
+          git tag v0.0.1-ci && git tag v0.0.2-ci
+
+      - name: Imágenes buena y rota
+        run: |
+          docker build -t visitacampo-api:good server/
+          # La "release rota": la API no arranca.
+          printf 'FROM visitacampo-api:good\nENTRYPOINT ["false"]\n' | docker build -t visitacampo-api:broken -
+
+      - name: Sin COMPOSE_FILE de producción, se niega
+        run: |
+          cp infra/.env env.bak
+          sed -i 's|^COMPOSE_FILE=.*|COMPOSE_FILE=docker-compose.yml|' infra/.env
+          set +e; bash infra/scripts/deploy.sh v0.0.1-ci visitacampo-api:good; code=$?; set -e
+          mv env.bak infra/.env
+          test "$code" = 1
+
+      - name: Desplegar v0.0.1-ci (buena) → 0
+        run: |
+          bash infra/scripts/deploy.sh v0.0.1-ci visitacampo-api:good
+          test "$(cat .deploy-state)" = "v0.0.1-ci visitacampo-api:good"
+
+      - name: Desplegar v0.0.2-ci (rota) → rollback (2) y servicio en pie
+        run: |
+          set +e; bash infra/scripts/deploy.sh v0.0.2-ci visitacampo-api:broken; code=$?; set -e
+          test "$code" = 2 || { echo "esperado 2 (rollback correcto), fue $code"; exit 1; }
+          test "$(cat .deploy-state)" = "v0.0.1-ci visitacampo-api:good"
+          test "$(docker inspect --format '{{.Config.Image}}' "$(cd infra && docker compose ps -q api)")" = visitacampo-api:good
+          curl -fsSk --resolve "${DAST_HOST}:443:127.0.0.1" "https://${DAST_HOST}/v1/readyz"
+
+      - name: Logs si falla
+        if: failure()
+        run: cd infra && docker compose logs --no-color --tail 100

@@ -1,0 +1,131 @@
+name: Deploy
+
+# Despliegue a producción (ISO 27001 A.8.32; OWASP A08:2025).
+#
+# - Lo llama release.yml al publicarse una release (workflow_call), y se puede
+#   lanzar a mano para desplegar o volver a una versión concreta
+#   (workflow_dispatch con el tag).
+# - Solo despliega la imagen de esa release fijada por digest y **después de
+#   verificar su atestación de procedencia** (`gh attestation verify`): una
+#   imagen que no construyó release.yml de este repositorio no llega al servidor.
+# - En el servidor ejecuta infra/scripts/deploy.sh por SSH (backup previo,
+#   healthcheck, readyz y rollback automático) y al final comprueba /v1/readyz
+#   desde fuera.
+#
+# Inactivo hasta configurar el environment `production` (Settings →
+# Environments, restringido a `master`, con revisores si se quiere aprobación
+# manual): secretos DEPLOY_HOST, DEPLOY_SSH_KEY (llave privada de `deploy`),
+# DEPLOY_KNOWN_HOSTS (`ssh-keyscan <host>` verificado a mano) y la variable
+# PRODUCTION_URL. Ver docs/operacion/despliegue.md.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Tag de la release (vX.Y.Z)
+        type: string
+        required: true
+      image:
+        description: Imagen fijada por digest (ghcr.io/…@sha256:…); si falta, se resuelve desde el tag
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Tag de la release a desplegar (vX.Y.Z); también para volver a una anterior
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Desplegar ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    permissions:
+      contents: read
+      packages: read # resolver el digest en GHCR
+      attestations: read # verificar la procedencia
+    env:
+      VERSION: ${{ inputs.version }}
+      IMAGE_IN: ${{ inputs.image }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: ¿Hay producción configurada?
+        id: cfg
+        run: |
+          if [ -n "$DEPLOY_HOST" ] && [ -n "$DEPLOY_SSH_KEY" ] && [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Sin secretos del environment production: no se despliega ${VERSION}."
+            echo "Despliegue de ${VERSION} **omitido**: faltan DEPLOY_HOST / DEPLOY_SSH_KEY / DEPLOY_KNOWN_HOSTS." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Los valores viajan a un comando remoto: se validan antes, para que un
+      # tag o una referencia manipulados no puedan inyectar nada en el servidor.
+      - name: Validar versión
+        if: steps.cfg.outputs.enabled == 'true'
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "Versión inválida: $VERSION"; exit 1; }
+
+      - name: Resolver la imagen de la release (por digest)
+        id: image
+        if: steps.cfg.outputs.enabled == 'true'
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if [ -n "$IMAGE_IN" ]; then
+            ref="$IMAGE_IN"
+          else
+            image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/visitacampo-api"
+            digest="$(docker buildx imagetools inspect "${image}:${VERSION#v}" --format '{{json .Manifest}}' \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"])')"
+            ref="${image}@${digest}"
+          fi
+          [[ "$ref" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]] || { echo "Referencia de imagen inválida: $ref"; exit 1; }
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "Imagen: \`${ref}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verificar la atestación de procedencia
+        if: steps.cfg.outputs.enabled == 'true'
+        env:
+          REF: ${{ steps.image.outputs.ref }}
+        run: gh attestation verify "oci://${REF}" --repo "$GITHUB_REPOSITORY"
+
+      - name: Desplegar por SSH (deploy.sh con rollback automático)
+        if: steps.cfg.outputs.enabled == 'true'
+        env:
+          REF: ${{ steps.image.outputs.ref }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          set +e
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "deploy@${DEPLOY_HOST}" \
+            "cd /opt/visitacampo && bash infra/scripts/deploy.sh '${VERSION}' '${REF}'"
+          code=$?
+          set -e
+          rm -f ~/.ssh/deploy_key
+          case "$code" in
+            0) echo "Desplegado ${VERSION}." >> "$GITHUB_STEP_SUMMARY" ;;
+            2) echo "::error::${VERSION} falló y se volvió a la versión anterior (servicio en pie)."; exit 1 ;;
+            3) echo "::error::${VERSION} falló y el rollback también: seguir docs/operacion/restauracion.md"; exit 1 ;;
+            *) echo "::error::deploy.sh terminó con código ${code}"; exit 1 ;;
+          esac
+
+      - name: Comprobación desde fuera
+        if: steps.cfg.outputs.enabled == 'true' && env.PRODUCTION_URL != ''
+        run: curl -fsS -o /dev/null --retry 5 --retry-delay 5 "${PRODUCTION_URL}/v1/readyz"

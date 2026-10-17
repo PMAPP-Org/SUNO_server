@@ -17,11 +17,13 @@
 | #7 | Semgrep OWASP, plantilla de PR, CODEOWNERS, CHANGELOG, actionlint |
 | #8 | Sistema de diseño e internacionalización de la app |
 | #9 | Documentación del SGSI (borradores) |
-| este | Runbooks de operación, `SECURITY.md`, este seguimiento |
+| #10 | Runbooks de operación, `SECURITY.md`, este seguimiento |
+| #11 | MFA obligatorio en el Admin; Paso 15 (rotación con detección de reutilización) y límites de tasa en la API |
+| este | Aprovisionamiento endurecido del VPS y despliegue automático con verificación de procedencia y rollback, ambos probados en CI |
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
-**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento → (2) MFA en el Admin + Paso 15 → (3) aprovisionamiento del VPS + workflow de despliegue → (4) Pasos 21 → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
 
