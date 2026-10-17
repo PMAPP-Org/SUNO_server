@@ -24,7 +24,21 @@
 1. **Aviso de privacidad y autorización** del titular en la app, antes del primer login y antes de capturar ubicación o fotos (art. 9 y 12, Ley 1581). Diseño pendiente de validación jurídica; el texto irá en `app/lib/l10n/app_es.arb`.
 2. **Plazo de conservación** de visitas, fotos y respuestas (T-3 a T-5), acordado con cada cliente e implementado como un periódico de retención, igual que `security.purge_logs`.
 3. **Transferencia internacional** a Cloudflare: verificar el DPA, la región del bucket y la base legal (art. 26).
-4. **Derechos del titular** (consulta, rectificación y supresión): procedimiento y herramienta en el back-office (Paso 24).
+4. ~~**Derechos del titular**: herramienta en el back-office~~ **Hecho en el Paso 24** (ver abajo). Falta fijar con el asesor jurídico el canal de recepción de solicitudes y los plazos de respuesta (art. 14 y 15: 10 y 15 días hábiles).
 5. **Fotos de terceros**: criterio de captura (evitar rostros y documentos innecesarios) en la guía de campo del cliente.
 6. **Registro Nacional de Bases de Datos** ante la SIC, si el responsable está obligado.
 7. **Rotación de logs de Docker** (T-8): fijar `max-size`/`max-file` en el aprovisionamiento del VPS.
+
+## Derechos del titular en el back-office (Paso 24)
+
+Los atiende la **administración de la organización** del titular (rol OWNER o ADMIN; supervisión no basta) desde Django Admin → Usuarios → acciones. Ver `server/visitacampo/backoffice/personal_data.py`.
+
+| Derecho | Cómo | Qué cubre |
+|---|---|---|
+| **Consulta** | Acción "Derechos del titular: exportar sus datos (JSON)" | Perfil, membresías, dispositivos, ubicación y hora de cada visita creada por la persona, y su rastro en la auditoría (T-1, T-2, T-3, T-6) |
+| **Rectificación** | Editar el usuario | Nombre, apellidos, correo, nombre visible |
+| **Supresión** | Acción "Derechos del titular: suprimir sus datos (anonimizar)", con pantalla de confirmación | **Anonimización irreversible**: usuario `suprimido-<id>`, se vacían nombre, correo y nombre de los dispositivos, se invalida la contraseña, se revocan todas las sesiones y se borran los segundos factores. Las visitas se conservan (son registros del cliente, con su propio plazo de retención) pero dejan de apuntar a una persona identificable |
+
+Garantías: nadie actúa sobre personas de otra organización (ni se confirma que existan), nadie se suprime a sí mismo, y cada consulta y supresión queda en la auditoría (`backoffice.personal_data_exported` / `backoffice.personal_data_suppressed`).
+
+Límites conocidos: la supresión no alcanza a las fotos (T-4) ni a respuestas de formulario que mencionen a la persona (T-5); eso depende de la plantilla y se resuelve con el plazo de conservación del pendiente 2. Tampoco reescribe los backups, que caducan según `retencion.md`.

@@ -41,20 +41,29 @@ __all__ = [
     "ADMIN_ROLES",
     "DEVICE_OWNER_ROLES",
     "MEMBER_ROLES",
+    "SUPERVISION_ROLES",
     "WRITE_VISIT_ROLES",
     "PolicyDenied",
+    "can_assign_work",
+    "can_export_visits",
     "can_manage_device",
+    "can_manage_personal_data",
     "can_publish_form_template",
     "can_read_job_output",
     "can_read_members",
     "can_read_visit",
+    "can_review_visit",
     "can_upload_attachment",
     "can_write_visit",
+    "check_assign_work",
+    "check_export_visits",
     "check_manage_device",
+    "check_manage_personal_data",
     "check_publish_form_template",
     "check_read_job_output",
     "check_read_members",
     "check_read_visit",
+    "check_review_visit",
     "check_upload_attachment",
     "check_write_visit",
     "user_has_organization_roles",
@@ -77,6 +86,10 @@ WRITE_VISIT_ROLES: frozenset[RoleValue] = frozenset(
 
 #: Quien puede tener un dispositivo propio que administrar.
 DEVICE_OWNER_ROLES: frozenset[RoleValue] = WRITE_VISIT_ROLES
+
+#: Back-office (Paso 24): quien supervisa el trabajo de campo — lo valida o
+#: rechaza y lo exporta. `FIELD_AGENT` y `VIEWER` quedan fuera.
+SUPERVISION_ROLES: frozenset[RoleValue] = frozenset({Role.OWNER, Role.ADMIN, Role.SUPERVISOR})
 
 # --- Códigos de error del contrato (`components.schemas.ErrorCode`) ---------
 CODE_FORBIDDEN = "forbidden"
@@ -281,6 +294,38 @@ def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
 # devolviendo un 403 donde RD-11 exige un 404).
 
 
+def can_review_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
+    """Validar o rechazar una visita desde el back-office (Paso 24).
+
+    Supervisión de la organización de la visita. Un agente no valida su propio
+    trabajo ni el de otros (segregación de funciones, ISO 27001 A.5.3).
+    """
+    return user_has_organization_roles(ctx, visit.org_id, SUPERVISION_ROLES)
+
+
+def can_assign_work(ctx: RequestContext, org_id: UUID) -> bool:
+    """Crear asignaciones de trabajo para los agentes (Paso 24): supervisión."""
+    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+
+
+def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
+    """Exportar visitas a CSV/Excel (Paso 24).
+
+    Un archivo exportado sale del control de la aplicación (ubicaciones,
+    respuestas): solo supervisión, y cada exportación queda en la auditoría.
+    """
+    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+
+
+def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
+    """Atender derechos del titular: consulta y supresión (Ley 1581, Paso 24).
+
+    Solo administración: suprimir es irreversible, y exportar entrega todos los
+    datos de una persona.
+    """
+    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+
+
 def check_read_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
     if not can_read_visit(ctx, visit):
         raise _denial(ctx, visit.org_id)
@@ -314,3 +359,23 @@ def check_read_job_output(ctx: RequestContext, job: OrgScopedResource) -> None:
 def check_manage_device(ctx: RequestContext, device: DeviceLike) -> None:
     if not can_manage_device(ctx, device):
         raise _denial(ctx, device.org_id)
+
+
+def check_review_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
+    if not can_review_visit(ctx, visit):
+        raise _denial(ctx, visit.org_id)
+
+
+def check_assign_work(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_assign_work(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_export_visits(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_export_visits(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_personal_data(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_personal_data(ctx, org_id):
+        raise _denial(ctx, org_id)

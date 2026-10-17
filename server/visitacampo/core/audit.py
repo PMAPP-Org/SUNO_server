@@ -70,6 +70,15 @@ class AuditAction:
     REFRESH_GRACE_REPLAY = "auth.refresh_grace_replay"
     REFRESH_REUSE_DETECTED = "auth.refresh_reuse_detected"
     ADMIN_MFA_ENROLLED = "admin.mfa_enrolled"
+    # Back-office (Paso 24): cada acción con efecto deja rastro.
+    VISIT_REVIEWED = "backoffice.visit_reviewed"
+    DEVICE_REVOKED = "backoffice.device_revoked"
+    JOB_RETRIED = "backoffice.job_retried"
+    ASSIGNMENT_CREATED = "backoffice.assignment_created"
+    TEMPLATE_PUBLISHED = "backoffice.template_published"
+    VISITS_EXPORTED = "backoffice.visits_exported"
+    PERSONAL_DATA_EXPORTED = "backoffice.personal_data_exported"
+    PERSONAL_DATA_SUPPRESSED = "backoffice.personal_data_suppressed"
 
 
 def hash_ip(ip: str | None) -> str | None:

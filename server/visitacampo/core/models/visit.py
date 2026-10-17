@@ -1,6 +1,9 @@
-"""Núcleo del dominio: `Visit`, `Blob` y `VisitAttachment` (doc 08 §4.4)."""
+"""Núcleo del dominio: `Visit`, `Blob` y `VisitAttachment` (doc 08 §4.4), más
+`VisitReview` (validación del back-office, Paso 24)."""
 
 from __future__ import annotations
+
+import uuid
 
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -12,6 +15,7 @@ from .base import (
     LON_MIN,
     AttachmentRole,
     MimeType,
+    OrgScopedModel,
     SyncedModel,
     finite_q,
     lat_validators,
@@ -86,13 +90,11 @@ class Visit(SyncedModel):
             # `NULL BETWEEN ...` evalúa a NULL, que un CHECK acepta — pero
             # dejarlo implícito sería frágil ante futuros cambios.
             models.CheckConstraint(
-                condition=models.Q(lat__isnull=True)
-                | models.Q(lat__gte=LAT_MIN, lat__lte=LAT_MAX),
+                condition=models.Q(lat__isnull=True) | models.Q(lat__gte=LAT_MIN, lat__lte=LAT_MAX),
                 name="visit_lat_range",
             ),
             models.CheckConstraint(
-                condition=models.Q(lon__isnull=True)
-                | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
+                condition=models.Q(lon__isnull=True) | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
                 name="visit_lon_range",
             ),
             # `accuracy_m` y `altitude_m`: no negativa la primera, y **finitas**
@@ -251,3 +253,57 @@ class VisitAttachment(SyncedModel):
 
     def __str__(self) -> str:
         return f"{self.role}:{self.id}"
+
+
+class VisitReviewStatus(models.TextChoices):
+    APPROVED = "approved", "Validada"
+    REJECTED = "rejected", "Rechazada"
+
+
+class VisitReview(OrgScopedModel):
+    """Validación o rechazo de una visita por supervisión (Paso 24, back-office).
+
+    **Tabla aparte y no un campo de `Visit`**, por dos razones:
+
+    - `Visit` es una entidad sincronizada: un campo nuevo cambiaría el contrato
+      que leen los teléfonos (`VisitRecord`), y la revisión es un dato del
+      back-office que el agente no edita.
+    - Editar una `Visit` desde el Admin la escribiría sin pasar por el push,
+      sin `change_seq` nuevo: los teléfonos nunca recibirían el cambio. Por eso
+      el Admin de `Visit` es de solo lectura, y la supervisión escribe aquí.
+
+    Es un **historial**: cada decisión es una fila nueva, y la vigente es la
+    más reciente. Rechazar y luego validar deja las dos decisiones registradas,
+    con quién y cuándo (ISO 27001 A.8.15).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    visit = models.ForeignKey(
+        Visit,
+        on_delete=models.PROTECT,
+        related_name="reviews",
+        verbose_name="visita",
+    )
+    status = models.CharField(
+        max_length=16, choices=VisitReviewStatus.choices, verbose_name="decisión"
+    )
+    comment = models.CharField(max_length=512, null=True, blank=True, verbose_name="comentario")
+    reviewer = models.ForeignKey(
+        "core.AppUser",
+        on_delete=models.PROTECT,
+        related_name="visit_reviews",
+        verbose_name="revisada por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="fecha")
+
+    class Meta:
+        db_table = "visit_review"
+        verbose_name = "revisión de visita"
+        verbose_name_plural = "revisiones de visita"
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["org", "visit", "-created_at"], name="review_org_visit_idx")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_status_display()}:{self.visit_id}"

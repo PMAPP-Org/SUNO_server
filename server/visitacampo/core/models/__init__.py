@@ -34,7 +34,7 @@ from .base import (
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .tenancy import AppUser, Device, Membership, Organization
-from .visit import Blob, Visit, VisitAttachment
+from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
 __all__ = [
     "ACTIVE_JOB_STATUSES",
@@ -67,4 +67,6 @@ __all__ = [
     "SyncedModel",
     "Visit",
     "VisitAttachment",
+    "VisitReview",
+    "VisitReviewStatus",
 ]
