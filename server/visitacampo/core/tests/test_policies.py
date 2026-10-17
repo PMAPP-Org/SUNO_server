@@ -19,6 +19,7 @@ aquí se prueba que devuelve `False` para un no-miembro, y además
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from django.test import SimpleTestCase
 from ninja.errors import HttpError
@@ -267,6 +268,32 @@ class CanReadJobOutputTests(SimpleTestCase):
         self.assertEqual(raised.exception.status_code, 404)
 
 
+class BackofficePoliciesTests(SimpleTestCase):
+    """Paso 24: quién revisa, asigna, exporta y atiende datos personales."""
+
+    def test_supervision_reviews_assigns_and_exports(self) -> None:
+        checks: tuple[tuple[Callable[..., bool], object], ...] = (
+            (policies.can_review_visit, visit()),
+            (policies.can_assign_work, ORG),
+            (policies.can_export_visits, ORG),
+        )
+        for policy, resource in checks:
+            for role in (Role.OWNER, Role.ADMIN, Role.SUPERVISOR):
+                with self.subTest(policy=policy.__name__, role=role):
+                    self.assertTrue(policy(ctx(role), resource))
+            for role in (Role.FIELD_AGENT, Role.VIEWER):
+                with self.subTest(policy=policy.__name__, role=role):
+                    self.assertFalse(policy(ctx(role), resource))
+
+    def test_personal_data_is_for_administration_only(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_manage_personal_data(ctx(role), ORG))
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(policies.can_manage_personal_data(ctx(role), ORG))
+
+
 # --- Deny-by-default, para toda política presente y futura ------------------
 
 
@@ -297,6 +324,12 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             # (RD-12/H-17), pero lo que esta clase comprueba es el suelo común:
             # sin membresía, y desde otra organización, no concede nada.
             "can_read_job_output": job(),
+            # Paso 24 (back-office): supervisión revisa, asigna y exporta;
+            # administración atiende los derechos del titular.
+            "can_review_visit": visit(),
+            "can_assign_work": ORG,
+            "can_export_visits": ORG,
+            "can_manage_personal_data": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

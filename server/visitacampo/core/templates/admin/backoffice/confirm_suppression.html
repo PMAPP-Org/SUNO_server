@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+Confirmación de la supresión de datos personales (Ley 1581, Paso 24). Es
+irreversible: el operador tiene que confirmarla a propósito, igual que un
+borrado del Admin. Reenvía la misma acción con `confirm=yes`.
+{% endcomment %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p>Vas a suprimir los datos personales de <strong>{{ target.get_username }}</strong>.</p>
+<ul>
+  <li>Se anonimizan su usuario, nombre, correo y los nombres de sus dispositivos.</li>
+  <li>Se cierran todas sus sesiones y se eliminan sus segundos factores.</li>
+  <li>Sus visitas se conservan como registro de la organización, sin identificarlo.</li>
+</ul>
+<p><strong>No se puede deshacer.</strong></p>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="{{ action }}">
+  <input type="hidden" name="_selected_action" value="{{ target.pk }}">
+  <input type="hidden" name="confirm" value="yes">
+  <input type="submit" value="Sí, suprimir sus datos">
+  <a href="../" class="button cancel-link">Cancelar</a>
+</form>
+{% endblock %}
