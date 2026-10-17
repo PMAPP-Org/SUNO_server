@@ -60,7 +60,8 @@ jobs:
       # Suelo de cobertura de líneas (sin código generado). Puede subir
       # cuando suba la cobertura; bajarlo es una decisión explícita en un PR.
       - name: Gate de cobertura
-        run: python3 ../infra/scripts/check_lcov.py coverage/lcov.info --min 0
+        # Medida: 76,4 % con el sistema de diseño (2026-10-17).
+        run: python3 ../infra/scripts/check_lcov.py coverage/lcov.info --min 75
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -181,3 +182,8 @@ jobs:
 
       - name: bash infra/scripts/lint_no_tls_bypass.sh
         run: bash infra/scripts/lint_no_tls_bypass.sh
+
+      # Sistema de diseño: sin colores, estilos, medidas ni textos sueltos en
+      # las pantallas (ver app/lib/ui/ y app/lib/l10n/).
+      - name: bash infra/scripts/lint_ui_tokens.sh
+        run: bash infra/scripts/lint_ui_tokens.sh

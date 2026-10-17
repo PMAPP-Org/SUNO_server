@@ -191,6 +191,13 @@ else
 	fail "lint_no_tls_bypass.sh"
 fi
 
+section "Mobile (app/) — sistema de diseño (lint_ui_tokens.sh, siempre se ejecuta)"
+if bash "$SCRIPT_DIR/lint_ui_tokens.sh"; then
+	pass "lint_ui_tokens.sh"
+else
+	fail "lint_ui_tokens.sh"
+fi
+
 section "infra/.env.example — check_envvars.sh (auto-chequeo, patrón de CI)"
 if bash "$SCRIPT_DIR/check_envvars.sh" infra/.env.example infra/.env.example; then
 	pass "check_envvars.sh (self-check contra .env.example)"
