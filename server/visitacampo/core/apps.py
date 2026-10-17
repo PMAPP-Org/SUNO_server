@@ -31,8 +31,27 @@ class OtpAdminConfig(AdminConfig):
     forma documentada por Django de cambiar el sitio por defecto, de modo que
     `admin.site` **es** un `OTPAdminSite` desde que arranca el proceso: su
     formulario de login pide usuario, contraseña y código TOTP (o de respaldo),
-    y una sesión sin segundo factor verificado no entra. No hay ajuste para
-    desactivarlo. El alta: `python manage.py enroll_admin_totp <usuario>`.
+    y una sesión sin segundo factor verificado no entra. El alta:
+    `python manage.py enroll_admin_totp <usuario>`. Única excepción, temporal:
+    `ADMIN_REQUIRE_OTP = False` (EXC-003, ver `admin_site.py`).
     """
 
     default_site = "visitacampo.core.admin_site.VisitaCampoOTPAdminSite"
+
+    def ready(self) -> None:
+        super().ready()
+        from django.core import checks
+
+        from visitacampo.core.admin_site import otp_required
+
+        @checks.register(checks.Tags.security, deploy=True)
+        def admin_otp_check(**kwargs: object) -> list[checks.CheckMessage]:
+            if otp_required():
+                return []
+            return [
+                checks.Warning(
+                    "El Admin no exige segundo factor (DJANGO_ADMIN_REQUIRE_OTP=false).",
+                    hint="Excepción temporal EXC-003: reactivarlo antes de cargar datos reales.",
+                    id="visitacampo.W001",
+                )
+            ]

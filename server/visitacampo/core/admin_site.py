@@ -14,6 +14,13 @@ dispositivo se elige por el **formato** del código, que no es ambiguo:
 
 Así el código se verifica contra un único dispositivo, como pide la librería,
 con su throttling intacto.
+
+**Excepción temporal EXC-003** (`docs/seguridad/excepciones.md`): con
+`ADMIN_REQUIRE_OTP = False` (variable `DJANGO_ADMIN_REQUIRE_OTP=false`) el
+Admin pide solo usuario y contraseña, mientras dura el desarrollo. Se decide
+en cada petición, así que reactivarlo es cambiar la variable y reiniciar; los
+dispositivos dados de alta se conservan. Mientras está apagado, la cabecera del
+Admin lo avisa y `manage.py check --deploy` lo señala.
 """
 
 from __future__ import annotations
@@ -21,14 +28,23 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from django.conf import settings
+from django.contrib.admin import AdminSite
+from django.contrib.admin.forms import AdminAuthenticationForm
 from django_otp import devices_for_user
 from django_otp.admin import OTPAdminAuthenticationForm, OTPAdminSite
 from django_otp.plugins.otp_static.models import StaticDevice
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-__all__ = ["VisitaCampoOTPAdminSite"]
+__all__ = ["VisitaCampoOTPAdminSite", "otp_required"]
 
 _TOTP_CODE = re.compile(r"\d{6}")
+
+_OTP_LOGIN_TEMPLATE = OTPAdminSite.login_template
+
+
+def otp_required() -> bool:
+    return bool(getattr(settings, "ADMIN_REQUIRE_OTP", True))
 
 
 class _DeviceByCodeFormatForm(OTPAdminAuthenticationForm):
@@ -47,4 +63,21 @@ class _DeviceByCodeFormatForm(OTPAdminAuthenticationForm):
 
 
 class VisitaCampoOTPAdminSite(OTPAdminSite):
-    login_form = _DeviceByCodeFormatForm
+    @property
+    def login_form(self) -> Any:
+        return _DeviceByCodeFormatForm if otp_required() else AdminAuthenticationForm
+
+    @property
+    def login_template(self) -> Any:
+        return _OTP_LOGIN_TEMPLATE if otp_required() else None
+
+    @property
+    def site_header(self) -> Any:
+        if otp_required():
+            return AdminSite.site_header
+        return "Administración — AVISO: segundo factor desactivado (EXC-003)"
+
+    def has_permission(self, request: Any) -> bool:
+        if otp_required():
+            return super().has_permission(request)
+        return AdminSite.has_permission(self, request)

@@ -6,14 +6,19 @@ respaldo). Se prueba el login real del Admin, no solo la configuración.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
 import unittest
 from io import StringIO
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin
+from django.core.checks import run_checks
 from django.core.management import CommandError, call_command
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django_otp.admin import OTPAdminSite
 from django_otp.oath import totp
 from django_otp.plugins.otp_static.models import StaticToken
@@ -35,12 +40,49 @@ skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 LOGIN_URL = "/admin/login/?next=/admin/"
 
+#: `server/`, para que el subproceso importe `config` aunque pytest corra desde la raíz.
+SERVER_DIR = Path(__file__).resolve().parents[3]
+
 
 class AdminSiteRequiresOtpTests(unittest.TestCase):
-    def test_the_admin_site_is_the_otp_one_and_cannot_be_switched_off(self) -> None:
+    def test_the_admin_site_is_the_otp_one(self) -> None:
         self.assertIsInstance(admin.site, OTPAdminSite)
         self.assertIn("visitacampo.core.apps.OtpAdminConfig", settings.INSTALLED_APPS)
         self.assertNotIn("django.contrib.admin", settings.INSTALLED_APPS)
+
+    def test_otp_is_required_unless_switched_off_explicitly(self) -> None:
+        """EXC-003: solo un `false` explícito lo apaga; ausente o raro, sigue activo."""
+        self.assertTrue(settings.ADMIN_REQUIRE_OTP)
+        script = "from django.conf import settings; print(settings.ADMIN_REQUIRE_OTP)"
+        for value, expected in (
+            (None, "True"),
+            ("", "True"),
+            ("true", "True"),
+            ("desactivado", "True"),
+            ("false", "False"),
+            (" FALSE ", "False"),
+            ("0", "False"),
+        ):
+            env = {k: v for k, v in os.environ.items() if k != "DJANGO_ADMIN_REQUIRE_OTP"}
+            if value is not None:
+                env["DJANGO_ADMIN_REQUIRE_OTP"] = value
+            with self.subTest(value=value):
+                result = subprocess.run(
+                    [sys.executable, "-c", f"import django; django.setup(); {script}"],
+                    env=env,
+                    cwd=SERVER_DIR,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                self.assertEqual(result.stdout.strip(), expected)
+
+    def test_the_deploy_check_flags_it_while_switched_off(self) -> None:
+        with override_settings(ADMIN_REQUIRE_OTP=False):
+            ids = [m.id for m in run_checks(include_deployment_checks=True)]
+        self.assertIn("visitacampo.W001", ids)
+        ids = [m.id for m in run_checks(include_deployment_checks=True)]
+        self.assertNotIn("visitacampo.W001", ids)
 
 
 @skip_without_db
@@ -108,6 +150,46 @@ class AdminMfaLoginTests(TestCase):
         self.client.logout()
         self.admin_login(code)
         self.assert_outside_admin()
+
+
+@skip_without_db
+@override_settings(ADMIN_REQUIRE_OTP=False)
+class AdminWithoutOtpTests(TestCase):
+    """EXC-003: con el MFA apagado entra usuario + contraseña, y nada más se relaja."""
+
+    def setUp(self) -> None:
+        self.org = make_org()
+        self.staff = make_user(self.org, username="backoffice")
+        self.staff.is_staff = True
+        self.staff.save()
+
+    def login(self, password: str = PASSWORD):
+        return self.client.post(LOGIN_URL, {"username": "backoffice", "password": password})
+
+    def test_password_alone_opens_the_admin_and_warns_in_the_header(self) -> None:
+        response = self.login()
+        self.assertEqual(response.status_code, 302, response.content[:300])
+        page = self.client.get("/admin/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "EXC-003")
+
+    def test_the_login_form_no_longer_asks_for_a_code(self) -> None:
+        self.assertNotContains(self.client.get(LOGIN_URL), 'name="otp_token"')
+
+    def test_a_wrong_password_still_fails(self) -> None:
+        self.login("no-es-la-clave")
+        self.assertEqual(self.client.get("/admin/").status_code, 302)
+
+    def test_non_staff_still_cannot_enter(self) -> None:
+        self.staff.is_staff = False
+        self.staff.save()
+        self.login()
+        self.assertEqual(self.client.get("/admin/").status_code, 302)
+
+    def test_switching_it_back_on_closes_the_unverified_session(self) -> None:
+        self.login()
+        with override_settings(ADMIN_REQUIRE_OTP=True):
+            self.assertEqual(self.client.get("/admin/").status_code, 302)
 
 
 @skip_without_db
