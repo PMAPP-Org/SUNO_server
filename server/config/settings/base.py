@@ -237,6 +237,12 @@ AXES_RESET_ON_SUCCESS = True
 # `--fail-level` más laxo— para que `check --deploy --fail-level WARNING`
 # pueda ser un gate de CI estricto sin que este aviso conocido lo bloquee.
 SILENCED_SYSTEM_CHECKS = ["axes.W002"]
+# Una fila por intento fallido (usuario, IP, hora) en `AccessFailureLog`,
+# además del contador que decide el bloqueo. Es la traza de los fallos de
+# contraseña, que `AuditEvent` no registra a propósito (sin organización a la
+# que atribuirlos y con riesgo de oráculo de enumeración; ver
+# `visitacampo/core/audit.py`). ISO 27001 A.8.15.
+AXES_ENABLE_ACCESS_FAILURE_LOG = True
 
 # --- Autenticación JWT (ADR-008, Paso 7) -----------------------------------
 # Clave de firma Ed25519 de los access tokens. Nombres consistentes con

@@ -31,6 +31,7 @@ from django.contrib import admin
 
 from visitacampo.core.models import (
     AppUser,
+    AuditEvent,
     Blob,
     FormTemplateVersion,
     Membership,
@@ -48,3 +49,28 @@ admin.site.register(AppUser)
 admin.site.register(Membership)
 admin.site.register(FormTemplateVersion)
 admin.site.register(Blob)
+
+
+@admin.register(AuditEvent)
+class AuditEventAdmin(admin.ModelAdmin):
+    """Traza de auditoría: consultable, nunca editable (ISO 27001 A.8.15).
+
+    Un registro que el propio back-office puede corregir o borrar no prueba
+    nada. Sin permisos de alta/cambio/borrado para nadie, superusuarios
+    incluidos: la única puerta de escritura es `core/audit.py::record`.
+    """
+
+    list_display = ("created_at", "action", "actor", "target", "org")
+    list_filter = ("action", "org")
+    search_fields = ("target", "actor__username")
+    date_hierarchy = "created_at"
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request, obj=None) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        return False

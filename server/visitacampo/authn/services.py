@@ -10,10 +10,12 @@ aquí. Referencias: **ADR-008** (esquema completo de autenticación),
 **Alcance de Fase 0** (el brief lo delimita explícitamente): este paso
 implementa login, emisión de JWT, registro de dispositivo, rotación de refresh
 y logout. **No** implementa —y el Paso 15 sí— la detección de reuso con
-revocación de familia y `AuditEvent`, la ventana de gracia de 30 s para
-reintentos concurrentes, y el rate limiting con `django-axes` por IP y por
-cuenta. Lo que se hace hoy con un token reutilizado es **rechazarlo**: es el
-comportamiento seguro, solo que menos informativo que el definitivo.
+revocación de familia y la ventana de gracia de 30 s para reintentos
+concurrentes. Lo que se hace hoy con un token reutilizado es **rechazarlo** y
+dejar un `AuditEvent` `auth.refresh_rejected` (línea base ISO 27001, A.8.15;
+qué se audita y qué no, en `core/audit.py`): es el comportamiento seguro,
+solo que todavía no reacciona revocando la familia. El rate limiting de login
+lo hace `django-axes` (ver `log_in`).
 
 **Por qué el patrón `selector.verifier` se implementa ya y no en el Paso 15**:
 diferirlo obligaría a escribir primero la versión con el token en claro, que
@@ -38,6 +40,8 @@ from ninja.errors import HttpError
 from visitacampo.authn import tokens
 from visitacampo.authn.lookups import find_refresh_token_by_selector
 from visitacampo.authn.models import RefreshToken
+from visitacampo.core import audit
+from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Device
 from visitacampo.core.scoping import scoped_qs
@@ -263,36 +267,92 @@ def log_in(request, username: str, password: str, info: DeviceRegistration) -> L
     # API pública de axes (`axes.utils.reset`), no lógica de rate limiting
     # propia; verificado en `authn/tests/test_axes_lockout.py`
     # (`test_a_successful_login_resets_the_failure_counter`).
+    client_ip = get_client_ip_address(request)
     if settings.AXES_RESET_ON_SUCCESS:
-        reset_axes_attempts(
-            ip=get_client_ip_address(request),
-            username=user.get_username(),
-        )
+        reset_axes_attempts(ip=client_ip, username=user.get_username())
 
     ctx = resolve_request_context(Principal(user_id=user.pk, org_id=user.org_id))
     if not ctx.is_member:
+        audit.record(
+            ctx,
+            action=AuditAction.LOGIN_DENIED,
+            target=f"user:{user.pk}",
+            metadata={"reason": "no_membership"},
+            ip=client_ip,
+        )
         raise InvalidCredentials
 
     now = timezone.now()
-    with transaction.atomic():
-        device = _register_device(ctx, user, info)
-        session = _issue_session(
+    try:
+        with transaction.atomic():
+            device = _register_device(ctx, user, info)
+            session = _issue_session(
+                ctx,
+                device=device,
+                user_id=user.pk,
+                # Login nuevo ⇒ familia nueva. Las familias anteriores del mismo
+                # dispositivo se dejan como están: revocarlas aquí echaría al
+                # propio usuario de una sesión que quizá sigue usando, y la
+                # revocación explícita es lo que hace el logout — que revoca por
+                # `device_id`, así que cualquier familia anterior del mismo
+                # dispositivo cae con ella (ver `log_out_session`).
+                family_id=uuid.uuid4(),
+                now=now,
+            )
+            # Dentro de la misma transacción: no existe una sesión emitida
+            # sin su traza (si la escritura de auditoría falla, falla el login).
+            audit.record(
+                ctx,
+                action=AuditAction.LOGIN,
+                target=f"device:{info.device_id}",
+                metadata={"platform": info.platform, "app_version": info.app_version},
+                ip=client_ip,
+            )
+    except DeviceUnavailable:
+        # Fuera de la transacción: la que lanzó la excepción ya se deshizo y
+        # se llevaría la fila consigo.
+        audit.record(
             ctx,
-            device=device,
-            user_id=user.pk,
-            # Login nuevo ⇒ familia nueva. Las familias anteriores del mismo
-            # dispositivo se dejan como están: revocarlas aquí echaría al
-            # propio usuario de una sesión que quizá sigue usando, y la
-            # revocación explícita es lo que hace el logout — que revoca por
-            # `device_id`, así que cualquier familia anterior del mismo
-            # dispositivo cae con ella (ver `log_out_session`).
-            family_id=uuid.uuid4(),
-            now=now,
+            action=AuditAction.DEVICE_CONFLICT,
+            target=f"device:{info.device_id}",
+            ip=client_ip,
         )
+        raise
     return LoginResult(session=session, user=user, org_id=ctx.org_id, roles=_sorted_roles(ctx))
 
 
-def refresh_session(raw_token: str, device_id: uuid.UUID) -> IssuedSession:
+def _reject_refresh(
+    ctx: RequestContext,
+    row: RefreshToken,
+    reason: str,
+    *,
+    presented_device_id: uuid.UUID,
+    client_ip: str | None,
+) -> InvalidCredentials:
+    """Audita un refresh con material auténtico rechazado y devuelve el 401.
+
+    Solo se llama con `selector.verifier` ya verificado: quien lo presenta
+    tiene el token de verdad, así que la fila no da pistas a nadie que no las
+    tuviera ya, y es justo la señal de robo o reuso que interesa conservar.
+    """
+    audit.record(
+        ctx,
+        action=AuditAction.REFRESH_REJECTED,
+        target=f"device:{row.device_id}",
+        actor_id=row.user_id,
+        metadata={
+            "reason": reason,
+            "presented_device_id": str(presented_device_id),
+            "family_id": str(row.family_id),
+        },
+        ip=client_ip,
+    )
+    return InvalidCredentials()
+
+
+def refresh_session(
+    raw_token: str, device_id: uuid.UUID, *, client_ip: str | None = None
+) -> IssuedSession:
     """`POST /v1/auth/refresh` — valida `selector.verifier`, **rota** y reemite.
 
     Se rota (y no solo se reemite el access token) porque el contrato responde
@@ -324,18 +384,27 @@ def refresh_session(raw_token: str, device_id: uuid.UUID) -> IssuedSession:
         raise InvalidCredentials
 
     now = timezone.now()
-    # Un refresh está atado a su dispositivo (ADR-008, "un refresh por
-    # dispositivo"): presentarlo desde otro `device_id` es material robado.
-    if row.device_id != device_id or not row.is_usable(now):
-        raise InvalidCredentials
-
     ctx = resolve_request_context(
         Principal(user_id=row.user_id, org_id=row.org_id, device_id=row.device_id)
     )
+
+    def reject(reason: str) -> InvalidCredentials:
+        return _reject_refresh(
+            ctx, row, reason, presented_device_id=device_id, client_ip=client_ip
+        )
+
+    # Un refresh está atado a su dispositivo (ADR-008, "un refresh por
+    # dispositivo"): presentarlo desde otro `device_id` es material robado.
+    if row.device_id != device_id:
+        raise reject("wrong_device")
+    # Ya rotado, revocado o caducado: con un token ya rotado es reuso, la
+    # señal que el Paso 15 convertirá en revocación de toda la familia.
+    if not row.is_usable(now):
+        raise reject("not_usable")
     # Quitarle las membresías a alguien tiene que cortarle la sesión en cuanto
     # caduque su access token (15 min), sin esperar a los 60 días del refresh.
     if not ctx.is_member:
-        raise InvalidCredentials
+        raise reject("no_membership")
 
     with transaction.atomic():
         rotated = (
@@ -343,18 +412,22 @@ def refresh_session(raw_token: str, device_id: uuid.UUID) -> IssuedSession:
             .filter(pk=row.pk, rotated_at__isnull=True, revoked_at__isnull=True)
             .update(rotated_at=now)
         )
-        if rotated != 1:
-            raise InvalidCredentials
-        return _issue_session(
-            ctx,
-            device=row.device_id,
-            user_id=row.user_id,
-            family_id=row.family_id,
-            now=now,
-        )
+        if rotated == 1:
+            return _issue_session(
+                ctx,
+                device=row.device_id,
+                user_id=row.user_id,
+                family_id=row.family_id,
+                now=now,
+            )
+    # Otro refresh concurrente ganó el compare-and-set (RD-10). Se audita
+    # fuera de la transacción para no depender de su resultado.
+    raise reject("rotation_race")
 
 
-def log_out_session(ctx: RequestContext, raw_token: str) -> None:
+def log_out_session(
+    ctx: RequestContext, raw_token: str, *, client_ip: str | None = None
+) -> None:
     """`POST /v1/auth/logout` — revoca todo refresh vivo del dispositivo.
 
     **Idempotente y sin oráculo**: sale en silencio si el token está
@@ -393,6 +466,16 @@ def log_out_session(ctx: RequestContext, raw_token: str) -> None:
     if not tokens.verifier_matches(verifier, row.verifier_hash):
         return
 
-    scoped_qs(ctx, RefreshToken).filter(
-        device_id=row.device_id, user_id=ctx.user_id, revoked_at__isnull=True
-    ).update(revoked_at=timezone.now())
+    with transaction.atomic():
+        revoked = (
+            scoped_qs(ctx, RefreshToken)
+            .filter(device_id=row.device_id, user_id=ctx.user_id, revoked_at__isnull=True)
+            .update(revoked_at=timezone.now())
+        )
+        audit.record(
+            ctx,
+            action=AuditAction.LOGOUT,
+            target=f"device:{row.device_id}",
+            metadata={"revoked": revoked},
+            ip=client_ip,
+        )

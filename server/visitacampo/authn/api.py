@@ -13,6 +13,7 @@ sesión de un dispositivo es una operación de un usuario ya identificado.
 
 from __future__ import annotations
 
+from axes.helpers import get_client_ip_address
 from ninja import Router, Status
 
 from visitacampo.authn import services
@@ -84,7 +85,9 @@ def login(request, payload: LoginRequest):
 )
 def refresh(request, payload: RefreshRequest):
     """`POST /v1/auth/refresh`. Rota y reemite (detección de reuso: Paso 15)."""
-    session = services.refresh_session(payload.refresh_token, payload.device_id)
+    session = services.refresh_session(
+        payload.refresh_token, payload.device_id, client_ip=get_client_ip_address(request)
+    )
     return _token_pair(session)
 
 
@@ -101,7 +104,11 @@ def logout(request, payload: LogoutRequest):
     borra la outbox local del cliente**: el trabajo pendiente del agente se
     conserva en el dispositivo y el Paso 13 debe respetarlo (ADR-008).
     """
-    services.log_out_session(get_request_context(request), payload.refresh_token)
+    services.log_out_session(
+        get_request_context(request),
+        payload.refresh_token,
+        client_ip=get_client_ip_address(request),
+    )
     # `Status(...)` y no la tupla `(204, None)`: Ninja 1.6 marca la tupla como
     # deprecada y avisa en cada llamada.
     return Status(204, None)
