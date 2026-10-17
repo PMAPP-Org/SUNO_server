@@ -100,7 +100,13 @@ class ConcurrentEnqueueTests(TransactionTestCase):
         """El caso real: `manage.py run_worker` arrancado dos veces a la vez."""
         results = self._race(2, lambda _: periodic.bootstrap())
 
-        self.assertEqual(sorted(results), [0, len(periodic.PERIODIC_JOBS)])
+        # Entre los dos se crea exactamente un juego. NO se exige que uno los
+        # cree todos y el otro ninguno ([0, N]): los dos `bootstrap()` pueden
+        # intercalarse periódico a periódico ([1, N-1], [2, N-2]…) y es igual de
+        # correcto; lo que garantiza el índice parcial (RD-14) es que no haya
+        # duplicados, no quién gana cada fila. Con [0, N] el test fallaba de
+        # forma intermitente en CI.
+        self.assertEqual(sum(results), len(periodic.PERIODIC_JOBS))
         for definition in periodic.PERIODIC_JOBS:
             with self.subTest(job=definition.type):
                 self.assertEqual(

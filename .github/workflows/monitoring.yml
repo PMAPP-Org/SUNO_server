@@ -153,8 +153,9 @@ jobs:
         run: |
           $COMPOSE stop api
           for _ in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:9093/api/v2/alerts | python3 -c \
-                "import json,sys; sys.exit(0 if any(a['labels']['alertname']=='ApiDown' for a in json.load(sys.stdin)) else 1)"; then
+            curl -sf -o am-alerts.json http://127.0.0.1:9093/api/v2/alerts || true
+            if python3 -c \
+                "import json,sys; sys.exit(0 if any(a['labels']['alertname']=='ApiDown' for a in json.load(open('am-alerts.json'))) else 1)" 2>/dev/null; then
               echo "ApiDown recibida por Alertmanager"; exit 0
             fi
             sleep 5

@@ -1,0 +1,8 @@
+# Excepciones de osv-scanner (security.yml). Cada una con motivo y fecha de
+# caducidad: al vencer, el gate vuelve a fallar solo. Registro completo y
+# análisis de riesgo en docs/seguridad/excepciones.md (ISO 27001 A.8.8).
+
+[[IgnoredVulns]]
+id = "GHSA-84m7-p3x7-pcfv" # CVE-2026-59951, mcp 1.29.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "DoS del servidor MCP StreamableHTTP; semgrep scan en CI no arranca ese servidor. Semgrep 1.181.0 fija mcp==1.29.0 y es la última versión. Ver docs/seguridad/excepciones.md EXC-001."

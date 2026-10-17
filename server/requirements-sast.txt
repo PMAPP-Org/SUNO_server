@@ -1,0 +1,7 @@
+# VisitaCampo — SAST multi-lenguaje (.github/workflows/security.yml, job
+# semgrep). Aparte de requirements-dev.txt porque arrastra muchas dependencias
+# y solo lo usa ese job. Se instala `requirements-sast.lock` (con hashes).
+#
+# Semgrep con las reglas OWASP Top 10, Python/Django, auditoría de seguridad,
+# secretos, Dockerfile y GitHub Actions (OWASP A01–A10:2025; ISO 27001 A.8.28).
+semgrep==1.181.0

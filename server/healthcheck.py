@@ -16,7 +16,8 @@ import sys
 import urllib.error
 import urllib.request
 
-URL = os.environ.get("HEALTHCHECK_URL", "http://127.0.0.1:8000/v1/healthz")
+#: Fija: gunicorn dentro del mismo contenedor. Nunca viene de un dato externo.
+URL = "http://127.0.0.1:8000/v1/healthz"
 
 
 def _host() -> str:
@@ -29,9 +30,9 @@ def main() -> int:
         URL, headers={"Host": _host(), "X-Forwarded-Proto": "https"}
     )
     try:
-        # B310 (esquemas arbitrarios en urlopen): la URL es local y la fija el
-        # despliegue, nunca un dato externo.
-        with urllib.request.urlopen(request, timeout=3) as response:  # nosec B310
+        # B310 / dynamic-urllib (esquemas arbitrarios en urlopen): la URL es la
+        # constante de arriba, http y local.
+        with urllib.request.urlopen(request, timeout=3) as response:  # nosec B310 # nosemgrep
             return 0 if response.status == 200 else 1
     except (urllib.error.URLError, OSError):
         return 1
