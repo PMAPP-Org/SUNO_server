@@ -55,7 +55,9 @@ jobs:
         run: |
           echo "127.0.0.1 ${DAST_HOST}" | sudo tee -a /etc/hosts
           DEMO_PASSWORD="$(bash infra/scripts/ci_dast_env.sh)"
-          echo "::add-mask::${DEMO_PASSWORD}"
+          # Enmascarar es la defensa correcta; los valores son de un solo uso
+          # y mueren con el run (secretos efímeros del stack de CI).
+          echo "::add-mask::${DEMO_PASSWORD}" # nosemgrep: unsafe-add-mask-workflow-command
           echo "DEMO_PASSWORD=${DEMO_PASSWORD}" >> "$GITHUB_ENV"
           bash infra/scripts/check_envvars.sh infra/.env infra/.env.example
 
@@ -73,11 +75,13 @@ jobs:
       - name: Sembrar usuario de prueba y obtener un access token
         run: |
           $COMPOSE exec -T api python manage.py bootstrap_demo --password "$DEMO_PASSWORD" > /dev/null
-          TOKEN="$(curl -sfk https://${DAST_HOST}/v1/auth/login \
+          curl -sfk https://${DAST_HOST}/v1/auth/login \
             -H 'Content-Type: application/json' \
             -d "{\"username\":\"agente-demo\",\"password\":\"${DEMO_PASSWORD}\",\"device_info\":{\"device_id\":\"$(cat /proc/sys/kernel/random/uuid)\",\"platform\":\"android\",\"app_version\":\"0.0.0-ci\"}}" \
-            | python3 -c 'import json, sys; print(json.load(sys.stdin)["tokens"]["access_token"])')"
-          echo "::add-mask::${TOKEN}"
+            -o login.json)"
+          TOKEN="$(python3 -c 'import json; print(json.load(open("login.json"))["tokens"]["access_token"])')"
+          rm -f login.json
+          echo "::add-mask::${TOKEN}" # nosemgrep: unsafe-add-mask-workflow-command
           echo "API_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       # El worker arranca encolando los periódicos y ejecuta el reaper en el

@@ -26,6 +26,7 @@ LOCKS: dict[str, tuple[str, ...]] = {
     "requirements.lock": ("requirements.txt", "requirements-runtime.txt"),
     "requirements-dev.lock": ("requirements-dev.txt",),
     "requirements-dast.lock": ("requirements-dast.txt",),
+    "requirements-sast.lock": ("requirements-sast.txt",),
 }
 
 _PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;\\#]+)")

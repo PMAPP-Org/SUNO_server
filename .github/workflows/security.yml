@@ -75,8 +75,10 @@ jobs:
       # extensión no le basta a osv-scanner para reconocerlos.
       - name: osv-scanner scan
         run: |
-          ./osv-scanner scan source \
+          # Excepciones con caducidad: osv-scanner.toml (docs/seguridad/excepciones.md).
+          ./osv-scanner scan source --config=osv-scanner.toml \
             -L app/pubspec.lock \
             -L requirements.txt:server/requirements.lock \
             -L requirements.txt:server/requirements-dev.lock \
-            -L requirements.txt:server/requirements-dast.lock
+            -L requirements.txt:server/requirements-dast.lock \
+            -L requirements.txt:server/requirements-sast.lock

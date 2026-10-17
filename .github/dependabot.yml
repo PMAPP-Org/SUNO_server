@@ -1,5 +1,10 @@
 # Actualización continua de dependencias (ISO 27001 A.8.8).
 #
+# Espera de 7 días en cada ecosistema: no se proponen versiones publicadas
+# hace menos de una semana, la ventana en la que suelen detectarse y
+# retirarse los paquetes maliciosos publicados desde una cuenta comprometida
+# (OWASP A03:2025). Las actualizaciones de SEGURIDAD no esperan.
+#
 # Las actualizaciones de seguridad de Dependabot (las que abre por un
 # advisory) se activan en Settings → Code security; este archivo programa
 # además las de versión, agrupadas para que el ruido sea un PR por
@@ -16,6 +21,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ["*"]
@@ -26,6 +33,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       dart:
         patterns: ["*"]
@@ -37,6 +46,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
 
   # Digest de la imagen base del servicio backup (infra/backup/Dockerfile);
   # debe seguir al de `db` (misma versión mayor de PostgreSQL).
@@ -45,6 +56,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
 
   # Imágenes de infra/docker-compose*.yml (postgres, caddy, monitoreo).
   - package-ecosystem: docker-compose
@@ -52,6 +65,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
 
   # Actions fijadas por SHA en .github/workflows/: Dependabot actualiza el
   # SHA y el comentario de versión a la vez.
@@ -60,6 +75,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
