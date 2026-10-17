@@ -29,7 +29,9 @@ def main() -> int:
         URL, headers={"Host": _host(), "X-Forwarded-Proto": "https"}
     )
     try:
-        with urllib.request.urlopen(request, timeout=3) as response:  # nosec B310: URL fija local
+        # B310 (esquemas arbitrarios en urlopen): la URL es local y la fija el
+        # despliegue, nunca un dato externo.
+        with urllib.request.urlopen(request, timeout=3) as response:  # nosec B310
             return 0 if response.status == 200 else 1
     except (urllib.error.URLError, OSError):
         return 1
