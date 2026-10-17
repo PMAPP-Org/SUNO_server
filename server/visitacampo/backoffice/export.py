@@ -24,10 +24,10 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from collections.abc import Iterable, Sequence
 from typing import Any
-from xml.sax.saxutils import escape
 
 from django.db.models import OuterRef, QuerySet, Subquery
 
@@ -43,6 +43,18 @@ MAX_EXPORT_ROWS = 10_000
 _REL_TYPES = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+#: Caracteres que XML 1.0 no admite ni escapados (controles salvo \t \n \r):
+#: uno solo en una respuesta dejaría el `.xlsx` ilegible.
+_XML_INVALID = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
+
+
+def _xml_text(value: str) -> str:
+    """Texto de un nodo XML. Solo se **escribe** XML, nunca se parsea: no hace
+    falta `xml.sax` (ni `defusedxml`) para esto."""
+    value = _XML_INVALID.sub("", value)
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 
 _BASE_COLUMNS = (
     "id",
@@ -150,9 +162,8 @@ def _xlsx_cell(ref: str, value: Any) -> str:
         value = "sí" if value else "no"
     if isinstance(value, int | float):
         return f'<c r="{ref}"><v>{value!r}</v></c>'
-    return (
-        f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{escape(str(value))}</t></is></c>'
-    )
+    text = _xml_text(str(value))
+    return f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
 
 
 def to_xlsx(header: Sequence[str], rows: Iterable[Sequence[Any]]) -> bytes:

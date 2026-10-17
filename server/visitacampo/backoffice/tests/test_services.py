@@ -13,6 +13,7 @@ import unittest
 import uuid
 import zipfile
 from unittest import mock
+from xml.etree import ElementTree
 
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
@@ -229,6 +230,18 @@ class ExportTests(TestCase):
             self.assertIn("[Content_Types].xml", book.namelist())
             sheet = book.read("xl/worksheets/sheet1.xml").decode()
         self.assertIn("ñandú &amp; &lt;b&gt;", sheet, "el XML va escapado")
+
+    def test_control_characters_do_not_break_the_xlsx(self) -> None:
+        """Un carácter de control pegado en una respuesta no puede dejar el
+        libro ilegible: XML 1.0 no lo admite ni escapado."""
+        self.a.visit(notas="antes\x01\x0b\x1fdespués\tcon tab")
+        header, rows = visit_table(self.a.ctx(), Visit.objects.all())
+        with zipfile.ZipFile(io.BytesIO(to_xlsx(header, rows))) as book:
+            for name in book.namelist():
+                with self.subTest(part=name):
+                    ElementTree.fromstring(book.read(name))  # bien formado
+            sheet = book.read("xl/worksheets/sheet1.xml").decode()
+        self.assertIn("antesdespués\tcon tab", sheet)
 
 
 class SafeCellTests(TestCase):
