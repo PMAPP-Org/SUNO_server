@@ -1,0 +1,57 @@
+# Actualización continua de dependencias (ISO 27001 A.8.8).
+#
+# Las actualizaciones de seguridad de Dependabot (las que abre por un
+# advisory) se activan en Settings → Code security; este archivo programa
+# además las de versión, agrupadas para que el ruido sea un PR por
+# ecosistema y semana, no uno por paquete.
+#
+# server/: Dependabot sube la versión en requirements*.txt pero NO regenera
+# requirements*.lock (uv). Quien revise el PR regenera el lock con el comando
+# de su cabecera; `infra/scripts/check_lockfiles.py` deja el PR en rojo
+# mientras tanto.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pub
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      dart:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
+
+  # Digest de la imagen base de server/Dockerfile.
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+
+  # Imágenes de infra/docker-compose*.yml (postgres, caddy).
+  - package-ecosystem: docker-compose
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+
+  # Actions fijadas por SHA en .github/workflows/: Dependabot actualiza el
+  # SHA y el comentario de versión a la vez.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]

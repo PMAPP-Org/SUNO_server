@@ -1,0 +1,81 @@
+name: Security
+
+# Gates de seguridad transversales al monorepo (línea base ISO 27001):
+# - gitleaks: secretos en todo el historial de git (A.8.4, A.8.12).
+# - osv-scanner: vulnerabilidades conocidas en los lockfiles de app/ y
+#   server/ (A.8.8). Corre también cada semana: una dependencia que no
+#   cambia puede volverse vulnerable porque se publica un advisory nuevo.
+#
+# Las herramientas se descargan como binario oficial con versión fija y se
+# verifica su SHA-256 antes de ejecutarlas, en vez de usar una action de
+# terceros (gitleaks-action tiene licencia comercial; osv-scanner-action
+# referencia su imagen por tag mutable). Para actualizar una herramienta:
+# cambiar versión + hash, ambos tomados del archivo de checksums de su
+# release en GitHub.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1" # lunes 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: gitleaks (historial completo)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Instalar gitleaks (versión fija + checksum)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          rm gitleaks.tar.gz
+
+      # Falsos positivos revisados: .gitleaksignore (por huella exacta).
+      - name: gitleaks git
+        run: ./gitleaks git . --redact --no-banner --exit-code 1
+
+  osv-scanner:
+    name: osv-scanner (lockfiles)
+    runs-on: ubuntu-latest
+    env:
+      OSV_SCANNER_VERSION: 2.7.0
+      OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar osv-scanner (versión fija + checksum)
+        run: |
+          curl -sSfL -o osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+
+      # Los .lock de server/ se declaran como formato requirements.txt: la
+      # extensión no le basta a osv-scanner para reconocerlos.
+      - name: osv-scanner scan
+        run: |
+          ./osv-scanner scan source \
+            -L app/pubspec.lock \
+            -L requirements.txt:server/requirements.lock \
+            -L requirements.txt:server/requirements-dev.lock

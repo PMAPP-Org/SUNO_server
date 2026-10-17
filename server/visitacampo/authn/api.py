@@ -31,7 +31,7 @@ router = Router(tags=["auth"])
 def _token_pair(session: services.IssuedSession) -> dict[str, object]:
     return {
         "access_token": session.access_token,
-        "token_type": "Bearer",
+        "token_type": "Bearer",  # nosec B105
         "expires_in": session.expires_in,
         "refresh_token": session.refresh_token,
         "refresh_expires_in": session.refresh_expires_in,

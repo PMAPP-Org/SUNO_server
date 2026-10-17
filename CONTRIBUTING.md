@@ -98,6 +98,39 @@ Si el lint produce un falso positivo bloqueante, la estrategia de rollback
 del Paso 3 aplica: se ajusta el regex/allow-list del script en un commit de
 seguimiento — **nunca se elimina el gate** como solución al falso positivo.
 
+## Dependencias y gates de seguridad (línea base ISO 27001)
+
+**Python (`server/`)**: los `requirements*.txt` son la fuente que se edita;
+lo que se instala en CI y en la imagen Docker son los `requirements*.lock`
+(árbol completo con versiones exactas y hashes). Tras cambiar un `.txt` —a
+mano o en un PR de Dependabot— se regenera su `.lock` con el comando de la
+cabecera de ese mismo archivo (`uv pip compile --universal --generate-hashes
+...`). `infra/scripts/check_lockfiles.py` deja el CI en rojo mientras no
+coincidan. Entorno local:
+
+```bash
+python -m pip install --require-hashes -r server/requirements-dev.lock
+```
+
+**Gates que corren en cada PR y en `master`** (además de lint/tests):
+
+| Gate | Dónde | Control ISO 27001 |
+|---|---|---|
+| `bandit` (SAST) | `backend.yml` | A.8.28, A.8.29 |
+| `pip-audit` y `osv-scanner` (CVEs en lockfiles; `osv-scanner` también semanal) | `backend.yml`, `security.yml` | A.8.8 |
+| `gitleaks` sobre todo el historial | `security.yml` | A.8.4, A.8.12 |
+| `check --deploy --fail-level WARNING` contra `config.settings.prod` | `backend.yml` | A.8.9, A.8.31 |
+| `docker build` desde el lockfile con `--require-hashes` | `backend.yml` | A.8.9 |
+| SBOM CycloneDX (artefacto del run) | `backend.yml` | A.8.8 |
+
+**Falsos positivos**: se suprimen solo por identificador exacto y con la
+justificación al lado —`# nosec B608` en el código para Bandit, huella exacta
+en `.gitleaksignore` para gitleaks—, nunca desactivando una regla entera.
+
+**Actions de GitHub**: se referencian por SHA de commit con la versión en un
+comentario (`uses: actions/checkout@<sha> # v7.0.1`); Dependabot actualiza
+ambos a la vez.
+
 ## Estilo de commits
 
 Ver [`README.md`](README.md#convención-de-commits): mensajes descriptivos en

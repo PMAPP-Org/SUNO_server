@@ -1,163 +1,159 @@
 name: Backend CI
 
-# Paso 3 del plan (plans/visitacampo-construccion.md): gate de CI para
-# server/ (Django + Ninja, se inicializa en el Paso 4). Este workflow se
-# activa desde ya, aunque server/ hoy solo tiene un .gitkeep — doc 08 §8
-# Fase 0 exige el gate desde el principio para que ningún paso posterior
-# pueda saltárselo.
+# Gate de CI de server/ (Paso 3 del plan; endurecido en la línea base de
+# seguridad ISO 27001 — A.8.8, A.8.9, A.8.25, A.8.29, A.8.31).
 #
-# Sin remoto de GitHub configurado en el entorno de desarrollo actual, este
-# workflow no se ha ejecutado nunca en Actions real. El equivalente
-# ejecutable localmente es `infra/scripts/ci_local.sh` (ver también
-# CONTRIBUTING.md). Cuando el repo tenga remoto en GitHub, este workflow se
-# activa automáticamente sin cambios adicionales.
-#
-# Cada paso `run:` es defensivo: si server/ todavía no tiene el archivo que
-# necesita (manage.py, algún *.py) o la herramienta aplicable, se informa y
-# se omite en vez de fallar — "0 archivos que lintar no es un fallo" (brief
-# del Paso 3). Esto es intencional y temporal: a partir del Paso 4, cuando
-# exista código real, estos mismos comandos pasan a evaluar contenido real.
+# Reglas de este archivo:
+# - Sin filtro de `paths`: un check marcado como requerido en la protección
+#   de rama tiene que reportar en todos los PRs, y con filtro el primer push
+#   de una rama podía no disparar el workflow nunca (le pasó a este repo:
+#   Backend CI no llegó a ejecutarse en GitHub hasta esta corrección).
+# - Sin pasos "si no existe, omitir": el código ya existe, así que un archivo
+#   que falta es un fallo real, no un PASS silencioso.
+# - Actions fijadas por SHA de commit (el comentario dice qué versión es) y
+#   dependencias instaladas desde `requirements-dev.lock` con hashes.
+# - `permissions` mínimos: este workflow solo lee el repositorio.
 
 on:
   push:
-    branches: ["**"]
-    paths:
-      - "server/**"
-      - "infra/.env.example"
-      - "infra/scripts/check_envvars.sh"
-      - ".github/workflows/backend.yml"
+    branches: [master]
   pull_request:
-    paths:
-      - "server/**"
-      - "infra/.env.example"
-      - "infra/scripts/check_envvars.sh"
-      - ".github/workflows/backend.yml"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
-    # Añadido tras el hallazgo "Important" de la revisión del Paso 5: sin
-    # esto, `_probe_database()` de `test_models.py` nunca encontraba una
-    # PostgreSQL real y la mitad 2 de la suite (el CHECK de ADR-005, la FK
-    # compuesta anti-cruce de organizaciones de ADR-011, y de paso
-    # `manage.py migrate` mismo) se saltaba en silencio en todo entorno,
-    # incluido CI — cero exigencia real detrás de un run en verde. Nombres
-    # de servicio/variables y valores por defecto calcados de
-    # `infra/.env.example` (Paso 2) y de `POSTGRES_*` en
-    # `server/config/settings/base.py` (Paso 4), no inventados aquí.
+    # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
+    # este servicio la mitad de integración de la suite se salta en silencio.
+    # `VISITACAMPO_REQUIRE_DB=1` convierte ese salto en fallo
+    # (`visitacampo/core/tests/dbsupport.py`).
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_DB: visitacampo
           POSTGRES_USER: visitacampo
-          # Valor ephemeral solo para este contenedor de CI — no es el
-          # placeholder real de infra/.env.example (ese nunca debe usarse
-          # fuera de una máquina de desarrollo) y no protege nada que
-          # sobreviva al job.
           POSTGRES_PASSWORD: ci_postgres_password
         ports:
           - 5432:5432
-        # Sin esto, los pasos siguientes podrían arrancar antes de que
-        # Postgres acepte conexiones y `_probe_database()` fallaría por una
-        # razón de arranque, no por falta de servicio — un falso negativo
-        # distinto del que este fix busca eliminar.
         options: >-
           --health-cmd pg_isready
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      # Mismos nombres que infra/.env.example y que lee
-      # server/config/settings/base.py (Paso 4) — no se inventan variables
-      # nuevas. HOST es "localhost" (no "db"): el runner de Actions habla con
-      # el contenedor de servicio por el puerto mapeado de arriba, no por la
-      # red interna de docker-compose que usa el hostname "db" en dev.
       POSTGRES_DB: visitacampo
       POSTGRES_USER: visitacampo
       POSTGRES_PASSWORD: ci_postgres_password
       POSTGRES_HOST: localhost
       POSTGRES_PORT: "5432"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
-      - name: Instalar ruff, mypy, pytest
-        run: python -m pip install --upgrade pip ruff mypy pytest
+      - name: Instalar dependencias (requirements-dev.lock, con hashes)
+        run: python -m pip install --require-hashes -r server/requirements-dev.lock
 
-      - name: Instalar dependencias del proyecto (server/requirements.txt)
-        # Añadido en el Paso 4: sin esto, Django/Ninja/Argon2/psycopg no
-        # están disponibles y mypy/pytest/manage.py fallarían con
-        # ModuleNotFoundError en vez de evaluar el código real.
-        run: |
-          if [ -f server/requirements.txt ]; then
-            python -m pip install -r server/requirements.txt
-          else
-            echo "server/requirements.txt todavía no existe (se crea en el Paso 4) — instalación omitida."
-          fi
-
-      - name: ruff check server/
+      - name: ruff check
         run: ruff check server/
 
-      - name: mypy server/
-        run: |
-          if find server -name '*.py' -not -path '*/.venv/*' | grep -q .; then
-            # mypy busca su configuración en el directorio desde el que se
-            # invoca (la raíz del repo aquí), no en el argumento de ruta, así
-            # que server/pyproject.toml (Paso 4) se referencia explícitamente.
-            mypy --config-file server/pyproject.toml server/
-          else
-            echo "server/ todavía no tiene archivos .py (se crea en el Paso 4) — mypy pasa vacío."
-          fi
+      - name: mypy
+        run: mypy --config-file server/pyproject.toml server/
 
-      - name: pytest server/
-        # VISITACAMPO_REQUIRE_DB=1 (test_models.py, hallazgo de la revisión
-        # del Paso 5): con el servicio postgres:16 de arriba ya no hay
-        # excusa para que la mitad 2 de la suite se salte. Si algún día deja
-        # de haber PostgreSQL alcanzable aquí (servicio caído, credenciales
-        # mal, lo que sea), este paso debe fallar fuerte, no reportar verde.
+      - name: pytest (contra PostgreSQL real)
         env:
           VISITACAMPO_REQUIRE_DB: "1"
-        run: |
-          if find server -name 'test_*.py' -o -name '*_test.py' | grep -q .; then
-            pytest server/
-          else
-            echo "server/ todavía no tiene tests (se crean a partir del Paso 4) — pytest pasa vacío."
-          fi
+        run: pytest server/
 
-      - name: python manage.py check --deploy
-        run: |
-          if [ -f server/manage.py ]; then
-            python server/manage.py check --deploy
-          else
-            echo "server/manage.py todavía no existe (se crea en el Paso 4) — check omitido."
-          fi
+      - name: makemigrations --check
+        run: python server/manage.py makemigrations --check --dry-run
 
-      - name: python manage.py makemigrations --check --dry-run
+      # `check --deploy` contra los settings que se despliegan (prod.py), no
+      # contra dev.py: con dev.py el comando solo puede advertir de lo que
+      # dev.py hace a propósito, y no protege nada. Los valores de entorno
+      # son de usar y tirar, solo para que prod.py cargue.
+      - name: manage.py check --deploy (settings de producción)
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_ALLOWED_HOSTS: ci.invalid
         run: |
-          if [ -f server/manage.py ]; then
-            python server/manage.py makemigrations --check --dry-run
-          else
-            echo "server/manage.py todavía no existe (se crea en el Paso 4) — check omitido."
-          fi
+          DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')" \
+            python server/manage.py check --deploy --fail-level WARNING
 
-  check-envvars:
-    name: check_envvars.sh (infra/.env.example, Paso 2)
+  security:
+    name: SAST + auditoría de dependencias + SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Instalar herramientas (requirements-dev.lock, con hashes)
+        run: python -m pip install --require-hashes -r server/requirements-dev.lock
+
+      # Dependabot actualiza los .txt pero no regenera los .lock de uv: sin
+      # este check su PR quedaría en verde sin cambiar lo que se instala.
+      - name: Lockfiles coherentes con sus fuentes
+        run: python infra/scripts/check_lockfiles.py
+
+      # Los falsos positivos revisados se suprimen en el código por id exacto
+      # (`# nosec B608`…), nunca desactivando reglas aquí.
+      - name: bandit (SAST)
+        run: bandit -q -r server/visitacampo server/config -x '*/tests/*,*/migrations/*'
+
+      - name: pip-audit (advisories PyPA/OSV)
+        run: |
+          pip-audit --require-hashes --disable-pip --progress-spinner off \
+            -r server/requirements.lock -r server/requirements-dev.lock
+
+      - name: SBOM CycloneDX de la imagen (requirements.lock)
+        run: |
+          cyclonedx-py requirements server/requirements.lock \
+            --output-format JSON --output-file sbom-server.cdx.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-server
+          path: sbom-server.cdx.json
+          retention-days: 90
+
+  docker-build:
+    name: docker build (server/Dockerfile)
+    runs-on: ubuntu-latest
+    # Verifica que la imagen se construye desde el lockfile con
+    # `--require-hashes`; no publica nada (eso es ADR-010, GHCR, más adelante).
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: docker build
+        run: docker build --pull -t visitacampo-api:ci server/
+
+  check-envvars:
+    name: check_envvars.sh (infra/.env.example)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: bash infra/scripts/check_envvars.sh
-        # En CI no existe infra/.env real (nunca se versiona, ver .gitignore,
-        # y no hay secretos reales disponibles para un runner público). El
-        # auto-chequeo contra sí mismo verifica que infra/.env.example esté
-        # bien formado y sea la referencia válida — el script ya soporta
-        # rutas explícitas exactamente para este uso (ver su comentario de
-        # cabecera: "rutas explícitas (tests, CI)"). La comparación contra un
-        # `.env` real con valores reales sigue haciéndose en local/despliegue.
         run: bash infra/scripts/check_envvars.sh infra/.env.example infra/.env.example

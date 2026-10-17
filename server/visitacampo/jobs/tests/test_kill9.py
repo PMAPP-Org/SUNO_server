@@ -65,7 +65,7 @@ from visitacampo.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
-from visitacampo.jobs import queue, periodic
+from visitacampo.jobs import periodic, queue
 
 from .factories import make_org, reload_job
 

@@ -232,6 +232,11 @@ AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_COOLOFF_TIME = lambda _request: timedelta(minutes=30)  # noqa: E731
 # Un login correcto reinicia el contador de fallos de esa cuenta/IP.
 AXES_RESET_ON_SUCCESS = True
+# `axes.W002` ("falta AxesMiddleware") es la consecuencia directa y buscada
+# del punto 1 de arriba. Se silencia por su código exacto —no con
+# `--fail-level` más laxo— para que `check --deploy --fail-level WARNING`
+# pueda ser un gate de CI estricto sin que este aviso conocido lo bloquee.
+SILENCED_SYSTEM_CHECKS = ["axes.W002"]
 
 # --- Autenticación JWT (ADR-008, Paso 7) -----------------------------------
 # Clave de firma Ed25519 de los access tokens. Nombres consistentes con

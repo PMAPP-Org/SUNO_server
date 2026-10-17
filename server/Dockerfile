@@ -3,20 +3,27 @@
 ##########################
 # Instala las dependencias en un stage aparte para no arrastrar caché de pip
 # ni artefactos de compilación a la imagen final.
-FROM python:3.12-slim-bookworm AS build
+#
+# La imagen base va fijada por digest (ISO 27001 A.8.9): el tag solo es
+# legible para humanos; Dependabot (ecosistema docker) propone el digest nuevo.
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS build
 
 WORKDIR /usr/src/app
 
-COPY requirements.txt requirements-runtime.txt ./
+COPY requirements.lock ./
 # psycopg[binary]==3.3.4 (server/requirements.txt) ya empaqueta libpq: no se
 # instala libpq-dev/gcc/python3-dev aquí (diferencia deliberada con
 # qfieldcloud/docker-app/Dockerfile, que no fija el extra [binary]).
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt -r requirements-runtime.txt
+#
+# Se instala el lockfile (requirements.txt + requirements-runtime.txt
+# resueltos con hashes) y no las fuentes: con `--require-hashes` el build es
+# reproducible y pip rechaza cualquier paquete cuyo contenido no coincida.
+RUN pip install --no-cache-dir --require-hashes --prefix=/install -r requirements.lock
 
 ##########################
 # WEBSERVER RUNTIME      #
 ##########################
-FROM python:3.12-slim-bookworm AS webserver_runtime
+FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS webserver_runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
