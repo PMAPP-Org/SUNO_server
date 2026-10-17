@@ -208,7 +208,10 @@ class OrgIsolationSchemaTests(SimpleTestCase):
     #   - `Organization` es la raíz del scoping (no se scopea a sí misma).
     #   - `Blob` es contenido direccionado por hash, deduplicado a propósito
     #     entre organizaciones (docstring de `models/visit.py`).
-    EXEMPT = {"Organization", "Blob"}
+    #   - `RateLimitBucket` cuenta peticiones de login y refresh **antes** de
+    #     saber a qué organización pertenece nadie; solo guarda un HMAC de la
+    #     identidad, nunca datos de negocio (docstring de `models/ops.py`).
+    EXEMPT = {"Organization", "Blob", "RateLimitBucket"}
 
     def _business_models(self) -> list[type[models.Model]]:
         from django.apps import apps
@@ -226,7 +229,7 @@ class OrgIsolationSchemaTests(SimpleTestCase):
                 self.assertFalse(field.null, f"{model.__name__}.org debe ser NOT NULL")
                 self.assertEqual(field.column, "org_id")
 
-    def test_exempt_models_are_only_the_two_documented_ones(self) -> None:
+    def test_exempt_models_are_only_the_documented_ones(self) -> None:
         """Que nadie añada una tabla sin `org_id` sin tocar también este test."""
         from django.apps import apps
 

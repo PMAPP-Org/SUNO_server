@@ -245,3 +245,34 @@ class SyncCursorFloor(OrgScopedModel):
 
     def __str__(self) -> str:
         return f"{self.org_id}:{self.floor}"
+
+
+class RateLimitBucket(models.Model):
+    """Contador de peticiones por clave y ventana de tiempo (Paso 15, ADR-008).
+
+    Lo usa `visitacampo/core/ratelimit.py` con un único
+    `INSERT … ON CONFLICT DO UPDATE … RETURNING`, atómico entre procesos y
+    workers de gunicorn sin Redis (ADR-006). **No** es `OrgScopedModel` a
+    propósito: el login y el refresh se limitan antes de saber a qué
+    organización pertenece nadie. `key` nunca contiene la IP ni el
+    identificador en claro: es `ámbito:HMAC(identidad)`. Las ventanas vencidas
+    las purga el periódico `security.purge_logs`.
+    """
+
+    key = models.CharField(max_length=128)
+    window_start = models.DateTimeField()
+    hits = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "rate_limit_bucket"
+        verbose_name = "ventana de rate limiting"
+        verbose_name_plural = "ventanas de rate limiting"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["key", "window_start"], name="rate_limit_bucket_key_window"
+            ),
+        ]
+        indexes = [models.Index(fields=["window_start"], name="rate_limit_bucket_window_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.key}@{self.window_start:%H:%M}: {self.hits}"

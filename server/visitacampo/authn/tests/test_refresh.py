@@ -3,9 +3,8 @@
 Alcance de Fase 0 (ver `authn/services.py`): validar `selector.verifier`,
 **rotar** —el contrato responde un `TokenPair` completo, así que el refresh
 nuevo hay que emitirlo— y reemitir el access token. La **detección de reuso**
-con revocación de familia y la ventana de gracia de 30 s son del Paso 15; aquí
-un token ya rotado simplemente se rechaza, que es el comportamiento seguro
-aunque no sea el completo.
+con revocación de familia y la ventana de gracia de 30 s (Paso 15) se prueban
+en `test_rotation.py`.
 """
 
 from __future__ import annotations
@@ -151,9 +150,12 @@ class RefreshRejectionTests(RefreshTestsBase):
         RefreshToken.objects.update(expires_at=timezone.now() - timedelta(seconds=1))
         self.assert_rejected(self.refresh())
 
-    def test_rejects_a_token_that_was_already_rotated(self) -> None:
-        """Reuso. En Paso 15 esto además revocará la familia entera."""
+    def test_rejects_a_token_that_was_rotated_outside_the_grace_window(self) -> None:
+        """Reuso (detalle de la revocación de familia en `test_rotation.py`)."""
         self.refresh()
+        RefreshToken.objects.filter(rotated_at__isnull=False).update(
+            rotated_at=timezone.now() - timedelta(seconds=31)
+        )
         self.assert_rejected(self.refresh())
 
     def test_rejects_the_token_of_a_user_who_lost_all_memberships(self) -> None:

@@ -24,6 +24,7 @@ from visitacampo.authn.schemas import (
     RefreshRequest,
     TokenPair,
 )
+from visitacampo.core import ratelimit
 from visitacampo.core.context import get_request_context
 
 router = Router(tags=["auth"])
@@ -55,6 +56,10 @@ def login(request, payload: LoginRequest):
     (RD-09/H-14). El cliente debe almacenarlo en el llavero del sistema
     (`flutter_secure_storage`, ADR-008), nunca en preferencias planas (C-09).
     """
+    # Antes de cualquier trabajo criptográfico: frena el relleno de
+    # credenciales y que el Argon2 de cada intento agote la CPU (axes limita
+    # por cuenta; esto, el volumen por IP).
+    ratelimit.hit("login:ip", get_client_ip_address(request))
     info = services.DeviceRegistration(
         device_id=payload.device_info.device_id,
         platform=payload.device_info.platform,
@@ -84,9 +89,11 @@ def login(request, payload: LoginRequest):
     operation_id="authRefresh",
 )
 def refresh(request, payload: RefreshRequest):
-    """`POST /v1/auth/refresh`. Rota y reemite (detección de reuso: Paso 15)."""
+    """`POST /v1/auth/refresh`. Rota y reemite, con detección de reuso (Paso 15)."""
+    client_ip = get_client_ip_address(request)
+    ratelimit.hit("refresh:ip", client_ip)
     session = services.refresh_session(
-        payload.refresh_token, payload.device_id, client_ip=get_client_ip_address(request)
+        payload.refresh_token, payload.device_id, client_ip=client_ip
     )
     return _token_pair(session)
 

@@ -32,7 +32,7 @@ from .base import (
     SyncEntityType,
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
-from .ops import AuditEvent, Job, SyncCursorFloor, SyncOpLog
+from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment
 
@@ -60,6 +60,7 @@ __all__ = [
     "Organization",
     "Platform",
     "Role",
+    "RateLimitBucket",
     "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",

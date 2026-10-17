@@ -68,7 +68,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from visitacampo.attachments.services import collect_unconfirmed_uploads
-from visitacampo.core import audit
+from visitacampo.core import audit, ratelimit
 from visitacampo.core.context import system_context
 from visitacampo.jobs import queue
 from visitacampo.jobs.queue import JobRecord
@@ -285,4 +285,6 @@ def run_purge_security_logs(record: JobRecord) -> Mapping[str, Any]:
         "audit_events": audit_events,
         "axes_failure_logs": AxesProxyHandler.reset_failure_logs(age_days=axes_age),
         "axes_access_logs": AxesProxyHandler.reset_logs(age_days=axes_age),
+        # Ventanas del rate limiting ya vencidas (la más larga dura minutos).
+        "rate_limit_buckets": ratelimit.purge_expired(older_than=now - timedelta(days=1)),
     }

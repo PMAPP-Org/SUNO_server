@@ -244,6 +244,18 @@ SILENCED_SYSTEM_CHECKS = ["axes.W002"]
 # `visitacampo/core/audit.py`). ISO 27001 A.8.15.
 AXES_ENABLE_ACCESS_FAILURE_LOG = True
 
+# --- Rate limiting de la API (visitacampo/core/ratelimit.py, Paso 15) -------
+# ámbito → (máximo de peticiones, ventana en segundos). Por IP, holgado: una
+# cuadrilla comparte IP detrás del NAT del operador móvil. Por token/usuario,
+# estricto: un dispositivo refresca cada ~15 min y pide una URL por foto.
+RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "login:ip": (60, 60),
+    "refresh:ip": (300, 60),
+    "refresh:token": (10, 60),
+    "presign:user": (120, 60),
+    "presign:ip": (600, 60),
+}
+
 # --- Autenticación JWT (ADR-008, Paso 7) -----------------------------------
 # Clave de firma Ed25519 de los access tokens. Nombres consistentes con
 # infra/.env.example (Paso 2): `JWT_SIGNING_KEY` ya estaba documentada allí y

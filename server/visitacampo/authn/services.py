@@ -40,7 +40,7 @@ from ninja.errors import HttpError
 from visitacampo.authn import tokens
 from visitacampo.authn.lookups import find_refresh_token_by_selector
 from visitacampo.authn.models import RefreshToken
-from visitacampo.core import audit
+from visitacampo.core import audit, ratelimit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Device
@@ -51,12 +51,19 @@ __all__ = [
     "InvalidCredentials",
     "IssuedSession",
     "LoginResult",
+    "REFRESH_REUSE_GRACE",
     "log_out_session",
     "log_in",
     "refresh_session",
 ]
 
 DEFAULT_REFRESH_TTL_SECONDS = 60 * 60 * 24 * 60  # 60 días con uso (ADR-008)
+
+#: Ventana de gracia de ADR-008: el mismo refresh presentado otra vez dentro
+#: de este plazo desde su rotación se trata como un reintento legítimo (la
+#: respuesta de red se perdió, o dos peticiones de la app salieron a la vez),
+#: no como reuso. Pasado el plazo, es un token robado.
+REFRESH_REUSE_GRACE = timedelta(seconds=30)
 
 #: Hash de relleno contra el que comparar cuando el `selector` no existe, para
 #: que el camino "token desconocido" haga el mismo trabajo criptográfico que
@@ -353,26 +360,29 @@ def _reject_refresh(
 def refresh_session(
     raw_token: str, device_id: uuid.UUID, *, client_ip: str | None = None
 ) -> IssuedSession:
-    """`POST /v1/auth/refresh` — valida `selector.verifier`, **rota** y reemite.
+    """`POST /v1/auth/refresh` — valida `selector.verifier`, rota y reemite (Paso 15).
 
-    Se rota (y no solo se reemite el access token) porque el contrato responde
-    un `TokenPair` completo, con `refresh_token` obligatorio: el cliente
-    espera un refresco nuevo. Lo que **no** se hace todavía es la detección de
-    reuso de ADR-008 —si llega un `verifier` ya rotado se revoca toda la
-    familia, se emite un `AuditEvent` y se avisa al usuario, con una ventana
-    de gracia de 30 s para reintentos concurrentes—: eso es el Paso 15. Aquí
-    un token ya rotado se rechaza con el 401 genérico.
+    Con un `selector.verifier` auténtico, del dispositivo correcto y de un
+    usuario que conserva su membresía, la decisión se toma **con la fila
+    bloqueada** (`SELECT … FOR UPDATE` dentro de `transaction.atomic()`,
+    RD-10 / H-15): dos peticiones simultáneas se serializan y la segunda ve el
+    estado que dejó la primera.
 
-    **La carrera de RD-10** sí está cerrada desde ya: la rotación es un
-    `UPDATE ... WHERE rotated_at IS NULL AND revoked_at IS NULL`, es decir un
-    compare-and-set atómico. Si dos refrescos concurrentes presentan el mismo
-    token, exactamente uno actualiza una fila y el otro ve `0` y se rechaza;
-    no hay ventana entre "leer" y "marcar" en la que ambos ganen.
+    - **Sin rotar** → se rota y se emite un par nuevo en la misma familia.
+    - **Rotado hace ≤ `REFRESH_REUSE_GRACE`** → reintento legítimo: se emite
+      otro par en la misma familia (`auth.refresh_grace_replay`).
+    - **Rotado hace más** → reuso: se revoca **toda la familia** —también los
+      tokens emitidos después—, se audita (`auth.refresh_reuse_detected`) y se
+      responde el 401 genérico. El usuario tendrá que volver a iniciar sesión.
+    - **Revocado o caducado** → 401, sin revocar nada más.
     """
     parsed = tokens.parse_refresh_token(raw_token)
     if parsed is None:
         raise InvalidCredentials
     selector, verifier = parsed
+    # Por token (el `selector`, que no es secreto): un dispositivo legítimo
+    # refresca cada ~15 min; martillear un token es un ataque al verifier.
+    ratelimit.hit("refresh:token", selector)
 
     row = find_refresh_token_by_selector(selector)
     if row is None:
@@ -397,32 +407,58 @@ def refresh_session(
     # dispositivo"): presentarlo desde otro `device_id` es material robado.
     if row.device_id != device_id:
         raise reject("wrong_device")
-    # Ya rotado, revocado o caducado: con un token ya rotado es reuso, la
-    # señal que el Paso 15 convertirá en revocación de toda la familia.
-    if not row.is_usable(now):
-        raise reject("not_usable")
     # Quitarle las membresías a alguien tiene que cortarle la sesión en cuanto
     # caduque su access token (15 min), sin esperar a los 60 días del refresh.
     if not ctx.is_member:
         raise reject("no_membership")
 
-    with transaction.atomic():
-        rotated = (
-            scoped_qs(ctx, RefreshToken)
-            .filter(pk=row.pk, rotated_at__isnull=True, revoked_at__isnull=True)
-            .update(rotated_at=now)
+    def issue() -> IssuedSession:
+        return _issue_session(
+            ctx, device=row.device_id, user_id=row.user_id, family_id=row.family_id, now=now
         )
-        if rotated == 1:
-            return _issue_session(
+
+    with transaction.atomic():
+        locked = scoped_qs(ctx, RefreshToken).select_for_update().get(pk=row.pk)
+        if locked.revoked_at is not None or locked.expires_at <= now:
+            outcome = "not_usable"
+        elif locked.rotated_at is None:
+            scoped_qs(ctx, RefreshToken).filter(pk=row.pk).update(rotated_at=now)
+            return issue()
+        elif now - locked.rotated_at <= REFRESH_REUSE_GRACE:
+            audit.record(
                 ctx,
-                device=row.device_id,
-                user_id=row.user_id,
-                family_id=row.family_id,
-                now=now,
+                action=AuditAction.REFRESH_GRACE_REPLAY,
+                target=f"device:{row.device_id}",
+                actor_id=row.user_id,
+                metadata={"family_id": str(row.family_id)},
+                ip=client_ip,
             )
-    # Otro refresh concurrente ganó el compare-and-set (RD-10). Se audita
-    # fuera de la transacción para no depender de su resultado.
-    raise reject("rotation_race")
+            return issue()
+        else:
+            # Reuso: la revocación y su traza se confirman juntas en esta
+            # transacción; la excepción se lanza fuera para no deshacerlas.
+            revoked = (
+                scoped_qs(ctx, RefreshToken)
+                .filter(family_id=row.family_id, revoked_at__isnull=True)
+                .update(revoked_at=now)
+            )
+            audit.record(
+                ctx,
+                action=AuditAction.REFRESH_REUSE_DETECTED,
+                target=f"device:{row.device_id}",
+                actor_id=row.user_id,
+                metadata={
+                    "family_id": str(row.family_id),
+                    "revoked": revoked,
+                    "presented_device_id": str(device_id),
+                },
+                ip=client_ip,
+            )
+            outcome = "reuse"
+
+    if outcome == "reuse":
+        raise InvalidCredentials
+    raise reject(outcome)
 
 
 def log_out_session(
