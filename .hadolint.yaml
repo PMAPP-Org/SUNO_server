@@ -1,0 +1,11 @@
+# hadolint (lint de Dockerfile, OWASP A02/A03). Excepciones revisadas, cada
+# una con su motivo; cualquier otra regla falla el CI.
+failure-threshold: info
+ignored:
+  # DL3008 "fija versiones en apt-get install": la imagen base ya va fijada
+  # por digest (server/Dockerfile) y Debian retira del mirror la versión
+  # anterior de un paquete en cuanto publica su parche de seguridad, así que
+  # fijar `tzdata=<versión>` rompería el build justo cuando hay que
+  # reconstruir. La reproducibilidad la da el digest; los parches, el
+  # escaneo de la imagen (grype) y Dependabot sobre ese digest.
+  - DL3008
