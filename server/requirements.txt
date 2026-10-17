@@ -4,10 +4,10 @@
 # ADR-004: Django 5.x LTS + Django Ninja (Pydantic v2) + PostgreSQL, sin DRF.
 # ADR-008: Argon2id (`argon2-cffi`) como hasher de contraseñas primario.
 
-Django==5.2.18
-django-ninja==1.6.2
+Django==6.1.2
+django-ninja==1.7.1
 argon2-cffi==25.1.0
-psycopg[binary]==3.3.4
+psycopg[binary]==3.3.6
 
 # ADR-008: access token JWT firmado con EdDSA/Ed25519 (Paso 7).
 # PyJWT implementa `EdDSA` **solo** si `cryptography` está instalado, así que
@@ -35,14 +35,14 @@ cryptography==50.0.2
 #
 # Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
 # dependencias suyas y las resuelve pip con las versiones que boto3 declara.
-boto3==1.43.63
+boto3==1.43.111
 
 # ADR-004: rate limiting de login (Paso de endurecimiento del demo — ver
 # plans/visitacampo-despliegue-demo-implementacion.md). Se instala y
 # configura la librería en vez de escribir rate limiting a mano: el login
 # (visitacampo/authn/services.py::log_in) ya llama a
 # django.contrib.auth.authenticate(), el mismo hook que axes necesita.
-django-axes==7.0.2
+django-axes==8.3.1
 
 # Hallazgo Importante de la revisión final de despliegue del demo: nada
 # servía `/static/*` (CSS/JS de Django Admin) en producción -- `collectstatic`
