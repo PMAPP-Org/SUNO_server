@@ -12,6 +12,7 @@ import sys
 import time
 import unittest
 from io import StringIO
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin
@@ -38,6 +39,9 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 LOGIN_URL = "/admin/login/?next=/admin/"
+
+#: `server/`, para que el subproceso importe `config` aunque pytest corra desde la raíz.
+SERVER_DIR = Path(__file__).resolve().parents[3]
 
 
 class AdminSiteRequiresOtpTests(unittest.TestCase):
@@ -66,6 +70,7 @@ class AdminSiteRequiresOtpTests(unittest.TestCase):
                 result = subprocess.run(
                     [sys.executable, "-c", f"import django; django.setup(); {script}"],
                     env=env,
+                    cwd=SERVER_DIR,
                     capture_output=True,
                     text=True,
                     check=True,
