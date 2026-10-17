@@ -2,7 +2,7 @@ name: DAST
 
 # Pruebas dinámicas contra la API **en ejecución**, con la misma topología que
 # producción: PostgreSQL + imagen de server/Dockerfile con
-# config.settings.prod + Caddy terminando TLS (CA interna para `localhost`).
+# config.settings.prod + Caddy terminando TLS (CA interna para un nombre bajo `.localhost`).
 # Ataca lo que el análisis estático no ve: configuración real, cabeceras,
 # redirecciones, y el comportamiento ante entradas arbitrarias.
 #
@@ -39,6 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
+      # Nombre con punto: un cliente Java (ZAP) solo envía SNI para nombres
+      # con punto y, sin SNI, Caddy corta el handshake. Caddy le emite
+      # certificado con su CA interna igual que a `localhost`.
+      DAST_HOST: api.visitacampo.localhost
       COMPOSE: docker compose --project-directory infra --env-file infra/.env -f infra/docker-compose.yml
       # 2.16.1 fijada por digest (`stable` se reconstruye y cambia).
       ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
@@ -49,6 +53,7 @@ jobs:
 
       - name: Generar infra/.env efímero (secretos de un solo uso)
         run: |
+          echo "127.0.0.1 ${DAST_HOST}" | sudo tee -a /etc/hosts
           DEMO_PASSWORD="$(bash infra/scripts/ci_dast_env.sh)"
           echo "::add-mask::${DEMO_PASSWORD}"
           echo "DEMO_PASSWORD=${DEMO_PASSWORD}" >> "$GITHUB_ENV"
@@ -58,17 +63,17 @@ jobs:
         run: |
           $COMPOSE up -d --build db api caddy
           for _ in $(seq 1 60); do
-            if curl -sfk https://localhost/v1/healthz > /dev/null; then exit 0; fi
+            if curl -sfk https://${DAST_HOST}/v1/healthz > /dev/null; then exit 0; fi
             sleep 2
           done
-          echo "La API no respondió en https://localhost/v1/healthz"
+          echo "La API no respondió en https://${DAST_HOST}/v1/healthz"
           $COMPOSE logs api caddy
           exit 1
 
       - name: Sembrar usuario de prueba y obtener un access token
         run: |
           $COMPOSE exec -T api python manage.py bootstrap_demo --password "$DEMO_PASSWORD" > /dev/null
-          TOKEN="$(curl -sfk https://localhost/v1/auth/login \
+          TOKEN="$(curl -sfk https://${DAST_HOST}/v1/auth/login \
             -H 'Content-Type: application/json' \
             -d "{\"username\":\"agente-demo\",\"password\":\"${DEMO_PASSWORD}\",\"device_info\":{\"device_id\":\"$(cat /proc/sys/kernel/random/uuid)\",\"platform\":\"android\",\"app_version\":\"0.0.0-ci\"}}" \
             | python3 -c 'import json, sys; print(json.load(sys.stdin)["tokens"]["access_token"])')"
@@ -79,7 +84,7 @@ jobs:
       # pero que aquí son requisitos (RD-15, OWASP A02/A04).
       - name: Cabeceras y redirecciones de producción
         run: |
-          headers="$(curl -sk -D - -o /dev/null https://localhost/v1/healthz)"
+          headers="$(curl -sk -D - -o /dev/null https://${DAST_HOST}/v1/healthz)"
           echo "$headers"
           echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
           echo "$headers" | grep -qi '^x-content-type-options: nosniff'
@@ -87,7 +92,7 @@ jobs:
           if echo "$headers" | grep -qi '^server: .*[0-9]'; then
             echo "La cabecera Server expone una versión"; exit 1
           fi
-          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/v1/healthz)"
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://${DAST_HOST}/v1/healthz)"
           test "$code" = "308" || test "$code" = "301"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -99,7 +104,7 @@ jobs:
 
       - name: Schemathesis — sin 5xx ni auth ignorada (bloqueante)
         run: |
-          st run server/openapi/v1.yaml --url https://localhost --tls-verify false \
+          st run server/openapi/v1.yaml --url https://${DAST_HOST} --tls-verify false \
             -H "Authorization: Bearer ${API_TOKEN}" \
             --checks not_a_server_error,ignored_auth --max-examples 50 \
             --report junit --report-dir reports/schemathesis-security
@@ -107,7 +112,7 @@ jobs:
       - name: Schemathesis — conformidad completa con el contrato (informativo)
         continue-on-error: true
         run: |
-          st run server/openapi/v1.yaml --url https://localhost --tls-verify false \
+          st run server/openapi/v1.yaml --url https://${DAST_HOST} --tls-verify false \
             -H "Authorization: Bearer ${API_TOKEN}" \
             --checks all --max-examples 30 \
             --report junit --report-dir reports/schemathesis-contract
@@ -122,9 +127,10 @@ jobs:
           docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" \
             -e ZAP_AUTH_HEADER=Authorization \
             -e ZAP_AUTH_HEADER_VALUE="Bearer ${API_TOKEN}" \
-            -e ZAP_AUTH_HEADER_SITE=localhost \
+            -e ZAP_AUTH_HEADER_SITE="${DAST_HOST}" \
+            --add-host "${DAST_HOST}:127.0.0.1" \
             "$ZAP_IMAGE" zap-api-scan.py \
-              -t v1.yaml -f openapi -O https://localhost \
+              -t v1.yaml -f openapi -O https://${DAST_HOST} \
               -c api-scan-rules.tsv -I \
               -r zap-report.html -J zap-report.json
 

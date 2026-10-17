@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Genera infra/.env para levantar el stack de producción en CI
 # (.github/workflows/dast.yml): settings de prod, secretos aleatorios de un
-# solo uso, clave JWT Ed25519 nueva, Caddy sirviendo `localhost` con su CA
+# solo uso, clave JWT Ed25519 nueva, Caddy sirviendo `$DAST_HOST` con su CA
 # interna y adjuntos en el filesystem del contenedor (sin R2/MinIO).
 #
 # Nada de esto vale fuera del run: cada ejecución genera secretos nuevos y
@@ -12,6 +12,11 @@
 set -euo pipefail
 
 ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+
+# Nombre con punto bajo `.localhost`: Caddy le emite certificado con su CA
+# interna igual que a `localhost`, pero un cliente Java (ZAP) solo envía SNI
+# para nombres con punto, y sin SNI Caddy corta el handshake.
+DAST_HOST="${DAST_HOST:-api.visitacampo.localhost}"
 
 rand() { openssl rand -hex 32; }
 
@@ -29,7 +34,7 @@ POSTGRES_PORT=5432
 DJANGO_SECRET_KEY=$(rand)
 DJANGO_DEBUG=false
 DJANGO_SETTINGS_MODULE=config.settings.prod
-DJANGO_ALLOWED_HOSTS=localhost
+DJANGO_ALLOWED_HOSTS=${DAST_HOST}
 JWT_SIGNING_KEY=${JWT_KEY_B64}
 JWT_SIGNING_KEY_FILE=
 STORAGE_BACKEND=localfs
@@ -44,7 +49,7 @@ EMAIL_PORT=25
 EMAIL_HOST_USER=
 EMAIL_HOST_PASSWORD=
 EMAIL_USE_TLS=false
-CADDY_DOMAIN=localhost
+CADDY_DOMAIN=${DAST_HOST}
 CADDY_ACME_EMAIL=ci@example.invalid
 EOF
 chmod 600 "$ENV_FILE"
