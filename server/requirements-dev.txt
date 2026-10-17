@@ -12,3 +12,9 @@ pytest==9.1.1
 bandit==1.9.4
 pip-audit==2.10.1
 cyclonedx-bom==7.5.0
+
+# Gate de calidad: cobertura de ramas con suelo en pyproject.toml.
+pytest-cov==7.1.0
+# SAST de los workflows de GitHub Actions (OWASP A03/A08: inyección en
+# expresiones, permisos excesivos, actions sin fijar).
+zizmor==1.31.1

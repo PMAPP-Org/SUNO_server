@@ -78,4 +78,5 @@ jobs:
           ./osv-scanner scan source \
             -L app/pubspec.lock \
             -L requirements.txt:server/requirements.lock \
-            -L requirements.txt:server/requirements-dev.lock
+            -L requirements.txt:server/requirements-dev.lock \
+            -L requirements.txt:server/requirements-dast.lock

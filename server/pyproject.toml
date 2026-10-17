@@ -1,6 +1,6 @@
 [project]
 name = "visitacampo-server"
-version = "0.1.0"
+version = "0.1.0" # x-release-please-version
 description = "VisitaCampo backend — Django 5 + Django Ninja (ADR-004, sin DRF)"
 requires-python = ">=3.12"
 
@@ -63,3 +63,22 @@ no_implicit_optional = true
 # generadas por Django, no código de mano.
 module = "config.settings.*"
 ignore_errors = true
+
+# --- coverage (gate de calidad, ISO 27001 A.8.29) -------------------------
+# Se mide el código de producción con ramas; tests y migraciones no cuentan.
+# `fail_under` es el suelo: puede subir cuando la cobertura suba, no bajar
+# sin una decisión explícita en el PR que lo cambie.
+[tool.coverage.run]
+branch = true
+source = ["visitacampo", "config"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "config/asgi.py",
+    "config/wsgi.py",
+]
+
+[tool.coverage.report]
+show_missing = false
+skip_covered = true
+fail_under = 90

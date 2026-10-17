@@ -37,7 +37,7 @@ jobs:
     # (`visitacampo/core/tests/dbsupport.py`).
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_DB: visitacampo
           POSTGRES_USER: visitacampo
@@ -73,10 +73,21 @@ jobs:
       - name: mypy
         run: mypy --config-file server/pyproject.toml server/
 
-      - name: pytest (contra PostgreSQL real)
+      # Cobertura de ramas del código de producción con suelo `fail_under`
+      # (server/pyproject.toml, [tool.coverage.report]): bajar de ahí falla.
+      - name: pytest + cobertura (contra PostgreSQL real)
         env:
           VISITACAMPO_REQUIRE_DB: "1"
-        run: pytest server/
+        run: |
+          pytest server/ --cov --cov-config=server/pyproject.toml \
+            --cov-report=term --cov-report=xml:coverage-server.xml
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: coverage-server
+          path: coverage-server.xml
+          retention-days: 30
 
       - name: makemigrations --check
         run: python server/manage.py makemigrations --check --dry-run
@@ -121,7 +132,17 @@ jobs:
       - name: pip-audit (advisories PyPA/OSV)
         run: |
           pip-audit --require-hashes --disable-pip --progress-spinner off \
-            -r server/requirements.lock -r server/requirements-dev.lock
+            -r server/requirements.lock -r server/requirements-dev.lock \
+            -r server/requirements-dast.lock
+
+      # Workflows de GitHub Actions como código (OWASP A03/A08): inyección en
+      # expresiones `${{ }}`, permisos excesivos, actions sin fijar o con
+      # vulnerabilidades conocidas. Con token, zizmor hace también las
+      # auditorías que consultan la API de GitHub.
+      - name: zizmor (seguridad de .github/workflows)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --no-progress --format plain .github/workflows
 
       - name: SBOM CycloneDX de la imagen (requirements.lock)
         run: |
@@ -135,17 +156,55 @@ jobs:
           retention-days: 90
 
   docker-build:
-    name: docker build (server/Dockerfile)
+    name: docker build + hadolint + grype (server/Dockerfile)
     runs-on: ubuntu-latest
     # Verifica que la imagen se construye desde el lockfile con
-    # `--require-hashes`; no publica nada (eso es ADR-010, GHCR, más adelante).
+    # `--require-hashes`, que el Dockerfile pasa el lint y que la imagen
+    # resultante no tiene vulnerabilidades altas con parche disponible. No
+    # publica nada: eso lo hace release.yml.
+    env:
+      HADOLINT_VERSION: 2.15.1
+      HADOLINT_SHA256: c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+      GRYPE_VERSION: 0.120.1
+      GRYPE_SHA256: 0a9ee97ef5ae2ee953b0a80098105052e846cdbe319a57d808b519c33cd1343d
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Instalar hadolint y grype (versión fija + checksum)
+        run: |
+          curl -sSfL -o hadolint \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  hadolint" | sha256sum -c -
+          curl -sSfL -o grype.tar.gz \
+            "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/grype_${GRYPE_VERSION}_linux_amd64.tar.gz"
+          echo "${GRYPE_SHA256}  grype.tar.gz" | sha256sum -c -
+          tar -xzf grype.tar.gz grype
+          chmod +x hadolint grype
+          rm grype.tar.gz
+
+      # Excepciones revisadas en .hadolint.yaml.
+      - name: hadolint
+        run: ./hadolint --config .hadolint.yaml server/Dockerfile
+
       - name: docker build
         run: docker build --pull -t visitacampo-api:ci server/
+
+      # `--only-fixed`: falla por lo que se puede arreglar hoy (subir el
+      # digest de la base o una dependencia). Las CVE de Debian sin parche
+      # publicado quedan en el informe, no bloquean.
+      - name: grype (vulnerabilidades de la imagen)
+        run: |
+          ./grype visitacampo-api:ci --only-fixed --fail-on high \
+            -o table -o sarif=grype-api.sarif
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: grype-api
+          path: grype-api.sarif
+          retention-days: 30
 
   check-envvars:
     name: check_envvars.sh (infra/.env.example)
