@@ -54,7 +54,7 @@ GitHub.
 
 ## Convención de commits
 
-Este repositorio no exige [Conventional Commits](https://www.conventionalcommits.org/), aunque el desarrollador puede adoptarlos si lo prefiere. La única convención obligatoria es:
+Los commits que llegan a `master` siguen [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix(server):`, `ci:`…): de ellos salen la versión, el tag y el CHANGELOG de cada release (ver [CONTRIBUTING.md](CONTRIBUTING.md#releases-tags-y-versiones-automáticos)). Los PR se integran con *Squash and merge* y `pr-title.yml` exige el formato en el título. Además:
 
 - Mensajes de commit descriptivos, en modo imperativo, que expliquen el **qué** y —cuando no sea obvio— el **porqué**.
 - Como mínimo, un commit por paso completado del plan de construcción (`plans/visitacampo-construccion.md`), de forma que el historial de git refleje el avance del plan.

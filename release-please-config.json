@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "bootstrap-sha": "dd2d5367984976e3831495acf1f379645c6f18a6",
+  "pull-request-title-pattern": "chore: release ${version}",
+  "changelog-sections": [
+    { "type": "feat", "section": "Funcionalidades" },
+    { "type": "fix", "section": "Correcciones" },
+    { "type": "perf", "section": "Rendimiento" },
+    { "type": "revert", "section": "Reversiones" },
+    { "type": "docs", "section": "Documentación" },
+    { "type": "build", "section": "Build y dependencias" },
+    { "type": "ci", "section": "CI", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "refactor", "section": "Refactorización", "hidden": true },
+    { "type": "chore", "section": "Mantenimiento", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "generic", "path": "app/pubspec.yaml" },
+        { "type": "generic", "path": "app/lib/core/constants.dart" },
+        { "type": "generic", "path": "server/pyproject.toml" }
+      ]
+    }
+  }
+}

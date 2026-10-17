@@ -1,0 +1,52 @@
+name: CodeQL
+
+# SAST semántico (flujo de datos de fuente a sumidero) sobre el backend y los
+# propios workflows. Complementa a Bandit, que es por patrones: CodeQL sigue
+# un valor de la request hasta un `cursor.execute`, un `open()` o una
+# redirección, que es como se encuentran inyecciones (OWASP A05:2025),
+# path traversal y SSRF (A01) reales. Los resultados van a Security → Code
+# scanning. ISO 27001 A.8.28, A.8.29.
+#
+# Dart no está soportado por CodeQL; la app la cubren `dart analyze`, el
+# lint RD-01 y los tests.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "41 5 * * 1" # lunes 05:41 UTC: reglas nuevas sobre código que no cambió
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # subir el SARIF a Code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-and-quality
+
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: /language:${{ matrix.language }}

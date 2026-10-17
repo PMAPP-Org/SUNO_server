@@ -112,6 +112,10 @@ coincidan. Entorno local:
 python -m pip install --require-hashes -r server/requirements-dev.lock
 ```
 
+La lista completa de gates, su correspondencia con OWASP Top 10:2025 e
+ISO 27001 y lo que falta por cubrir está en
+[`docs/seguridad/owasp-top10-2025.md`](docs/seguridad/owasp-top10-2025.md).
+
 **Gates que corren en cada PR y en `master`** (además de lint/tests):
 
 | Gate | Dónde | Control ISO 27001 |
@@ -142,6 +146,30 @@ recuperación con Google Play. Sin `key.properties`, `flutter build apk
 --release` falla a propósito en vez de firmar con la clave de debug. El job
 `android-release` de `mobile.yml` lo comprueba en cada PR con una llave
 efímera.
+
+## Releases (tags y versiones automáticos)
+
+El versionado lo lleva [release-please](https://github.com/googleapis/release-please)
+(`.github/workflows/release.yml`) a partir de los commits de `master`, que
+deben seguir [Conventional Commits](https://www.conventionalcommits.org/):
+`feat:` sube la versión menor, `fix:` el parche y `feat!:`/`BREAKING CHANGE:`
+la mayor (antes de 1.0, la menor). Los PR se integran con **Squash and
+merge** y su título es el mensaje del commit; `pr-title.yml` lo exige.
+
+1. Cada push a `master` actualiza el PR `chore: release X.Y.Z` con el
+   CHANGELOG y la versión nueva en `version.txt`, `app/pubspec.yaml`,
+   `app/lib/core/constants.dart` y `server/pyproject.toml`.
+2. Mergear ese PR crea el tag `vX.Y.Z` y la GitHub Release.
+3. La release publica la imagen `ghcr.io/<owner>/visitacampo-api:X.Y.Z` con
+   SBOM y atestación de procedencia, y —si existen los secretos— el APK
+   firmado con su checksum y atestación.
+
+Configuración que hace un admin una sola vez: *Settings → Actions → Allow
+GitHub Actions to create and approve pull requests*, y el environment
+`release` (restringido a `master`) con los secretos
+`ANDROID_UPLOAD_KEYSTORE_B64` (el `.jks` en base64),
+`ANDROID_UPLOAD_KEY_ALIAS`, `ANDROID_UPLOAD_KEYSTORE_PASSWORD`,
+`ANDROID_UPLOAD_KEY_PASSWORD` y, opcionalmente, `RELEASE_PLEASE_TOKEN`.
 
 ## Estilo de commits
 

@@ -34,18 +34,25 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup --system app && adduser --system app --ingroup app
+# UID/GID numéricos: un orquestador puede verificar `runAsNonRoot` sin
+# resolver nombres (hadolint DL3066).
+RUN addgroup --system --gid 10001 app && adduser --system --uid 10001 --ingroup app app
 
 WORKDIR /usr/src/app
 
 COPY --from=build /install /usr/local
 
+# El código queda propiedad de root y de solo lectura para el proceso: si
+# alguien lograra ejecutar código en el contenedor, no podría reescribir la
+# aplicación (OWASP A02/A08). El usuario de runtime solo escribe donde hace
+# falta: `staticfiles/` (collectstatic en entrypoint.sh) y `.blobstore/`
+# (adaptador LocalFsBlobStore, ADR-007).
 COPY . .
-RUN mkdir -p staticfiles \
+RUN mkdir -p staticfiles .blobstore \
     && chmod +x entrypoint.sh \
-    && chown -R app:app /usr/src/app
+    && chown -R 10001:10001 staticfiles .blobstore
 
-USER app
+USER 10001:10001
 
 EXPOSE 8000
 

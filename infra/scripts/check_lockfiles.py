@@ -25,6 +25,7 @@ SERVER = Path(__file__).resolve().parents[2] / "server"
 LOCKS: dict[str, tuple[str, ...]] = {
     "requirements.lock": ("requirements.txt", "requirements-runtime.txt"),
     "requirements-dev.lock": ("requirements-dev.txt",),
+    "requirements-dast.lock": ("requirements-dast.txt",),
 }
 
 _PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==([^\s;\\#]+)")
