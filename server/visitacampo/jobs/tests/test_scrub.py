@@ -23,7 +23,7 @@ from contextlib import contextmanager
 
 from django.test import SimpleTestCase, TestCase
 
-from visitacampo.core.models import JobStatus
+from visitacampo.core.models import Job, JobStatus
 from visitacampo.core.scrub import (
     REDACTED,
     ScrubbingFilter,
@@ -126,7 +126,8 @@ class ScrubTests(SimpleTestCase):
         self.assertNotIn(SECRET, redacted)
 
     def test_numbers_and_booleans_pass_through(self) -> None:
-        self.assertEqual(scrub({"n": 3, "ok": True, "nada": None}), {"n": 3, "ok": True, "nada": None})
+        plain = {"n": 3, "ok": True, "nada": None}
+        self.assertEqual(scrub(plain), plain)
 
     def test_the_result_is_json_serialisable(self) -> None:
         """`job.output` es una columna `jsonb`: lo que no serializa, revienta."""
@@ -157,7 +158,7 @@ class JobOutputScrubbingTests(TestCase):
     def setUp(self) -> None:
         self.org = make_org("Scrub")
 
-    def run_failing_job(self, job_type: str, handler) -> object:
+    def run_failing_job(self, job_type: str, handler) -> Job:
         job_id = queue.enqueue(org_id=self.org.pk, job_type=job_type, max_attempts=1)
         assert job_id is not None
         with temporary_handler(job_type, handler):
@@ -287,8 +288,18 @@ class LoggingScrubbingTests(SimpleTestCase):
         self.assertEqual(console["formatter"], "scrubbed")
 
     def test_the_configured_handler_is_actually_wired_at_runtime(self) -> None:
-        """`dictConfig` ya corrió: el handler real tiene el filtro puesto."""
-        handlers = logging.getLogger("visitacampo").handlers
+        """`dictConfig` ya corrió: el handler real tiene el filtro puesto.
+
+        Se buscan por nombre los handlers que declara `LOGGING`: pytest añade
+        sus propios handlers de captura a este mismo logger y esos no son
+        configuración del proyecto.
+        """
+        from django.conf import settings
+
+        configured = set(settings.LOGGING["handlers"])
+        handlers = [
+            h for h in logging.getLogger("visitacampo").handlers if h.get_name() in configured
+        ]
         self.assertTrue(handlers, "el logger `visitacampo` debe tener handler propio")
         for handler in handlers:
             with self.subTest(handler=handler):

@@ -116,7 +116,7 @@ class ActiveStatusesTests(TestCase):
         """`ACTIVE_JOB_STATUSES` va como literales para no ensuciar la migración."""
         self.assertEqual(
             set(ACTIVE_JOB_STATUSES),
-            {JobStatus.PENDING.value, JobStatus.RUNNING.value},
+            {str(JobStatus.PENDING), str(JobStatus.RUNNING)},
         )
 
 
@@ -195,8 +195,9 @@ class HeartbeatTests(TestCase):
     def setUp(self) -> None:
         self.org = make_org()
         queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
-        self.record = queue.take(worker_id=WORKER, lease_seconds=10)
-        assert self.record is not None
+        record = queue.take(worker_id=WORKER, lease_seconds=10)
+        assert record is not None
+        self.record = record
 
     def test_it_extends_the_lease(self) -> None:
         original = job_row(self.record.id)["locked_until"]

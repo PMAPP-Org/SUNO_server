@@ -30,7 +30,7 @@ class WaitForPostgresTests(unittest.TestCase):
         calls: list[dict[str, object]] = []
 
         class _Conn:
-            def __enter__(self) -> "_Conn":
+            def __enter__(self) -> _Conn:
                 return self
 
             def __exit__(self, *exc_info: object) -> None:
@@ -56,7 +56,7 @@ class WaitForPostgresTests(unittest.TestCase):
         attempts = {"count": 0}
 
         class _Conn:
-            def __enter__(self) -> "_Conn":
+            def __enter__(self) -> _Conn:
                 return self
 
             def __exit__(self, *exc_info: object) -> None:
