@@ -11,6 +11,10 @@ definición de **RD-03** ("validación con OpenAPI 3.1 + JSON Schema, en ambos e
 - Semántica de sync: [ADR-003](../../docs/08-arquitectura-propuesta-visitacampo.md#adr-003--protocolo-de-sync-outbox--cas-por-versión-aplicación-síncrona-y-server-authoritative).
 - Entidades y campos: [doc 08 §4.4](../../docs/08-arquitectura-propuesta-visitacampo.md#44-modelo-de-datos-servidor).
 
+## Fixtures compartidos
+
+`fixtures/forms_parity.json` contiene los casos del DSL de formularios (ADR-012) que ejecutan **a la vez** el servidor (`visitacampo/forms/tests/test_parity.py`) y la app (`app/test/core/forms/parity_test.dart`). Recoge qué plantillas son válidas, qué campos se ven con cada respuesta y qué violaciones produce cada una. Un caso nuevo se añade aquí, nunca en uno solo de los dos lados.
+
 ## Verificación
 
 ```bash

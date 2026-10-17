@@ -187,3 +187,8 @@ jobs:
       # las pantallas (ver app/lib/ui/ y app/lib/l10n/).
       - name: bash infra/scripts/lint_ui_tokens.sh
         run: bash infra/scripts/lint_ui_tokens.sh
+
+      # RD-06 / ADR-012: el renderer de formularios interpreta datos; nada en
+      # la app puede ejecutar código elegido en tiempo de ejecución.
+      - name: bash infra/scripts/lint_no_dynamic_code.sh
+        run: bash infra/scripts/lint_no_dynamic_code.sh

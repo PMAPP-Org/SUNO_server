@@ -198,6 +198,13 @@ else
 	fail "lint_ui_tokens.sh"
 fi
 
+section "Mobile (app/) — sin ejecución dinámica de código (lint_no_dynamic_code.sh, siempre se ejecuta)"
+if bash "$SCRIPT_DIR/lint_no_dynamic_code.sh"; then
+	pass "lint_no_dynamic_code.sh"
+else
+	fail "lint_no_dynamic_code.sh"
+fi
+
 section "infra/.env.example — check_envvars.sh (auto-chequeo, patrón de CI)"
 if bash "$SCRIPT_DIR/check_envvars.sh" infra/.env.example infra/.env.example; then
 	pass "check_envvars.sh (self-check contra .env.example)"
