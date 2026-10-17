@@ -19,11 +19,12 @@
 | #9 | Documentación del SGSI (borradores) |
 | #10 | Runbooks de operación, `SECURITY.md`, este seguimiento |
 | #11 | MFA obligatorio en el Admin; Paso 15 (rotación con detección de reutilización) y límites de tasa en la API |
-| este | Aprovisionamiento endurecido del VPS y despliegue automático con verificación de procedencia y rollback, ambos probados en CI |
+| #12 | Aprovisionamiento endurecido del VPS y despliegue automático con verificación de procedencia y rollback, ambos probados en CI |
+| este | Paso 21: renderer dinámico de formularios en Flutter, con paridad servidor ↔ cliente comprobada por un fixture común |
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
-**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
 
@@ -152,7 +153,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 
 - [ ] **Paso 16** — Autenticación cliente completa: `TrustStore`, TOFU explícito, pinning SPKI
 - [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento
-- [ ] **Paso 21** — Renderer dinámico de formularios en Flutter
+- [x] **Paso 21** — Renderer dinámico de formularios en Flutter
 - [ ] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma
 - [ ] **Paso 23** — UI de conflictos: `quarantine` y reenvío
 
@@ -174,10 +175,31 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 4 (Pasos 15, 17, 19, 20) | 11 (Pasos 15–25) |
-| **Total** | **18** | **26** |
+| Fase 1 | 5 (Pasos 15, 17, 19, 20, 21) | 11 (Pasos 15–25) |
+| **Total** | **19** | **26** |
 
-**Estado de verificación del Paso 17 (backend, último paso cerrado)**: `pytest server/` **553 passed** (+744 subtests) contra PostgreSQL real (452 antes de este paso: +101 tests nuevos), `ruff check server/` y `mypy server/ --config-file server/pyproject.toml` limpios, `manage.py makemigrations --check --dry-run` sin cambios y `manage.py check` sin incidencias — el paso **no añade ninguna tabla**: `Blob` y `VisitAttachment` ya existían desde el Paso 5. Los comandos de verificación del plan corren de verdad, en `attachments/tests/`: (a) presign de un `sha256` ya existente → `already_present: true`, sin URL y **sin tocar el object storage**; (b) commit con checksum que no coincide con el `HEAD` real → `422 attachment_checksum_mismatch` y el `Blob` **no** se registra (ídem para el tamaño); (c) commit válido → `Blob` creado, y doble commit idempotente devolviendo la misma fila byte a byte. Más: **test de traversal explícito** con 15 familias de entrada hostil (`../`, rutas absolutas POSIX y Windows, UNC, URL-encoding, byte nulo, mayúsculas, longitud incorrecta) contra `bucket_key_for()` y contra la resolución de ruta del adaptador local, comprobando además que no se crea nada en el filesystem; y **test de concurrencia** (`TransactionTestCase` + `ThreadPoolExecutor`) con dos y con ocho commits simultáneos del mismo `sha256`: todos resuelven sin error de constraint, queda **una** fila y **exactamente uno** reporta haberla creado.
+**Estado de verificación del Paso 21 (móvil, último paso cerrado)**:
+- **Pruebas:** `flutter test` **140 passed**; cobertura de líneas 83,3 % (gate 75 %). `dart analyze` limpio. En el servidor, `pytest visitacampo/forms visitacampo/sync` 236 passed.
+- **Paridad servidor ↔ cliente:** `server/openapi/fixtures/forms_parity.json` es la fuente única de casos. Lo ejecutan `forms/tests/test_parity.py` y `app/test/core/forms/parity_test.dart`, y ambos coinciden en los 35 casos:
+  - 2 plantillas válidas con 9 combinaciones de respuestas: visibilidad y violaciones idénticas;
+  - 26 plantillas inválidas, rechazadas por los dos lados, entre ellas `op: eval`/`system`, claves extra, literal estructurado, referencia hacia delante o a sí mismo, regex, dialecto `@2` y profundidad excesiva.
+- **Comandos de verificación del plan:**
+  - render de cada tipo de campo (`test/ui/forms/`);
+  - expresiones condicionales `eq`, `in`, `and(gt, ne)`, `not(is_empty)` y `or(gte, is_not_empty)` cambiando valores en pantalla;
+  - plantilla mal formada → resultado tipado, nunca excepción (incluido un JSON de 5000 niveles);
+  - inyección de expresión rechazada sin evaluarse;
+  - **regresión de H-11** (`form_template_repository_test.dart`): al llegar la v2, una visita nueva usa la v2 y la caché de la plantilla se invalida explícitamente; una visita que referencia la v1 la sigue leyendo.
+- **Criterio de salida "cero ejecución dinámica":** `infra/scripts/lint_no_dynamic_code.sh` es un gate nuevo en `mobile.yml` y `ci_local.sh`. Prohíbe `dart:mirrors`, `Function.apply`, `noSuchMethod`, `spawnUri` y la evaluación de JavaScript en toda `app/lib`.
+
+**Decisiones de diseño registradas (Paso 21)**:
+- (a) **Parser escrito a mano en vez de `freezed`.** El meta-schema necesita rechazar claves extra y no convertir tipos, y `json_serializable` no hace ninguna de las dos cosas. Los modelos son clases selladas inmutables, y el `switch` del renderer sobre ellas es exhaustivo: un tipo de campo nuevo no compila hasta tener su widget.
+- (b) **El cliente es más estricto que Pydantic** (`"true"` no es `true`). Esto no rompe nada porque el servidor guarda la definición normalizada (`model_dump`).
+- (c) **Caché indexada por `(org_id, template_version_id)`.** Se invalida al recibir cualquier versión de la plantilla. Los tombstones marcan `deleted_at` en vez de borrar, para que una visita histórica siga siendo interpretable.
+- (d) **Una definición corrupta en disco se borra** y fuerza un pull completo (`resetCursor`). Una de un dialecto desconocido no se borra: la app pide actualizarse.
+- (e) **Las filas `form_template_version` que no cumplen el contrato se ignoran** sin bloquear el pull, para no envenenar la sincronización de visitas.
+- (f) **Foto, firma y ubicación se capturan fuera del renderer**, a través de `FormMediaDelegate`. El renderer solo guarda el identificador. La captura real y la integración en `CaptureScreen` son el Paso 22.
+
+**Estado de verificación del Paso 17 (backend)**: `pytest server/` **553 passed** (+744 subtests) contra PostgreSQL real (452 antes de este paso: +101 tests nuevos), `ruff check server/` y `mypy server/ --config-file server/pyproject.toml` limpios, `manage.py makemigrations --check --dry-run` sin cambios y `manage.py check` sin incidencias — el paso **no añade ninguna tabla**: `Blob` y `VisitAttachment` ya existían desde el Paso 5. Los comandos de verificación del plan corren de verdad, en `attachments/tests/`: (a) presign de un `sha256` ya existente → `already_present: true`, sin URL y **sin tocar el object storage**; (b) commit con checksum que no coincide con el `HEAD` real → `422 attachment_checksum_mismatch` y el `Blob` **no** se registra (ídem para el tamaño); (c) commit válido → `Blob` creado, y doble commit idempotente devolviendo la misma fila byte a byte. Más: **test de traversal explícito** con 15 familias de entrada hostil (`../`, rutas absolutas POSIX y Windows, UNC, URL-encoding, byte nulo, mayúsculas, longitud incorrecta) contra `bucket_key_for()` y contra la resolución de ruta del adaptador local, comprobando además que no se crea nada en el filesystem; y **test de concurrencia** (`TransactionTestCase` + `ThreadPoolExecutor`) con dos y con ocho commits simultáneos del mismo `sha256`: todos resuelven sin error de constraint, queda **una** fila y **exactamente uno** reporta haberla creado.
 
 **Criterios de salida del Paso 17, uno a uno**: **H-08 mitigado por construcción** — el registro es `bulk_create(ignore_conflicts=True)` (= `INSERT ... ON CONFLICT DO NOTHING`) sobre `sha256`, sin `select_for_update`, y un test comprueba sobre el modelo real que `blob` no tiene **ningún** campo mutable que perder (los cinco campos son los de doc 08 §4.4 y cuatro son `editable=False`); si alguien añadiera un `latest_version`/`estado`/`updated_at`, ese test lo detendría. **H-06/H-21 mitigados** — la única función que compone una ruta es `bucket_key_for()` y solo acepta 64 caracteres `[0-9a-f]`; el nombre de descarga se genera localmente (`{uuid}.{ext}` desde el MIME ya verificado) y el API **no tiene por dónde recibir un nombre de archivo**, porque el contrato no declara ese campo. **H-05 no reproducida** — los bytes nunca pasan por el API (`PUT` directo a URL prefirmada); el servidor solo hace `HEAD` y lee 16 bytes de prefijo para el sniffing, con el stream cerrado en `finally` (verificado por un doble que cuenta cierres).
 

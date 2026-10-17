@@ -1,0 +1,185 @@
+{
+  "_comment": "Casos compartidos por server/visitacampo/forms/tests/test_parity.py y app/test/core/forms/parity_test.dart (Paso 21). Servidor y cliente deben coincidir en qué plantillas son válidas, qué campos son visibles y qué violaciones produce cada respuesta (ADR-012). Un caso nuevo se añade aquí, no en uno de los dos lados.",
+  "valid_definitions": [
+    {
+      "name": "catalogo_completo",
+      "definition": {
+        "dsl": "visitacampo/form@1",
+        "title": {"es": "Inspección de cultivo", "en": "Crop inspection"},
+        "fields": [
+          {"key": "tiene_planta", "type": "boolean", "label": {"es": "¿Hay planta?"}, "required": true},
+          {"key": "altura_cm", "type": "number", "label": {"es": "Altura (cm)"}, "required": true, "min": 0, "max": 500,
+           "visible_if": {"op": "eq", "field": "tiene_planta", "value": true}},
+          {"key": "estado", "type": "single_choice", "label": {"es": "Estado sanitario"},
+           "options": [
+             {"value": "sano", "label": {"es": "Sano"}},
+             {"value": "plaga", "label": {"es": "Con plaga"}},
+             {"value": "muerto", "label": {"es": "Muerto"}}
+           ]},
+          {"key": "plaga_observada", "type": "text", "label": {"es": "¿Qué plaga?"}, "required": true, "max_length": 200,
+           "visible_if": {"op": "in", "field": "estado", "value": ["plaga"]}},
+          {"key": "conteo", "type": "integer", "label": {"es": "Conteo"}, "min": 0, "max": 1000},
+          {"key": "alerta_altura", "type": "text", "label": {"es": "Motivo de la altura"}, "multiline": true,
+           "visible_if": {"op": "and", "operands": [
+             {"op": "gt", "field": "altura_cm", "value": 300},
+             {"op": "ne", "field": "estado", "value": "muerto"}
+           ]}},
+          {"key": "sintomas", "type": "multi_choice", "label": {"es": "Síntomas"}, "max_selected": 2,
+           "options": [
+             {"value": "hojas", "label": {"es": "Hojas"}},
+             {"value": "tallo", "label": {"es": "Tallo"}},
+             {"value": "raiz", "label": {"es": "Raíz"}}
+           ],
+           "visible_if": {"op": "not", "operand": {"op": "is_empty", "field": "estado"}}},
+          {"key": "fecha_siembra", "type": "date", "label": {"es": "Fecha de siembra"}},
+          {"key": "revisado_en", "type": "datetime", "label": {"es": "Revisado en"},
+           "visible_if": {"op": "or", "operands": [
+             {"op": "gte", "field": "fecha_siembra", "value": "2026-01-01"},
+             {"op": "is_not_empty", "field": "conteo"}
+           ]}},
+          {"key": "foto", "type": "photo", "label": {"es": "Foto"}},
+          {"key": "firma", "type": "signature", "label": {"es": "Firma"}, "required": true,
+           "visible_if": {"op": "eq", "field": "tiene_planta", "value": true}},
+          {"key": "ubicacion", "type": "location", "label": {"es": "Ubicación"}}
+        ]
+      },
+      "cases": [
+        {
+          "name": "vacio",
+          "answers": {},
+          "visible": ["tiene_planta", "estado", "conteo", "fecha_siembra", "foto", "ubicacion"],
+          "violations": [["tiene_planta", "required"]]
+        },
+        {
+          "name": "completo_y_valido",
+          "answers": {
+            "tiene_planta": true, "altura_cm": 350, "estado": "plaga", "plaga_observada": "pulgón",
+            "conteo": 3, "alerta_altura": "muy alta", "sintomas": ["hojas"], "fecha_siembra": "2026-03-01",
+            "revisado_en": "2026-03-02T10:00:00-05:00", "foto": "0192f0e2-8a6b-7c3d-9e4f-5a6b7c8d9e0f",
+            "firma": "0192f0e2-8a6b-7c3d-9e4f-5a6b7c8d9e10", "ubicacion": {"lat": 4.6, "lon": -74.08}
+          },
+          "visible": ["tiene_planta", "altura_cm", "estado", "plaga_observada", "conteo", "alerta_altura", "sintomas",
+                      "fecha_siembra", "revisado_en", "foto", "firma", "ubicacion"],
+          "violations": []
+        },
+        {
+          "name": "todo_mal",
+          "answers": {
+            "tiene_planta": true, "altura_cm": 600, "estado": "plaga", "conteo": 2.5,
+            "sintomas": ["hojas", "tallo", "raiz"], "fecha_siembra": "2026-02-30", "revisado_en": "2026-03-02T10:00:00",
+            "foto": "no-es-un-uuid", "ubicacion": {"lat": 95, "lon": 0}, "extra": 1
+          },
+          "visible": ["tiene_planta", "altura_cm", "estado", "plaga_observada", "conteo", "alerta_altura", "sintomas",
+                      "fecha_siembra", "revisado_en", "foto", "firma", "ubicacion"],
+          "violations": [
+            ["extra", "unknown_field"],
+            ["altura_cm", "out_of_range"],
+            ["plaga_observada", "required"],
+            ["conteo", "not_an_integer"],
+            ["sintomas", "too_many_selected"],
+            ["fecha_siembra", "not_a_date"],
+            ["revisado_en", "naive_datetime"],
+            ["foto", "not_a_uuid"],
+            ["firma", "required"],
+            ["ubicacion", "out_of_range"]
+          ]
+        },
+        {
+          "name": "oculto_con_valor_tipado_se_admite_mal_tipado_no",
+          "answers": {"tiene_planta": false, "altura_cm": 3, "estado": "sano", "conteo": "x"},
+          "visible": ["tiene_planta", "estado", "conteo", "sintomas", "fecha_siembra", "revisado_en", "foto", "ubicacion"],
+          "violations": [["conteo", "not_an_integer"]]
+        },
+        {
+          "name": "cero_y_false_no_son_vacio",
+          "answers": {"tiene_planta": false, "conteo": 0},
+          "visible": ["tiene_planta", "estado", "conteo", "fecha_siembra", "revisado_en", "foto", "ubicacion"],
+          "violations": []
+        },
+        {
+          "name": "true_no_es_uno",
+          "answers": {"tiene_planta": 1},
+          "visible": ["tiene_planta", "estado", "conteo", "fecha_siembra", "foto", "ubicacion"],
+          "violations": [["tiene_planta", "not_a_boolean"]]
+        },
+        {
+          "name": "estado_muerto_oculta_alerta",
+          "answers": {"tiene_planta": true, "altura_cm": 400.5, "estado": "muerto", "firma": "0192f0e2-8a6b-7c3d-9e4f-5a6b7c8d9e10"},
+          "visible": ["tiene_planta", "altura_cm", "estado", "conteo", "sintomas", "fecha_siembra", "foto", "firma", "ubicacion"],
+          "violations": []
+        }
+      ]
+    },
+    {
+      "name": "minima_sin_dsl_ni_titulo",
+      "definition": {"fields": [{"key": "nota", "type": "text", "label": {"es": "Nota"}}]},
+      "cases": [
+        {"name": "vacio", "answers": {}, "visible": ["nota"], "violations": []},
+        {"name": "no_es_texto", "answers": {"nota": 7}, "visible": ["nota"], "violations": [["nota", "not_a_string"]]}
+      ]
+    }
+  ],
+  "invalid_definitions": [
+    {"name": "operador_eval", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eval", "code": "__import__('os').system('id')"}}]}},
+    {"name": "operador_system", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "system", "field": "a"}}]}},
+    {"name": "clave_extra_en_expresion", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": true, "exec": "x"}}]}},
+    {"name": "literal_estructurado", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": {"__class__": "x"}}}]}},
+    {"name": "referencia_hacia_delante", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}, "visible_if": {"op": "is_empty", "field": "b"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}}]}},
+    {"name": "referencia_a_si_mismo", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}, "visible_if": {"op": "is_empty", "field": "a"}}]}},
+    {"name": "campo_con_ruta_como_clave", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "is_empty", "field": "__class__.__base__"}}]}},
+    {"name": "tipo_desconocido", "definition": {"fields": [{"key": "a", "type": "script", "label": {"es": "A"}}]}},
+    {"name": "clave_extra_en_campo", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}, "onchange": "alert(1)"}]}},
+    {"name": "regex_no_admitida", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}, "pattern": "^(a+)+$"}]}},
+    {"name": "clave_duplicada", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}},
+      {"key": "a", "type": "boolean", "label": {"es": "A otra vez"}}]}},
+    {"name": "orden_sobre_texto", "definition": {"fields": [
+      {"key": "a", "type": "text", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "gt", "field": "a", "value": "m"}}]}},
+    {"name": "igualdad_sobre_foto", "definition": {"fields": [
+      {"key": "a", "type": "photo", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": "x"}}]}},
+    {"name": "opcion_con_errata", "definition": {"fields": [
+      {"key": "a", "type": "single_choice", "label": {"es": "A"}, "options": [{"value": "aprobado", "label": {"es": "Aprobado"}}]},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": "aprovado"}}]}},
+    {"name": "numero_sobre_booleano", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": 1}}]}},
+    {"name": "dialecto_futuro", "definition": {"dsl": "visitacampo/form@2", "fields": []}},
+    {"name": "expresion_demasiado_profunda", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if":
+        {"op": "not", "operand": {"op": "not", "operand": {"op": "not", "operand": {"op": "not", "operand":
+        {"op": "not", "operand": {"op": "not", "operand": {"op": "eq", "field": "a", "value": true}}}}}}}}]}},
+    {"name": "and_con_un_operando", "definition": {"fields": [
+      {"key": "a", "type": "boolean", "label": {"es": "A"}},
+      {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "and", "operands": [{"op": "eq", "field": "a", "value": true}]}}]}},
+    {"name": "min_mayor_que_max", "definition": {"fields": [
+      {"key": "a", "type": "number", "label": {"es": "A"}, "min": 10, "max": 1}]}},
+    {"name": "etiqueta_vacia", "definition": {"fields": [{"key": "a", "type": "text", "label": {}}]}},
+    {"name": "idioma_invalido", "definition": {"fields": [{"key": "a", "type": "text", "label": {"español": "A"}}]}},
+    {"name": "opcion_con_espacio", "definition": {"fields": [
+      {"key": "a", "type": "single_choice", "label": {"es": "A"}, "options": [{"value": "con espacio", "label": {"es": "X"}}]}]}},
+    {"name": "opciones_duplicadas", "definition": {"fields": [
+      {"key": "a", "type": "single_choice", "label": {"es": "A"}, "options": [
+        {"value": "x", "label": {"es": "X"}}, {"value": "x", "label": {"es": "X2"}}]}]}},
+    {"name": "clave_con_mayusculas", "definition": {"fields": [{"key": "Altura", "type": "text", "label": {"es": "A"}}]}},
+    {"name": "clave_extra_arriba", "definition": {"fields": [], "script": "x"}},
+    {"name": "sin_fields", "definition": {"title": {"es": "Nada"}}}
+  ]
+}
