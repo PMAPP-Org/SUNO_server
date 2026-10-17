@@ -121,6 +121,7 @@ ISO 27001 y lo que falta por cubrir está en
 | Gate | Dónde | Control ISO 27001 |
 |---|---|---|
 | `bandit` (SAST) | `backend.yml` | A.8.28, A.8.29 |
+| `semgrep` (OWASP Top 10, secretos, Docker, Actions) | `security.yml` | A.8.28, A.8.29 |
 | `pip-audit` y `osv-scanner` (CVEs en lockfiles; `osv-scanner` también semanal) | `backend.yml`, `security.yml` | A.8.8 |
 | `gitleaks` sobre todo el historial | `security.yml` | A.8.4, A.8.12 |
 | `check --deploy --fail-level WARNING` contra `config.settings.prod` | `backend.yml` | A.8.9, A.8.31 |
@@ -129,7 +130,11 @@ ISO 27001 y lo que falta por cubrir está en
 
 **Falsos positivos**: se suprimen solo por identificador exacto y con la
 justificación al lado —`# nosec B608` en el código para Bandit, huella exacta
-en `.gitleaksignore` para gitleaks—, nunca desactivando una regla entera.
+en `.gitleaksignore` para gitleaks, `# nosemgrep: <regla>` para Semgrep—, nunca
+desactivando una regla entera. Una vulnerabilidad que se **acepta** (no un
+falso positivo) se registra en
+[`docs/seguridad/excepciones.md`](docs/seguridad/excepciones.md) con fecha
+de caducidad.
 
 **Actions de GitHub**: se referencian por SHA de commit con la versión en un
 comentario (`uses: actions/checkout@<sha> # v7.0.1`); Dependabot actualiza

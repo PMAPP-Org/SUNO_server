@@ -16,6 +16,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | `check --deploy --fail-level WARNING` con `config.settings.prod` | `backend.yml` | PR, `master` | Sí |
 | Bandit (SAST por patrones) | `backend.yml` | PR, `master` | Sí |
 | CodeQL `security-and-quality` (Python + workflows) | `codeql.yml` | PR, `master`, semanal | Sí (alertas en Code scanning) |
+| Semgrep: packs OWASP Top 10, Python, Django, security-audit, secrets, Dockerfile y GitHub Actions | `security.yml` | PR, `master`, semanal | Sí (alertas en Code scanning) |
 | zizmor (seguridad de GitHub Actions) | `backend.yml` | PR, `master` | Sí |
 | hadolint (Dockerfile) | `backend.yml` | PR, `master` | Sí |
 | grype sobre el SBOM de la imagen: CVE altas con parche (paquetes Debian + Python) | `backend.yml` | PR, `master` | Sí |
@@ -67,7 +68,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 ### A05:2025 Injection
 
 - **Controles**: SQL siempre parametrizado (solo identificadores con `quote_name` se interpolan); validación Pydantic v2 en el borde; formularios como DSL declarativo sin `eval` (RD-06, ADR-012).
-- **Pruebas automatizadas**: Bandit (supresiones B608 revisadas, con justificación en el código); CodeQL (flujo de datos fuente→sumidero); ZAP con todas las reglas de inyección en FAIL; test por AST de que `forms/` no usa `eval`/`exec`/`pickle`; tests de expresiones hostiles en plantillas.
+- **Pruebas automatizadas**: Bandit (supresiones B608 revisadas, con justificación en el código); Semgrep `p/owasp-top-ten`; CodeQL (flujo de datos fuente→sumidero); ZAP con todas las reglas de inyección en FAIL; test por AST de que `forms/` no usa `eval`/`exec`/`pickle`; tests de expresiones hostiles en plantillas.
 
 ### A06:2025 Insecure Design
 
@@ -106,8 +107,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 |---|---|
 | A.5.15 Control de acceso | `scoped_qs`, políticas puras, environment `release` para secretos de firma |
 | A.5.32 Derechos de propiedad intelectual | Dependency Review con licencias copyleft denegadas |
-| A.8.4 Acceso al código fuente | gitleaks; pendiente: protección de rama y CODEOWNERS |
-| A.8.8 Gestión de vulnerabilidades técnicas | pip-audit, osv-scanner, grype, Dependency Review, Dependabot, escaneos semanales |
+| A.8.4 Acceso al código fuente | gitleaks; `.github/CODEOWNERS`; pendiente: protección de rama que lo haga obligatorio |
+| A.8.8 Gestión de vulnerabilidades técnicas | pip-audit, osv-scanner, grype, Dependency Review, Dependabot (espera de 7 días), escaneos semanales; excepciones con caducidad en [`excepciones.md`](excepciones.md) |
 | A.8.9 Gestión de la configuración | lockfiles con hashes, digests, SHA de actions, `check --deploy` |
 | A.8.10 Eliminación de información | Periódico `security.purge_logs`, [`retencion.md`](retencion.md) |
 | A.8.12 Prevención de fuga de datos | scrubber RD-12, IP como HMAC, sin backup Android, gitleaks |
@@ -118,7 +119,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | A.8.25 Ciclo de vida de desarrollo seguro | este documento, CONTRIBUTING.md, gates de CI |
 | A.8.26 Requisitos de seguridad de las aplicaciones | RD-01…RD-16 en doc 08 |
 | A.8.27 Arquitectura y principios de ingeniería seguros | ADR-001…013 |
-| A.8.28 Codificación segura | Bandit, CodeQL, zizmor, hadolint, ruff/mypy, `dart analyze` |
+| A.8.28 Codificación segura | Bandit, Semgrep, CodeQL, zizmor, hadolint, ruff/mypy, `dart analyze`; plantilla de PR con checklist de seguridad |
 | A.8.29 Pruebas de seguridad en desarrollo y aceptación | tests de seguridad, DAST (Schemathesis + ZAP), cobertura mínima |
 | A.8.31 Separación de entornos | settings dev/prod; DAST con secretos efímeros; `.env` fuera de git |
 | A.8.32 Gestión de cambios | PR + CI obligatorio, Conventional Commits, release-please con CHANGELOG; pendiente: revisión por una persona distinta del autor exigida por protección de rama |

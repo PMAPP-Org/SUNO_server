@@ -1,0 +1,20 @@
+# Responsables de revisión (ISO 27001 A.8.4 / A.8.32). GitHub pide su
+# revisión automáticamente; cuando la protección de `master` exija "Require
+# review from Code Owners" (issue #5, requiere Admin), su aprobación será
+# obligatoria. Nadie aprueba su propio PR: con dos responsables, cada uno
+# revisa los del otro.
+
+* @Victor-Pulido @gabriel0820gs-dev
+
+# Superficie sensible: cambios aquí afectan a la seguridad de todo el sistema
+# (autenticación, aislamiento entre organizaciones, borde TLS, CI y release,
+# backups y secretos). Mismos responsables, listados aparte para que la regla
+# sobreviva si la de arriba se reparte por áreas.
+/.github/                               @Victor-Pulido @gabriel0820gs-dev
+/infra/                                 @Victor-Pulido @gabriel0820gs-dev
+/server/config/settings/                @Victor-Pulido @gabriel0820gs-dev
+/server/visitacampo/authn/              @Victor-Pulido @gabriel0820gs-dev
+/server/visitacampo/core/scoping.py     @Victor-Pulido @gabriel0820gs-dev
+/server/visitacampo/core/audit.py       @Victor-Pulido @gabriel0820gs-dev
+/app/lib/core/security/                 @Victor-Pulido @gabriel0820gs-dev
+/docs/seguridad/                        @Victor-Pulido @gabriel0820gs-dev
