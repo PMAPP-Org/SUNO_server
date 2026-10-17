@@ -6,7 +6,7 @@
 #
 # La imagen base va fijada por digest (ISO 27001 A.8.9): el tag solo es
 # legible para humanos; Dependabot (ecosistema docker) propone el digest nuevo.
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS build
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS build
 
 WORKDIR /usr/src/app
 
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --require-hashes --prefix=/install -r requirement
 ##########################
 # WEBSERVER RUNTIME      #
 ##########################
-FROM python:3.12-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258 AS webserver_runtime
+FROM python:3.14-slim-bookworm@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83 AS webserver_runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
