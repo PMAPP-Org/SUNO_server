@@ -70,6 +70,11 @@ __all__ = [
 
 
 # --- Identificadores, resueltos contra el modelo ----------------------------
+#
+# Las supresiones B608 de este módulo marcan falsos positivos revisados de
+# Bandit: lo único que se interpola en el texto SQL son identificadores que
+# salen de estas dos funciones (metadatos del modelo + `quote_name`) o los
+# placeholders `%s` de `_active_statuses_sql`; todo valor viaja en `params`.
 
 
 def _col(field_name: str) -> str:
@@ -210,7 +215,7 @@ def enqueue(
         "idempotency_key",
     )
     sql = (
-        f"INSERT INTO {_table()} ({', '.join(_col(name) for name in columns)}) "
+        f"INSERT INTO {_table()} ({', '.join(_col(name) for name in columns)}) "  # nosec B608
         "VALUES (%s, %s, %s, %s, %s::jsonb, 0, %s, %s, NULL, NULL, NULL, NULL, %s, NULL, %s) "
         f"ON CONFLICT ({_col('org')}, {_col('idempotency_key')}) "
         f"WHERE {_col('status')} {condition} DO NOTHING "
@@ -271,7 +276,7 @@ def take(*, worker_id: str, lease_seconds: int, now: datetime | None = None) -> 
     moment = now or timezone.now()
     until = moment + timedelta(seconds=lease_seconds)
     sql = (
-        f"WITH candidate AS ("
+        f"WITH candidate AS ("  # nosec B608
         f" SELECT {_col('id')} FROM {_table()}"
         f" WHERE {_col('status')} = %s"
         f" AND ({_col('run_after')} IS NULL OR {_col('run_after')} <= %s)"
@@ -342,7 +347,7 @@ def heartbeat(
     """
     moment = now or timezone.now()
     sql = (
-        f"UPDATE {_table()} SET {_col('locked_until')} = %s "
+        f"UPDATE {_table()} SET {_col('locked_until')} = %s "  # nosec B608
         f"WHERE {_col('id')} = %s AND {_col('locked_by')} = %s AND {_col('status')} = %s"
     )
     with connection.cursor() as cursor:
@@ -372,7 +377,7 @@ def succeed(
     """
     moment = now or timezone.now()
     sql = (
-        f"UPDATE {_table()} SET {_col('status')} = %s, {_col('output')} = %s::jsonb, "
+        f"UPDATE {_table()} SET {_col('status')} = %s, {_col('output')} = %s::jsonb, "  # nosec B608
         f"{_col('error')} = NULL, {_col('finished_at')} = %s, "
         f"{_col('locked_by')} = NULL, {_col('locked_until')} = NULL "
         f"WHERE {_col('id')} = %s AND {_col('locked_by')} = %s AND {_col('status')} = %s"
@@ -424,7 +429,7 @@ def fail(
     backoff_sql, backoff_params = _backoff_expression()
     exhausted = f"j.{_col('attempts')} >= j.{_col('max_attempts')}"
     sql = (
-        f"UPDATE {_table()} AS j SET "
+        f"UPDATE {_table()} AS j SET "  # nosec B608
         f"{_col('status')} = CASE WHEN {exhausted} THEN %s ELSE %s END, "
         f"{_col('output')} = %s::jsonb, "
         f"{_col('error')} = %s::jsonb, "
@@ -470,7 +475,7 @@ def mark_dead_letter(
     """
     moment = now or timezone.now()
     sql = (
-        f"UPDATE {_table()} SET {_col('status')} = %s, {_col('error')} = %s::jsonb, "
+        f"UPDATE {_table()} SET {_col('status')} = %s, {_col('error')} = %s::jsonb, "  # nosec B608
         f"{_col('finished_at')} = %s, {_col('locked_by')} = NULL, {_col('locked_until')} = NULL "
         f"WHERE {_col('id')} = %s AND {_col('locked_by')} = %s AND {_col('status')} = %s"
     )
@@ -527,7 +532,7 @@ def reap_expired_leases(now: datetime | None = None) -> ReapReport:
     backoff_sql, backoff_params = _backoff_expression()
     exhausted = f"j.{_col('attempts')} >= j.{_col('max_attempts')}"
     sql = (
-        f"UPDATE {_table()} AS j SET "
+        f"UPDATE {_table()} AS j SET "  # nosec B608
         f"{_col('status')} = CASE WHEN {exhausted} THEN %s ELSE %s END, "
         f"{_col('run_after')} = CASE WHEN {exhausted} THEN j.{_col('run_after')} "
         f"ELSE {backoff_sql} END, "
@@ -574,5 +579,5 @@ def organization_ids() -> list[uuid.UUID]:
     table = connection.ops.quote_name(Organization._meta.db_table)
     column = connection.ops.quote_name(Organization._meta.get_field("id").column)
     with connection.cursor() as cursor:
-        cursor.execute(f"SELECT {column} FROM {table} ORDER BY {column}")
+        cursor.execute(f"SELECT {column} FROM {table} ORDER BY {column}")  # nosec B608
         return [row[0] for row in cursor.fetchall()]

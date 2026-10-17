@@ -90,6 +90,10 @@ _INSERT_FIELDS: tuple[str, ...] = (
 )
 
 
+# Las supresiones B608 de este módulo marcan falsos positivos revisados de
+# Bandit: el texto SQL solo interpola lo que devuelven `column()`/`table()`
+# —un nombre de contrato fuera de `_MODEL_FIELD_BY_CONTRACT_NAME` lanza
+# `KeyError` antes de llegar al SQL— y placeholders `%s`; los valores, nunca.
 def column(contract_name: str) -> str:
     """Columna citada de un campo del contrato, resuelta contra `Visit._meta`."""
     field = Visit._meta.get_field(_MODEL_FIELD_BY_CONTRACT_NAME[contract_name])
@@ -157,7 +161,7 @@ def build_insert(
         params.append(param)
 
     sql = (
-        f"INSERT INTO {table()} ({', '.join(columns)}) "
+        f"INSERT INTO {table()} ({', '.join(columns)}) "  # nosec B608
         f"VALUES ({', '.join(placeholders)}) "
         f"ON CONFLICT ({column('id')}) DO NOTHING "
         f"RETURNING {column('version')}, {column('change_seq')}"
@@ -201,7 +205,7 @@ def build_update(
     params.append(change_seq)
 
     sql = (
-        f"UPDATE {table()} SET {', '.join(assignments)} "
+        f"UPDATE {table()} SET {', '.join(assignments)} "  # nosec B608
         f"WHERE {column('id')} = %s AND {column('org_id')} = %s AND {version_col} = %s "
         f"RETURNING {version_col}, {column('change_seq')}"
     )

@@ -548,7 +548,7 @@ def collect_unconfirmed_uploads(
 
     garbage = unconfirmed_sha256(listed, registered, now=moment, max_age=window)
     for entry in garbage:
-        assert entry.sha256 is not None  # garantizado por `unconfirmed_sha256`
+        assert entry.sha256 is not None  # garantizado por `unconfirmed_sha256`  # nosec B101
         blob_store.delete(entry.sha256)
 
     return GarbageCollection(
