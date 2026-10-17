@@ -48,13 +48,33 @@
 		header_up Host {host}
 	}
 
+	# Cabeceras de seguridad: Caddy es el único dueño en el borde. `defer` las
+	# aplica DESPUÉS de recibir la respuesta de Django, así que reemplazan las
+	# que ya pone `SecurityMiddleware` en vez de sumarse: con las dos, HSTS
+	# salía duplicada y con valores distintos (hallazgo de ZAP 10035 en
+	# dast.yml). Los valores coinciden con config/settings/prod.py, que sigue
+	# fijándolos para que `check --deploy` los exija.
 	header {
+		defer
 		# HSTS solo tiene efecto real bajo HTTPS (producción); en dev con
 		# certificado interno o HTTP plano el navegador la ignora o no aplica.
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		# Defensa en profundidad básica; no sustituye la configuración de
-		# seguridad de Django (CSP/permissions-policy se revisan en Paso 25).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		# Sin nombre ni versión del servidor en las respuestas.
+		-Server
+	}
+
+	# La API solo devuelve JSON a la app móvil: ningún navegador debería
+	# ejecutar, enmarcar ni cargar nada desde estas respuestas (ZAP 10038,
+	# 10063, 90004). No se aplica a /admin/, que sí sirve HTML, JS y CSS.
+	@api path /v1/*
+	header @api {
+		defer
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+		Cross-Origin-Resource-Policy "same-origin"
+		Cross-Origin-Opener-Policy "same-origin"
 	}
 
 	log {

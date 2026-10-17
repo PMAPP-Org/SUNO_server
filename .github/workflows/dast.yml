@@ -86,7 +86,9 @@ jobs:
         run: |
           headers="$(curl -sk -D - -o /dev/null https://${DAST_HOST}/v1/healthz)"
           echo "$headers"
-          echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
+          echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000; includeSubDomains; preload'
+          # Una sola: Caddy (con `defer`) reemplaza la de Django, no se suma.
+          test "$(echo "$headers" | grep -ci '^strict-transport-security:')" = 1
           echo "$headers" | grep -qi '^x-content-type-options: nosniff'
           # (`! cmd` no dispara errexit en bash: se comprueba con if.)
           if echo "$headers" | grep -qi '^server: .*[0-9]'; then
