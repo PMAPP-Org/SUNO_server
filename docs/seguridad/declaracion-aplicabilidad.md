@@ -14,7 +14,7 @@
 | 🏢 | Organizacional: aplica, pero se cumple fuera del repositorio (procesos, personas, contratos) y lo debe documentar la organización |
 | ➖ | No aplica (con justificación) |
 
-**Resumen:** de 93 controles, 25 implementados, 34 parciales, 2 pendientes, 29 organizacionales y 3 que no aplican. El código y el CI cubren bien la familia 8 (tecnológicos). Lo que más falta para certificar está en las familias 5 a 7, que son procesos y personas.
+**Resumen:** de 93 controles, 26 implementados, 33 parciales, 2 pendientes, 29 organizacionales y 3 que no aplican. El código y el CI cubren bien la familia 8 (tecnológicos). Lo que más falta para certificar está en las familias 5 a 7, que son procesos y personas.
 
 ## 5. Controles organizacionales
 
@@ -45,7 +45,7 @@
 | 5.23 Seguridad en el uso de servicios en la nube | Sí | 🟡 | R2 con bucket de backups separado y token acotado; VPS con aprovisionamiento endurecido (pendiente). Falta evaluar al proveedor |
 | 5.24 Planificación de la gestión de incidentes | Sí | 🟡 | Procedimiento en [`politicas.md`](politicas.md) §8 (borrador); detección con alertas (ADR-014) e issue `incidente` (uptime.yml) |
 | 5.25 Evaluación de eventos de seguridad | Sí | 🟡 | Clasificación de severidad en [`politicas.md`](politicas.md) §8 |
-| 5.26 Respuesta a incidentes | Sí | 🟡 | Procedimiento en borrador. Faltan los runbooks probados |
+| 5.26 Respuesta a incidentes | Sí | 🟡 | Procedimiento ([`politicas.md`](politicas.md) §8) y runbook por alerta ([`docs/operacion/incidentes.md`](../operacion/incidentes.md)). Falta ensayarlos |
 | 5.27 Aprendizaje de los incidentes | Sí | 🟡 | Post-mortem obligatorio en el procedimiento §8 |
 | 5.28 Recopilación de evidencias | Sí | 🟡 | `AuditEvent` de solo lectura y logs. Falta la cadena de custodia |
 | 5.29 Seguridad durante una interrupción | Sí | 🏢 | Plan de continuidad |
@@ -56,7 +56,7 @@
 | 5.34 Privacidad y protección de datos personales | Sí | 🟡 | IP solo como HMAC, retención definida, sin backup en la nube en Android. Falta el aviso de privacidad en la app y la retención de visitas y fotos |
 | 5.35 Revisión independiente de la seguridad | Sí | 🏢 | Auditoría interna o externa del SGSI |
 | 5.36 Cumplimiento de políticas y normas | Sí | ✅ | Los gates de CI hacen cumplir las políticas técnicas en cada PR ([`owasp-top10-2025.md`](owasp-top10-2025.md)) |
-| 5.37 Procedimientos de operación documentados | Sí | 🟡 | `infra/backup/README.md`, `infra/monitoring/README.md`, CONTRIBUTING. Faltan los runbooks de despliegue, rollback e incidentes |
+| 5.37 Procedimientos de operación documentados | Sí | ✅ | Runbooks en [`docs/operacion/`](../operacion/README.md) (despliegue y rollback, incidentes por alerta, restauración), `infra/backup/README.md`, `infra/monitoring/README.md` |
 
 ## 6. Controles de personas
 
@@ -69,7 +69,7 @@
 | 6.5 Responsabilidades al terminar el empleo | Sí | 🏢 | Revocar los accesos a GitHub, al VPS, a R2 y a Grafana |
 | 6.6 Acuerdos de confidencialidad | Sí | 🏢 | NDA con personal y proveedores |
 | 6.7 Trabajo en remoto | Sí | 🏢 | El acceso al servidor y a los paneles es solo por túnel SSH (`infra/monitoring/README.md`) |
-| 6.8 Notificación de eventos de seguridad | Sí | 🟡 | `SECURITY.md` pendiente; canal interno en [`politicas.md`](politicas.md) §8 |
+| 6.8 Notificación de eventos de seguridad | Sí | 🟡 | [`SECURITY.md`](../../SECURITY.md) (canal externo) y canal interno en [`politicas.md`](politicas.md) §8. Falta que un admin active el reporte privado de vulnerabilidades de GitHub |
 
 ## 7. Controles físicos
 

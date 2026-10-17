@@ -1,7 +1,31 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-08-05 (Paso 17 cerrado — adjuntos backend: puerto `BlobStore`, presign/commit verificado, GC; anterior: 2026-08-04, Paso 20 cerrado — formularios declarativos backend; anterior: 2026-08-03, ajuste: construcción continua sin confirmación por paso + dependencias de Grupo C relajadas + harness engineering — ver [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias), sub-sección "Ajuste 2026-08-03 (continuación 2)")
+**Última actualización**: 2026-10-17 (línea base de seguridad ISO 27001 / OWASP, Paso 19 cerrado, plan de demo completado; ver «Estado al 2026-10-17» abajo. Anterior: 2026-08-05, Paso 17 cerrado)
+
+
+## Estado al 2026-10-17
+
+**Qué cambió desde agosto.** Antes de seguir con los pasos pendientes se paró a dejar el proyecto con buenas prácticas y alineado con ISO/IEC 27001:2022 y OWASP Top 10:2025. Todo está en una **cadena de PR apilados que se integran en orden**, cada uno con el CI en verde salvo *Dependency Review*, que necesita que un admin active el Dependency graph (issue #5):
+
+| PR | Contenido |
+|---|---|
+| #1 | Línea base: CI real (antes Mobile CI fallaba y Backend CI nunca había corrido), CVE corregidas, lockfiles con hashes, gates de seguridad, fuga de `Bearer` en logs corregida |
+| #2 | Traza de auditoría de autenticación; release Android publicable (faltaba `INTERNET`, firmaba con debug) |
+| #4 | CodeQL, DAST (Schemathesis + ZAP) contra el stack de producción, grype, SBOM, releases automáticos con procedencia firmada |
+| #6 | Endurecimiento de prod (`SECRET_KEY`, RD-15, `/admin/` por origen), backups cifrados con simulacro, retención, worker activado, monitoreo (ADR-014) |
+| #7 | Semgrep OWASP, plantilla de PR, CODEOWNERS, CHANGELOG, actionlint |
+| #8 | Sistema de diseño e internacionalización de la app |
+| #9 | Documentación del SGSI (borradores) |
+| este | Runbooks de operación, `SECURITY.md`, este seguimiento |
+
+**Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
+
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento → (2) MFA en el Admin + Paso 15 → (3) aprovisionamiento del VPS + workflow de despliegue → (4) Pasos 21 → 22 → 18 → 23 → 24 → 25. El Paso 14 (checkpoints 14c y 14d en emulador) y el Paso 16 siguen pendientes.
+
+**Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
+
+---
 
 ## Fase actual: construcción de código continua (emulador diferido)
 
@@ -115,7 +139,9 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 - [ ] **Paso 15** — Endurecimiento de autenticación: rotación, detección de reuso, rate limiting
 - [x] **Paso 17** — Adjuntos backend: `BlobStore`, presign/commit, verificación
   `076567e` Añade el carril de adjuntos: BlobStore, presign/commit verificado y GC (Paso 17)
-- [ ] **Paso 19** — Cola de trabajos: `SKIP LOCKED` + lease + heartbeat + reaper
+- [x] **Paso 19** — Cola de trabajos: `SKIP LOCKED` + lease + heartbeat + reaper
+  `3b06073` WIP: cola de trabajos (Paso 19) — commit sin revisión previa
+  Revisado y cerrado en la línea base de seguridad: ruff/mypy y 5 tests que fallaban en el WIP corregidos (PR #1); el worker pasa de placeholder a servicio real en Compose, con re-aseguramiento periódico de los periódicos (bug: una organización creada tras arrancar el worker nunca los recibía) y el periódico nuevo `security.purge_logs` (PR #6). Criterios de salida verificados en CI: `test_kill9` (H-12), `test_toctou` (H-13, con el test endurecido contra intercalados), `test_scrub` (H-17) y el DAST, que comprueba que el worker procesa la cola en el stack de producción. Backups: decididos como tarea de despliegue (`infra/backup/`, con simulacro de restauración en CI), como prevé la tarea 9.
 - [x] **Paso 20** — Formularios declarativos: `form_template` + JSON Schema versionado
   `1268240` Añade formularios declarativos: DSL restringido + meta-schema versionado (Paso 20)
 
@@ -145,8 +171,8 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 2 (Pasos 17, 20) | 11 (Pasos 15–25) |
-| **Total** | **16** | **26** |
+| Fase 1 | 3 (Pasos 17, 19, 20) | 11 (Pasos 15–25) |
+| **Total** | **17** | **26** |
 
 **Estado de verificación del Paso 17 (backend, último paso cerrado)**: `pytest server/` **553 passed** (+744 subtests) contra PostgreSQL real (452 antes de este paso: +101 tests nuevos), `ruff check server/` y `mypy server/ --config-file server/pyproject.toml` limpios, `manage.py makemigrations --check --dry-run` sin cambios y `manage.py check` sin incidencias — el paso **no añade ninguna tabla**: `Blob` y `VisitAttachment` ya existían desde el Paso 5. Los comandos de verificación del plan corren de verdad, en `attachments/tests/`: (a) presign de un `sha256` ya existente → `already_present: true`, sin URL y **sin tocar el object storage**; (b) commit con checksum que no coincide con el `HEAD` real → `422 attachment_checksum_mismatch` y el `Blob` **no** se registra (ídem para el tamaño); (c) commit válido → `Blob` creado, y doble commit idempotente devolviendo la misma fila byte a byte. Más: **test de traversal explícito** con 15 familias de entrada hostil (`../`, rutas absolutas POSIX y Windows, UNC, URL-encoding, byte nulo, mayúsculas, longitud incorrecta) contra `bucket_key_for()` y contra la resolución de ruta del adaptador local, comprobando además que no se crea nada en el filesystem; y **test de concurrencia** (`TransactionTestCase` + `ThreadPoolExecutor`) con dos y con ocho commits simultáneos del mismo `sha256`: todos resuelven sin error de constraint, queda **una** fila y **exactamente uno** reporta haberla creado.
 
