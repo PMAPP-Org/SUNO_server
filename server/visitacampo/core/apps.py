@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.contrib.admin.apps import AdminConfig
 
 
 class CoreConfig(AppConfig):
@@ -21,3 +22,17 @@ class CoreConfig(AppConfig):
     name = "visitacampo.core"
     label = "core"
     verbose_name = "Núcleo VisitaCampo"
+
+
+class OtpAdminConfig(AdminConfig):
+    """Django Admin con segundo factor obligatorio (riesgo R-20, A.8.5).
+
+    Sustituye a `django.contrib.admin` en `INSTALLED_APPS`. `default_site` es la
+    forma documentada por Django de cambiar el sitio por defecto, de modo que
+    `admin.site` **es** un `OTPAdminSite` desde que arranca el proceso: su
+    formulario de login pide usuario, contraseña y código TOTP (o de respaldo),
+    y una sesión sin segundo factor verificado no entra. No hay ajuste para
+    desactivarlo. El alta: `python manage.py enroll_admin_totp <usuario>`.
+    """
+
+    default_site = "visitacampo.core.admin_site.VisitaCampoOTPAdminSite"

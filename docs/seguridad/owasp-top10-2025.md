@@ -52,7 +52,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 - **Controles**: `prod.py` con HSTS, `SECURE_SSL_REDIRECT`, cookies seguras; Caddy sobrescribe `X-Forwarded-*` (RD-15); imagen con usuario no root (UID 10001) y código de solo lectura; Android sin backup ni tráfico en claro.
 - **Pruebas automatizadas**: `check --deploy --fail-level WARNING` contra prod; `dast.yml` verifica HSTS, `nosniff`, ausencia de versión en `Server` y redirección HTTP→HTTPS en el stack real; hadolint; zizmor; ZAP 10035/10021/40040 en FAIL.
 - **Resuelto**: `/admin/` solo desde `CADDY_ADMIN_ALLOWED_IPS` (404 fuera); `USE_X_FORWARDED_HOST=False` (RD-15); `SECRET_KEY` obligatoria y fuerte en prod. Verificado en `dast.yml` y `test_prod_settings.py`.
-- **Pendiente**: MFA en el Admin.
+- **Resuelto también**: MFA obligatorio en el Admin (Paso 15).
 
 ### A03:2025 Software Supply Chain Failures
 
@@ -79,9 +79,9 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 ### A07:2025 Authentication Failures
 
-- **Controles**: bloqueo tras 5 fallos por usuario+IP (django-axes); `401` genérico sin oráculo de enumeración; rotación de refresh con compare-and-set (RD-10); refresh atado al dispositivo; sesión cortada al perder la membresía.
-- **Pruebas automatizadas**: `authn/tests/` (lockout, rotación, robo desde otro dispositivo, logout por dispositivo); Schemathesis `ignored_auth`.
-- **Pendiente**: detección de reuso con revocación de familia (Paso 15); MFA en el back-office.
+- **Controles**: bloqueo tras 5 fallos por usuario+IP (django-axes); rate limiting por IP, token y usuario (`core/ratelimit.py`); `401` genérico y mismo trabajo de hash sin oráculo de enumeración; rotación de refresh con `SELECT FOR UPDATE` y **revocación de la familia ante reuso** (RD-10, Paso 15); refresh atado al dispositivo; sesión cortada al perder la membresía; **MFA obligatorio en el Admin**.
+- **Pruebas automatizadas**: `authn/tests/` (lockout, rotación, reuso y ventana de gracia con concurrencia real, rate limiting, trabajo uniforme del login, logs sin secretos, robo desde otro dispositivo); `core/tests/test_admin_mfa.py` (login real del Admin con TOTP y códigos de respaldo); Schemathesis `ignored_auth`.
+- **Pendiente**: rotación de la llave de firma JWT con dos llaves vivas.
 
 ### A08:2025 Software or Data Integrity Failures
 

@@ -251,6 +251,7 @@ django==5.2.18 \
     #   -r requirements.txt
     #   django-axes
     #   django-ninja
+    #   django-otp
 django-axes==7.0.2 \
     --hash=sha256:893dacce259d39e8cbcff655c61a008b3b827797c2f733f64fd9baf6bc7256e9 \
     --hash=sha256:a96bd6cdca9fbcbd250cf5ce1d92bfc72f2ce64b928804d9802d30a090406c59
@@ -258,6 +259,10 @@ django-axes==7.0.2 \
 django-ninja==1.6.2 \
     --hash=sha256:20095f5900bada22ea00cf1a58af50bdb285b2354c61a9d9b47d0dc89ac462d6 \
     --hash=sha256:d56ae5aa4791068ef4ac9a66cfdf2fc11f507413ded35abb79c51d0d52ad6412
+    # via -r requirements.txt
+django-otp==1.7.5 \
+    --hash=sha256:475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc \
+    --hash=sha256:7f554d21dcd035550c3b8e3f154b1f422fee71fdc75c8a3bf96e42a2ea6dafcc
     # via -r requirements.txt
 gunicorn==23.0.0 \
     --hash=sha256:ec400d38950de4dfd418cff8328b2c8faed0edb0d517d3394e457c317908ca4d \

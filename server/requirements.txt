@@ -61,3 +61,8 @@ django-axes==7.0.2
 # este plan (ver plans/visitacampo-despliegue-demo-implementacion.md, Global
 # Constraints, punto 4).
 whitenoise==6.12.0
+
+# MFA (TOTP + códigos de respaldo) para el back-office de Django Admin
+# (riesgo R-20, ISO 27001 A.8.5). Sin extras: el alta muestra la URI otpauth
+# y el secreto, que cualquier app de autenticación acepta.
+django-otp==1.7.5

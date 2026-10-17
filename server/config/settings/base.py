@@ -31,8 +31,13 @@ ALLOWED_HOSTS: list[str] = []
 
 # --- Apps ----------------------------------------------------------------
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # Admin con MFA obligatorio (OTPAdminSite): ver visitacampo/core/apps.py.
+    "visitacampo.core.apps.OtpAdminConfig",
     "django.contrib.auth",
+    # MFA del back-office (TOTP + códigos de respaldo): ver `ADMIN_REQUIRE_OTP`.
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
@@ -77,6 +82,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -243,6 +249,13 @@ SILENCED_SYSTEM_CHECKS = ["axes.W002"]
 # que atribuirlos y con riesgo de oráculo de enumeración; ver
 # `visitacampo/core/audit.py`). ISO 27001 A.8.15.
 AXES_ENABLE_ACCESS_FAILURE_LOG = True
+
+# --- MFA del back-office (django-otp; riesgo R-20, ISO 27001 A.8.5) ----------
+# Django Admin exige usuario + contraseña + código TOTP (o un código de
+# respaldo) en todos los entornos, desarrollo incluido; lo impone
+# `OtpAdminConfig` (visitacampo/core/apps.py) y no hay ajuste para apagarlo.
+# Alta del segundo factor en el servidor: `python manage.py enroll_admin_totp <usuario>`.
+OTP_TOTP_ISSUER = "VisitaCampo"
 
 # --- Rate limiting de la API (visitacampo/core/ratelimit.py, Paso 15) -------
 # ámbito → (máximo de peticiones, ventana en segundos). Por IP, holgado: una

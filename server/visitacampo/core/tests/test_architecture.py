@@ -74,6 +74,11 @@ ALLOWED = {
     # necesitaría para poder scopear -- no existe todavía ningún `ctx` que
     # pasarle a `scoped_qs` (misma razón que `context.py`/`authn/lookups.py`).
     "visitacampo/management/commands/bootstrap_demo.py": "aprovisionamiento offline, pre-contexto",
+    # Paso 15 (MFA del Admin): `enroll_admin_totp` también es aprovisionamiento
+    # offline, ejecutado en el servidor. Busca al usuario por nombre antes de
+    # que haya contexto, y escribe en las tablas de django-otp, que no tienen
+    # `org_id` (son del back-office, no datos de negocio de un tenant).
+    "visitacampo/management/commands/enroll_admin_totp.py": "alta offline del 2.º factor del Admin",
 }
 
 
@@ -230,6 +235,7 @@ class WalkerTests(SimpleTestCase):
                 "visitacampo/core/context.py",
                 "visitacampo/authn/lookups.py",
                 "visitacampo/management/commands/bootstrap_demo.py",
+                "visitacampo/management/commands/enroll_admin_totp.py",
             },
         )
 

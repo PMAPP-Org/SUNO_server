@@ -69,6 +69,7 @@ class AuditAction:
     REFRESH_REJECTED = "auth.refresh_rejected"
     REFRESH_GRACE_REPLAY = "auth.refresh_grace_replay"
     REFRESH_REUSE_DETECTED = "auth.refresh_reuse_detected"
+    ADMIN_MFA_ENROLLED = "admin.mfa_enrolled"
 
 
 def hash_ip(ip: str | None) -> str | None:
