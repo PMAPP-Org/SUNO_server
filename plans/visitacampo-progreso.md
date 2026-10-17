@@ -162,7 +162,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 ### Móvil
 
 - [ ] **Paso 16** — Autenticación cliente completa: `TrustStore`, TOFU explícito, pinning SPKI
-- [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento
+- [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento (en curso: cola, reintento y streaming hechos en [SUNO_client#3](https://github.com/PMAPP-Org/SUNO_client/pull/3); falta la subida con la app cerrada y su medición en dispositivo)
 - [x] **Paso 21** — Renderer dinámico de formularios en Flutter
 - [x] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma (falta la prueba manual en emulador)
 - [ ] **Paso 23** — UI de conflictos: `quarantine` y reenvío
@@ -187,6 +187,26 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
 | Fase 1 | 6 (Pasos 15, 17, 19, 20, 21, 22) | 11 (Pasos 15–25) |
 | **Total** | **20** | **26** |
+
+**Estado del Paso 18 (móvil, en curso; [SUNO_client#3](https://github.com/PMAPP-Org/SUNO_client/pull/3))**:
+- **Hecho y verificado** (`flutter test` 175 passed, cobertura 84,5 %):
+  - cola de subida con estado persistente (esquema Drift v5, con test de migración v4→v5);
+  - backoff exponencial con jitter, que sobrevive a reiniciar la app;
+  - fallos transitorios separados de los permanentes;
+  - recuperación de subidas interrumpidas;
+  - `PUT` en streaming con el archivo cerrado siempre en `finally`. **H-05 queda mitigado en el cliente**, con un test que cuenta aperturas y cierres, incluido un cliente HTTP que abandona el cuerpo;
+  - planificador en primer plano (al iniciar sesión, al volver a primer plano, cada minuto y al guardar);
+  - independencia del outbox de datos, probada en los dos sentidos: **criterio de salida cumplido**.
+- **Comandos de verificación del plan:** (a) subida correcta → `uploaded`; (b) fallo de red → backoff sin bloquear el resto de la cola; (c) `already_present` → `uploaded` sin subir bytes. Están en `test/core/attachments/` de SUNO_client.
+- **Pendiente para cerrar el paso:**
+  - la subida con la app cerrada o suspendida mucho tiempo (WorkManager en Android, BGTaskScheduler en iOS), que exige un plugin nativo;
+  - la **medición en dispositivo real**, sobre todo en iOS (riesgo de doc 08 §9).
+
+  Sin ellas, la cola se retoma en el siguiente arranque y no se pierde nada.
+- **Decisiones:**
+  - (a) No se envía `visit_id` al presign (es opcional en el contrato). Con él, la cuota por visita exigiría que la visita ya estuviera en el servidor, y eso ataría esta cola al push de datos.
+  - (b) "Sincronizar" fuerza un intento inmediato (ignora el backoff y reintenta las fallidas). Los disparos automáticos respetan el backoff.
+  - (c) 401/403 son transitorios: el token se renueva, y una URL firmada caducada se vuelve a pedir.
 
 **Estado de verificación del Paso 22 (móvil + servidor, último paso cerrado)**:
 - **Pruebas:** `flutter test` **159 passed**, cobertura 83,3 → 83,6 %; `dart analyze` y los tres lints limpios. Servidor: `pytest` completo **715 passed**, `ruff` y `mypy` limpios.
