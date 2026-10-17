@@ -4,6 +4,31 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.3.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* split the server out of the monorepo into SUNO_server
+
+### Agregado
+
+* **admin:** allow disabling admin OTP during development (EXC-003) ([#11](https://github.com/PMAPP-Org/SUNO_server/issues/11)) ([1a36235](https://github.com/PMAPP-Org/SUNO_server/commit/1a36235e6d10a4c35017df3c9442ef1ba1113ce9))
+* **backoffice:** org-scoped Django Admin with review, export and data rights (Paso 24) ([#12](https://github.com/PMAPP-Org/SUNO_server/issues/12)) ([1141f9d](https://github.com/PMAPP-Org/SUNO_server/commit/1141f9d0473bc2eef0f9f41ce19a89309a326b77))
+* offline visit capture with photos and signature (Paso 22) ([#21](https://github.com/PMAPP-Org/SUNO_server/issues/21)) ([8085204](https://github.com/PMAPP-Org/SUNO_server/commit/80852049d2fbe3ad1491ffc91a14dac635766ab8))
+
+
+### Documentación
+
+* **plan:** Paso 18 status (client upload queue, background on device pending) ([#9](https://github.com/PMAPP-Org/SUNO_server/issues/9)) ([fe2d91c](https://github.com/PMAPP-Org/SUNO_server/commit/fe2d91cf570a4d02db54e17978d978d14cc75d31))
+* **plan:** remaining work verified against the code; Paso 23 status ([#10](https://github.com/PMAPP-Org/SUNO_server/issues/10)) ([ec16fb0](https://github.com/PMAPP-Org/SUNO_server/commit/ec16fb066a9a6d545b832272c8c7ce3b2c10ca4c))
+* **sgsi:** point to the transferred issues ([#3](https://github.com/PMAPP-Org/SUNO_server/issues/3) → [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6), [#5](https://github.com/PMAPP-Org/SUNO_server/issues/5) → [#7](https://github.com/PMAPP-Org/SUNO_server/issues/7)) ([#8](https://github.com/PMAPP-Org/SUNO_server/issues/8)) ([256b18b](https://github.com/PMAPP-Org/SUNO_server/commit/256b18b2eb647714bbf42f0fd5185479e8a631cd))
+
+
+### Dependencias y build
+
+* split the server out of the monorepo into SUNO_server ([190dc2f](https://github.com/PMAPP-Org/SUNO_server/commit/190dc2faddb467983ebace636fa58e6549e12ac3))
+
 ## [0.2.0](https://github.com/PMAPP-Org/Seguimiento_Proyectos/compare/v0.1.0...v0.2.0) (2026-10-17)
 
 
