@@ -30,7 +30,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | DAST: cabeceras/HSTS/redirect HTTPS del stack real | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: Schemathesis `not_a_server_error` + `ignored_auth` | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: OWASP ZAP API scan (reglas FAIL en `infra/zap/api-scan-rules.tsv`) | `dast.yml` | PR, `master`, semanal | Sí |
-| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#3](https://github.com/PMAPP-Org/SUNO_server/issues/3) |
+| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6) |
 | Título de PR en Conventional Commits | `pr-title.yml` | PR | Sí |
 | Simulacro de restauración de backup (cifrado age, datos idénticos tras borrar la BD) | `backup.yml` | PR, `master`, semanal | Sí |
 | Monitoreo: `promtool`/`amtool`, pruebas unitarias de alertas, stack + ApiDown de punta a punta | `monitoring.yml` | PR, `master` | Sí |
@@ -75,7 +75,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: modelado de amenazas derivado de una auditoría (doc 07 → RD-01…16) y ADRs con alternativas descartadas; contrato OpenAPI como fuente de verdad (RD-03); plan por pasos con criterios de salida.
 - **Pruebas automatizadas**: Schemathesis contra el contrato (conformidad completa, informativa); tests de concurrencia (CAS, `ON CONFLICT`, advisory locks, kill -9 del worker).
-- **Pendiente**: desviaciones de contrato en [#3](https://github.com/PMAPP-Org/SUNO_server/issues/3).
+- **Pendiente**: desviaciones de contrato en [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6).
 
 ### A07:2025 Authentication Failures
 

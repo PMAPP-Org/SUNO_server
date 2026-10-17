@@ -17,11 +17,11 @@ Documentación del SGSI del proyecto, alineada con ISO/IEC 27001:2022 y OWASP To
 
 ## Estado de cumplimiento, en una frase
 
-Los **controles tecnológicos y de desarrollo** (familia 8 del Anexo A) están implementados y se verifican en cada PR. Lo que falta para un SGSI certificable es **organizacional**: aprobar estos borradores, designar roles, exigir la revisión independiente de cambios (issue #5), evaluar proveedores, formar al equipo y cumplir los pendientes de la Ley 1581.
+Los **controles tecnológicos y de desarrollo** (familia 8 del Anexo A) están implementados y se verifican en cada PR. Lo que falta para un SGSI certificable es **organizacional**: aprobar estos borradores, designar roles, exigir la revisión independiente de cambios (issue #7), evaluar proveedores, formar al equipo y cumplir los pendientes de la Ley 1581.
 
 ## Próximos pasos, por prioridad
 
-1. Rol Admin del repositorio → protección de `master` con aprobación de otra persona (R-17, issue #5).
+1. Rol Admin del repositorio → protección de `master` con aprobación de otra persona (R-17, issue #7).
 2. Aprobación de la dirección: alcance, política general, estos borradores y asignación de roles.
 3. Aviso de privacidad y plazos de conservación de visitas y fotos (R-25).
 4. ~~MFA en el back-office (R-20) y Paso 15 (R-24)~~: implementados.

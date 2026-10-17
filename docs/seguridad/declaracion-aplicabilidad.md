@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 5.1 Políticas de seguridad de la información | Sí | 🟡 | Políticas temáticas de desarrollo y operación en [`politicas.md`](politicas.md) (borrador). Falta la política general aprobada por la dirección |
 | 5.2 Roles y responsabilidades | Sí | ⬜ | Roles definidos en [`politicas.md`](politicas.md) §1, sin personas asignadas. Designación pendiente |
-| 5.3 Segregación de funciones | Sí | 🟡 | CODEOWNERS y "nadie aprueba su propio PR" (plantilla de PR). Falta que la protección de rama lo exija (issue #5) |
+| 5.3 Segregación de funciones | Sí | 🟡 | CODEOWNERS y "nadie aprueba su propio PR" (plantilla de PR). Falta que la protección de rama lo exija (issue #7) |
 | 5.4 Responsabilidades de la dirección | Sí | 🏢 | Aprobación de políticas, recursos y revisión del SGSI |
 | 5.5 Contacto con las autoridades | Sí | 🏢 | SIC (protección de datos, Colombia) y colCERT. Directorio a cargo de la organización |
 | 5.6 Contacto con grupos de interés especial | Sí | 🏢 | Suscripción a avisos de seguridad de Django, Flutter y Python (GitHub Security Advisories vía Dependabot) |
@@ -99,7 +99,7 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | 8.1 Dispositivos finales de usuario | Sí | 🟡 | App: BD cifrada, tokens en almacenamiento seguro, TLS estricto, sin backup ni tráfico en claro. Falta MDM y bloqueo de pantalla obligatorio |
 | 8.2 Derechos de acceso privilegiado | Sí | 🟡 | El Admin exige MFA (TOTP + códigos de respaldo, `OtpAdminConfig`), con alta solo desde el servidor (`enroll_admin_totp`) y auditada; acceso SSH al VPS solo con llave. Falta un inventario de cuentas privilegiadas y su revisión trimestral |
 | 8.3 Restricción del acceso a la información | Sí | ✅ | `scoped_qs` + test de arquitectura (RD-11); `404` para recursos de otra organización (ADR-013) |
-| 8.4 Acceso al código fuente | Sí | 🟡 | CODEOWNERS y gitleaks en todo el historial. Falta la protección de rama (issue #5) y decidir si el repo público debe pasar a privado |
+| 8.4 Acceso al código fuente | Sí | 🟡 | CODEOWNERS y gitleaks en todo el historial. Falta la protección de rama (issue #7) y decidir si el repo público debe pasar a privado |
 | 8.5 Autenticación segura | Sí | ✅ | Bloqueo tras 5 fallos (django-axes); rate limiting por IP, token y usuario en login, refresh y presign; `401` genérico y el mismo trabajo de hash con usuario inexistente o contraseña incorrecta; JWT EdDSA corto; rotación con `SELECT FOR UPDATE` y revocación de la familia ante reuso (RD-10, Paso 15); MFA obligatorio en el Admin |
 | 8.6 Gestión de la capacidad | Sí | 🟡 | Alertas de CPU, memoria y disco (incluida la proyección a 24 h) en `infra/monitoring/`. Falta desplegarlas |
 | 8.7 Protección contra el malware | Sí | 🟡 | Imágenes escaneadas con grype; contenedores sin privilegios y con código de solo lectura. Endpoints del personal a cargo de la organización |
@@ -127,6 +127,6 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | 8.29 Pruebas de seguridad en desarrollo y aceptación | Sí | ✅ | Tests de seguridad, DAST (Schemathesis + ZAP) contra el stack de producción, simulacros de backup y alertas |
 | 8.30 Desarrollo externalizado | Sí | 🟡 | Se usan asistentes de IA para programar: todo cambio pasa por los mismos gates y por revisión humana (pendiente de exigir, 5.3). Reuso de código de terceros solo con licencia compatible (qfieldcloud, MIT) |
 | 8.31 Separación de los entornos | Sí | ✅ | Settings dev y prod separados; el CI usa secretos efímeros de un solo uso; `.env` fuera de git |
-| 8.32 Gestión de cambios | Sí | 🟡 | PR, CI obligatorio, Conventional Commits, CHANGELOG y releases trazables con procedencia firmada; despliegue solo de releases, con la procedencia verificada, backup previo y rollback automático probado en CI (`deploy.yml`, `deploy.sh`). Falta la aprobación independiente obligatoria (issue #5) |
+| 8.32 Gestión de cambios | Sí | 🟡 | PR, CI obligatorio, Conventional Commits, CHANGELOG y releases trazables con procedencia firmada; despliegue solo de releases, con la procedencia verificada, backup previo y rollback automático probado en CI (`deploy.yml`, `deploy.sh`). Falta la aprobación independiente obligatoria (issue #7) |
 | 8.33 Información de prueba | Sí | ✅ | Los tests y el CI usan datos sintéticos; nunca datos de producción |
 | 8.34 Protección durante las pruebas de auditoría | Sí | ✅ | El DAST y los escaneos activos corren contra un stack efímero de CI, nunca contra producción |
