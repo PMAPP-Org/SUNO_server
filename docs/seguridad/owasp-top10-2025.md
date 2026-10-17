@@ -30,6 +30,9 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | DAST: OWASP ZAP API scan (reglas FAIL en `infra/zap/api-scan-rules.tsv`) | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#3](https://github.com/Victor-Pulido/Seguimiento_Proyectos/issues/3) |
 | Título de PR en Conventional Commits | `pr-title.yml` | PR | Sí |
+| Simulacro de restauración de backup (cifrado age, datos idénticos tras borrar la BD) | `backup.yml` | PR, `master`, semanal | Sí |
+| Monitoreo: `promtool`/`amtool`, pruebas unitarias de alertas, stack + ApiDown de punta a punta | `monitoring.yml` | PR, `master` | Sí |
+| Vigilancia externa de producción (abre/cierra issue `incidente`) | `uptime.yml` | cada 15 min | — (inactivo sin `PRODUCTION_URL`) |
 | OpenSSF Scorecard | `scorecard.yml` | `master`, semanal | No (informa) |
 | SBOM (syft, CycloneDX + SPDX) de la imagen y de la app; CycloneDX de los requirements | `backend.yml`, `mobile.yml` | PR, `master` (artefacto, 90 días) | — |
 | SBOM adjuntos a cada release + atestaciones firmadas (procedencia SLSA y SBOM) de la imagen y del APK | `release.yml` | release | — |
@@ -46,7 +49,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: `prod.py` con HSTS, `SECURE_SSL_REDIRECT`, cookies seguras; Caddy sobrescribe `X-Forwarded-*` (RD-15); imagen con usuario no root (UID 10001) y código de solo lectura; Android sin backup ni tráfico en claro.
 - **Pruebas automatizadas**: `check --deploy --fail-level WARNING` contra prod; `dast.yml` verifica HSTS, `nosniff`, ausencia de versión en `Server` y redirección HTTP→HTTPS en el stack real; hadolint; zizmor; ZAP 10035/10021/40040 en FAIL.
-- **Pendiente**: `/admin/` expuesto en el dominio público sin MFA ni restricción de origen; `USE_X_FORWARDED_HOST=True` contradice RD-15 (decidir y documentar).
+- **Resuelto**: `/admin/` solo desde `CADDY_ADMIN_ALLOWED_IPS` (404 fuera); `USE_X_FORWARDED_HOST=False` (RD-15); `SECRET_KEY` obligatoria y fuerte en prod. Verificado en `dast.yml` y `test_prod_settings.py`.
+- **Pendiente**: MFA en el Admin.
 
 ### A03:2025 Software Supply Chain Failures
 
@@ -88,7 +92,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: `AuditEvent` para login, denegación, conflicto de dispositivo, logout y refresh rechazado (`core/audit.py`); `AccessFailureLog` de axes para contraseñas incorrectas; redacción de secretos en logs y en `job.output` (RD-12); traza de solo lectura en el Admin.
 - **Pruebas automatizadas**: `authn/tests/test_audit.py`; `jobs/tests/test_scrub.py` (incluida la regresión `authorization: Bearer`).
-- **Pendiente**: alertas (Sentry / monitor de uptime de ADR-010); política de retención y purga de `AuditEvent` y `AccessFailureLog`.
+- **Alertas y retención**: monitoreo con alertas por correo y vigilancia externa (ADR-014, `infra/monitoring/`); purga automática según [`retencion.md`](retencion.md).
+- **Pendiente**: Sentry para errores de aplicación.
 
 ### A10:2025 Mishandling of Exceptional Conditions
 
@@ -104,8 +109,11 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | A.8.4 Acceso al código fuente | gitleaks; pendiente: protección de rama y CODEOWNERS |
 | A.8.8 Gestión de vulnerabilidades técnicas | pip-audit, osv-scanner, grype, Dependency Review, Dependabot, escaneos semanales |
 | A.8.9 Gestión de la configuración | lockfiles con hashes, digests, SHA de actions, `check --deploy` |
+| A.8.10 Eliminación de información | Periódico `security.purge_logs`, [`retencion.md`](retencion.md) |
 | A.8.12 Prevención de fuga de datos | scrubber RD-12, IP como HMAC, sin backup Android, gitleaks |
+| A.8.13 Copias de seguridad | `infra/backup/` (cifrado age, rotación) + simulacro de restauración `backup.yml` |
 | A.8.15 Registro | `AuditEvent`, `AccessFailureLog`, logs JSON de Caddy |
+| A.8.16 Actividades de monitorización | `infra/monitoring/` (ADR-014) + `uptime.yml`; alertas probadas en `monitoring.yml` |
 | A.8.24 Uso de criptografía | Argon2id, EdDSA, SQLCipher, TLS estricto, firma de releases |
 | A.8.25 Ciclo de vida de desarrollo seguro | este documento, CONTRIBUTING.md, gates de CI |
 | A.8.26 Requisitos de seguridad de las aplicaciones | RD-01…RD-16 en doc 08 |

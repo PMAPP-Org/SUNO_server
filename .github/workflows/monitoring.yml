@@ -1,0 +1,170 @@
+name: Monitoring
+
+# Verifica el monitoreo de salud del servidor (ADR-014, ISO 27001 A.8.16):
+#
+# - static: promtool (config, reglas y sus pruebas unitarias), amtool
+#   (Alertmanager con y sin correo) y el JSON del dashboard.
+# - integration: levanta el stack de producción + monitoreo, comprueba que
+#   todos los targets están `up`, que las sondas de la API pasan con TLS
+#   verificado y que Grafana tiene datasource y dashboard; después DETIENE la
+#   API y exige que la alerta ApiDown dispare y llegue a Alertmanager.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitoring-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROMETHEUS_IMAGE: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+  ALERTMANAGER_IMAGE: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+
+jobs:
+  static:
+    name: promtool + amtool + dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck de los entrypoints
+        run: shellcheck -s sh infra/monitoring/*/entrypoint.sh
+
+      - name: promtool check config + rules + test
+        run: |
+          mkdir -p rendered
+          sed 's|__CADDY_DOMAIN__|api.example.org|g' \
+            infra/monitoring/prometheus/prometheus.yml.tmpl > rendered/prometheus.yml
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/rendered/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            -v "$PWD/infra/monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro" \
+            "$PROMETHEUS_IMAGE" check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool -w /rules \
+            -v "$PWD/infra/monitoring/prometheus:/rules:ro" \
+            "$PROMETHEUS_IMAGE" test rules alerts_test.yml
+
+      - name: amtool check-config (con correo y sin él)
+        run: |
+          sed -e 's|__SMTP_SMARTHOST__|smtp.example.org:587|' \
+              -e 's|__ALERT_EMAIL_FROM__|alertas@example.org|' \
+              -e 's|__SMTP_USERNAME__|alertas|' \
+              -e 's|__SMTP_REQUIRE_TLS__|true|' \
+              -e 's|__ALERT_EMAIL_TO__|ops@example.org|' \
+              infra/monitoring/alertmanager/alertmanager.email.yml.tmpl > rendered/alertmanager.yml
+          for f in rendered/alertmanager.yml infra/monitoring/alertmanager/alertmanager.null.yml; do
+            docker run --rm --entrypoint amtool -v "$PWD/$f:/am.yml:ro" \
+              "$ALERTMANAGER_IMAGE" check-config /am.yml
+          done
+
+      - name: Dashboard JSON válido y con su uid
+        run: |
+          python3 -c "import json; d = json.load(open('infra/monitoring/grafana/dashboards/visitacampo-salud.json')); assert d['uid'] == 'visitacampo-salud' and d['panels']"
+
+  integration:
+    name: stack + monitoreo, y ApiDown dispara de verdad
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DAST_HOST: api.visitacampo.localhost
+      COMPOSE: >-
+        docker compose --project-directory infra --env-file infra/.env
+        -f infra/docker-compose.yml -f infra/docker-compose.monitoring.yml
+        -f infra/ci/docker-compose.monitoring-ci.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Entorno efímero
+        run: |
+          echo "127.0.0.1 ${DAST_HOST}" | sudo tee -a /etc/hosts
+          bash infra/scripts/ci_dast_env.sh > /dev/null
+          # El bundle de CA se completa cuando Caddy haya generado su CA.
+          cp /etc/ssl/certs/ca-certificates.crt .ci-ca-bundle.crt
+
+      - name: Stack de la aplicación
+        run: |
+          $COMPOSE up -d --build db api worker caddy
+          for _ in $(seq 1 60); do
+            curl -sfk "https://${DAST_HOST}/v1/healthz" > /dev/null && exit 0
+            sleep 2
+          done
+          $COMPOSE logs api caddy; exit 1
+
+      - name: Blackbox confía en la CA interna de Caddy (solo CI)
+        run: |
+          $COMPOSE exec -T caddy cat /data/caddy/pki/authorities/local/root.crt >> .ci-ca-bundle.crt
+          grep -c 'BEGIN CERTIFICATE' .ci-ca-bundle.crt
+
+      - name: Monitoreo
+        run: $COMPOSE up -d prometheus alertmanager blackbox node-exporter postgres-exporter grafana
+
+      - name: Todos los targets up y las sondas de la API en verde
+        run: |
+          check() {
+            python3 - <<'PY'
+          import json, sys, urllib.request
+          def q(path):
+              return json.load(urllib.request.urlopen("http://127.0.0.1:9090" + path, timeout=5))["data"]
+          targets = q("/api/v1/targets")["activeTargets"]
+          down = [f'{t["labels"]["job"]}: {t.get("lastError") or t["health"]}' for t in targets if t["health"] != "up"]
+          probes = q('/api/v1/query?query=probe_success%7Bjob%3D%22api-probe%22%7D')["result"]
+          ok = {r["metric"]["endpoint"]: r["value"][1] for r in probes}
+          print("targets caídos:", down, "| sondas:", ok)
+          sys.exit(0 if not down and len(targets) >= 7 and ok == {"healthz": "1", "readyz": "1"} else 1)
+          PY
+          }
+          for _ in $(seq 1 40); do check && exit 0; sleep 5; done
+          exit 1
+
+      - name: Certificado verificado y reglas cargadas
+        run: |
+          python3 - <<'PY'
+          import json, time, urllib.request
+          def q(path):
+              return json.load(urllib.request.urlopen("http://127.0.0.1:9090" + path, timeout=5))["data"]
+          exp = q("/api/v1/query?query=probe_ssl_earliest_cert_expiry")["result"]
+          assert exp and float(exp[0]["value"][1]) > time.time(), exp
+          rules = [r for g in q("/api/v1/rules")["groups"] for r in g["rules"]]
+          assert len(rules) == 14, len(rules)
+          print("certificado caduca:", time.ctime(float(exp[0]["value"][1])), "| reglas:", len(rules))
+          PY
+
+      - name: Grafana con datasource y dashboard provisionados
+        run: |
+          . infra/.env
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:3000/api/health && break; sleep 2; done
+          curl -sf -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
+            http://127.0.0.1:3000/api/datasources/uid/prometheus/health | grep -q '"status":"OK"'
+          curl -sf -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
+            http://127.0.0.1:3000/api/dashboards/uid/visitacampo-salud > /dev/null
+          # Sin credenciales, nada.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/dashboards/uid/visitacampo-salud)" = 401
+
+      - name: Se detiene la API → ApiDown llega a Alertmanager
+        run: |
+          $COMPOSE stop api
+          for _ in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:9093/api/v2/alerts | python3 -c \
+                "import json,sys; sys.exit(0 if any(a['labels']['alertname']=='ApiDown' for a in json.load(sys.stdin)) else 1)"; then
+              echo "ApiDown recibida por Alertmanager"; exit 0
+            fi
+            sleep 5
+          done
+          echo "ApiDown no llegó a Alertmanager en 5 minutos"; exit 1
+
+      - name: Logs (si algo falló)
+        if: failure()
+        run: $COMPOSE logs --no-color prometheus alertmanager blackbox caddy api | tail -300
+
+      - name: Bajar
+        if: always()
+        run: $COMPOSE down -v

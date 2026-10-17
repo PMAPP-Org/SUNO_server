@@ -1,0 +1,32 @@
+# Alertmanager con aviso por correo (ADR-014). Plantilla: el contenedor
+# sustituye los __MARCADORES__ al arrancar (docker-compose.monitoring.yml).
+# Reutiliza el SMTP de la app (EMAIL_HOST/PORT/USER/USE_TLS en .env); la
+# contraseña se lee de un archivo efímero del contenedor, no queda escrita aquí.
+global:
+  smtp_smarthost: "__SMTP_SMARTHOST__"
+  smtp_from: "__ALERT_EMAIL_FROM__"
+  smtp_auth_username: "__SMTP_USERNAME__"
+  smtp_auth_password_file: /tmp/alertmanager-smtp-password
+  smtp_require_tls: __SMTP_REQUIRE_TLS__
+
+route:
+  receiver: email
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: email
+      repeat_interval: 1h
+
+receivers:
+  - name: email
+    email_configs:
+      - to: "__ALERT_EMAIL_TO__"
+        send_resolved: true
+
+# Mientras la API está caída, no avisar además de que está lenta o no lista.
+inhibit_rules:
+  - source_matchers: [alertname="ApiDown"]
+    target_matchers: [alertname=~"ApiSlow|ApiNotReady"]

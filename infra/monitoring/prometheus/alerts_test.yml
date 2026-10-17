@@ -1,0 +1,164 @@
+# Pruebas unitarias de alerts.yml: `promtool test rules alerts_test.yml` (CI,
+# .github/workflows/monitoring.yml). Cada caso comprueba que la alerta salta
+# cuando debe y NO antes (el `for:` cuenta).
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: ApiDown salta tras 2 minutos sin respuesta, no antes
+    interval: 1m
+    input_series:
+      - series: 'probe_success{job="api-probe", endpoint="healthz", instance="https://api.example/v1/healthz"}'
+        values: "1 1 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ApiDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: api-probe
+              endpoint: healthz
+              instance: https://api.example/v1/healthz
+            exp_annotations:
+              summary: "La API no responde (https://api.example/v1/healthz)"
+              description: "/v1/healthz falla desde hace 2 minutos: el proceso, Caddy o TLS están caídos."
+
+  - name: ApiNotReady espera 5 minutos (un reinicio de PostgreSQL no despierta a nadie)
+    interval: 1m
+    input_series:
+      - series: 'probe_success{job="api-probe", endpoint="readyz", instance="https://api.example/v1/readyz"}'
+        values: "0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ApiNotReady
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ApiNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: api-probe
+              endpoint: readyz
+              instance: https://api.example/v1/readyz
+            exp_annotations:
+              summary: "La API no está lista (https://api.example/v1/readyz)"
+              description: "/v1/readyz falla desde hace 5 minutos: la API no llega a PostgreSQL o al almacenamiento de adjuntos."
+
+  - name: Certificado a 10 días de caducar → warning, no critical
+    interval: 1m
+    input_series:
+      # Caduca en t = 2h + 10d: a las 2 h de evaluación quedan exactamente 10 días.
+      - series: 'probe_ssl_earliest_cert_expiry{job="api-probe", endpoint="healthz", instance="https://api.example/v1/healthz"}'
+        values: "871200+0x130"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: TlsCertExpiringSoon
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: api-probe
+              endpoint: healthz
+              instance: https://api.example/v1/healthz
+            exp_annotations:
+              summary: "El certificado TLS caduca en 10d 0h 0m 0s"
+              description: "Caddy renueva solo a 30 días del vencimiento: si quedan menos de 14, la renovación ACME está fallando."
+      - eval_time: 2h
+        alertname: TlsCertExpiryCritical
+        exp_alerts: []
+
+  - name: BackupStale a las 27 h del último backup, no a las 25 h
+    interval: 1m
+    input_series:
+      - series: 'visitacampo_backup_last_success_timestamp_seconds{job="node", instance="node-exporter:9100"}'
+        values: "0+0x1700"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: BackupStale
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupStale
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: node
+              instance: node-exporter:9100
+            exp_annotations:
+              summary: "No hay un backup correcto desde hace 1d 3h 0m 0s"
+              description: "El último backup correcto es de hace más de 26 h (se esperan cada 24 h). Revisar `docker compose logs backup`."
+
+  - name: BackupMissing si node-exporter funciona pero nunca hubo backup
+    # Muestras por minuto (el scrape real es cada 30 s): con muestras horarias
+    # la serie "desaparece" entre una y otra (lookback de 5 min) y el `for`
+    # se reiniciaría.
+    interval: 1m
+    input_series:
+      - series: 'up{job="node", instance="node-exporter:9100"}'
+        values: "1+0x1700"
+    alert_rule_test:
+      - eval_time: 20h
+        alertname: BackupMissing
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: BackupMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "No existe ningún backup"
+              description: "node-exporter funciona pero el servicio backup nunca ha publicado un backup correcto. ¿Falta BACKUP_AGE_RECIPIENT?"
+
+  - name: Disco con 10 % libre
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node", instance="node-exporter:9100", mountpoint="/", fstype="ext4", device="/dev/sda1"}'
+        values: "10+0x20"
+      - series: 'node_filesystem_size_bytes{job="node", instance="node-exporter:9100", mountpoint="/", fstype="ext4", device="/dev/sda1"}'
+        values: "100+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HostDiskAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: node
+              instance: node-exporter:9100
+              mountpoint: /
+              fstype: ext4
+              device: /dev/sda1
+            exp_annotations:
+              summary: "Disco / con menos del 15 % libre"
+              description: "Quedan 10%."
+
+  - name: Los tmpfs no cuentan como disco
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node", instance="node-exporter:9100", mountpoint="/run", fstype="tmpfs", device="tmpfs"}'
+        values: "1+0x20"
+      - series: 'node_filesystem_size_bytes{job="node", instance="node-exporter:9100", mountpoint="/run", fstype="tmpfs", device="tmpfs"}'
+        values: "100+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: HostDiskAlmostFull
+        exp_alerts: []
+
+  - name: PostgresDown en 1 minuto
+    interval: 1m
+    input_series:
+      - series: 'pg_up{job="postgres", instance="postgres-exporter:9187"}'
+        values: "1 0 0 0"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PostgresDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: postgres
+              instance: postgres-exporter:9187
+            exp_annotations:
+              summary: "PostgreSQL no responde"
+              description: "postgres-exporter no puede conectar con la base de datos."

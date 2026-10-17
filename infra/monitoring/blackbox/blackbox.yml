@@ -1,0 +1,15 @@
+# Módulos de blackbox_exporter (ADR-014). La sonda verifica el certificado
+# de verdad (sin insecure_skip_verify): un certificado caducado o inválido
+# es una caída para la app móvil, que tampoco acepta certificados inválidos
+# (RD-01), así que tiene que serlo también para el monitoreo.
+modules:
+  https_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_not_ssl: true
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: false

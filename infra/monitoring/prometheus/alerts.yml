@@ -1,0 +1,143 @@
+# Alertas de salud del servidor (ADR-014, ISO 27001 A.8.16). Cada regla
+# tiene prueba unitaria en alerts_test.yml (`promtool test rules`, en CI).
+# Severidad: `critical` = el servicio está caído o a punto de perder datos;
+# `warning` = degradación que hay que atender en horario.
+groups:
+  - name: visitacampo-api
+    rules:
+      - alert: ApiDown
+        expr: probe_success{job="api-probe", endpoint="healthz"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API no responde ({{ $labels.instance }})"
+          description: "/v1/healthz falla desde hace 2 minutos: el proceso, Caddy o TLS están caídos."
+
+      - alert: ApiNotReady
+        expr: probe_success{job="api-probe", endpoint="readyz"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API no está lista ({{ $labels.instance }})"
+          description: "/v1/readyz falla desde hace 5 minutos: la API no llega a PostgreSQL o al almacenamiento de adjuntos."
+
+      - alert: ApiSlow
+        expr: probe_duration_seconds{job="api-probe"} > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La API responde lento ({{ $value | humanizeDuration }})"
+          description: "{{ $labels.instance }} tarda más de 2 s desde hace 10 minutos."
+
+      - alert: TlsCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry{job="api-probe"} - time() < 14 * 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "El certificado TLS caduca en {{ $value | humanizeDuration }}"
+          description: "Caddy renueva solo a 30 días del vencimiento: si quedan menos de 14, la renovación ACME está fallando."
+
+      - alert: TlsCertExpiryCritical
+        expr: probe_ssl_earliest_cert_expiry{job="api-probe"} - time() < 3 * 86400
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "El certificado TLS caduca en menos de 3 días"
+          description: "Revisar los logs de Caddy (ACME) y el DNS del dominio."
+
+  - name: visitacampo-backup
+    rules:
+      - alert: BackupStale
+        expr: time() - visitacampo_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No hay un backup correcto desde hace {{ $value | humanizeDuration }}"
+          description: "El último backup correcto es de hace más de 26 h (se esperan cada 24 h). Revisar `docker compose logs backup`."
+
+      - alert: BackupMissing
+        expr: absent(visitacampo_backup_last_success_timestamp_seconds) and on() up{job="node"} == 1
+        for: 26h
+        labels:
+          severity: critical
+        annotations:
+          summary: "No existe ningún backup"
+          description: "node-exporter funciona pero el servicio backup nunca ha publicado un backup correcto. ¿Falta BACKUP_AGE_RECIPIENT?"
+
+  - name: visitacampo-host
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus no puede leer {{ $labels.job }}"
+          description: "{{ $labels.instance }} no responde desde hace 5 minutos: se está perdiendo visibilidad."
+
+      - alert: HostCpuHigh
+        expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU por encima del 90 % ({{ $value | humanizePercentage }})"
+          description: "Sostenido 15 minutos."
+
+      - alert: HostMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memoria disponible por debajo del 10 % ({{ $value | humanizePercentage }})"
+          description: "Riesgo de que el kernel mate procesos (OOM killer)."
+
+      - alert: HostDiskAlmostFull
+        expr: >-
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disco {{ $labels.mountpoint }} con menos del 15 % libre"
+          description: "Quedan {{ $value | humanizePercentage }}."
+
+      - alert: HostDiskWillFillIn24h
+        expr: >-
+          predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}[6h], 24 * 3600) < 0
+          and node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.40
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "El disco {{ $labels.mountpoint }} se llenará en menos de 24 h"
+          description: "Proyección lineal de las últimas 6 h. PostgreSQL deja de escribir con el disco lleno."
+
+  - name: visitacampo-postgres
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL no responde"
+          description: "postgres-exporter no puede conectar con la base de datos."
+
+      - alert: PostgresTooManyConnections
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL al {{ $value | humanizePercentage }} de conexiones"
+          description: "Cerca de max_connections: nuevas peticiones de la API pueden fallar."

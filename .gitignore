@@ -75,3 +75,6 @@ zap/
 .ci-backups/
 age-identity.txt
 wrong-identity.txt
+# CI del monitoreo (.github/workflows/monitoring.yml)
+.ci-ca-bundle.crt
+rendered/
