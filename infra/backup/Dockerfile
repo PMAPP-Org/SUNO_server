@@ -3,7 +3,7 @@
 # Misma imagen base que el servicio `db` (mismo digest): `pg_dump` y
 # `pg_restore` tienen que ser de la misma versión mayor que el servidor.
 # Encima: `age` (cifrado con llave pública) y `rclone` (subida S3/R2).
-FROM postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+FROM postgres:18@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends age rclone ca-certificates \
