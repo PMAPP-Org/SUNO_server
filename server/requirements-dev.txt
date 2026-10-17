@@ -1,8 +1,14 @@
 # VisitaCampo backend — dependencias de desarrollo/CI (Paso 4).
-# ruff/mypy/pytest ya los instala .github/workflows/backend.yml e
-# infra/scripts/ci_local.sh directamente (Paso 3); este archivo documenta
-# las versiones usadas para desarrollar y verificar este paso localmente.
+# Fuente editable a mano; lo que instalan CI y los desarrolladores es
+# `requirements-dev.lock` (versiones exactas + hashes de todo el árbol), que
+# se regenera con el comando de la cabecera de ese archivo.
 -r requirements.txt
 ruff==0.16.1
 mypy==2.3.0
 pytest==9.1.1
+
+# Gates de seguridad de CI (ISO 27001 A.8.8 / A.8.28 / A.8.29):
+# SAST, auditoría de dependencias contra advisories y SBOM CycloneDX.
+bandit==1.9.4
+pip-audit==2.10.1
+cyclonedx-bom==7.5.0

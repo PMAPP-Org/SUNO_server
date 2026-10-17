@@ -1,0 +1,11 @@
+# Falsos positivos revisados de gitleaks (ISO 27001 A.8.12), uno por huella
+# exacta `commit:archivo:regla:línea`. Una huella solo cubre esa aparición:
+# un secreto nuevo en el mismo archivo vuelve a fallar el CI.
+#
+# Nombre de la entrada de secure storage, no la clave de cifrado.
+169694afcc3335dd32a1ffa9d22f134b4d3d611d:app/lib/data/local/encryption_key_store.dart:generic-api-key:26
+# Fixture de test del scrubber: el valor que se comprueba que NO se filtra.
+3b06073ee57a6dec96fdd6209c42bbba680e5f5e:server/visitacampo/jobs/tests/test_scrub.py:generic-api-key:53
+# Placeholders CAMBIAR_EN_PRODUCCION_* de la plantilla de entorno.
+d16443fb69af7302ab0ec5a8cf6a1ee81ff5a367:infra/.env.example:generic-api-key:46
+d16443fb69af7302ab0ec5a8cf6a1ee81ff5a367:infra/.env.example:generic-api-key:56
