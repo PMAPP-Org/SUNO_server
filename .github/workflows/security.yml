@@ -1,9 +1,9 @@
 name: Security
 
-# Gates de seguridad transversales al monorepo (línea base ISO 27001):
+# Gates de seguridad del repositorio del servidor (línea base ISO 27001):
 # - gitleaks: secretos en todo el historial de git (A.8.4, A.8.12).
-# - osv-scanner: vulnerabilidades conocidas en los lockfiles de app/ y
-#   server/ (A.8.8). Corre también cada semana: una dependencia que no
+# - osv-scanner: vulnerabilidades conocidas en los lockfiles de server/
+#   (A.8.8). Corre también cada semana: una dependencia que no
 #   cambia puede volverse vulnerable porque se publica un advisory nuevo.
 # - semgrep: SAST multi-lenguaje con las reglas OWASP Top 10 y las de
 #   Python/Django, auditoría de seguridad, secretos, Dockerfile y GitHub
@@ -84,7 +84,6 @@ jobs:
         run: |
           # Excepciones con caducidad: osv-scanner.toml (docs/seguridad/excepciones.md).
           ./osv-scanner scan source --config=osv-scanner.toml \
-            -L app/pubspec.lock \
             -L requirements.txt:server/requirements.lock \
             -L requirements.txt:server/requirements-dev.lock \
             -L requirements.txt:server/requirements-dast.lock \
@@ -109,9 +108,7 @@ jobs:
         run: python -m pip install --require-hashes -r server/requirements-sast.lock
 
       # Las reglas de los packs p/… se descargan del registro de Semgrep en
-      # cada ejecución: así entran reglas nuevas sin tocar este archivo. La
-      # app Flutter queda fuera: Semgrep no tiene reglas de seguridad para
-      # Dart; la cubren `dart analyze`, el lint RD-01 y los tests.
+      # cada ejecución: así entran reglas nuevas sin tocar este archivo.
       # Falsos positivos revisados: `# nosemgrep: <regla>` junto al código,
       # con su justificación. Nunca se desactiva un pack entero.
       - name: semgrep scan
@@ -120,7 +117,7 @@ jobs:
             --config=p/owasp-top-ten --config=p/python --config=p/django \
             --config=p/security-audit --config=p/secrets \
             --config=p/dockerfile --config=p/github-actions \
-            --exclude='*/tests/*' --exclude='*/migrations/*' --exclude=app/ \
+            --exclude='*/tests/*' --exclude='*/migrations/*' \
             --sarif --output=semgrep.sarif \
             .
 

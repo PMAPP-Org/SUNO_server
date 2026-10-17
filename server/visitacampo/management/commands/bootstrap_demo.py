@@ -8,7 +8,7 @@ desplegado no tiene ninguna `Organization`, ningún `AppUser`, ninguna
 filas, `POST /v1/auth/login` (`authn/services.py::log_in`) falla siempre con
 un `401 invalid_credentials` sin explicación (no hay usuario con el que
 autenticar), y aunque lo hubiera, la pantalla de captura
-(`app/lib/features/capture/capture_screen.dart`) exige pegar el UUID de una
+(la pantalla de captura de PMAPP-Org/SUNO_client) exige pegar el UUID de una
 `FormTemplateVersion` que tampoco existiría (Decisión de diseño 7 del plan:
 "el operador del demo siembra una plantilla vía Django Admin antes de la
 prueba"). `core/models/tenancy.py` ya dejaba anotado que este comando

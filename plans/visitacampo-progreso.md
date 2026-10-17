@@ -21,7 +21,16 @@
 | #11 | MFA obligatorio en el Admin; Paso 15 (rotación con detección de reutilización) y límites de tasa en la API |
 | #12 | Aprovisionamiento endurecido del VPS y despliegue automático con verificación de procedencia y rollback, ambos probados en CI |
 | #13 | Paso 21: renderer dinámico de formularios en Flutter, con paridad servidor ↔ cliente comprobada por un fixture común |
-| este | Paso 22: captura de visita completa offline (formulario, GPS, fotos, firma) y alta de `visit_attachment` en el push |
+| #21 | Paso 22: captura de visita completa offline (formulario, GPS, fotos, firma) y alta de `visit_attachment` en el push |
+
+**Separación en dos repositorios (2026-10-17, tras v0.2.0):** el monorepo `PMAPP-Org/Seguimiento_Proyectos` queda archivado. El trabajo sigue en dos repositorios, cada uno con su historial y con la misma línea base de CI, seguridad, plantillas, Dependabot y release-please:
+
+| Repositorio | Contenido | Pasos del plan |
+|---|---|---|
+| [PMAPP-Org/SUNO_server](https://github.com/PMAPP-Org/SUNO_server) (este) | `server/`, `infra/`, `docs/` (incluido el SGSI), `plans/` | backend, infraestructura e integración (24, 25 y la parte de servidor de cada paso) |
+| [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client) | la app Flutter en la raíz; `contract/` con la copia fijada del contrato; `tool/` con sus lints | carril móvil (14, 16, 18, 23) |
+
+Las rutas `app/…` que citan los pasos anteriores corresponden ahora a la raíz de SUNO_client (`app/lib/…` → `lib/…`, `infra/scripts/lint_*.sh` → `tool/lint_*.sh`). Los dos repositorios se versionan por separado. La compatibilidad entre ellos la dan el contrato (`contract.yml` en el cliente) y la negociación de `schema_version` en `/v1/server/info`.
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #5); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 

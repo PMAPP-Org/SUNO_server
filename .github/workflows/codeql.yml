@@ -7,8 +7,8 @@ name: CodeQL
 # path traversal y SSRF (A01) reales. Los resultados van a Security → Code
 # scanning. ISO 27001 A.8.28, A.8.29.
 #
-# Dart no está soportado por CodeQL; la app la cubren `dart analyze`, el
-# lint RD-01 y los tests.
+# La app Flutter vive en PMAPP-Org/SUNO_client (Dart no está soportado por
+# CodeQL; allí la cubren `dart analyze`, sus lints y los tests).
 
 on:
   push:

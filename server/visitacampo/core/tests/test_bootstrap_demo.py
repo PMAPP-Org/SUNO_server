@@ -4,7 +4,7 @@ Verifica lo que un operador de un VPS recién desplegado necesita que sea
 cierto: el comando crea una `Organization`, un `AppUser` con `Membership`
 `FIELD_AGENT`, y una `FormTemplateVersion` publicada cuya `definition` acepta
 `altura_cm`/`notas` -- los mismos dos campos que
-`app/lib/features/capture/capture_screen.dart` envía en `answers`. También
+la pantalla de captura de PMAPP-Org/SUNO_client envía en `answers`. También
 que el comando es seguro de correr dos veces (falla en vez de duplicar) y que
 nunca hardcodea una contraseña real cuando no se le pasa una.
 """

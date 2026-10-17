@@ -1,7 +1,7 @@
 <!--
 El TÍTULO de este PR será el mensaje del commit en master (Squash and merge)
 y de él sale el CHANGELOG: usa Conventional Commits, p. ej.
-  feat(server): …   fix(app): …   feat!: … (rompe compatibilidad)
+  feat(sync): …   fix(admin): …   feat!: … (rompe compatibilidad)
 -->
 
 ## Qué cambia y por qué
@@ -18,7 +18,7 @@ y de él sale el CHANGELOG: usa Conventional Commits, p. ej.
 - [ ] El CI está en verde, o lo que falla está explicado aquí y no es de este cambio.
 - [ ] Los tests nuevos o cambiados cubren el comportamiento, incluido el caso de error (la cobertura no baja del suelo de `server/pyproject.toml`).
 - [ ] Si cambia un `requirements*.txt`: regeneré su `.lock` con el comando de su cabecera.
-- [ ] Si cambia el contrato de la API: `server/openapi/v1.yaml` está actualizado en el mismo PR.
+- [ ] Si cambia el contrato de la API: `server/openapi/v1.yaml` (y `fixtures/` si aplica) está actualizado en el mismo PR, y hay un issue o PR en [SUNO_client](https://github.com/PMAPP-Org/SUNO_client) para actualizar su `contract/`.
 
 **Seguridad** ([`docs/seguridad/owasp-top10-2025.md`](../docs/seguridad/owasp-top10-2025.md))
 - [ ] Sin secretos, tokens ni llaves en el código, los tests ni el historial: vienen de variables de entorno o del environment `release`.
@@ -33,7 +33,7 @@ y de él sale el CHANGELOG: usa Conventional Commits, p. ej.
 **Despliegue**
 - [ ] Si hay migraciones: se pueden aplicar con la versión anterior aún corriendo, o se explica aquí la ventana necesaria.
 - [ ] Si hay variables de entorno nuevas: están en `infra/.env.example` (y `check_envvars.sh` pasa).
-- [ ] Si rompe compatibilidad con la app ya instalada o con datos existentes: el título lleva `!` y se explica la migración.
+- [ ] Si rompe compatibilidad con la app ya instalada (SUNO_client) o con datos existentes: el título lleva `!` y se explica la migración.
 
 ## Para quien revisa
 

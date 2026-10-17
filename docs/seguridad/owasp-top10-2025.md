@@ -10,10 +10,10 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 | Gate | Workflow | Cuándo | Bloquea |
 |---|---|---|---|
-| ruff, mypy, `dart analyze` | `backend.yml`, `mobile.yml` | PR, `master` | Sí |
+| ruff, mypy, `dart analyze` | `backend.yml`; `mobile.yml` de SUNO_client | PR, `master` | Sí |
 | pytest contra PostgreSQL real + cobertura de ramas ≥ 90 % | `backend.yml` | PR, `master` | Sí |
-| `flutter test` + cobertura de líneas ≥ 75 % | `mobile.yml` | PR, `master` | Sí |
-| Sistema de diseño de la app: sin colores, estilos, medidas ni textos sueltos en pantallas | `mobile.yml` (`lint_ui_tokens.sh`) | PR, `master` | Sí |
+| `flutter test` + cobertura de líneas ≥ 75 % | `mobile.yml` de SUNO_client | PR, `master` | Sí |
+| Sistema de diseño de la app: sin colores, estilos, medidas ni textos sueltos en pantallas | `mobile.yml` de SUNO_client (`tool/lint_ui_tokens.sh`) | PR, `master` | Sí |
 | `check --deploy --fail-level WARNING` con `config.settings.prod` | `backend.yml` | PR, `master` | Sí |
 | Bandit (SAST por patrones) | `backend.yml` | PR, `master` | Sí |
 | CodeQL `security-and-quality` (Python + workflows) | `codeql.yml` | PR, `master`, semanal | Sí (alertas en Code scanning) |
@@ -25,18 +25,18 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | Dependency Review: CVE ≥ moderada o licencia copyleft en dependencias nuevas | `dependency-review.yml` | PR | Sí |
 | Lockfiles coherentes con sus fuentes | `backend.yml` | PR, `master` | Sí |
 | gitleaks sobre todo el historial | `security.yml` | PR, `master`, semanal | Sí |
-| Lint anti-bypass TLS (RD-01) | `mobile.yml` | PR, `master` | Sí |
-| APK release firmado (no debug) y con `INTERNET` | `mobile.yml` | PR, `master` | Sí |
+| Lint anti-bypass TLS (RD-01) | `mobile.yml` de SUNO_client | PR, `master` | Sí |
+| APK release firmado (no debug) y con `INTERNET` | `mobile.yml` de SUNO_client | PR, `master` | Sí |
 | DAST: cabeceras/HSTS/redirect HTTPS del stack real | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: Schemathesis `not_a_server_error` + `ignored_auth` | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: OWASP ZAP API scan (reglas FAIL en `infra/zap/api-scan-rules.tsv`) | `dast.yml` | PR, `master`, semanal | Sí |
-| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#3](https://github.com/PMAPP-Org/Seguimiento_Proyectos/issues/3) |
+| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#3](https://github.com/PMAPP-Org/SUNO_server/issues/3) |
 | Título de PR en Conventional Commits | `pr-title.yml` | PR | Sí |
 | Simulacro de restauración de backup (cifrado age, datos idénticos tras borrar la BD) | `backup.yml` | PR, `master`, semanal | Sí |
 | Monitoreo: `promtool`/`amtool`, pruebas unitarias de alertas, stack + ApiDown de punta a punta | `monitoring.yml` | PR, `master` | Sí |
 | Vigilancia externa de producción (abre/cierra issue `incidente`) | `uptime.yml` | cada 15 min | — (inactivo sin `PRODUCTION_URL`) |
 | OpenSSF Scorecard | `scorecard.yml` | `master`, semanal | No (informa) |
-| SBOM (syft, CycloneDX + SPDX) de la imagen y de la app; CycloneDX de los requirements | `backend.yml`, `mobile.yml` | PR, `master` (artefacto, 90 días) | — |
+| SBOM (syft, CycloneDX + SPDX) de la imagen y de la app; CycloneDX de los requirements | `backend.yml`; `mobile.yml` de SUNO_client | PR, `master` (artefacto, 90 días) | — |
 | SBOM adjuntos a cada release + atestaciones firmadas (procedencia SLSA y SBOM) de la imagen y del APK | `release.yml` | release | — |
 
 ## Por categoría
@@ -75,7 +75,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: modelado de amenazas derivado de una auditoría (doc 07 → RD-01…16) y ADRs con alternativas descartadas; contrato OpenAPI como fuente de verdad (RD-03); plan por pasos con criterios de salida.
 - **Pruebas automatizadas**: Schemathesis contra el contrato (conformidad completa, informativa); tests de concurrencia (CAS, `ON CONFLICT`, advisory locks, kill -9 del worker).
-- **Pendiente**: desviaciones de contrato en [#3](https://github.com/PMAPP-Org/Seguimiento_Proyectos/issues/3).
+- **Pendiente**: desviaciones de contrato en [#3](https://github.com/PMAPP-Org/SUNO_server/issues/3).
 
 ### A07:2025 Authentication Failures
 
@@ -87,7 +87,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: releases con atestación de procedencia SLSA y SBOM firmadas con Sigstore (`release.yml`); APK firmado con llave de subida fuera del repo; adjuntos inmutables direccionados por contenido con checksum certificado por el object storage (RD-08, ADR-007); sync con CAS por versión.
 - **Pruebas automatizadas**: job `android-release` (firma no debug); tests de presign/commit con checksum incorrecto; tests de idempotencia y conflicto del `SyncEngine`.
-- **Verificación manual de un artefacto**: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api:<versión> --repo PMAPP-Org/Seguimiento_Proyectos`.
+- **Verificación manual de un artefacto**: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api:<versión> --repo PMAPP-Org/SUNO_server`.
 - **Pendiente**: protección de rama en `master` (revisión obligatoria + checks requeridos).
 
 ### A09:2025 Security Logging and Alerting Failures
@@ -124,3 +124,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | A.8.29 Pruebas de seguridad en desarrollo y aceptación | tests de seguridad, DAST (Schemathesis + ZAP), cobertura mínima |
 | A.8.31 Separación de entornos | settings dev/prod; DAST con secretos efímeros; `.env` fuera de git |
 | A.8.32 Gestión de cambios | PR + CI obligatorio, Conventional Commits, release-please con CHANGELOG; pendiente: revisión por una persona distinta del autor exigida por protección de rama |
+
+## Repositorios
+
+Desde la separación del monorepo, los gates viven en dos repositorios con la misma línea base: [PMAPP-Org/SUNO_server](https://github.com/PMAPP-Org/SUNO_server) (este: API, panel de administración, infraestructura y este SGSI) y [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client) (la app). Los gates comunes —gitleaks, osv-scanner, Semgrep, actionlint, CodeQL, Dependency Review, Scorecard, título de PR, Dependabot y release-please con procedencia firmada— corren en los dos. El contrato que los une se comprueba en `contract.yml` de SUNO_client.

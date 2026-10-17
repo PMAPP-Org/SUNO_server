@@ -3,7 +3,7 @@ name: Dependency Review
 # Bloquea un PR que **introduce** una dependencia con vulnerabilidad conocida
 # o con una licencia copyleft fuerte (OWASP A03:2025; ISO 27001 A.8.8 y
 # A.5.32 derechos de propiedad intelectual). Mira solo el diff de
-# dependencias del PR (pubspec.lock, requirements*.lock, actions), así que es
+# dependencias del PR (requirements*.lock, actions), así que es
 # complementario a osv-scanner, que escanea todo el árbol.
 #
 # Licencias: docs/08 §3 ya descartó reutilizar código GPL de QField para no

@@ -1,5 +1,5 @@
 {
-  "_comment": "Casos compartidos por server/visitacampo/forms/tests/test_parity.py y app/test/core/forms/parity_test.dart (Paso 21). Servidor y cliente deben coincidir en qué plantillas son válidas, qué campos son visibles y qué violaciones produce cada respuesta (ADR-012). Un caso nuevo se añade aquí, no en uno de los dos lados.",
+  "_comment": "Casos compartidos por server/visitacampo/forms/tests/test_parity.py y PMAPP-Org/SUNO_client: test/core/forms/parity_test.dart, que los lee de su copia fijada en contract/ (Paso 21). Servidor y cliente deben coincidir en qué plantillas son válidas, qué campos son visibles y qué violaciones produce cada respuesta (ADR-012). Un caso nuevo se añade aquí y luego se actualiza la copia del cliente.",
   "valid_definitions": [
     {
       "name": "catalogo_completo",

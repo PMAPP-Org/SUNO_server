@@ -13,7 +13,9 @@ definición de **RD-03** ("validación con OpenAPI 3.1 + JSON Schema, en ambos e
 
 ## Fixtures compartidos
 
-`fixtures/forms_parity.json` contiene los casos del DSL de formularios (ADR-012) que ejecutan **a la vez** el servidor (`visitacampo/forms/tests/test_parity.py`) y la app (`app/test/core/forms/parity_test.dart`). Recoge qué plantillas son válidas, qué campos se ven con cada respuesta y qué violaciones produce cada una. Un caso nuevo se añade aquí, nunca en uno solo de los dos lados.
+`fixtures/forms_parity.json` contiene los casos del DSL de formularios (ADR-012) que ejecutan **a la vez** el servidor (`visitacampo/forms/tests/test_parity.py`) y la app ([PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client), `test/core/forms/parity_test.dart`). Recoge qué plantillas son válidas, qué campos se ven con cada respuesta y qué violaciones produce cada una. Un caso nuevo se añade aquí, nunca en uno solo de los dos lados.
+
+**La app usa una copia fijada** de `v1.yaml` y `fixtures/` en su carpeta `contract/`, con el commit de este repositorio del que sale (`contract/SOURCE`). Su workflow `contract.yml` falla si la copia difiere de ese commit y avisa cuando `master` de este repositorio cambia el contrato. Por eso un cambio del contrato aquí lleva siempre un PR en PMAPP-Org/SUNO_client que actualice su copia ([`contract/README.md`](https://github.com/PMAPP-Org/SUNO_client/blob/master/contract/README.md)).
 
 ## Verificación
 
@@ -39,7 +41,7 @@ contrato** en CI compara el OpenAPI que Ninja **exporta** con `v1.yaml` y falla 
 deriva.
 
 **Decisión — cliente**: los modelos Dart (`freezed` + `json_serializable`) se **escriben a mano**
-en `app/`, y un **test de contrato en Dart puro** (Paso 12) valida fixtures de request/response
+en la app (SUNO_client), y un **test de contrato en Dart puro** (Paso 12) valida fixtures de request/response
 contra los JSON Schemas extraídos de `v1.yaml`, sin emulador ni red.
 
 En ambos extremos: **contrato → código a mano → deriva detectada automáticamente**. No hay
@@ -64,8 +66,8 @@ resto.
 | Test | Dónde | Paso | Qué falla si hay deriva |
 |---|---|---|---|
 | OpenAPI exportado por Ninja ≡ `v1.yaml` (comparación normalizada de `paths` + `components.schemas`) | `server/` (pytest) | 4–9 | Un campo añadido/renombrado/eliminado en un `Schema` de Ninja que no esté en el contrato. |
-| Fixtures JSON válidos contra los JSON Schemas de `v1.yaml` | `server/` (pytest) y `app/` (test Dart puro) | 9 / 12 | Un modelo Dart o Pydantic que serializa algo que el contrato rechaza. |
-| Round-trip Dart: `fromJson(toJson(x)) == x` sobre fixtures del contrato | `app/` | 12 | Pérdida de campos en la serialización del cliente. |
+| Fixtures JSON válidos contra los JSON Schemas de `v1.yaml` | `server/` (pytest) y SUNO_client (test Dart puro) | 9 / 12 | Un modelo Dart o Pydantic que serializa algo que el contrato rechaza. |
+| Round-trip Dart: `fromJson(toJson(x)) == x` sobre fixtures del contrato | SUNO_client | 12 | Pérdida de campos en la serialización del cliente. |
 | Sintaxis OpenAPI 3.1 (`openapi-spec-validator`) | CI | 1 (aquí) | Cualquier edición que rompa el contrato. |
 
 Los fixtures compartidos por ambos extremos viven en `server/openapi/fixtures/` (se crean en el

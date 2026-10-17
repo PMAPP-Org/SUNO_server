@@ -776,7 +776,7 @@ QField permite plugins **QML dinámicos** con permisos por plugin ([01 §5](01-a
 
 Contratos y esqueleto antes que funcionalidad.
 
-- Repositorio monorepo: `app/` (Flutter), `server/` (Django), `docs/`, `infra/`.
+- Repositorio monorepo: `app/` (Flutter), `server/` (Django), `docs/`, `infra/`. **Actualización (2026-10-17):** separado en dos repositorios con su historial, [PMAPP-Org/SUNO_server](https://github.com/PMAPP-Org/SUNO_server) (`server/`, `infra/`, `docs/`, `plans/`) y [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client) (la app en la raíz, más una copia fijada del contrato en `contract/`). El monorepo `PMAPP-Org/Seguimiento_Proyectos` queda archivado.
 - Contrato OpenAPI 3.1 de `/v1/sync/*` y `/v1/auth/*` **escrito primero**, con esquemas Pydantic; generación de modelos Dart desde el contrato.
 - Migración inicial con `org_id` en todas las tablas (ADR-011) y `version`/`change_seq`/`deleted_at`.
 - Esqueleto de `SyncEngine` con outbox y **tests de dominio en Dart puro** (sin emulador): idempotencia, backoff, conflicto, cursor expirado.

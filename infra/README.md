@@ -126,7 +126,7 @@ docker compose down -v   # limpia también los volúmenes (¡destruye datos loca
 ## CI (Paso 3): `ci_local.sh` y el lint RD-01
 
 Desde el **Paso 3** existe un gate de CI (`.github/workflows/backend.yml` +
-`.github/workflows/mobile.yml`) que cubre `server/`, `app/`,
+más los de seguridad) que cubre `server/`,
 `check_envvars.sh` y el lint anti-TLS-bypass RD-01/ADR-009. Sin remoto de
 GitHub configurado en este entorno, el equivalente ejecutable localmente es:
 
@@ -147,4 +147,3 @@ posterior del plan se considera completo si su propio job de CI no pasa.**
 | Postgres arranca y acepta conexiones | `docker compose up db` → `docker compose exec db pg_isready -U $POSTGRES_USER` |
 | `.env.example` completo / detecta variables faltantes | `bash infra/scripts/check_envvars.sh` (ver sección anterior) |
 | Pipeline de CI completo (Paso 3) contra el estado actual del repo | `bash infra/scripts/ci_local.sh` |
-| Lint anti-TLS-bypass (RD-01) de forma aislada | `bash infra/scripts/lint_no_tls_bypass.sh` |

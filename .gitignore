@@ -1,29 +1,5 @@
-# === VisitaCampo — .gitignore raíz del monorepo ===
-# Cubre app/ (Flutter), server/ (Django), infra/ (Docker) y artefactos comunes.
-# Decisión (Paso 0): los archivos generados por build_runner (*.g.dart, *.freezed.dart, etc.)
-# NO se versionan por defecto — se regeneran con `flutter pub run build_runner build`.
-# Si algún paso posterior necesita versionar un .g.dart puntual, se debe excepcionar
-# explícitamente aquí con `!ruta/al/archivo.g.dart` y documentar el motivo.
-
-# --- Flutter / Dart (app/) ---
-app/build/
-app/.dart_tool/
-app/.flutter-plugins
-app/.flutter-plugins-dependencies
-app/.packages
-app/.pub-cache/
-app/.pub/
-app/*.iml
-**/*.g.dart
-**/*.freezed.dart
-**/*.mocks.dart
-app/android/local.properties
-app/android/**/gradle-wrapper.jar
-app/android/.gradle/
-app/ios/Pods/
-app/ios/.symlinks/
-app/ios/Flutter/Flutter.framework
-app/ios/Flutter/Flutter.podspec
+# === SUNO_server — .gitignore ===
+# Cubre server/ (Django), infra/ (Docker) y artefactos de calidad y DAST.
 
 # --- Python / Django (server/) ---
 server/**/__pycache__/
@@ -66,7 +42,6 @@ Thumbs.db
 # --- Artefactos de calidad / DAST (CI y local) ---
 .coverage
 coverage*.xml
-app/coverage/
 .schemathesis/
 reports/
 zap/
@@ -79,7 +54,4 @@ wrong-identity.txt
 .ci-ca-bundle.crt
 rendered/
 
-# Textos generados por flutter gen-l10n desde app/lib/l10n/*.arb (se regeneran
-# en cada `flutter pub get`, igual que los *.g.dart con build_runner).
-app/lib/l10n/app_localizations*.dart
 .deploy-state

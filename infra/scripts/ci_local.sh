@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # VisitaCampo — ejecuta localmente el mismo conjunto de checks que
-# .github/workflows/backend.yml + mobile.yml (Paso 3 del plan), sin
+# .github/workflows/backend.yml (Paso 3 del plan), sin
 # depender de tener un remoto de GitHub configurado. Ver CONTRIBUTING.md /
 # infra/README.md: ningún paso posterior del plan se considera completo si
 # su propio job de CI no pasa, y este script es la forma de comprobarlo
@@ -8,16 +8,16 @@
 # desarrollo, sin `gh` ni remoto configurado).
 #
 # Comportamiento de cada check:
-#   - Si el árbol de código correspondiente todavía no existe (server/,
-#     app/ son placeholders hasta los Pasos 4/10) → SKIP informativo, no
+#   - Si el árbol de código correspondiente todavía no existe (server/ era
+#     un placeholder hasta el Paso 4) → SKIP informativo, no
 #     fallo ("0 archivos que lintar no es un fallo", criterio del brief).
 #   - Si el árbol de código existe pero la herramienta (ruff/mypy/pytest/
-#     dart/flutter) no está instalada en este entorno → SKIP informativo,
+#     bandit/pip-audit) no está instalada en este entorno → SKIP informativo,
 #     documentado como "no verificado localmente, pendiente de un entorno
 #     con el toolchain instalado o de la ejecución real en GitHub Actions".
-#   - El lint RD-01 (anti-TLS-bypass) y check_envvars.sh SIEMPRE se
-#     ejecutan de verdad: no dependen de ningún toolchain externo, solo de
-#     bash/grep, así que no hay excusa para omitirlos.
+#   - check_envvars.sh SIEMPRE se ejecuta de verdad: no depende de ningún
+#     toolchain externo, solo de bash/grep.
+#   - La app (Flutter) tiene sus propios checks en PMAPP-Org/SUNO_client.
 #
 # Uso: bash infra/scripts/ci_local.sh
 # Exit: 0 si todo lo que se ejecutó (no lo omitido) pasó; 1 si algo falló.
@@ -60,8 +60,6 @@ skip() {
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 has_py_files() { find server -name '*.py' -not -path '*/.venv/*' 2>/dev/null | grep -q .; }
 has_py_tests() { find server \( -name 'test_*.py' -o -name '*_test.py' \) 2>/dev/null | grep -q .; }
-has_dart_files() { find app -name '*.dart' 2>/dev/null | grep -q .; }
-has_dart_tests() { find app/test -name '*_test.dart' 2>/dev/null | grep -q .; }
 
 # --- Backend (server/) --------------------------------------------------
 section "Backend (server/) — ruff check"
@@ -156,53 +154,6 @@ else
 	else
 		fail "manage.py makemigrations --check --dry-run"
 	fi
-fi
-
-# --- Mobile (app/) --------------------------------------------------------
-section "Mobile (app/) — dart analyze"
-if ! has_dart_files; then
-	skip "dart analyze app/" "app/ todavía no tiene archivos .dart (Paso 10)"
-elif ! command_exists dart; then
-	skip "dart analyze app/" "dart no está instalado en este entorno"
-# Igual que mobile.yml: el código generado no se versiona, así que se
-# genera antes de analizar.
-elif (cd app && dart run build_runner build --delete-conflicting-outputs) && dart analyze app/; then
-	pass "dart analyze app/"
-else
-	fail "dart analyze app/"
-fi
-
-section "Mobile (app/) — flutter test"
-if ! has_dart_tests; then
-	skip "flutter test app/" "app/ todavía no tiene tests (Paso 10+)"
-elif ! command_exists flutter; then
-	skip "flutter test app/" "flutter no está instalado en este entorno"
-elif (cd app && flutter test --concurrency=1); then
-	pass "flutter test app/"
-else
-	fail "flutter test app/"
-fi
-
-# --- Gates que SIEMPRE se ejecutan de verdad (solo bash/grep) -----------
-section "RD-01 — lint anti-TLS-bypass (ADR-009, siempre se ejecuta)"
-if bash "$SCRIPT_DIR/lint_no_tls_bypass.sh"; then
-	pass "lint_no_tls_bypass.sh"
-else
-	fail "lint_no_tls_bypass.sh"
-fi
-
-section "Mobile (app/) — sistema de diseño (lint_ui_tokens.sh, siempre se ejecuta)"
-if bash "$SCRIPT_DIR/lint_ui_tokens.sh"; then
-	pass "lint_ui_tokens.sh"
-else
-	fail "lint_ui_tokens.sh"
-fi
-
-section "Mobile (app/) — sin ejecución dinámica de código (lint_no_dynamic_code.sh, siempre se ejecuta)"
-if bash "$SCRIPT_DIR/lint_no_dynamic_code.sh"; then
-	pass "lint_no_dynamic_code.sh"
-else
-	fail "lint_no_dynamic_code.sh"
 fi
 
 section "infra/.env.example — check_envvars.sh (auto-chequeo, patrón de CI)"

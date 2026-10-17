@@ -1,61 +1,62 @@
-# VisitaCampo
+# SUNO_server
 
-VisitaCampo es una aplicación offline-first de seguimiento de visitas de campo, compuesta por un cliente móvil Flutter y un backend Django.
+Backend de VisitaCampo, la aplicación offline-first de seguimiento de visitas de campo. Contiene:
+- la **API** v1 de sincronización, autenticación y adjuntos (Django 5 + Django Ninja);
+- el **panel de administración** (Django Admin con MFA obligatorio);
+- la **infraestructura** de despliegue: Docker Compose, Caddy, backups cifrados, monitoreo, aprovisionamiento del VPS y despliegue con rollback.
+
+La app móvil (Flutter) está en [`PMAPP-Org/SUNO_client`](https://github.com/PMAPP-Org/SUNO_client).
 
 ## Fuente de verdad
 
-La arquitectura propuesta para este proyecto está documentada en [`docs/08-arquitectura-propuesta-visitacampo.md`](docs/08-arquitectura-propuesta-visitacampo.md). Ante cualquier duda de diseño o implementación, ese documento (y el resto de `docs/`) prevalece sobre supuestos ad-hoc.
+- **Arquitectura:** [`docs/08-arquitectura-propuesta-visitacampo.md`](docs/08-arquitectura-propuesta-visitacampo.md). Ante cualquier duda de diseño, ese documento (y el resto de `docs/`) prevalece sobre supuestos ad hoc.
+- **Contrato de la API:** [`server/openapi/v1.yaml`](server/openapi/v1.yaml), más los casos de paridad de formularios en `server/openapi/fixtures/`. La app usa una copia fijada en su `contract/` ([`server/openapi/README.md`](server/openapi/README.md)).
+- **Plan de construcción y su seguimiento:** [`plans/`](plans/).
+- **SGSI ISO 27001** de todo el sistema (app incluida): [`docs/seguridad/`](docs/seguridad/README.md).
+- **Runbooks de operación:** [`docs/operacion/`](docs/operacion/README.md).
 
-El plan de construcción paso a paso vive en [`plans/visitacampo-construccion.md`](plans/visitacampo-construccion.md).
-
-## Estructura del monorepo
+## Estructura
 
 ```
-VisitaCampo/
-├── app/     # Cliente Flutter (se inicializa en el Paso 10 del plan)
-├── server/  # Backend Django (se inicializa en el Paso 4 del plan)
-│   └── openapi/  # Contrato de API v1 (OpenAPI 3.1) — fuente de verdad de ambos extremos
-├── infra/   # Docker Compose, Caddy, scripts de despliegue — ver infra/README.md (Paso 2)
-├── docs/    # Documentos de arquitectura (ya existentes)
-└── plans/   # Plan de construcción (ya existente)
+SUNO_server/
+├── server/   # Django: API (Ninja), panel de administración, worker de la cola
+│   └── openapi/  # Contrato de API v1 (OpenAPI 3.1) y fixtures compartidos con la app
+├── infra/    # Docker Compose, Caddy, backups, monitoreo, aprovisionamiento y despliegue
+├── docs/     # Arquitectura, SGSI (seguridad/) y runbooks (operacion/)
+└── plans/    # Plan de construcción y seguimiento
 ```
 
 ## Comandos de verificación
-
-Conjunto acumulativo; cada paso del plan añade los suyos.
 
 | Qué verifica | Comando |
 |---|---|
 | Sintaxis del contrato de API (OpenAPI 3.1) | `python -m openapi_spec_validator server/openapi/v1.yaml` |
 | YAML de Docker Compose válido (base + override dev) | `docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.dev.yml config` |
 | `.env` completo respecto a `.env.example` | `bash infra/scripts/check_envvars.sh` |
-| Pipeline de CI completo (backend + mobile + gates), local o vía GitHub Actions | `bash infra/scripts/ci_local.sh` (local) / `.github/workflows/backend.yml` + `mobile.yml` (Actions) |
-| Lint anti-TLS-bypass (RD-01, ADR-009) | `bash infra/scripts/lint_no_tls_bypass.sh` |
-
-Requiere `python -m pip install openapi-spec-validator` (se integrará en las dependencias de CI
-en el Paso 4). Detalles del contrato y su estrategia de generación de código en
-[`server/openapi/README.md`](server/openapi/README.md).
+| Pipeline de CI del backend en local | `bash infra/scripts/ci_local.sh` |
 
 ## Entorno local
 
-El entorno local (Docker Compose, servicios, variables de entorno) se define en `infra/` — ver
-[`infra/README.md`](infra/README.md) para instrucciones de arranque, la selección de overrides vía
-`COMPOSE_FILE` y el estado de los servicios `api`/`worker` (placeholders hasta los Pasos 4 y 19).
+El entorno local (Docker Compose, servicios y variables de entorno) se define en `infra/`. Ver [`infra/README.md`](infra/README.md) para arrancarlo y para elegir los overrides con `COMPOSE_FILE`.
 
-## CI y gates de calidad/seguridad
+## CI y gates de calidad y seguridad
 
-Desde el Paso 3 existe un gate de CI (`.github/workflows/backend.yml`,
-`.github/workflows/mobile.yml`) que incluye, entre otros, el lint anti-TLS-bypass
-**RD-01** (ADR-009). Ver [`CONTRIBUTING.md`](CONTRIBUTING.md) para la regla
-completa: **ningún paso posterior de este plan se considera completo si su
-propio job de CI no pasa**, y cómo ejecutar el pipeline localmente
-(`bash infra/scripts/ci_local.sh`) mientras el repositorio no tenga remoto en
-GitHub.
+Cada PR pasa:
+- **Backend:** ruff, mypy, pytest (cobertura ≥90 %), `check --deploy`, migraciones, Bandit y pip-audit.
+- **Dinámicas:** DAST con Schemathesis y OWASP ZAP contra el stack de producción, y el simulacro de backup → borrado → restauración.
+- **Monitoreo e infraestructura:** pruebas del monitoreo y, cuando cambia `infra/`, de `provision.sh` y `deploy.sh`.
+- **Comunes:** gitleaks, osv-scanner, Semgrep (OWASP Top 10), CodeQL, actionlint, Dependency Review y Scorecard.
+
+La regla completa está en [`CONTRIBUTING.md`](CONTRIBUTING.md): **ningún paso del plan está completo si su CI no pasa**. La correspondencia con OWASP Top 10:2025 e ISO 27001 está en [`docs/seguridad/owasp-top10-2025.md`](docs/seguridad/owasp-top10-2025.md).
+
+## Releases y despliegue
+
+release-please versiona a partir de Conventional Commits. Cada release publica la imagen `ghcr.io/<owner>/visitacampo-api` con SBOM y atestación de procedencia, y `deploy.yml` la despliega en producción si el environment `production` está configurado ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)).
 
 ## Convención de commits
 
-Los commits que llegan a `master` siguen [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix(server):`, `ci:`…): de ellos salen la versión, el tag y el CHANGELOG de cada release (ver [CONTRIBUTING.md](CONTRIBUTING.md#releases-tags-y-versiones-automáticos)). Los PR se integran con *Squash and merge* y `pr-title.yml` exige el formato en el título. Además:
+Los commits de `master` siguen [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix(sync):`, `ci:`…). De ellos salen la versión, el tag y el CHANGELOG de cada release ([`CONTRIBUTING.md`](CONTRIBUTING.md#releases-tags-y-versiones-automáticos)). Los PR se integran con *Squash and merge*, y `pr-title.yml` exige el formato en el título.
 
-- Mensajes de commit descriptivos, en modo imperativo, que expliquen el **qué** y —cuando no sea obvio— el **porqué**.
-- Como mínimo, un commit por paso completado del plan de construcción (`plans/visitacampo-construccion.md`), de forma que el historial de git refleje el avance del plan.
-- Los commits pueden dividirse en unidades más pequeñas dentro de un mismo paso si eso mejora la legibilidad del historial.
+## Historia
+
+Este repositorio salió del monorepo `PMAPP-Org/Seguimiento_Proyectos` (archivado) con el historial de `server/`, `infra/`, `docs/` y `plans/`. La app y su historial están en SUNO_client. El monorepo archivado conserva el historial conjunto hasta v0.2.0.

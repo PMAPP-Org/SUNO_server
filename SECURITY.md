@@ -6,8 +6,10 @@
 
 Usa el reporte privado de GitHub: pestaña **Security → Report a vulnerability** de este repositorio. Solo lo ven los mantenedores. Si no está disponible, escribe a los mantenedores listados en [`.github/CODEOWNERS`](.github/CODEOWNERS) pidiendo un canal privado, sin incluir los detalles en el primer mensaje.
 
+Si el fallo está en la app móvil, repórtalo en [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client/security). Si no sabes de qué lado está, hazlo aquí: lo movemos nosotros.
+
 Incluye, si puedes:
-- qué componente está afectado (app, API, infraestructura) y qué versión o commit;
+- qué componente está afectado (API, panel de administración, infraestructura) y qué versión o commit;
 - cómo reproducirlo;
 - qué impacto crees que tiene.
 

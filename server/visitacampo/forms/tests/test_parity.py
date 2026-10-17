@@ -1,7 +1,8 @@
 """Paridad servidor ↔ cliente del DSL de formularios (Paso 21).
 
 `server/openapi/fixtures/forms_parity.json` es la fuente única de casos: este
-test y `app/test/core/forms/parity_test.dart` ejecutan **los mismos**. Si el
+test y `test/core/forms/parity_test.dart` de PMAPP-Org/SUNO_client (sobre su copia fijada en
+`contract/`) ejecutan **los mismos**. Si el
 servidor y el renderer de Flutter llegaran a discrepar sobre qué plantilla es
 válida, qué campo se ve o qué respuesta se rechaza, el agente vería en pantalla
 un formulario distinto del que el servidor valida (ADR-012).
