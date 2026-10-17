@@ -10,6 +10,8 @@ name: Security
 #   Actions (OWASP A01–A10:2025; ISO 27001 A.8.28). Complementa a Bandit
 #   (patrones Python) y CodeQL (flujo de datos): cubre también YAML de
 #   workflows, Dockerfiles y configuración.
+# - actionlint: sintaxis y semántica de los workflows, y shellcheck sobre cada
+#   `run:` (un `)` sobrante en un paso solo se veía al ejecutarse en CI).
 #
 # Las herramientas se descargan como binario oficial con versión fija y se
 # verifica su SHA-256 antes de ejecutarlas, en vez de usar una action de
@@ -127,3 +129,28 @@ jobs:
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
+  actionlint:
+    name: actionlint (workflows + shellcheck de cada run)
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      # Bloquea desde `warning`: los `info` de estilo (p. ej. `$COMPOSE` sin
+      # comillas, que se separa en palabras a propósito) no son defectos.
+      SHELLCHECK_OPTS: --severity=warning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar actionlint (versión fija + checksum)
+        run: |
+          curl -sSfL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint && rm actionlint.tar.gz
+
+      # shellcheck viene preinstalado en ubuntu-latest; actionlint lo usa solo.
+      - name: actionlint
+        run: ./actionlint -color

@@ -78,7 +78,7 @@ jobs:
           curl -sfk https://${DAST_HOST}/v1/auth/login \
             -H 'Content-Type: application/json' \
             -d "{\"username\":\"agente-demo\",\"password\":\"${DEMO_PASSWORD}\",\"device_info\":{\"device_id\":\"$(cat /proc/sys/kernel/random/uuid)\",\"platform\":\"android\",\"app_version\":\"0.0.0-ci\"}}" \
-            -o login.json)"
+            -o login.json
           TOKEN="$(python3 -c 'import json; print(json.load(open("login.json"))["tokens"]["access_token"])')"
           rm -f login.json
           echo "::add-mask::${TOKEN}" # nosemgrep: unsafe-add-mask-workflow-command
