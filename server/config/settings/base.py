@@ -252,9 +252,18 @@ AXES_ENABLE_ACCESS_FAILURE_LOG = True
 
 # --- MFA del back-office (django-otp; riesgo R-20, ISO 27001 A.8.5) ----------
 # Django Admin exige usuario + contraseña + código TOTP (o un código de
-# respaldo) en todos los entornos, desarrollo incluido; lo impone
-# `OtpAdminConfig` (visitacampo/core/apps.py) y no hay ajuste para apagarlo.
+# respaldo); lo impone `OtpAdminConfig` (visitacampo/core/apps.py).
 # Alta del segundo factor en el servidor: `python manage.py enroll_admin_totp <usuario>`.
+#
+# EXC-003 (docs/seguridad/excepciones.md): mientras dura el desarrollo se
+# puede apagar con DJANGO_ADMIN_REQUIRE_OTP=false (solo usuario y contraseña).
+# Activo salvo que se apague **explícitamente**: una variable ausente o con
+# otro valor deja el MFA encendido.
+ADMIN_REQUIRE_OTP = os.environ.get("DJANGO_ADMIN_REQUIRE_OTP", "true").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 OTP_TOTP_ISSUER = "VisitaCampo"
 
 # --- Rate limiting de la API (visitacampo/core/ratelimit.py, Paso 15) -------
