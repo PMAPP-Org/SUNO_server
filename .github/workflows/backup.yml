@@ -74,9 +74,14 @@ jobs:
           echo "PGU=${POSTGRES_USER}" >> "$GITHUB_ENV"
           echo "PGD=${POSTGRES_DB}" >> "$GITHUB_ENV"
 
+      # PostgreSQL ≥ 16.10 (CVE-2025-8714) escribe en cada volcado plano una
+      # línea `\restrict <clave aleatoria>` (y su `\unrestrict`): dos volcados de
+      # los mismos datos nunca son idénticos byte a byte. Se excluyen de la huella;
+      # todo lo demás (filas, secuencias) se compara entero.
       - name: Huella de los datos antes del backup
         run: |
           $COMPOSE exec -T db pg_dump -U "$PGU" -d "$PGD" --data-only --no-owner \
+            | grep -v -E '^[\\](un)?restrict ' \
             | sha256sum | tee before.sha256
           rows="$($COMPOSE exec -T db psql -U "$PGU" -d "$PGD" -tAc 'SELECT count(*) FROM organization')"
           test "$rows" -ge 1
@@ -116,6 +121,7 @@ jobs:
       - name: Los datos restaurados son idénticos
         run: |
           $COMPOSE exec -T db pg_dump -U "$PGU" -d "$PGD" --data-only --no-owner \
+            | grep -v -E '^[\\](un)?restrict ' \
             | sha256sum | tee after.sha256
           diff before.sha256 after.sha256
 

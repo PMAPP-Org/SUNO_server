@@ -85,7 +85,7 @@ jobs:
       - name: El worker procesa la cola
         run: |
           for _ in $(seq 1 30); do
-            done_jobs="$($COMPOSE exec -T api python manage.py shell -c \n              "from visitacampo.core.models import Job; print(Job.objects.filter(status='succeeded').count())" | tail -1)"
+            done_jobs="$($COMPOSE exec -T api python manage.py shell -c "from visitacampo.core.models import Job; print(Job.objects.filter(status='succeeded').count())" | tail -1)"
             if [ "${done_jobs:-0}" -gt 0 ]; then echo "jobs completados: $done_jobs"; exit 0; fi
             sleep 2
           done
