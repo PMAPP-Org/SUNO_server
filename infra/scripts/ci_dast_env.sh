@@ -51,6 +51,9 @@ EMAIL_HOST_PASSWORD=
 EMAIL_USE_TLS=false
 CADDY_DOMAIN=${DAST_HOST}
 CADDY_ACME_EMAIL=ci@example.invalid
+# TEST-NET-3 (RFC 5737): ningún cliente real del CI está ahí, así que el
+# DAST comprueba que /admin/ queda cerrado.
+CADDY_ADMIN_ALLOWED_IPS=203.0.113.0/24
 EOF
 chmod 600 "$ENV_FILE"
 

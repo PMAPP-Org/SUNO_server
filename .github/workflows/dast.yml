@@ -96,6 +96,13 @@ jobs:
           fi
           code="$(curl -s -o /dev/null -w '%{http_code}' http://${DAST_HOST}/v1/healthz)"
           test "$code" = "308" || test "$code" = "301"
+          # RD-15: un X-Forwarded-Proto falso sobre HTTP plano no evita la
+          # redirección (Caddy sobrescribe la cabecera, nunca la reenvía).
+          code="$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' http://${DAST_HOST}/v1/healthz)"
+          test "$code" = "308" || test "$code" = "301"
+          # /admin/ cerrado fuera de CADDY_ADMIN_ALLOWED_IPS (404, no 403).
+          code="$(curl -sk -o /dev/null -w '%{http_code}' https://${DAST_HOST}/admin/login/)"
+          test "$code" = "404"
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

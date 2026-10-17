@@ -50,6 +50,7 @@ services:
       # Ver infra/Caddyfile y infra/README.md para el significado de cada uno.
       CADDY_DOMAIN: ${CADDY_DOMAIN}
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+      CADDY_ADMIN_ALLOWED_IPS: ${CADDY_ADMIN_ALLOWED_IPS}
     depends_on:
       - api
 
