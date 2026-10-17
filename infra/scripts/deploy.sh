@@ -49,6 +49,8 @@ if [ -z "$version" ] || [ -z "$image" ]; then
 	die "uso: deploy.sh vX.Y.Z <imagen@sha256:digest>"
 fi
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "versión inválida: $version"
+# Solo caracteres de una referencia de imagen: el valor acaba en infra/.env.
+[[ "$image" =~ ^[A-Za-z0-9./:@_-]+$ ]] || die "referencia de imagen inválida: $image"
 if [ "${DEPLOY_ALLOW_TAG:-0}" != 1 ] && [[ "$image" != *@sha256:* ]]; then
 	die "la imagen debe ir fijada por digest (…@sha256:…): $image"
 fi
@@ -85,8 +87,19 @@ ready() {
 	return 1
 }
 
+# La imagen en marcha queda también en infra/.env, para que un operador pueda
+# usar `docker compose ps|logs|exec` en el servidor sin exportarla a mano.
+record_image() { # $1 = imagen
+	if grep -q '^VISITACAMPO_API_IMAGE=' "$ENV_FILE"; then
+		sed -i "s|^VISITACAMPO_API_IMAGE=.*|VISITACAMPO_API_IMAGE=$1|" "$ENV_FILE"
+	else
+		printf 'VISITACAMPO_API_IMAGE=%s\n' "$1" >> "$ENV_FILE"
+	fi
+}
+
 start() { # $1 = imagen
 	export VISITACAMPO_API_IMAGE="$1"
+	record_image "$1"
 	[ "${DEPLOY_SKIP_PULL:-0}" = 1 ] || compose pull api worker
 	compose up -d --remove-orphans --wait --wait-timeout "${DEPLOY_WAIT_TIMEOUT:-180}" && ready
 }
