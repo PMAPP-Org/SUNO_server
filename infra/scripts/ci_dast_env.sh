@@ -54,6 +54,9 @@ CADDY_ACME_EMAIL=ci@example.invalid
 # TEST-NET-3 (RFC 5737): ningún cliente real del CI está ahí, así que el
 # DAST comprueba que /admin/ queda cerrado.
 CADDY_ADMIN_ALLOWED_IPS=203.0.113.0/24
+# El DAST crea la organización después de arrancar el worker: con 5 s se
+# comprueba en segundos que el worker la descubre sin reiniciarse.
+JOB_BOOTSTRAP_INTERVAL_SECONDS=5
 EOF
 chmod 600 "$ENV_FILE"
 

@@ -351,8 +351,20 @@ JOB_BACKOFF_MAX_SECONDS = 900
 # purga de tombstones y el GC de blobs miden ventanas de 90 días y 24 h
 # respectivamente, así que correrlos más a menudo no adelantaría nada.
 JOB_REAP_INTERVAL_SECONDS = 60
+# Cada cuánto el worker vuelve a asegurar los periódicos de organizaciones
+# nuevas (`Worker.maybe_bootstrap`).
+JOB_BOOTSTRAP_INTERVAL_SECONDS = int(os.environ.get("JOB_BOOTSTRAP_INTERVAL_SECONDS", "300"))
 JOB_PURGE_TOMBSTONES_INTERVAL_SECONDS = 24 * 60 * 60
 JOB_ATTACHMENT_GC_INTERVAL_SECONDS = 6 * 60 * 60
+JOB_PURGE_SECURITY_LOGS_INTERVAL_SECONDS = 24 * 60 * 60
+
+# --- Retención de trazas de seguridad (docs/seguridad/retencion.md) --------
+# AuditEvent: un año, lo bastante para investigar un incidente y para la
+# revisión anual del SGSI (ISO 27001 A.8.15). Los registros de axes guardan
+# usuario e IP en claro: 90 días, lo mínimo útil para detectar ataques de
+# fuerza bruta (principio de temporalidad, Ley 1581; A.8.10).
+AUDIT_EVENT_RETENTION_DAYS = int(os.environ.get("AUDIT_EVENT_RETENTION_DAYS", "365"))
+AXES_LOG_RETENTION_DAYS = int(os.environ.get("AXES_LOG_RETENTION_DAYS", "90"))
 
 # --- Logging con redacción (RD-12, doc 08 §7.4) -----------------------------
 # doc 08 RD-12 pide la redacción de claves conocidas **en los logs**, no solo

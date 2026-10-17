@@ -1,4 +1,4 @@
-"""Los tres periódicos reales del MVP, y su recurrencia (Paso 19, tareas 4 y 9).
+"""Los periódicos reales del MVP, y su recurrencia (Paso 19, tareas 4 y 9).
 
 ADR-006: *"Periódicos con el mismo mecanismo (`run_after`), **sin Celery Beat
 ni cron externo tipo `ofelia`**"*. Aquí no hay un planificador aparte: un
@@ -14,13 +14,20 @@ Los tres:
 3. `attachments.gc_unconfirmed_uploads` — el GC de blobs subidos y nunca
    confirmados que el Paso 17 dejó igual
    (`attachments/services.collect_unconfirmed_uploads`).
+4. `security.purge_logs` — la retención de las trazas de seguridad
+   (línea base ISO 27001, A.8.10/A.8.15): `AuditEvent` de la organización
+   más antiguos que `AUDIT_EVENT_RETENTION_DAYS` y los registros de
+   django-axes (usuario e IP en claro) más antiguos que
+   `AXES_LOG_RETENTION_DAYS`. Plazos y motivo en
+   `docs/seguridad/retencion.md`.
 
 Ninguno de los tres reimplementa nada: el Paso 19 aporta **cuándo** se llaman,
 que es exactamente donde los pasos 9 y 17 pusieron la frontera.
 
 ---
 
-**Backups (`pg_dump` cifrado → R2): fuera del alcance de este paso.** La tarea
+**Backups (`pg_dump` cifrado → R2): fuera de la aplicación** (hoy en
+`infra/backup/`, con su prueba de restauración en CI). La tarea
 9 del plan lo dejaba a decidir y esta es la decisión, escrita aquí y no solo en
 el seguimiento. Motivo: un backup no es trabajo de aplicación sino de
 despliegue. Necesita el binario `pg_dump` en la imagen, credenciales de R2 que
@@ -56,10 +63,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
+from axes.handlers.proxy import AxesProxyHandler
 from django.conf import settings
 from django.utils import timezone
 
 from visitacampo.attachments.services import collect_unconfirmed_uploads
+from visitacampo.core import audit
 from visitacampo.core.context import system_context
 from visitacampo.jobs import queue
 from visitacampo.jobs.queue import JobRecord
@@ -69,6 +78,7 @@ from visitacampo.sync.retention import purge_expired_tombstones
 __all__ = [
     "ATTACHMENT_GC",
     "PERIODIC_JOBS",
+    "PURGE_SECURITY_LOGS",
     "PURGE_TOMBSTONES",
     "QUEUE_REAP",
     "PeriodicJob",
@@ -80,6 +90,7 @@ __all__ = [
 QUEUE_REAP = "queue.reap"
 PURGE_TOMBSTONES = "sync.purge_tombstones"
 ATTACHMENT_GC = "attachments.gc_unconfirmed_uploads"
+PURGE_SECURITY_LOGS = "security.purge_logs"
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +134,11 @@ PERIODIC_JOBS: tuple[PeriodicJob, ...] = (
     PeriodicJob(
         type=ATTACHMENT_GC,
         interval=timedelta(seconds=settings.JOB_ATTACHMENT_GC_INTERVAL_SECONDS),
+        max_attempts=3,
+    ),
+    PeriodicJob(
+        type=PURGE_SECURITY_LOGS,
+        interval=timedelta(seconds=settings.JOB_PURGE_SECURITY_LOGS_INTERVAL_SECONDS),
         max_attempts=3,
     ),
 )
@@ -246,4 +262,27 @@ def run_attachment_gc(record: JobRecord) -> Mapping[str, Any]:
         "inspected": report.inspected,
         "deleted": len(report.deleted),
         "reclaimed_bytes": report.reclaimed_bytes,
+    }
+
+
+@register(PURGE_SECURITY_LOGS)
+def run_purge_security_logs(record: JobRecord) -> Mapping[str, Any]:
+    """Retención de trazas de seguridad (A.8.10/A.8.15, Ley 1581).
+
+    `AuditEvent` se purga por organización (`system_context`, como los
+    tombstones). Los registros de axes no llevan `org_id`: se purgan con la
+    API pública de axes (`AxesProxyHandler`, sin tocar sus modelos), y con
+    varias organizaciones las pasadas de más no encuentran nada, igual que el
+    GC de blobs (ver el docstring del módulo).
+    """
+    now = timezone.now()
+    audit_events = audit.purge_expired(
+        system_context(record.org_id),
+        older_than=now - timedelta(days=settings.AUDIT_EVENT_RETENTION_DAYS),
+    )
+    axes_age = settings.AXES_LOG_RETENTION_DAYS
+    return {
+        "audit_events": audit_events,
+        "axes_failure_logs": AxesProxyHandler.reset_failure_logs(age_days=axes_age),
+        "axes_access_logs": AxesProxyHandler.reset_logs(age_days=axes_age),
     }

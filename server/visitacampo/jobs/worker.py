@@ -102,6 +102,12 @@ class WorkerSettings:
     max_jobs: int | None = None
     idle_timeout: float | None = None
     bootstrap_periodic: bool = True
+    #: Cada cuánto se vuelven a asegurar los periódicos (segundos). Una
+    #: organización creada después de arrancar el worker —la primera de un
+    #: despliegue nuevo, siempre— recibe así reaper, purgas y GC sin
+    #: reiniciar nada. Barato e idempotente: lo resuelve el índice parcial
+    #: (RD-14), igual que dos workers arrancando a la vez.
+    bootstrap_interval: float = 300.0
 
     @classmethod
     def from_settings(cls, **overrides: Any) -> WorkerSettings:
@@ -109,6 +115,7 @@ class WorkerSettings:
             "poll_interval": float(settings.JOB_POLL_INTERVAL_SECONDS),
             "lease_seconds": int(settings.JOB_LEASE_SECONDS),
             "heartbeat_interval": float(settings.JOB_HEARTBEAT_INTERVAL_SECONDS),
+            "bootstrap_interval": float(settings.JOB_BOOTSTRAP_INTERVAL_SECONDS),
         }
         defaults.update({key: value for key, value in overrides.items() if value is not None})
         return cls(**defaults)
@@ -172,6 +179,7 @@ class Worker:
         self.config = config or WorkerSettings.from_settings()
         self.processed = 0
         self._stopping = False
+        self._last_bootstrap: float | None = None
 
     # --- Ciclo de vida -------------------------------------------------------
 
@@ -198,12 +206,13 @@ class Worker:
 
     def run(self) -> int:
         """Consume la cola hasta que toque parar. Devuelve cuántos jobs ejecutó."""
+        created = self.maybe_bootstrap(now=time.monotonic())
         if self.config.bootstrap_periodic:
-            created = periodic.bootstrap()
             logger.info("Periódicos asegurados al arrancar: %s nuevos.", created)
 
         idle_since: float | None = None
         while not self._stopping:
+            self.maybe_bootstrap(now=time.monotonic())
             if self.run_once():
                 idle_since = None
                 if self.config.max_jobs is not None and self.processed >= self.config.max_jobs:
@@ -219,6 +228,23 @@ class Worker:
                 break
             time.sleep(self.config.poll_interval)
         return self.processed
+
+    def maybe_bootstrap(self, *, now: float) -> int:
+        """Asegura los periódicos si toca (o si nunca se hizo). Devuelve los creados.
+
+        `now` es un reloj monótono (`time.monotonic()`), inyectable para probar
+        la cadencia sin dormir.
+        """
+        if not self.config.bootstrap_periodic:
+            return 0
+        last = self._last_bootstrap
+        if last is not None and now - last < self.config.bootstrap_interval:
+            return 0
+        self._last_bootstrap = now
+        created = periodic.bootstrap()
+        if created and last is not None:
+            logger.info("Periódicos asegurados para organizaciones nuevas: %s.", created)
+        return created
 
     def run_once(self) -> bool:
         """Toma y ejecuta como mucho un job. `False` si la cola estaba vacía."""

@@ -59,9 +59,9 @@ jobs:
           echo "DEMO_PASSWORD=${DEMO_PASSWORD}" >> "$GITHUB_ENV"
           bash infra/scripts/check_envvars.sh infra/.env infra/.env.example
 
-      - name: Levantar db + api + caddy
+      - name: Levantar db + api + worker + caddy
         run: |
-          $COMPOSE up -d --build db api caddy
+          $COMPOSE up -d --build db api worker caddy
           for _ in $(seq 1 60); do
             if curl -sfk https://${DAST_HOST}/v1/healthz > /dev/null; then exit 0; fi
             sleep 2
@@ -79,6 +79,18 @@ jobs:
             | python3 -c 'import json, sys; print(json.load(sys.stdin)["tokens"]["access_token"])')"
           echo "::add-mask::${TOKEN}"
           echo "API_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+
+      # El worker arranca encolando los periódicos y ejecuta el reaper en el
+      # acto: si en 60 s no hay ningún job terminado, el worker no funciona.
+      - name: El worker procesa la cola
+        run: |
+          for _ in $(seq 1 30); do
+            done_jobs="$($COMPOSE exec -T api python manage.py shell -c \n              "from visitacampo.core.models import Job; print(Job.objects.filter(status='succeeded').count())" | tail -1)"
+            if [ "${done_jobs:-0}" -gt 0 ]; then echo "jobs completados: $done_jobs"; exit 0; fi
+            sleep 2
+          done
+          $COMPOSE logs worker | tail -50
+          exit 1
 
       # Comprobaciones de configuración que un escáner reporta como "warning"
       # pero que aquí son requisitos (RD-15, OWASP A02/A04).
@@ -145,7 +157,7 @@ jobs:
 
       - name: Logs del stack (si algo falló)
         if: failure()
-        run: $COMPOSE logs --no-color api caddy | tail -300
+        run: $COMPOSE logs --no-color api worker caddy | tail -300
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
