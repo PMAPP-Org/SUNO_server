@@ -108,7 +108,10 @@ jobs:
         env:
           IMAGE: ${{ steps.push.outputs.image }}
           DIGEST: ${{ steps.push.outputs.digest }}
-        run: ./syft "${IMAGE}@${DIGEST}" -o spdx-json=sbom-api.spdx.json
+        run: |
+          ./syft "${IMAGE}@${DIGEST}" -q \
+            -o spdx-json=sbom-api.spdx.json \
+            -o cyclonedx-json=sbom-api.cdx.json
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -123,10 +126,45 @@ jobs:
           sbom-path: sbom-api.spdx.json
           push-to-registry: true
 
-      - name: Adjuntar el SBOM a la release
+      - name: Adjuntar los SBOM a la release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" sbom-api.spdx.json --repo "$GITHUB_REPOSITORY" --clobber
+        run: |
+          gh release upload "$TAG" sbom-api.spdx.json sbom-api.cdx.json \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+  sbom-app:
+    name: SBOM de la app → release
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    # Siempre, haya o no APK: el inventario de dependencias de la app de
+    # cada versión queda publicado junto a la release.
+    permissions:
+      contents: write # subir el SBOM a la release
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      SYFT_VERSION: 1.54.1
+      SYFT_SHA256: c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+
+      - name: Generar y adjuntar el SBOM de la app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -sSfL -o syft.tar.gz \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  syft.tar.gz" | sha256sum -c -
+          tar -xzf syft.tar.gz syft && rm syft.tar.gz
+          ./syft scan dir:app -q \
+            -o spdx-json=sbom-app.spdx.json \
+            -o cyclonedx-json=sbom-app.cdx.json
+          gh release upload "$TAG" sbom-app.spdx.json sbom-app.cdx.json \
+            --repo "$GITHUB_REPOSITORY" --clobber
 
   android:
     name: APK firmado → release (si hay llave de subida)
@@ -202,6 +240,26 @@ jobs:
         if: steps.key.outputs.present == 'true'
         with:
           subject-path: visitacampo-*.apk
+
+      # SBOM atestado sobre el APK concreto: vincula criptográficamente el
+      # binario publicado con el inventario de lo que contiene.
+      - name: SBOM de la app para la atestación
+        if: steps.key.outputs.present == 'true'
+        env:
+          SYFT_VERSION: 1.54.1
+          SYFT_SHA256: c069905b391cc4c20a5ba65ad5c10be2a7ba074f8ea6ad203e24d14e303dad47
+        run: |
+          curl -sSfL -o syft.tar.gz \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  syft.tar.gz" | sha256sum -c -
+          tar -xzf syft.tar.gz syft && rm syft.tar.gz
+          ./syft scan dir:app -q -o spdx-json=sbom-app.spdx.json
+
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        if: steps.key.outputs.present == 'true'
+        with:
+          subject-path: visitacampo-*.apk
+          sbom-path: sbom-app.spdx.json
 
       - name: Adjuntar APK y checksum a la release
         if: steps.key.outputs.present == 'true'

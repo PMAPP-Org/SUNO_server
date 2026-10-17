@@ -18,7 +18,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | CodeQL `security-and-quality` (Python + workflows) | `codeql.yml` | PR, `master`, semanal | Sí (alertas en Code scanning) |
 | zizmor (seguridad de GitHub Actions) | `backend.yml` | PR, `master` | Sí |
 | hadolint (Dockerfile) | `backend.yml` | PR, `master` | Sí |
-| grype: CVE altas con parche en la imagen | `backend.yml` | PR, `master` | Sí |
+| grype sobre el SBOM de la imagen: CVE altas con parche (paquetes Debian + Python) | `backend.yml` | PR, `master` | Sí |
 | pip-audit + osv-scanner (todos los lockfiles) | `backend.yml`, `security.yml` | PR, `master`, semanal | Sí |
 | Dependency Review: CVE ≥ moderada o licencia copyleft en dependencias nuevas | `dependency-review.yml` | PR | Sí |
 | Lockfiles coherentes con sus fuentes | `backend.yml` | PR, `master` | Sí |
@@ -31,7 +31,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#3](https://github.com/Victor-Pulido/Seguimiento_Proyectos/issues/3) |
 | Título de PR en Conventional Commits | `pr-title.yml` | PR | Sí |
 | OpenSSF Scorecard | `scorecard.yml` | `master`, semanal | No (informa) |
-| SBOM CycloneDX (deps) / SPDX (imagen) + procedencia SLSA firmada | `backend.yml`, `release.yml` | PR / release | — |
+| SBOM (syft, CycloneDX + SPDX) de la imagen y de la app; CycloneDX de los requirements | `backend.yml`, `mobile.yml` | PR, `master` (artefacto, 90 días) | — |
+| SBOM adjuntos a cada release + atestaciones firmadas (procedencia SLSA y SBOM) de la imagen y del APK | `release.yml` | release | — |
 
 ## Por categoría
 
