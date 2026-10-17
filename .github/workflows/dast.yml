@@ -1,0 +1,147 @@
+name: DAST
+
+# Pruebas dinámicas contra la API **en ejecución**, con la misma topología que
+# producción: PostgreSQL + imagen de server/Dockerfile con
+# config.settings.prod + Caddy terminando TLS (CA interna para `localhost`).
+# Ataca lo que el análisis estático no ve: configuración real, cabeceras,
+# redirecciones, y el comportamiento ante entradas arbitrarias.
+#
+# - Schemathesis (bloqueante): fuzzing guiado por server/openapi/v1.yaml.
+#   `not_a_server_error`: ninguna entrada produce un 5xx (OWASP A10:2025).
+#   `ignored_auth`: ningún endpoint protegido acepta peticiones sin
+#   credenciales o con credenciales inválidas (A01/A07).
+# - Schemathesis (informativo): conformidad completa con el contrato. Las
+#   desviaciones conocidas están en el issue enlazado desde
+#   docs/seguridad/owasp-top10-2025.md; no bloquean hasta corregirlas.
+# - OWASP ZAP API scan (bloqueante en FAIL): escaneo activo con la política
+#   infra/zap/api-scan-rules.tsv (inyecciones, traversal, SSRF, cabeceras).
+#
+# ISO 27001 A.8.29 (pruebas de seguridad en desarrollo y aceptación).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "5 7 * * 1" # lunes 07:05 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast:
+    name: Schemathesis + ZAP contra el stack de producción
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COMPOSE: docker compose --project-directory infra --env-file infra/.env -f infra/docker-compose.yml
+      # 2.16.1 fijada por digest (`stable` se reconstruye y cambia).
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generar infra/.env efímero (secretos de un solo uso)
+        run: |
+          DEMO_PASSWORD="$(bash infra/scripts/ci_dast_env.sh)"
+          echo "::add-mask::${DEMO_PASSWORD}"
+          echo "DEMO_PASSWORD=${DEMO_PASSWORD}" >> "$GITHUB_ENV"
+          bash infra/scripts/check_envvars.sh infra/.env infra/.env.example
+
+      - name: Levantar db + api + caddy
+        run: |
+          $COMPOSE up -d --build db api caddy
+          for _ in $(seq 1 60); do
+            if curl -sfk https://localhost/v1/healthz > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "La API no respondió en https://localhost/v1/healthz"
+          $COMPOSE logs api caddy
+          exit 1
+
+      - name: Sembrar usuario de prueba y obtener un access token
+        run: |
+          $COMPOSE exec -T api python manage.py bootstrap_demo --password "$DEMO_PASSWORD" > /dev/null
+          TOKEN="$(curl -sfk https://localhost/v1/auth/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"agente-demo\",\"password\":\"${DEMO_PASSWORD}\",\"device_info\":{\"device_id\":\"$(cat /proc/sys/kernel/random/uuid)\",\"platform\":\"android\",\"app_version\":\"0.0.0-ci\"}}" \
+            | python3 -c 'import json, sys; print(json.load(sys.stdin)["tokens"]["access_token"])')"
+          echo "::add-mask::${TOKEN}"
+          echo "API_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+
+      # Comprobaciones de configuración que un escáner reporta como "warning"
+      # pero que aquí son requisitos (RD-15, OWASP A02/A04).
+      - name: Cabeceras y redirecciones de producción
+        run: |
+          headers="$(curl -sk -D - -o /dev/null https://localhost/v1/healthz)"
+          echo "$headers"
+          echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
+          echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+          # (`! cmd` no dispara errexit en bash: se comprueba con if.)
+          if echo "$headers" | grep -qi '^server: .*[0-9]'; then
+            echo "La cabecera Server expone una versión"; exit 1
+          fi
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost/v1/healthz)"
+          test "$code" = "308" || test "$code" = "301"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Schemathesis (requirements-dast.lock, con hashes)
+        run: python -m pip install --require-hashes -r server/requirements-dast.lock
+
+      - name: Schemathesis — sin 5xx ni auth ignorada (bloqueante)
+        run: |
+          st run server/openapi/v1.yaml --url https://localhost --tls-verify false \
+            -H "Authorization: Bearer ${API_TOKEN}" \
+            --checks not_a_server_error,ignored_auth --max-examples 50 \
+            --report junit --report-dir reports/schemathesis-security
+
+      - name: Schemathesis — conformidad completa con el contrato (informativo)
+        continue-on-error: true
+        run: |
+          st run server/openapi/v1.yaml --url https://localhost --tls-verify false \
+            -H "Authorization: Bearer ${API_TOKEN}" \
+            --checks all --max-examples 30 \
+            --report junit --report-dir reports/schemathesis-contract
+
+      # Exit codes de zap-api-scan.py: 0 limpio, 1 alguna regla FAIL, 2 solo
+      # WARN (con -I no falla), 3 error de ejecución (también falla).
+      - name: OWASP ZAP API scan
+        run: |
+          mkdir -p zap
+          cp server/openapi/v1.yaml infra/zap/api-scan-rules.tsv zap/
+          chmod -R a+rwX zap
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" \
+            -e ZAP_AUTH_HEADER=Authorization \
+            -e ZAP_AUTH_HEADER_VALUE="Bearer ${API_TOKEN}" \
+            -e ZAP_AUTH_HEADER_SITE=localhost \
+            "$ZAP_IMAGE" zap-api-scan.py \
+              -t v1.yaml -f openapi -O https://localhost \
+              -c api-scan-rules.tsv -I \
+              -r zap-report.html -J zap-report.json
+
+      - name: Logs del stack (si algo falló)
+        if: failure()
+        run: $COMPOSE logs --no-color api caddy | tail -300
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: dast-reports
+          path: |
+            reports/
+            zap/zap-report.html
+            zap/zap-report.json
+          retention-days: 30
+
+      - name: Bajar el stack
+        if: always()
+        run: $COMPOSE down -v
