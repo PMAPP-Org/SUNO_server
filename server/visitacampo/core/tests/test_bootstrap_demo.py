@@ -69,6 +69,24 @@ class BootstrapDemoTests(unittest.TestCase):
         # ni se imprime como "generada".
         self.assertNotIn("generada", output)
 
+    def test_extra_agents_for_the_load_test(self) -> None:
+        """Paso 25: N agentes más en la misma organización, misma contraseña."""
+        call_command(
+            "bootstrap_demo",
+            "--org-name=Org carga test",
+            "--username=carga",
+            "--password=una-contraseña-de-prueba-larga-42",
+            "--extra-agents=3",
+            stdout=io.StringIO(),
+        )
+        org = Organization.objects.get(name="Org carga test")
+        agents = get_user_model().objects.filter(org=org).order_by("username")
+        self.assertEqual(
+            [a.username for a in agents], ["carga", "carga-01", "carga-02", "carga-03"]
+        )
+        self.assertTrue(all(a.check_password("una-contraseña-de-prueba-larga-42") for a in agents))
+        self.assertEqual(Membership.objects.filter(org=org, role=Role.FIELD_AGENT).count(), 4)
+
     def test_generates_and_prints_a_password_when_none_is_given(self) -> None:
         out = io.StringIO()
         call_command(

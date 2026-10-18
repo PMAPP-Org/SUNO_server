@@ -73,6 +73,12 @@ jobs:
       - name: mypy
         run: mypy --config-file server/pyproject.toml server/
 
+      # Paso 25: cada hallazgo H-01…H-21 tiene un test que lo cubre. Si se
+      # renombra o borra ese test, falla aquí (la evidencia del cliente la
+      # comprueba la CI de SUNO_client con este mismo mapa).
+      - name: Mapa hallazgo → test (H-01…H-21)
+        run: python infra/scripts/check_findings_map.py --repo server
+
       # Cobertura de ramas del código de producción con suelo `fail_under`
       # (server/pyproject.toml, [tool.coverage.report]): bajar de ahí falla.
       - name: pytest + cobertura (contra PostgreSQL real)

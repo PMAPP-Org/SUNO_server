@@ -14,6 +14,8 @@ Documentación del SGSI del proyecto, alineada con ISO/IEC 27001:2022 y OWASP To
 | [`retencion.md`](retencion.md) | Cuánto se guarda cada dato y qué lo borra | Vigente (implementado) |
 | [`excepciones.md`](excepciones.md) | Vulnerabilidades aceptadas, con caducidad | Vigente |
 | [`owasp-top10-2025.md`](owasp-top10-2025.md) | Qué prueba automatizada cubre cada riesgo OWASP y cada control técnico | Vigente (lo verifica el CI) |
+| [`hallazgos-tests.toml`](hallazgos-tests.toml) | Qué test cubre cada hallazgo H-01…H-21 de la revisión de QField/QFieldCloud | Vigente (lo verifica el CI de los dos repos) |
+| [`verificacion-mvp.md`](verificacion-mvp.md) | Gate de cierre de la Fase 1: suite de seguridad, carga y criterios de aceptación, con lo que queda abierto | Vigente, con pendientes manuales |
 
 ## Estado de cumplimiento, en una frase
 

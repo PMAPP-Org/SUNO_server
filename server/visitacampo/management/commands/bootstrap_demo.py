@@ -145,6 +145,15 @@ class Command(BaseCommand):
             default="Visita de campo (demo)",
             help="Nombre de la FormTemplate/FormTemplateVersion a publicar.",
         )
+        parser.add_argument(
+            "--extra-agents",
+            type=int,
+            default=0,
+            help=(
+                "Agentes adicionales en la misma organización, '<username>-01'…, "
+                "con la misma contraseña (prueba de carga del Paso 25)."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         org_name: str = options["org_name"]
@@ -153,6 +162,11 @@ class Command(BaseCommand):
         template_name: str = options["template_name"]
         password_was_given = options["password"] is not None
         password: str = options["password"] or _generate_password()
+
+        extra_agents: int = options["extra_agents"]
+        if extra_agents < 0:
+            raise CommandError("--extra-agents no puede ser negativo.")
+        extra_usernames = [f"{username}-{n:02d}" for n in range(1, extra_agents + 1)]
 
         app_user_model = get_user_model()
 
@@ -171,6 +185,10 @@ class Command(BaseCommand):
                 "vuelve a sembrar sobre un entorno ya inicializado. Pasa --username "
                 "distinto para un segundo demo."
             )
+        if app_user_model.objects.filter(username__in=extra_usernames).exists():
+            raise CommandError(
+                f"Ya existe algún AppUser '{username}-NN'. Pasa --username distinto."
+            )
 
         # Validado contra el mismo meta-schema que `FormTemplateVersion.clean()`
         # exige (Paso 20, ADR-012): si `capture_screen.dart` cambiara de forma
@@ -187,6 +205,11 @@ class Command(BaseCommand):
                 org=org,
             )
             Membership.objects.create(org=org, user=user, role=Role.FIELD_AGENT)
+            for extra in extra_usernames:
+                agent = app_user_model.objects.create_user(
+                    username=extra, email=f"{extra}@example.com", password=password, org=org
+                )
+                Membership.objects.create(org=org, user=agent, role=Role.FIELD_AGENT)
 
             # `FormTemplateVersion` es sincronizable (SyncedModel): su
             # `change_seq` se asigna bajo el mismo `pg_advisory_xact_lock` que
@@ -215,6 +238,11 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Demo inicializado correctamente:"))
         self.stdout.write(f"  Organization id: {org.id}")
         self.stdout.write(f"  AppUser username: {user.username}  (email: {user.email})")
+        if extra_usernames:
+            self.stdout.write(
+                f"  Agentes adicionales: {len(extra_usernames)} "
+                f"({extra_usernames[0]} … {extra_usernames[-1]}), misma contraseña"
+            )
         if not password_was_given:
             self.stdout.write(
                 self.style.WARNING(
