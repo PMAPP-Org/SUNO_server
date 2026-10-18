@@ -17,6 +17,11 @@ name: Deploy
 # manual): secretos DEPLOY_HOST, DEPLOY_SSH_KEY (llave privada de `deploy`),
 # DEPLOY_KNOWN_HOSTS (`ssh-keyscan <host>` verificado a mano) y la variable
 # PRODUCTION_URL. Ver docs/operacion/despliegue.md.
+#
+# Llamado desde release.yml, los secretos del environment solo llegan si el
+# llamador usa `secrets: inherit`: sin eso GitHub entrega las variables del
+# environment pero los secretos vacíos (pasó con la v0.3.0, que se omitió).
+# Lanzado a mano (workflow_dispatch), el environment los entrega directamente.
 
 on:
   workflow_call:
@@ -128,4 +133,5 @@ jobs:
 
       - name: Comprobación desde fuera
         if: steps.cfg.outputs.enabled == 'true' && env.PRODUCTION_URL != ''
-        run: curl -fsS -o /dev/null --retry 5 --retry-delay 5 "${PRODUCTION_URL}/v1/readyz"
+        # `%/`: la variable puede terminar en barra (https://dominio/).
+        run: curl -fsS -o /dev/null --retry 5 --retry-delay 5 "${PRODUCTION_URL%/}/v1/readyz"
