@@ -66,6 +66,9 @@ jobs:
       DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      # EXC-003 (docs/seguridad/excepciones.md): `false` apaga el segundo factor
+      # del Admin; `true` lo reactiva; sin definir no se toca `infra/.env`.
+      ADMIN_REQUIRE_OTP: ${{ vars.DJANGO_ADMIN_REQUIRE_OTP }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: ¿Hay producción configurada?
@@ -117,10 +120,24 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # EXC-003: la línea se fija aquí, en el workflow, y no en deploy.sh:
+          # el servidor ejecuta el deploy.sh de la versión que ya tiene, así que
+          # un cambio allí solo valdría a partir del despliegue siguiente.
+          # Solo `true`/`false`: el valor acaba dentro de un comando remoto.
+          otp_cmd=":"
+          case "${ADMIN_REQUIRE_OTP}" in
+            "") ;;
+            true | false)
+              line="DJANGO_ADMIN_REQUIRE_OTP=${ADMIN_REQUIRE_OTP}"
+              otp_cmd="if grep -q '^DJANGO_ADMIN_REQUIRE_OTP=' infra/.env; then sed -i 's/^DJANGO_ADMIN_REQUIRE_OTP=.*/${line}/' infra/.env; else { echo; echo '${line}'; } >> infra/.env; fi"
+              echo "Admin: ${line}" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *) echo "::error::vars.DJANGO_ADMIN_REQUIRE_OTP debe ser true o false"; exit 1 ;;
+          esac
           set +e
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes \
             "deploy@${DEPLOY_HOST}" \
-            "cd /opt/visitacampo && bash infra/scripts/deploy.sh '${VERSION}' '${REF}'"
+            "cd /opt/visitacampo && ${otp_cmd} && bash infra/scripts/deploy.sh '${VERSION}' '${REF}'"
           code=$?
           set -e
           rm -f ~/.ssh/deploy_key
