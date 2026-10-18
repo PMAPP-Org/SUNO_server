@@ -44,6 +44,7 @@ simplejwt` (acoplada a DRF, que ADR-004 descarta explícitamente).
 from __future__ import annotations
 
 import hmac
+import re
 import secrets
 import uuid
 from collections.abc import Iterable, Sequence
@@ -96,6 +97,9 @@ VERIFIER_HASH_CHARS = 64
 #: Separador del token opaco. Un carácter fuera del alfabeto base64url, así
 #: que nunca aparece dentro del selector ni del verifier y `split` es exacto.
 REFRESH_SEPARATOR = "."
+
+#: Alfabeto de `secrets.token_urlsafe`: lo único válido en selector y verifier.
+_URLSAFE = re.compile(r"[A-Za-z0-9_-]+")
 
 # --- Access token (JWT) -----------------------------------------------------
 
@@ -182,7 +186,10 @@ def parse_refresh_token(raw: str) -> tuple[str, str] | None:
     if len(parts) != 2:
         return None
     selector, verifier = parts
-    if not selector or not verifier:
+    # Solo el alfabeto con el que se generan (`token_urlsafe`). Sin esto, un
+    # carácter no ASCII llegaba hasta `hash_verifier` y salía como un 400
+    # "cuerpo no parseable" en vez del 401 genérico (hallazgo de Schemathesis).
+    if not _URLSAFE.fullmatch(selector) or not _URLSAFE.fullmatch(verifier):
         return None
     return selector, verifier
 

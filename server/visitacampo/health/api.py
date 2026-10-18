@@ -22,7 +22,7 @@ def healthz(request):
 
     Sin autenticación y sin filtrar información (doc 08 §6, ADR-004): no
     devuelve versión, hostname ni estado de dependencias — ver
-    server/openapi/v1.yaml `/healthz`.
+    server/openapi/v1.yaml `/v1/healthz`.
     """
     return {"status": "ok"}
 
@@ -38,7 +38,7 @@ def readyz(request):
       - Devolver 503 con `{"status": "unavailable"}` si alguna dependencia
         crítica no responde, **sin indicar cuál** (doc 08 §6 / ADR-010
         "Observabilidad de bajo coste"; ver server/openapi/v1.yaml
-        `/readyz`, que documenta la respuesta 503).
+        `/v1/readyz`, que documenta la respuesta 503).
       - Delegar la comprobación en un servicio, no vivir inline aquí
         (regla de arquitectura de ADR-004).
     """

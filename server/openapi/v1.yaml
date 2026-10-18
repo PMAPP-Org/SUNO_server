@@ -352,6 +352,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -388,6 +389,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422':
           description: |
             El objeto no supera la verificación: `attachment_checksum_mismatch` (checksum o tamaño
@@ -419,6 +421,7 @@ paths:
                 $ref: '#/components/schemas/DownloadUrlResponse'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -448,11 +451,12 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   # -------------------------------------------------------------- health ----
 
-  /healthz:
+  /v1/healthz:
     get:
       operationId: healthz
       tags: [health]
@@ -469,7 +473,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
 
-  /readyz:
+  /v1/readyz:
     get:
       operationId: readyz
       tags: [health]
@@ -628,12 +632,13 @@ components:
 
     Cursor:
       type: string
-      minLength: 1
+      pattern: '^c1:[0-9]{20}$'
       description: |
         Cursor de pull **opaco**. Codifica el `change_seq` alcanzado; el cliente lo almacena y lo
-        reenvía tal cual, sin interpretarlo.
+        reenvía tal cual, sin interpretarlo. El formato se publica solo para validar la entrada;
+        no es algo que el cliente deba construir.
       examples:
-        - 'c1:000000000000102394'
+        - 'c1:00000000000000102394'
 
     Mime:
       type: string
@@ -783,12 +788,19 @@ components:
         user:
           $ref: '#/components/schemas/UserProfile'
 
+    RefreshToken:
+      type: string
+      pattern: '^[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$'
+      description: |
+        Refresh token opaco `selector.verifier` (alfabeto base64url). Cualquier otra forma es una
+        credencial inválida más: `401`, como un verifier incorrecto.
+
     RefreshRequest:
       type: object
       required: [refresh_token, device_id]
       properties:
         refresh_token:
-          type: string
+          $ref: '#/components/schemas/RefreshToken'
         device_id:
           $ref: '#/components/schemas/Uuid'
 
@@ -798,6 +810,9 @@ components:
       properties:
         refresh_token:
           type: string
+          description: |
+            El refresh token de la sesión que se cierra. Sin patrón a propósito: el logout responde
+            `204` con cualquier valor, exista o no, para no servir de oráculo.
 
     UserProfile:
       type: object
@@ -1440,7 +1455,12 @@ components:
       required: [schema_version, device_id, batch_uuid, ops]
       properties:
         schema_version:
-          $ref: '#/components/schemas/SchemaVersion'
+          allOf:
+            - $ref: '#/components/schemas/SchemaVersion'
+          const: 1
+          description: |
+            Versión de payload de este contrato (v1). Otra versión ⇒ `422 schema_unsupported`;
+            `GET /v1/server/info` publica el rango aceptado.
         device_id:
           $ref: '#/components/schemas/Uuid'
         batch_uuid:
@@ -1518,13 +1538,17 @@ components:
     PresignRequest:
       type: object
       required: [sha256, size, mime]
+      additionalProperties: false
       properties:
         sha256:
           $ref: '#/components/schemas/Sha256'
         size:
           type: integer
           minimum: 1
-          description: Tamaño exacto en bytes. Se fija en la firma y se verifica en el commit.
+          maximum: 26214400
+          description: |
+            Tamaño exacto en bytes. Se fija en la firma y se verifica en el commit. Máximo 25 MiB
+            por archivo (`ServerCapabilities.attachment_max_bytes`); por encima, `413`.
         mime:
           $ref: '#/components/schemas/Mime'
         visit_id:
@@ -1567,10 +1591,12 @@ components:
         Tamaño y MIME declarados; el servidor hace `HEAD` sobre el objeto y los verifica junto al
         checksum antes de registrar el blob. Discrepancia ⇒ `422 attachment_checksum_mismatch`.
       required: [size, mime]
+      additionalProperties: false
       properties:
         size:
           type: integer
           minimum: 1
+          maximum: 26214400
         mime:
           $ref: '#/components/schemas/Mime'
 
