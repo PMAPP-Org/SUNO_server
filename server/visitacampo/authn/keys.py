@@ -33,11 +33,15 @@ configurada:
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, \\
             serialization.NoEncryption()).decode())"
 
-**Rotación** (ADR-008, "rotable con periodo de gracia de dos claves"): no se
-implementa aquí. Requiere aceptar *dos* claves de verificación a la vez y
-elegir una para firmar; es trabajo del Paso 15 junto con la detección de
-reuso. El diseño lo permite sin reescritura: `verification_keys()` ya devuelve
-una lista, aunque hoy tenga un solo elemento.
+**Rotación con dos claves vivas** (ADR-008, "rotable con periodo de gracia de
+dos claves"): la clave de firma es siempre una sola; la **anterior** se
+configura aparte (`JWT_PREVIOUS_KEY_FILE` o `JWT_PREVIOUS_KEY`) y solo
+**verifica**, nunca firma. Basta su clave pública (PEM `PUBLIC KEY`): no hace
+falta seguir guardando el secreto retirado. Cada token lleva en la cabecera
+`kid` la huella de la clave que lo firmó, así que se verifica directamente con
+la suya. Procedimiento en `docs/operacion/incidentes.md` ("Rotar la llave
+JWT"): la anterior se retira cuando ya no quedan access tokens suyos vivos
+(15 min por defecto, `JWT_ACCESS_TTL_SECONDS`).
 """
 
 from __future__ import annotations
@@ -45,16 +49,21 @@ from __future__ import annotations
 import base64
 import binascii
 import warnings
+from hashlib import sha256
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
 __all__ = [
     "generate_signing_key",
     "get_signing_key",
+    "key_id",
     "public_key_pem",
     "reset_key_cache",
     "signing_key_to_pem",
@@ -177,16 +186,66 @@ def get_signing_key() -> Ed25519PrivateKey:
     return key
 
 
-def verification_keys() -> list[Ed25519PrivateKey]:
-    """Claves aceptadas al **verificar**.
+def _decode_public_material(material: str) -> Ed25519PublicKey:
+    """La clave anterior: una clave **pública** Ed25519 (PEM o base64 del PEM),
+    o la privada retirada, de la que solo se usa la parte pública."""
+    text = material.strip()
+    raw = text.encode("ascii") if text.startswith(_PEM_HEADER) else None
+    if raw is None:
+        try:
+            raw = base64.b64decode(text, validate=True).lstrip()
+        except (binascii.Error, ValueError) as exc:
+            raise ImproperlyConfigured("La clave JWT anterior no es un PEM ni su base64.") from exc
+    if b"PUBLIC KEY" in raw.split(b"\n", 1)[0]:
+        try:
+            public = serialization.load_pem_public_key(raw)
+        except ValueError as exc:
+            raise ImproperlyConfigured("La clave JWT anterior no se puede cargar.") from exc
+        if not isinstance(public, Ed25519PublicKey):
+            raise ImproperlyConfigured("La clave JWT anterior tiene que ser Ed25519.")
+        return public
+    return _decode_key_material(raw.decode("ascii")).public_key()
 
-    Hoy es siempre `[get_signing_key()]`. Existe como lista —y no como
-    `get_signing_key()` a secas en el verificador— porque la rotación con
-    periodo de gracia de ADR-008 consiste justo en devolver aquí dos claves
-    durante la ventana de cambio; el Paso 15 podrá hacerlo sin tocar
-    `tokens.py`.
+
+def _previous_key() -> Ed25519PublicKey | None:
+    key_file = getattr(settings, "JWT_PREVIOUS_KEY_FILE", "") or ""
+    inline = getattr(settings, "JWT_PREVIOUS_KEY", "") or ""
+    if key_file:
+        return _decode_public_material(_read_key_file(key_file))
+    if inline:
+        return _decode_public_material(inline)
+    return None
+
+
+def _raw_public(key: Ed25519PublicKey) -> bytes:
+    return key.public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+    )
+
+
+def key_id(key: Ed25519PublicKey) -> str:
+    """Huella corta de una clave pública (cabecera `kid` del JWT).
+
+    No es secreta ni identifica a nadie: sirve para verificar con la clave
+    correcta durante una rotación y para saber, en un incidente, con qué
+    clave se firmó un token.
     """
-    return [get_signing_key()]
+    return sha256(_raw_public(key)).hexdigest()[:16]
+
+
+def verification_keys() -> list[Ed25519PublicKey]:
+    """Claves públicas aceptadas al **verificar**: la actual y, durante una
+    rotación, la anterior. Nunca más de dos."""
+    cached = _CACHE.get("verification")
+    if isinstance(cached, list):
+        return cached
+    current = get_signing_key().public_key()
+    keys = [current]
+    previous = _previous_key()
+    if previous is not None and _raw_public(previous) != _raw_public(current):
+        keys.append(previous)
+    _CACHE["verification"] = keys
+    return keys
 
 
 def public_key_pem() -> str:

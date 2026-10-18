@@ -70,10 +70,25 @@ Caddy renueva solo a 30 días del vencimiento; si la alerta salta, la renovació
 
 1. **Rotar** el secreto (inventario en [`docs/seguridad/inventario-activos.md`](../seguridad/inventario-activos.md) §3) y `docker compose up -d`.
    - `DJANGO_SECRET_KEY` invalida las sesiones del Admin y la correlación de las IP de auditoría.
-   - La llave JWT invalida todos los access tokens: los teléfonos se re-autentican con su refresh.
+   - La llave JWT invalida todos los access tokens: los teléfonos se re-autentican con su refresh. **Comprometida, no se deja como `JWT_PREVIOUS_KEY`**: eso aceptaría durante 15 minutos los tokens que firme el atacante. Se cambia y punto.
 2. Credenciales de R2 o GitHub: revócalas en el proveedor **antes** de crear las nuevas.
 3. Llave privada de backups: genera un par nuevo, cambia `BACKUP_AGE_RECIPIENT` y decide si re-cifrar o borrar los backups existentes.
 4. Revisa `AuditEvent` y los logs para acotar qué se hizo con el secreto.
+
+## Rotar la llave JWT (planificado, sin cortar sesiones)
+
+Rotación periódica o preventiva, con la llave **no** comprometida (si lo está, sección anterior). Dos claves vivas durante 15 minutos: la nueva firma y la anterior solo verifica los tokens que ya emitió (ADR-008, `server/visitacampo/authn/keys.py`).
+
+1. Genera la llave nueva (base64 en una línea, como `JWT_SIGNING_KEY`):
+   ```bash
+   openssl genpkey -algorithm ed25519 | base64 -w0
+   ```
+2. En `infra/.env`: copia el valor **actual** de `JWT_SIGNING_KEY` a `JWT_PREVIOUS_KEY` y pon la nueva en `JWT_SIGNING_KEY`. (Con secretos de archivo: `JWT_PREVIOUS_KEY_FILE` apunta al archivo anterior y `JWT_SIGNING_KEY_FILE` al nuevo. Basta la clave pública de la anterior: `openssl pkey -pubout`.)
+3. `docker compose up -d api worker`. Comprueba que entra un login y que `/v1/sync/pull` responde con un token emitido **antes** del cambio.
+4. Pasados al menos 15 minutos (`JWT_ACCESS_TTL_SECONDS`), vacía `JWT_PREVIOUS_KEY` y repite el `up -d`. Los tokens de la llave anterior dejan de valer; los teléfonos ya se habían renovado con su refresh.
+5. Guarda la llave nueva donde se guardan los secretos (`docs/seguridad/inventario-activos.md` §3) y destruye la copia anterior.
+
+Cada access token lleva en la cabecera `kid` la huella de la clave que lo firmó: en un incidente, decodifica la cabecera (no la firma) para saber con cuál se emitió.
 
 ## Teléfono de campo perdido o robado (S2)
 

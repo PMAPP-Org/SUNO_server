@@ -135,7 +135,9 @@ class ReuseDetectionTests(_RefreshMixin, TestCase):
         RefreshToken.objects.update(revoked_at=timezone.now())
         response = self.refresh(self.original)
         self.assertEqual(response.status_code, 401)
-        self.assertFalse(AuditEvent.objects.filter(action=AuditAction.REFRESH_REUSE_DETECTED).exists())
+        self.assertFalse(
+            AuditEvent.objects.filter(action=AuditAction.REFRESH_REUSE_DETECTED).exists()
+        )
 
 
 @skip_without_db
