@@ -20,6 +20,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Assignment, Membership, Visit
+from visitacampo.core.scoping import scoped_qs
 
 
 def _context_for(user: AppUser) -> RequestContext:
@@ -53,11 +54,12 @@ def platform_home(request: HttpRequest) -> HttpResponse:
     """Authenticated operational overview backed only by tenant-scoped data."""
 
     user = cast(AppUser, request.user)
-    if not _context_for(user).is_member:
+    request_context = _context_for(user)
+    if not request_context.is_member:
         auth_logout(request)
         return redirect("platform_login")
 
-    visits = Visit.objects.filter(org_id=user.org_id, deleted_at__isnull=True)
+    visits = scoped_qs(request_context, Visit).filter(deleted_at__isnull=True)
     recent_visits = list(
         visits.select_related("template_version__template", "created_by")
         .annotate(review_count=Count("reviews"))
@@ -81,7 +83,8 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         for visit in located_visits
     ]
     pending_assignments = (
-        Assignment.objects.filter(org_id=user.org_id, deleted_at__isnull=True)
+        scoped_qs(request_context, Assignment)
+        .filter(deleted_at__isnull=True)
         .annotate(visit_count=Count("visits"))
         .filter(visit_count=0)
         .count()
@@ -93,7 +96,7 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         "visit_count": visits.count(),
         "pending_review_count": visits.filter(reviews__isnull=True).count(),
         "pending_assignment_count": pending_assignments,
-        "member_count": Membership.objects.filter(org_id=user.org_id).count(),
+        "member_count": scoped_qs(request_context, Membership).count(),
     }
     return render(request, "suno/platform.html", context)
 
