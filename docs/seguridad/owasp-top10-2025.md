@@ -62,9 +62,9 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 ### A04:2025 Cryptographic Failures
 
-- **Controles**: Argon2id (ADR-008); JWT EdDSA con algoritmo fijado y claims obligatorios; refresh `selector.verifier` con solo `sha256(verifier)` en BD y comparación en tiempo constante (RD-09); SQLCipher con clave en Keystore/Keychain (ADR-002); TLS estricto sin bypass (RD-01); IP de auditoría como HMAC.
-- **Pruebas automatizadas**: lint RD-01 + test que levanta un servidor HTTPS autofirmado y exige el rechazo; tests de tokens; smoke test de cifrado SQLCipher; HSTS verificado en DAST.
-- **Pendiente**: rotación de la clave de firma JWT con dos claves vivas (Paso 15); pinning SPKI con consentimiento (`TrustStore`, Paso 16).
+- **Controles**: Argon2id (ADR-008); JWT EdDSA con algoritmo fijado y claims obligatorios; refresh `selector.verifier` con solo `sha256(verifier)` en BD y comparación en tiempo constante (RD-09); SQLCipher con clave en Keystore/Keychain (ADR-002), Keychain `first_unlock_this_device`; TLS estricto sin bypass (RD-01) con `TrustStore` en la app: solo HTTPS, pinning SPKI del servidor oficial (dos pines con caducidad), TOFU con consentimiento explícito para autohospedados y verificación del certificado antes de enviar la petición (ADR-009); IP de auditoría como HMAC.
+- **Pruebas automatizadas**: lint RD-01 + tests de `TrustStore` contra servidores HTTPS reales (sin pin → rechazo; pin actual o siguiente → aceptado; pin caducado → CA; pin incorrecto → cero peticiones; certificado cambiado → bloqueo); tests de tokens; smoke test de cifrado SQLCipher; HSTS verificado en DAST.
+- **Pendiente**: rotación de la clave de firma JWT con dos claves vivas (Paso 15); pines SPKI reales del dominio oficial y prueba de `TrustStore` en dispositivo.
 
 ### A05:2025 Injection
 
