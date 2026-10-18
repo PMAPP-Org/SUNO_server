@@ -57,6 +57,24 @@ class PlatformAccessTests(TestCase):
         self.assertContains(response, "cuenta sin acceso activo")
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_session_expiry_follows_remember_choice(self) -> None:
+        self.client.post(
+            "/plataforma/ingresar/",
+            {"username": self.user.username, "password": PASSWORD},
+        )
+        self.assertTrue(self.client.session.get_expire_at_browser_close())
+
+        self.client.post("/plataforma/salir/")
+        self.client.post(
+            "/plataforma/ingresar/",
+            {
+                "username": self.user.username,
+                "password": PASSWORD,
+                "remember": "on",
+            },
+        )
+        self.assertFalse(self.client.session.get_expire_at_browser_close())
+
     def test_logout_requires_post(self) -> None:
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/plataforma/salir/").status_code, 405)

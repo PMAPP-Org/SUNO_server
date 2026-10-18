@@ -1,35 +1,107 @@
 {% load static %}
+{% static 'suno/brand/icons.svg' as suno_icons %}
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fffdf4">
+  <meta name="theme-color" content="#faf9f2">
   <title>Mi espacio · SUNO</title>
   <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
   <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'suno/css/web.css' %}">
+  <script src="{% static 'suno/js/web.js' %}" defer></script>
 </head>
-<body class="platform-page">
-  <header class="site-header wrap compact-header">
-    <a class="suno-wordmark text-wordmark" href="{% url 'platform_home' %}" aria-label="SUNO · Mi espacio"><span>SUNO</span></a>
-    <form method="post" action="{% url 'platform_logout' %}">{% csrf_token %}<button class="quiet-button" type="submit">Cerrar sesión</button></form>
-  </header>
-  <main id="contenido" class="workspace wrap">
-    <p class="eyebrow"><span></span> MI ESPACIO</p>
-    <h1>Hola, {{ request.user.display_name|default:request.user.username }}<span class="red">.</span></h1>
-    <div class="workspace-grid">
-      <section class="workspace-card">
-        <span>ORGANIZACIÓN</span>
-        <h2>{{ organization.name }}</h2>
-        <p>Tu cuenta está activa y vinculada a este espacio de trabajo.</p>
-      </section>
-      <section class="workspace-card">
-        <span>OPERACIÓN EN CAMPO</span>
-        <h2>Continúa desde la app SUNO</h2>
-        <p>Captura visitas, evidencia y ubicación desde el dispositivo asignado, incluso sin conexión.</p>
-      </section>
+<body class="workspace-page">
+  <a class="skip-link" href="#workspace-content">Saltar al contenido</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="workspace-sidebar" aria-label="Navegación de la plataforma">
+      <a class="suno-wordmark sidebar-brand" href="{% url 'platform_home' %}" aria-label="SUNO · Mi espacio"><img src="{% static 'suno/brand/Logo_Principal.png' %}" width="36" height="36" alt=""><span>SUNO</span></a>
+      <nav class="sidebar-nav">
+        <p>General</p>
+        <a class="active" href="#resumen"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#home"></use></svg> Inicio</a>
+        <a href="#proyectos"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#folder"></use></svg> Proyectos</a>
+        <a href="#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#map"></use></svg> Mapa</a>
+        <a href="#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#activity"></use></svg> Actividades</a>
+        <a href="#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#record"></use></svg> Registros</a>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#report"></use></svg> Reportes <small>Próximamente</small></span>
+        <p>Gestión</p>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Equipos</span>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#form"></use></svg> Formularios</span>
+        <a href="#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg> Capas GIS</a>
+        {% if request.user.is_staff %}<a href="{% url 'admin:index' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#settings"></use></svg> Administración</a>{% endif %}
+      </nav>
+      <div class="sidebar-user">
+        <span class="user-avatar">{{ request.user.display_name|default:request.user.username|first|upper }}</span>
+        <span><strong>{{ request.user.display_name|default:request.user.username }}</strong><small>{{ organization.name }}</small></span>
+        <form method="post" action="{% url 'platform_logout' %}">{% csrf_token %}<button type="submit" aria-label="Cerrar sesión" title="Cerrar sesión"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#logout"></use></svg></button></form>
+      </div>
+    </aside>
+
+    <div class="workspace-frame">
+      <header class="workspace-topbar">
+        <button class="sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false" data-sidebar-toggle><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#menu"></use></svg><span class="sr-only">Abrir navegación</span></button>
+        <div class="project-selector"><span>Organización</span><strong>{{ organization.name }}</strong></div>
+        <label class="global-search"><span class="sr-only">Buscar proyectos, registros o ubicaciones</span><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#search"></use></svg><input type="search" placeholder="Buscar registros o ubicaciones" data-platform-search></label>
+        <div class="topbar-actions"><button type="button" aria-label="Notificaciones" title="Notificaciones"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#bell"></use></svg></button><span class="topbar-avatar">{{ request.user.display_name|default:request.user.username|first|upper }}</span></div>
+      </header>
+
+      <main id="workspace-content" class="workspace-content">
+        <section class="workspace-heading" id="resumen">
+          <div><p class="editorial-label">Vista general</p><h1>Hola, <span>{{ request.user.display_name|default:request.user.username }}</span>.</h1><p>Consulta la operación reciente y continúa el trabajo de tu organización.</p></div>
+          <p class="workspace-scope">{{ organization.name }}<br><span>Información aislada por organización</span></p>
+        </section>
+
+        <section class="metrics-strip" aria-label="Indicadores de operación">
+          <article><span>Proyectos activos</span><strong>—</strong><small>Módulo aún no configurado</small></article>
+          <article><span>Visitas registradas</span><strong>{{ visit_count }}</strong><small>Registros disponibles</small></article>
+          <article><span>Pendientes de revisión</span><strong>{{ pending_review_count }}</strong><small>{{ pending_assignment_count }} {% if pending_assignment_count == 1 %}asignación pendiente{% else %}asignaciones pendientes{% endif %}</small></article>
+          <article><span>Miembros del equipo</span><strong>{{ member_count }}</strong><small>Con acceso activo</small></article>
+        </section>
+
+        <div class="workspace-primary">
+          <section class="projects-module" id="proyectos" aria-labelledby="projects-title">
+            <div class="module-heading"><div><p class="editorial-index">Operación</p><h2 id="projects-title">Proyectos</h2></div><span class="module-note">Datos reales</span></div>
+            <div class="projects-table" role="table" aria-label="Proyectos de la organización">
+              <div class="table-head" role="row"><span role="columnheader">Proyecto</span><span role="columnheader">Estado</span><span role="columnheader">Última actividad</span><span role="columnheader">Acceso</span></div>
+              <div class="empty-row" role="row"><div><strong>Sin proyectos configurados</strong><p>El modelo de proyectos todavía no forma parte de este entorno. Los registros y el mapa muestran únicamente información existente.</p></div></div>
+            </div>
+            <div class="quick-links" aria-label="Accesos rápidos">
+              <a href="#mapa">Abrir mapa <span aria-hidden="true">→</span></a>
+              <a href="#actividad">Ver registros <span aria-hidden="true">→</span></a>
+              {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">Administrar información <span aria-hidden="true">→</span></a>{% endif %}
+            </div>
+          </section>
+
+          <section class="map-module" id="mapa" aria-labelledby="map-title">
+            <div class="map-module-head"><div><p class="editorial-index">Territorio</p><h2 id="map-title">Mapa de registros</h2></div><span>{{ map_points|length }} punto{{ map_points|length|pluralize:"s" }}</span></div>
+            <div class="map-viewer" data-map-viewer>
+              <div class="map-stage" data-map-stage><img src="{% static 'suno/brand/topography.png' %}" alt="" width="1224" height="1285"><div class="map-marker-layer" data-map-markers></div></div>
+              <div class="map-tools" aria-label="Herramientas del mapa"><button type="button" data-map-zoom="in" aria-label="Acercar"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#plus"></use></svg></button><button type="button" data-map-zoom="out" aria-label="Alejar"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#minus"></use></svg></button><button type="button" data-map-layer aria-pressed="true" aria-label="Mostrar u ocultar curvas de nivel"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg></button></div>
+              {% if not map_points %}<div class="map-empty"><strong>Sin registros georreferenciados</strong><span>Cuando existan visitas con ubicación aparecerán aquí.</span></div>{% endif %}
+              <aside class="record-panel" data-record-panel hidden><button type="button" data-record-close aria-label="Cerrar detalle">×</button><p class="editorial-label">Registro localizado</p><h3 data-record-title></h3><dl><div><dt>Responsable</dt><dd data-record-author></dd></div><div><dt>Capturado</dt><dd data-record-date></dd></div><div><dt>Coordenadas</dt><dd data-record-coordinates></dd></div></dl></aside>
+            </div>
+          </section>
+        </div>
+
+        <section class="activity-module" id="actividad" aria-labelledby="activity-title">
+          <div class="module-heading"><div><p class="editorial-index">Seguimiento</p><h2 id="activity-title">Actividad reciente</h2></div><span class="module-note">{{ recent_visits|length }} registro{{ recent_visits|length|pluralize:"s" }}</span></div>
+          <div class="activity-table" role="table" aria-label="Actividad reciente">
+            <div class="table-head activity-columns" role="row"><span>Actividad</span><span>Responsable</span><span>Fecha y hora</span><span>Revisión</span></div>
+            {% for visit in recent_visits %}
+              <div class="activity-row activity-columns" role="row" data-searchable="{{ visit.template_version.template.name }} {{ visit.created_by.display_name|default:visit.created_by.username }} {{ visit.lat|default:'' }} {{ visit.lon|default:'' }}">
+                <span><i class="activity-mark"></i><strong>{{ visit.template_version.template.name }}</strong><small>{% if visit.lat != None %}{{ visit.lat|floatformat:5 }}, {{ visit.lon|floatformat:5 }}{% else %}Sin ubicación{% endif %}</small></span>
+                <span>{{ visit.created_by.display_name|default:visit.created_by.username }}</span>
+                <time datetime="{{ visit.captured_at|date:'c' }}">{{ visit.captured_at|date:"d M Y · H:i" }}</time>
+                <span>{% if visit.review_count %}<i class="status-dot reviewed"></i> Revisado{% else %}<i class="status-dot pending"></i> Pendiente{% endif %}</span>
+              </div>
+            {% empty %}<div class="activity-empty">Todavía no hay actividad registrada para esta organización.</div>{% endfor %}
+            <p class="search-empty" data-search-empty hidden>No hay registros que coincidan con la búsqueda.</p>
+          </div>
+        </section>
+      </main>
     </div>
-  </main>
+  </div>
+  {{ map_points|json_script:"platform-map-data" }}
 </body>
 </html>

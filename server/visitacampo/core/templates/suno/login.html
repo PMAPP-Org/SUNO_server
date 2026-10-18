@@ -4,58 +4,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fffdf4">
+  <meta name="theme-color" content="#faf9f2">
   <meta name="description" content="Acceso a la plataforma SUNO para integrantes de organizaciones.">
   <title>Ingresar · SUNO</title>
   <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
   <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'suno/css/web.css' %}">
+  <script src="{% static 'suno/js/web.js' %}" defer></script>
 </head>
-<body class="platform-page">
+<body class="access-page">
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
-  <header class="site-header wrap compact-header">
-    <a class="suno-wordmark text-wordmark" href="{% url 'home' %}" aria-label="SUNO · Inicio"><span>SUNO</span></a>
-    <a class="quiet-link" href="{% url 'home' %}">Volver al inicio</a>
+  <header class="site-header access-header">
+    <div class="public-wrap header-inner">
+      <a class="suno-wordmark" href="{% url 'home' %}" aria-label="SUNO · Inicio">
+        <img src="{% static 'suno/brand/Logo_Principal.png' %}" width="40" height="40" alt=""><span>SUNO</span>
+      </a>
+      <a class="quiet-link" href="{% url 'home' %}"><span aria-hidden="true">←</span> Volver al inicio</a>
+    </div>
   </header>
 
-  <main id="contenido" class="access-layout wrap">
+  <main id="contenido" class="access-layout public-wrap">
     <section class="access-intro" aria-labelledby="login-title">
-      <p class="eyebrow"><span></span> ACCESO A LA PLATAFORMA</p>
-      <h1 id="login-title">Continúa tu trabajo<span class="red">.</span></h1>
-      <p>Ingresa con la cuenta de tu organización para consultar tu espacio de trabajo SUNO.</p>
+      <p class="editorial-label">Acceso a la plataforma</p>
+      <h1 id="login-title">Continúa<br>tu trabajo<span class="brand-dot">.</span></h1>
+      <p>Ingresa con la cuenta de tu organización para acceder a tus proyectos y continuar tus actividades en SUNO.</p>
       <div class="access-note">
         <strong>¿Trabajas en administración?</strong>
-        <span>El panel interno tiene un acceso independiente y requiere permisos adicionales.</span>
+        <span>El panel interno dispone de un acceso independiente y requiere permisos adicionales.</span>
+        <a href="{% url 'admin:index' %}">Ir al acceso administrativo <span aria-hidden="true">→</span></a>
       </div>
     </section>
 
-    <section class="login-card" aria-label="Formulario de acceso">
-      <p class="form-kicker">CUENTA SUNO</p>
-      {% if form.non_field_errors %}
-        <div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>
-      {% endif %}
-      <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -- the CSRF field is the first control inside this form. -->
-      <form method="post" novalidate>
-        {% csrf_token %}
-        <div class="field-row">
-          <label for="{{ form.username.id_for_label }}">Usuario</label>
-          {{ form.username }}
-          {% for error in form.username.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
-        </div>
-        <div class="field-row">
-          <label for="{{ form.password.id_for_label }}">Contraseña</label>
-          {{ form.password }}
-          {% for error in form.password.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
-        </div>
-        <button class="button form-button" type="submit">Ingresar a SUNO <span aria-hidden="true">→</span></button>
-      </form>
-      <p class="login-help">Si todavía no tienes cuenta, solicítala al responsable de tu organización.</p>
+    <section class="login-surface" aria-label="Formulario de acceso">
+      <img class="access-topography" src="{% static 'suno/brand/topography.png' %}" alt="" width="1224" height="1285">
+      <div class="login-form-wrap">
+        <p class="form-kicker">Cuenta SUNO</p>
+        <h2>Accede a tu organización</h2>
+        {% if form.non_field_errors %}<div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>{% endif %}
+        <form method="post" novalidate data-login-form>
+          {% csrf_token %}
+          <div class="field-row{% if form.username.errors %} has-error{% endif %}">
+            <label for="{{ form.username.id_for_label }}">Usuario</label>
+            {{ form.username }}
+            {% for error in form.username.errors %}<span class="field-error" role="alert">{{ error }}</span>{% endfor %}
+          </div>
+          <div class="field-row{% if form.password.errors %} has-error{% endif %}">
+            <label for="{{ form.password.id_for_label }}">Contraseña</label>
+            <div class="password-field">{{ form.password }}<button type="button" class="password-toggle" data-password-toggle aria-label="Mostrar contraseña" aria-pressed="false"><span aria-hidden="true">Mostrar</span></button></div>
+            {% for error in form.password.errors %}<span class="field-error" role="alert">{{ error }}</span>{% endfor %}
+          </div>
+          <div class="form-options"><label class="remember-option"><input type="checkbox" name="remember"> <span>Mantener sesión iniciada</span></label><a href="#solicitar-acceso">¿Olvidaste tu contraseña?</a></div>
+          <button class="button form-button" type="submit" data-submit-label="Ingresar a SUNO" data-loading-label="Ingresando…">Ingresar a SUNO <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="login-help" id="solicitar-acceso">Si todavía no tienes cuenta o no recuerdas tu contraseña, solicítala al responsable de tu organización.</p>
+      </div>
     </section>
   </main>
 
-  <footer class="site-footer wrap access-footer">
-    <p>SUNO · Gestión de campo</p>
-    <a class="admin-link" href="{% url 'admin:index' %}">Acceso restringido para administración</a>
-  </footer>
+  <footer class="site-footer public-wrap access-footer"><p>SUNO · Gestión de campo</p><a class="admin-link" href="{% url 'admin:index' %}">Acceso restringido para administración</a></footer>
 </body>
 </html>
