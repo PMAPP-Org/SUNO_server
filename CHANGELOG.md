@@ -4,6 +4,26 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.5.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.4.0...v0.5.0) (2026-10-18)
+
+
+### Agregado
+
+* **authn:** rotate the JWT signing key with two live keys (ADR-008) ([#20](https://github.com/PMAPP-Org/SUNO_server/issues/20)) ([816df5b](https://github.com/PMAPP-Org/SUNO_server/commit/816df5b022ad32b3544a404ed203777bb0a23812))
+* **privacy:** record the data subject's authorization (Ley 1581, art. 9) ([#25](https://github.com/PMAPP-Org/SUNO_server/issues/25)) ([40ff3c4](https://github.com/PMAPP-Org/SUNO_server/commit/40ff3c4960948e2162e3b8efeb50f7d8868faf84))
+* **ui:** add SUNO website and branded administration ([#24](https://github.com/PMAPP-Org/SUNO_server/issues/24)) ([fbc6cab](https://github.com/PMAPP-Org/SUNO_server/commit/fbc6cab7f9fe64f6506b65117529a17e942837a5))
+
+
+### Corregido
+
+* **api:** contract conformance, two server defects, blocking DAST conformance and IDOR check ([#23](https://github.com/PMAPP-Org/SUNO_server/issues/23)) ([3a71dba](https://github.com/PMAPP-Org/SUNO_server/commit/3a71dba8fd637a6a73532fd36252e1d194a07db6))
+* **ci:** deploy secrets for the reusable workflow; regenerate runtime lock ([#18](https://github.com/PMAPP-Org/SUNO_server/issues/18)) ([44b9278](https://github.com/PMAPP-Org/SUNO_server/commit/44b9278d9a9dc57740532c9f7723e4b3607619c8))
+
+
+### Documentación
+
+* **plan:** Ley 1581 mechanics done; notice text pending legal review ([#26](https://github.com/PMAPP-Org/SUNO_server/issues/26)) ([a1acb18](https://github.com/PMAPP-Org/SUNO_server/commit/a1acb185da8164a4f61bf8955179c7ca9f322d7c))
+
 ## [0.4.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.3.0...v0.4.0) (2026-10-18)
 
 
