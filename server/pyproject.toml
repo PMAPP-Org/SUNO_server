@@ -1,6 +1,6 @@
 [project]
 name = "visitacampo-server"
-version = "0.5.0" # x-release-please-version
+version = "0.6.0" # x-release-please-version
 description = "VisitaCampo backend — Django 5 + Django Ninja (ADR-004, sin DRF)"
 requires-python = ">=3.12"
 
