@@ -4,10 +4,12 @@ partir de los pasos que añaden modelos de dominio)."""
 
 from django.contrib import admin
 from django.urls import path
+from django.views.generic import TemplateView
 
 from config.api import api
 
 urlpatterns = [
+    path("", TemplateView.as_view(template_name="suno/home.html"), name="home"),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),
 ]

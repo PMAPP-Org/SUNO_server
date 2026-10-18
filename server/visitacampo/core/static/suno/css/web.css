@@ -1,0 +1,84 @@
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 32px; }
+body { margin: 0; background: var(--suno-cream); color: var(--suno-ink); font: 15px/1.65 var(--suno-font); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-underline-offset: 5px; }
+.wrap { max-width: 1280px; margin-inline: auto; padding-inline: 48px; }
+.site-header { min-height: 104px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--suno-line); }
+nav { display: flex; align-items: center; gap: 36px; font-size: 13px; font-weight: 550; }
+nav a { text-decoration: none; padding-block: 12px; }
+nav a:hover, .text-link:hover { color: var(--suno-action); }
+.nav-access { border-left: 1px solid var(--suno-line); padding-left: 32px; }
+.nav-access span { margin-left: 16px; color: var(--suno-action); }
+.hero { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 56px; padding-block: 76px 80px; }
+.eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .15em; line-height: 1.8; margin: 0 0 26px; }
+.hero .eyebrow { display: flex; gap: 12px; align-items: center; }
+.eyebrow > span { width: 25px; height: 2px; background: var(--suno-red); }
+h1 { font-size: clamp(44px, 5vw, 68px); font-weight: 600; letter-spacing: -.055em; line-height: 1.06; margin: 0 0 28px; }
+.red { color: var(--suno-red); }
+.hero-description { max-width: 400px; color: var(--suno-muted); font-size: 16px; margin-bottom: 32px; line-height: 1.8; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 28px; min-height: 48px; padding: 13px 22px; background: var(--suno-action); color: var(--suno-cream); border-radius: var(--suno-radius); text-decoration: none; font-size: 13px; font-weight: 600; transition: background .15s; }
+.button:hover { background: var(--suno-red-dark); }
+.text-link { display: inline-flex; gap: 18px; font-size: 12px; margin: 18px 0 18px 24px; text-decoration: none; padding-block: 12px; }
+.hero-note { font-size: 11px; color: var(--suno-muted); margin-top: 24px; }
+.hero-art { margin: 0; border-left: 1px solid var(--suno-line); padding-left: 32px; }
+.hero-art img { display: block; width: 100%; height: auto; margin-block: 20px; }
+.art-meta, figcaption { display: flex; justify-content: space-between; gap: 16px; font-size: 9px; letter-spacing: .09em; color: var(--suno-muted); }
+figcaption { padding-top: 18px; border-top: 1px solid var(--suno-line); letter-spacing: 0; font-size: 11px; }
+.capabilities { padding-block: 52px 76px; border-top: 1px solid var(--suno-line); }
+.section-heading { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; margin-bottom: 48px; }
+h2 { font-size: clamp(28px, 3vw, 39px); font-weight: 550; letter-spacing: -.04em; line-height: 1.2; margin: 0; }
+.capability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; }
+.capability-grid article { border-top: 1px solid var(--suno-line); padding-top: 22px; }
+.feature-top { display: flex; align-items: center; justify-content: space-between; color: var(--suno-muted); font-size: 9px; letter-spacing: .12em; margin-bottom: 24px; }
+svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.feature-top svg { color: var(--suno-action); }
+h3 { font-size: 18px; font-weight: 600; letter-spacing: -.02em; margin: 0 0 10px; }
+.capability-grid p { color: var(--suno-muted); font-size: 13px; line-height: 1.85; margin: 0; }
+.field-section { background: var(--suno-ink); color: var(--suno-cream); padding-block: 72px; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; }
+.field-section .eyebrow { color: var(--suno-pink); }
+.field-intro { color: #c9c8c0; max-width: 320px; margin-top: 24px; font-size: 14px; }
+.workflow { list-style: none; padding: 0; margin: 0; }
+.workflow li { display: flex; gap: 24px; padding-block: 22px; border-top: 1px solid #42443e; }
+.workflow li > span { color: var(--suno-pink); font-size: 11px; }
+.workflow h3 { font-size: 16px; }
+.workflow p { color: #c9c8c0; margin: 0; font-size: 13px; }
+.closing { display: flex; align-items: center; justify-content: space-between; gap: 32px; padding-block: 72px; }
+.closing h2 { font-size: 28px; }
+.closing .eyebrow { margin-bottom: 14px; }
+.site-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--suno-line); padding-block: 28px; font-size: 11px; color: var(--suno-muted); }
+.site-footer .suno-wordmark span { font-size: 18px; color: var(--suno-ink); }
+.site-footer > a:last-child { padding-block: 14px; }
+.skip-link { position: fixed; top: -100px; left: 16px; padding: 12px 20px; background: var(--suno-ink); color: var(--suno-cream); z-index: 10; }
+.skip-link:focus { top: 12px; }
+@media (max-width: 900px) {
+  .wrap { padding-inline: 28px; }
+  .hero { gap: 24px; padding-block: 56px; }
+  .hero-art { padding-left: 20px; }
+  .text-link { margin-left: 0; margin-right: 20px; }
+  .art-meta { font-size: 8px; letter-spacing: 0; }
+  .field-grid { gap: 40px; }
+  .closing { align-items: flex-start; }
+}
+@media (max-width: 620px) {
+  .wrap { padding-inline: 24px; }
+  .site-header { min-height: 86px; flex-wrap: wrap; padding-block: 16px; gap: 12px; }
+  .site-header .suno-wordmark img { width: 40px; height: 40px; }
+  .site-header .suno-wordmark span { font-size: 22px; }
+  nav { width: 100%; justify-content: space-between; gap: 12px; font-size: 11px; }
+  .nav-access { padding-left: 12px; }
+  .nav-access span { margin-left: 4px; }
+  .hero { grid-template-columns: 1fr; padding-block: 40px; gap: 32px; }
+  .hero .eyebrow { font-size: 9px; }
+  .hero-description { font-size: 15px; }
+  .text-link { margin-left: 20px; margin-right: 0; }
+  .hero-art { border-left: 0; border-top: 1px solid var(--suno-line); padding: 22px 0 0; }
+  .hero-art img { max-width: 320px; margin-inline: auto; }
+  .section-heading, .capability-grid, .field-grid { grid-template-columns: 1fr; gap: 28px; }
+  .section-heading .eyebrow { margin: 0; }
+  .capabilities, .field-section { padding-block: 40px; }
+  .feature-top { margin-bottom: 16px; }
+  .closing { flex-direction: column; padding-block: 40px; }
+  .site-footer { flex-wrap: wrap; gap: 12px 24px; }
+  .site-footer p { order: 3; width: 100%; margin: 0; }
+}

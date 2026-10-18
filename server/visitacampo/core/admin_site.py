@@ -63,6 +63,9 @@ class _DeviceByCodeFormatForm(OTPAdminAuthenticationForm):
 
 
 class VisitaCampoOTPAdminSite(OTPAdminSite):
+    site_title = "SUNO · Administración"
+    index_title = "Gestión de campo"
+
     @property
     def login_form(self) -> Any:
         return _DeviceByCodeFormatForm if otp_required() else AdminAuthenticationForm
@@ -74,7 +77,7 @@ class VisitaCampoOTPAdminSite(OTPAdminSite):
     @property
     def site_header(self) -> Any:
         if otp_required():
-            return AdminSite.site_header
+            return "Administración"
         return "Administración — AVISO: segundo factor desactivado (EXC-003)"
 
     def has_permission(self, request: Any) -> bool:

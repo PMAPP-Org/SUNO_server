@@ -1,0 +1,30 @@
+@font-face {
+  font-family: Inter;
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --suno-red: #e84546;
+  --suno-action: #a5282c;
+  --suno-red-dark: #8f1d23;
+  --suno-pink: #d57c87;
+  --suno-cream: #fffdf4;
+  --suno-paper: #f6f3eb;
+  --suno-line: #e5e1da;
+  --suno-ink: #161715;
+  --suno-muted: #62655f;
+  --suno-green: #6b7f6b;
+  --suno-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --suno-radius: 6px;
+}
+
+.suno-wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.suno-wordmark img { object-fit: contain; flex-shrink: 0; }
+.suno-wordmark span { font: 750 26px/1 var(--suno-font); letter-spacing: .1em; }
+:focus-visible { outline: 3px solid var(--suno-action); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
