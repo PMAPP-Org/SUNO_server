@@ -33,6 +33,7 @@ from .base import (
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
+from .privacy import PrivacyConsent, PrivacyPurpose
 from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
@@ -58,6 +59,8 @@ __all__ = [
     "MimeType",
     "OrgScopedModel",
     "Organization",
+    "PrivacyConsent",
+    "PrivacyPurpose",
     "Platform",
     "Role",
     "RateLimitBucket",

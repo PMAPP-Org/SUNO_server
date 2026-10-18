@@ -57,6 +57,7 @@ from visitacampo.core.models import (
     Job,
     Membership,
     Organization,
+    PrivacyConsent,
     SyncOpLog,
     Visit,
     VisitAttachment,
@@ -622,6 +623,21 @@ class AuditEventAdmin(ReadOnlyAdmin):
     search_fields = ("target", "actor__username")
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
+
+
+@admin.register(PrivacyConsent)
+class PrivacyConsentAdmin(ReadOnlyAdmin):
+    """Prueba de la autorización de datos personales (Ley 1581, art. 9).
+
+    Solo lectura, como la auditoría: una prueba que el back-office pudiera
+    editar no probaría nada. Se escribe únicamente desde `POST /v1/consents`.
+    """
+
+    list_display = ("recorded_at", "user", "notice_version", "purposes", "device")
+    list_filter = ("notice_version",)
+    search_fields = ("user__username",)
+    date_hierarchy = "recorded_at"
+    ordering = ("-recorded_at",)
 
 
 @admin.register(Blob)

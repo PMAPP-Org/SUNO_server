@@ -330,6 +330,8 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_assign_work": ORG,
             "can_export_visits": ORG,
             "can_manage_personal_data": ORG,
+            # Ley 1581: cualquier miembro registra su propia autorización.
+            "can_record_consent": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

@@ -52,6 +52,7 @@ __all__ = [
     "can_read_job_output",
     "can_read_members",
     "can_read_visit",
+    "can_record_consent",
     "can_review_visit",
     "can_upload_attachment",
     "can_write_visit",
@@ -63,6 +64,7 @@ __all__ = [
     "check_read_job_output",
     "check_read_members",
     "check_read_visit",
+    "check_record_consent",
     "check_review_visit",
     "check_upload_attachment",
     "check_write_visit",
@@ -317,6 +319,15 @@ def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
 
 
+def can_record_consent(ctx: RequestContext, org_id: UUID) -> bool:
+    """Registrar la propia autorización de datos personales (Ley 1581, art. 9).
+
+    Cualquier miembro, para sí mismo: la autorización es del titular. Que el
+    dispositivo sea suyo lo comprueba el servicio (`privacy/services.py`).
+    """
+    return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
+
+
 def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
     """Atender derechos del titular: consulta y supresión (Ley 1581, Paso 24).
 
@@ -373,6 +384,11 @@ def check_assign_work(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_export_visits(ctx: RequestContext, org_id: UUID) -> None:
     if not can_export_visits(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_record_consent(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_record_consent(ctx, org_id):
         raise _denial(ctx, org_id)
 
 

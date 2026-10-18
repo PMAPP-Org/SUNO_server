@@ -76,6 +76,8 @@ tags:
     description: Estado de trabajos asíncronos (ADR-006).
   - name: health
     description: Liveness y readiness. Sin autenticación, sin filtrar información.
+  - name: privacy
+    description: Autorización del titular de los datos personales (Ley 1581 de 2012).
 
 security:
   - bearerAuth: []
@@ -448,6 +450,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Job'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ------------------------------------------------------------- privacy ----
+
+  /v1/consents:
+    post:
+      operationId: consentsRecord
+      tags: [privacy]
+      summary: Registra la autorización de datos personales del titular
+      description: |
+        Prueba de la autorización **previa, expresa e informada** que exige el art. 9 de la
+        Ley 1581: la app muestra el aviso de privacidad antes del primer login, el agente acepta
+        cada finalidad, y tras el login la app envía aquí lo que aceptó. Cada llamada guarda una
+        fila nueva (historial), nunca se edita.
+
+        El titular es quien llama (`bearerAuth`) y `device_id` tiene que ser **un dispositivo
+        suyo** de su organización; si no, `404` (RD-11).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentRequest'
+      responses:
+        '201':
+          description: Autorización registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1696,6 +1733,46 @@ components:
           description: Motivo del fallo en `failed` / `dead_letter`.
 
     # ---------------------------------------------------------- health ----
+
+    PrivacyPurpose:
+      type: string
+      enum: [account, location, photos]
+      description: |
+        Finalidad aceptada en el aviso de privacidad: `account` (cuenta y uso de la app),
+        `location` (ubicación de las visitas), `photos` (fotos y firmas de las visitas).
+
+    ConsentRequest:
+      type: object
+      required: [device_id, notice_version, purposes, accepted_at]
+      additionalProperties: false
+      properties:
+        device_id:
+          $ref: '#/components/schemas/Uuid'
+        notice_version:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: '^[0-9A-Za-z][0-9A-Za-z._-]*$'
+          description: Versión del aviso de privacidad que se mostró (la fija la app).
+        purposes:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PrivacyPurpose'
+        accepted_at:
+          $ref: '#/components/schemas/Timestamp'
+          description: Cuándo aceptó, según el teléfono (puede ser antes, sin red).
+
+    ConsentResponse:
+      type: object
+      required: [id, recorded_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        recorded_at:
+          $ref: '#/components/schemas/Timestamp'
 
     HealthStatus:
       type: object

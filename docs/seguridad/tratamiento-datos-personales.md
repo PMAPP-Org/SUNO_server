@@ -17,17 +17,18 @@
 | T-5 | Respuestas de formulario | Según la plantilla (pueden incluir datos de terceros) | Objeto del servicio del cliente | Teléfono → PostgreSQL | **Por definir** | Ninguno | Validación por esquema, aislamiento por organización |
 | T-6 | Traza de auditoría (actor, acción, dispositivo, **IP como HMAC**) | Usuarios | Seguridad y trazabilidad (A.8.15) | PostgreSQL | 365 días ([`retencion.md`](retencion.md)) | Ninguno | Solo lectura; IP no reversible |
 | T-7 | Intentos fallidos de login (**usuario e IP en claro**) | Quien intenta entrar, aunque el usuario no exista | Defensa contra fuerza bruta | PostgreSQL (django-axes) | 90 días ([`retencion.md`](retencion.md)) | Ninguno | Purga automática |
-| T-8 | Logs del proxy (IP, ruta, hora) | Cualquier cliente | Operación y seguridad | stdout de Caddy en el VPS | Según la rotación de logs de Docker (**por definir**) | Ninguno | Sin cuerpos de petición ni cabeceras de autorización |
+| T-8 | Logs del proxy (IP, ruta, hora) | Cualquier cliente | Operación y seguridad | stdout de Caddy en el VPS | Rotación de Docker: 5 archivos de 10 MB (`infra/provision/provision.sh`) | Ninguno | Sin cuerpos de petición ni cabeceras de autorización |
+| T-9 | **Autorización del titular**: versión del aviso, finalidades aceptadas, dispositivo, fecha | Agente | Prueba de la autorización (art. 9) | PostgreSQL (`privacy_consent`) | Mientras exista la cuenta (es la prueba de que el tratamiento fue autorizado) | Ninguno | Solo lectura en el Admin; se escribe solo desde `POST /v1/consents`; incluida en la consulta del titular |
 
 ## Pendientes para cumplir
 
-1. **Aviso de privacidad y autorización** del titular en la app, antes del primer login y antes de capturar ubicación o fotos (art. 9 y 12, Ley 1581). Diseño pendiente de validación jurídica; el texto irá en `app/lib/l10n/app_es.arb`.
+1. **Aviso de privacidad y autorización**: la mecánica está hecha. El servidor guarda la prueba (`POST /v1/consents`, T-9) y la app muestra el aviso antes del primer login, con una autorización expresa por finalidad (cuenta, ubicación, fotos). **Falta** que el asesor jurídico valide el texto del aviso (`lib/l10n/app_es.arb` de SUNO_client) y la identificación del responsable que debe incluir (art. 12).
 2. **Plazo de conservación** de visitas, fotos y respuestas (T-3 a T-5), acordado con cada cliente e implementado como un periódico de retención, igual que `security.purge_logs`.
 3. **Transferencia internacional** a Cloudflare: verificar el DPA, la región del bucket y la base legal (art. 26).
 4. ~~**Derechos del titular**: herramienta en el back-office~~ **Hecho en el Paso 24** (ver abajo). Falta fijar con el asesor jurídico el canal de recepción de solicitudes y los plazos de respuesta (art. 14 y 15: 10 y 15 días hábiles).
 5. **Fotos de terceros**: criterio de captura (evitar rostros y documentos innecesarios) en la guía de campo del cliente.
 6. **Registro Nacional de Bases de Datos** ante la SIC, si el responsable está obligado.
-7. **Rotación de logs de Docker** (T-8): fijar `max-size`/`max-file` en el aprovisionamiento del VPS.
+7. ~~**Rotación de logs de Docker** (T-8)~~: hecho en `infra/provision/provision.sh` (`max-size` 10 MB, `max-file` 5).
 
 ## Derechos del titular en el back-office (Paso 24)
 
