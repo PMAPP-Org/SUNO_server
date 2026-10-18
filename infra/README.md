@@ -37,7 +37,7 @@ mismo en el shell.
 
 | Override | Archivo | Estado | Contenido |
 |---|---|---|---|
-| Desarrollo | `docker-compose.override.dev.yml` | **Creado en este paso** | Puertos publicados al host, hot-reload placeholder de `api`, MinIO (+ `createbuckets`) como emulador S3 local (anticipa ADR-007/Paso 17), MailHog para correo saliente simulado. |
+| Desarrollo | `docker-compose.override.dev.yml` | **Creado en este paso** | Puertos publicados al host, hot-reload placeholder de `api`, MinIO (+ `createbuckets`) como emulador S3 local (anticipa ADR-007/Paso 17), Mailpit para correo saliente simulado (sustituye a MailHog). MinIO ya no publica imágenes públicas: ver el issue del sustituto. |
 | Self-hosted (todo en Docker, un único VPS) | `docker-compose.override.selfhosted.yml` | **Fuera de alcance de este paso** — se crea en un paso posterior de infraestructura de producción (ver Paso 24/25 del plan si aplica despliegue real). Incluirá `db` con volumen persistente en el propio VPS, tal como describe ADR-010. | — |
 | Managed (Postgres gestionado externo) | `docker-compose.override.managed.yml` | **Fuera de alcance de este paso**, misma razón. Sustituirá el servicio `db` local por variables de conexión a un Postgres gestionado (ruta de evolución documentada en ADR-010). | — |
 

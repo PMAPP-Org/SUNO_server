@@ -58,7 +58,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: lockfiles con hashes para todo el árbol Python (`--require-hashes` en CI y Docker) y `pubspec.lock` con `--enforce-lockfile`; imágenes base y de servicios fijadas por digest; actions fijadas por SHA; herramientas de CI descargadas con versión y SHA-256 verificados; Dependabot semanal; SBOM.
 - **Pruebas automatizadas**: pip-audit, osv-scanner (también semanal), Dependency Review, grype sobre la imagen, `check_lockfiles.py`, zizmor (impostor commits, actions vulnerables), Scorecard.
-- **Pendiente**: imágenes del override de desarrollo (`minio`, `mailhog`) en `:latest` (solo dev).
+- **Pendiente**: sustituto de MinIO en el override de desarrollo: dejó de publicar imágenes públicas ([#21](https://github.com/PMAPP-Org/SUNO_server/issues/21)); MailHog ya se sustituyó por Mailpit fijado por digest.
 
 ### A04:2025 Cryptographic Failures
 
