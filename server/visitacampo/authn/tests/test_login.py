@@ -50,6 +50,24 @@ class LoginSuccessTests(TestCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertEqual(response.json()["code"], "validation_error")
 
+    def test_a_nul_character_is_a_422_not_a_500(self) -> None:
+        """Schemathesis: PostgreSQL no guarda `U+0000`; el intento fallido que
+        registra django-axes salía como `DataError` → 500 (`NoNulStr`)."""
+        for body in (
+            {"username": "a\u0000b", "password": "x", "device_info": device_info()},
+            {
+                "username": "agente",
+                "password": "x",
+                "device_info": device_info(model="Pixel\u0000"),
+            },
+        ):
+            with self.subTest(body=body):
+                response = self.client.post(
+                    "/v1/auth/login", data=json.dumps(body), content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 422, response.content)
+                self.assertEqual(response.json()["code"], "validation_error")
+
     def test_returns_the_contract_shape(self) -> None:
         response = login(self.client)
         self.assertEqual(response.status_code, 200, response.content)
