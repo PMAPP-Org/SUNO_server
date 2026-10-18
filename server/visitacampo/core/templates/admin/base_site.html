@@ -13,7 +13,9 @@
 {% block branding %}
 <div class="suno-admin-brand">
   <a class="suno-wordmark" href="{% url 'admin:index' %}" aria-label="SUNO · Administración">
+    {% if request.resolver_match.url_name != "login" %}
     <img src="{% static 'suno/brand/Logo_Principal.png' %}" alt="" width="48" height="48">
+    {% endif %}
     <span>SUNO</span>
   </a>
   <span class="suno-admin-label">{{ site_header }}</span>
