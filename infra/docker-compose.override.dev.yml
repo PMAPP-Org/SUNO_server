@@ -53,7 +53,7 @@ services:
       STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
       STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
       STORAGE_S3_USE_PATH_STYLE: "true"
-      EMAIL_HOST: mailhog
+      EMAIL_HOST: mailpit
       EMAIL_PORT: "1025"
     depends_on:
       db:
@@ -62,6 +62,10 @@ services:
         condition: service_started
 
   minio:
+    # ATENCIÓN: MinIO ya no publica imágenes públicas (Docker Hub las retiró y
+    # quay.io pide autenticación): este servicio no arranca en un equipo
+    # nuevo. Sustituto pendiente de decidir: SUNO_server#21. Mientras tanto, desarrollo
+    # local con STORAGE_BACKEND=localfs, como la CI.
     image: minio/minio:latest
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -92,8 +96,10 @@ services:
       STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY}
       STORAGE_S3_BUCKET_NAME: ${STORAGE_S3_BUCKET_NAME}
 
-  mailhog:
-    image: mailhog/mailhog:latest
+  mailpit:
+    # Correo saliente simulado. Sustituye a MailHog, sin mantenimiento desde
+    # 2020; mismos puertos. Fijado por versión y digest (Dependabot lo sube).
+    image: axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
     restart: unless-stopped
     ports:
       - "1025:1025" # SMTP
