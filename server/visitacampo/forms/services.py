@@ -116,9 +116,11 @@ def publish_version(
         if template is None:
             raise TemplateNotFound
 
-        highest = scoped_qs(ctx, FormTemplateVersion).filter(template_id=template_id).aggregate(
-            top=models.Max("version_number")
-        )["top"]
+        highest = (
+            scoped_qs(ctx, FormTemplateVersion)
+            .filter(template_id=template_id)
+            .aggregate(top=models.Max("version_number"))["top"]
+        )
 
         return scoped_qs(ctx, FormTemplateVersion).create(
             org_id=ctx.org_id,

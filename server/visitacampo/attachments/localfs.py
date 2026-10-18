@@ -49,6 +49,7 @@ from visitacampo.attachments.blobstore import (
     basemap_key_for,
     bucket_key_for,
     checksum_header_value,
+    layer_key_for,
     normalize_sha256,
     sha256_from_bucket_key,
 )
@@ -181,28 +182,46 @@ class LocalFsBlobStore:
 
     # --- mapas base (Fase B) ---------------------------------------------------
 
-    def _basemap_path(self, sha256: str) -> Path:
-        candidate = (self._root / basemap_key_for(sha256)).resolve()
+    def _contained(self, key: str) -> Path:
+        candidate = (self._root / key).resolve()
         if not candidate.is_relative_to(self._root):
             raise BlobStoreError("La ruta resuelta cae fuera del directorio de blobs.")
         return candidate
 
-    def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
+    def _put_verified(self, key: str, *, sha256: str, path: str, size: int) -> None:
         # Como el store real: lo guardado tiene que ser lo declarado.
         source = Path(path)
         if source.stat().st_size != size or _digest_of(source) != sha256:
-            raise BlobStoreError("El paquete no coincide con el tamaño o el sha256 declarados.")
-        target = self._basemap_path(sha256)
+            raise BlobStoreError("El archivo no coincide con el tamaño o el sha256 declarados.")
+        target = self._contained(key)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
 
+    def _presigned(self, key: str, expires_in: int, filename: str) -> str:
+        query = f"expires={int(time.time()) + expires_in}&filename={quote(filename)}"
+        return f"{self._base_url}{key}?{query}"
+
+    def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
+        self._put_verified(basemap_key_for(sha256), sha256=sha256, path=path, size=size)
+
     def basemap_exists(self, sha256: str) -> bool:
         """**Solo para tests**: ¿se guardó el paquete?"""
-        return self._basemap_path(sha256).is_file()
+        return self._contained(basemap_key_for(sha256)).is_file()
 
     def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
-        query = f"expires={int(time.time()) + expires_in}&filename={quote(filename)}"
-        return f"{self._base_url}{basemap_key_for(sha256)}?{query}"
+        return self._presigned(basemap_key_for(sha256), expires_in, filename)
+
+    # --- capas de referencia (Fase C) -------------------------------------------
+
+    def put_layer(self, *, sha256: str, path: str, size: int) -> None:
+        self._put_verified(layer_key_for(sha256), sha256=sha256, path=path, size=size)
+
+    def layer_exists(self, sha256: str) -> bool:
+        """**Solo para tests**: ¿se guardó la capa?"""
+        return self._contained(layer_key_for(sha256)).is_file()
+
+    def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        return self._presigned(layer_key_for(sha256), expires_in, filename)
 
     # --- interno ----------------------------------------------------------------
 

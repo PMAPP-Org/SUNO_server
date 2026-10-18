@@ -117,6 +117,29 @@
         {"name": "vacio", "answers": {}, "visible": ["nota"], "violations": []},
         {"name": "no_es_texto", "answers": {"nota": 7}, "visible": ["nota"], "violations": [["nota", "not_a_string"]]}
       ]
+    },
+    {
+      "name": "geometrias",
+      "definition": {"fields": [
+        {"key": "cerca", "type": "line", "label": {"es": "Recorrido de la cerca"}},
+        {"key": "lote", "type": "polygon", "label": {"es": "Lindero del lote"}, "required": true}]},
+      "cases": [
+        {"name": "validas", "answers": {
+          "cerca": {"type": "LineString", "coordinates": [[-74.08, 4.6], [-74.079, 4.601]]},
+          "lote": {"type": "Polygon", "coordinates": [[[-74.08, 4.6], [-74.079, 4.6], [-74.079, 4.601], [-74.08, 4.6]]]}},
+          "visible": ["cerca", "lote"], "violations": []},
+        {"name": "sin_poligono_obligatorio", "answers": {}, "visible": ["cerca", "lote"], "violations": [["lote", "required"]]},
+        {"name": "mal_formadas", "answers": {
+          "cerca": {"type": "LineString", "coordinates": [[-74.08, 4.6]]},
+          "lote": {"type": "Polygon", "coordinates": [[[-74.08, 4.6], [-74.079, 4.6], [-74.079, 4.601], [-74.078, 4.602]]]}},
+          "visible": ["cerca", "lote"], "violations": [["cerca", "too_few_vertices"], ["lote", "not_closed"]]},
+        {"name": "fuera_de_rango_o_tipo", "answers": {
+          "cerca": {"type": "LineString", "coordinates": [[-74.08, 4.6], [-200, 4.6]]},
+          "lote": {"type": "Point", "coordinates": [-74.08, 4.6]}},
+          "visible": ["cerca", "lote"], "violations": [["cerca", "out_of_range"], ["lote", "not_a_geometry"]]},
+        {"name": "no_es_objeto", "answers": {"cerca": [[-74.08, 4.6], [-74.079, 4.601]], "lote": "x"},
+          "visible": ["cerca", "lote"], "violations": [["cerca", "not_an_object"], ["lote", "not_an_object"]]}
+      ]
     }
   ],
   "invalid_definitions": [

@@ -106,8 +106,9 @@ class MetaSchemaTests(SimpleTestCase):
     def test_inverted_bounds_are_rejected(self) -> None:
         with self.assertRaises(TemplateDefinitionError):
             validate_definition(
-                with_fields({"key": "n", "type": "number", "label": label("n"),
-                             "min": 10, "max": 1})
+                with_fields(
+                    {"key": "n", "type": "number", "label": label("n"), "min": 10, "max": 1}
+                )
             )
 
     def test_duplicate_option_values_are_rejected(self) -> None:
@@ -164,6 +165,8 @@ class MetaSchemaTests(SimpleTestCase):
                 "photo",
                 "signature",
                 "location",
+                "line",
+                "polygon",
             },
         )
 
@@ -204,8 +207,7 @@ class DslSecurityTests(SimpleTestCase):
                 validate_definition(
                     with_fields(
                         {"key": "a", "type": "boolean", "label": label("a")},
-                        {"key": "b", "type": "text", "label": label("b"),
-                         "visible_if": expression},
+                        {"key": "b", "type": "text", "label": label("b"), "visible_if": expression},
                     )
                 )
 
@@ -252,10 +254,19 @@ class DslSecurityTests(SimpleTestCase):
         self.assertEqual(
             visibility.OPERATORS,
             {
-                "eq", "ne", "gt", "gte", "lt", "lte",
-                "in", "not_in",
-                "is_empty", "is_not_empty",
-                "not", "and", "or",
+                "eq",
+                "ne",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "in",
+                "not_in",
+                "is_empty",
+                "is_not_empty",
+                "not",
+                "and",
+                "or",
             },
         )
 
@@ -266,8 +277,7 @@ class VisibilityRuleTests(SimpleTestCase):
     def _template(self, visible_if: object) -> dict[str, object]:
         return with_fields(
             {"key": "tiene_planta", "type": "boolean", "label": label("p"), "required": True},
-            {"key": "altura_cm", "type": "number", "label": label("a"),
-             "visible_if": visible_if},
+            {"key": "altura_cm", "type": "number", "label": label("a"), "visible_if": visible_if},
         )
 
     def test_a_forward_reference_is_rejected(self) -> None:
@@ -275,8 +285,12 @@ class VisibilityRuleTests(SimpleTestCase):
         with self.assertRaises(TemplateDefinitionError):
             validate_definition(
                 with_fields(
-                    {"key": "a", "type": "text", "label": label("a"),
-                     "visible_if": {"op": "is_not_empty", "field": "b"}},
+                    {
+                        "key": "a",
+                        "type": "text",
+                        "label": label("a"),
+                        "visible_if": {"op": "is_not_empty", "field": "b"},
+                    },
                     {"key": "b", "type": "text", "label": label("b")},
                 )
             )
@@ -285,8 +299,12 @@ class VisibilityRuleTests(SimpleTestCase):
         with self.assertRaises(TemplateDefinitionError):
             validate_definition(
                 with_fields(
-                    {"key": "a", "type": "text", "label": label("a"),
-                     "visible_if": {"op": "is_not_empty", "field": "a"}}
+                    {
+                        "key": "a",
+                        "type": "text",
+                        "label": label("a"),
+                        "visible_if": {"op": "is_not_empty", "field": "a"},
+                    }
                 )
             )
 
@@ -309,8 +327,12 @@ class VisibilityRuleTests(SimpleTestCase):
                         "label": label("e"),
                         "options": [{"value": "sano", "label": label("Sano")}],
                     },
-                    {"key": "nota", "type": "text", "label": label("n"),
-                     "visible_if": {"op": "eq", "field": "estado", "value": "snao"}},
+                    {
+                        "key": "nota",
+                        "type": "text",
+                        "label": label("n"),
+                        "visible_if": {"op": "eq", "field": "estado", "value": "snao"},
+                    },
                 )
             )
 
@@ -329,9 +351,7 @@ class VisibilityRuleTests(SimpleTestCase):
         operand = {"op": "eq", "field": "tiene_planta", "value": True}
         with self.assertRaises(TemplateDefinitionError):
             validate_definition(
-                self._template(
-                    {"op": "and", "operands": [operand] * (visibility.MAX_OPERANDS + 1)}
-                )
+                self._template({"op": "and", "operands": [operand] * (visibility.MAX_OPERANDS + 1)})
             )
 
     def test_a_valid_nested_expression_is_accepted(self) -> None:
@@ -378,10 +398,12 @@ class EvaluatorTests(SimpleTestCase):
 
     def test_a_boolean_is_not_the_number_one(self) -> None:
         """En Python `True == 1`; en este DSL no, y es a propósito."""
-        self.assertFalse(visibility.evaluate(self._expr({"op": "eq", "field": "a", "value": 1}),
-                                             {"a": True}))
-        self.assertTrue(visibility.evaluate(self._expr({"op": "eq", "field": "a", "value": True}),
-                                            {"a": True}))
+        self.assertFalse(
+            visibility.evaluate(self._expr({"op": "eq", "field": "a", "value": 1}), {"a": True})
+        )
+        self.assertTrue(
+            visibility.evaluate(self._expr({"op": "eq", "field": "a", "value": True}), {"a": True})
+        )
 
     def test_false_and_zero_are_answers_not_blanks(self) -> None:
         for value in (False, 0, 0.0):
@@ -434,9 +456,7 @@ class PublishVersionTests(TestCase):
 
     def test_the_stored_definition_is_the_normalized_one(self) -> None:
         """Lo que el pull entrega es exactamente lo que este servidor validó."""
-        version = publish_version(
-            self.ctx, template_id=self.template.pk, definition={"fields": []}
-        )
+        version = publish_version(self.ctx, template_id=self.template.pk, definition={"fields": []})
         self.assertEqual(version.definition["dsl"], DSL_VERSION)
         validate_definition(version.definition)
 
@@ -457,8 +477,12 @@ class PublishVersionTests(TestCase):
                 template_id=self.template.pk,
                 definition=with_fields(
                     {"key": "a", "type": "boolean", "label": label("a")},
-                    {"key": "b", "type": "text", "label": label("b"),
-                     "visible_if": {"op": "eval", "code": "1"}},
+                    {
+                        "key": "b",
+                        "type": "text",
+                        "label": label("b"),
+                        "visible_if": {"op": "eval", "code": "1"},
+                    },
                 ),
             )
         self.assertEqual(FormTemplateVersion.objects.count(), 0)
@@ -476,9 +500,7 @@ class PublishVersionTests(TestCase):
         other_org = Organization.objects.create(name="Otra")
         other_template = FormTemplate.objects.create(org=other_org, name="Ajena")
         with self.assertRaises(PolicyDenied) as raised:
-            publish_version(
-                self.ctx, template_id=other_template.pk, definition=INSPECCION_V1
-            )
+            publish_version(self.ctx, template_id=other_template.pk, definition=INSPECCION_V1)
         self.assertEqual(raised.exception.status_code, 404)
 
     def test_a_field_agent_cannot_publish(self) -> None:

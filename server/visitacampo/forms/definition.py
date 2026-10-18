@@ -401,6 +401,80 @@ class LocationField(_FieldBase):
         return None
 
 
+#: Vértices máximos de una línea o un polígono. Un recorrido caminando con
+#: un vértice cada pocos metros cabe holgado; el tope acota lo que llega al
+#: bucle de push y al JSONB de `answers`.
+MAX_VERTICES = 2000
+
+
+def _check_positions(positions: Any, *, minimum: int) -> str | None:
+    """Lista de posiciones GeoJSON `[lon, lat]` en WGS84, con los rangos de ADR-005."""
+    if not isinstance(positions, list):
+        return "not_a_geometry"
+    if len(positions) < minimum:
+        return "too_few_vertices"
+    if len(positions) > MAX_VERTICES:
+        return "too_many_vertices"
+    for position in positions:
+        if not isinstance(position, list) or len(position) != 2:
+            return "not_a_geometry"
+        for coordinate, low, high in zip(
+            position, (LON_MIN, LAT_MIN), (LON_MAX, LAT_MAX), strict=True
+        ):
+            if isinstance(coordinate, bool) or not isinstance(coordinate, int | float):
+                return "not_a_number"
+            if not math.isfinite(coordinate) or not low <= coordinate <= high:
+                return "out_of_range"
+    return None
+
+
+class LineField(_FieldBase):
+    """Fase C: un recorrido o lindero abierto (`geotrace` en XLSForm).
+
+    La respuesta es una geometría GeoJSON `LineString` en WGS84:
+    `{"type": "LineString", "coordinates": [[lon, lat], ...]}`, con 2 o más
+    vértices. Se guarda en 4326 como el resto; otros sistemas solo se usan
+    para mostrar o exportar.
+    """
+
+    type: Literal["line"]
+
+    def check_answer(self, value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return "not_an_object"
+        if set(value) != {"type", "coordinates"} or value["type"] != "LineString":
+            return "not_a_geometry"
+        return _check_positions(value["coordinates"], minimum=2)
+
+
+class PolygonField(_FieldBase):
+    """Fase C: un área (lote, predio; `geoshape` en XLSForm).
+
+    GeoJSON `Polygon` en WGS84 con **un solo anillo exterior** cerrado (el
+    último vértice repite el primero) y al menos 3 vértices distintos:
+    `{"type": "Polygon", "coordinates": [[[lon, lat], ..., [lon, lat]]]}`.
+    Sin huecos en esta versión.
+    """
+
+    type: Literal["polygon"]
+
+    def check_answer(self, value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return "not_an_object"
+        if set(value) != {"type", "coordinates"} or value["type"] != "Polygon":
+            return "not_a_geometry"
+        rings = value["coordinates"]
+        if not isinstance(rings, list) or len(rings) != 1:
+            return "not_a_geometry"
+        ring = rings[0]
+        problem = _check_positions(ring, minimum=4)
+        if problem is not None:
+            return problem
+        if ring[0] != ring[-1]:
+            return "not_closed"
+        return None
+
+
 #: El catálogo cerrado, como unión discriminada por `type`.
 FormFieldUnion = Annotated[
     TextField
@@ -413,7 +487,9 @@ FormFieldUnion = Annotated[
     | MultiChoiceField
     | PhotoField
     | SignatureField
-    | LocationField,
+    | LocationField
+    | LineField
+    | PolygonField,
     Field(discriminator="type"),
 ]
 

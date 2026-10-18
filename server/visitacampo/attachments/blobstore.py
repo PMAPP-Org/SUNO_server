@@ -41,6 +41,7 @@ from typing import Protocol
 
 __all__ = [
     "BASEMAP_KEY_PREFIX",
+    "LAYER_KEY_PREFIX",
     "BLOB_KEY_PREFIX",
     "SHA256_PATTERN",
     "BlobStore",
@@ -51,6 +52,7 @@ __all__ = [
     "PresignedUpload",
     "StoredObject",
     "basemap_key_for",
+    "layer_key_for",
     "bucket_key_for",
     "checksum_header_value",
     "normalize_sha256",
@@ -70,6 +72,10 @@ BLOB_KEY_PREFIX = "blobs/"
 #: el GC de adjuntos borra todo lo de ese prefijo que no esté en la tabla
 #: `blob`, y un mapa no es un adjunto (ni cabe en su allow-list de MIME).
 BASEMAP_KEY_PREFIX = "basemaps/"
+
+#: Capas de referencia GeoJSON (Fase C). Mismo motivo que los mapas base:
+#: fuera de `BLOB_KEY_PREFIX`, el GC de adjuntos no las toca.
+LAYER_KEY_PREFIX = "layers/"
 
 
 class BlobStoreError(RuntimeError):
@@ -185,6 +191,11 @@ def basemap_key_for(sha256: str) -> str:
     return f"{BASEMAP_KEY_PREFIX}{normalize_sha256(sha256)}.mbtiles"
 
 
+def layer_key_for(sha256: str) -> str:
+    """`layers/{sha256}.geojson`, con la misma validación previa."""
+    return f"{LAYER_KEY_PREFIX}{normalize_sha256(sha256)}.geojson"
+
+
 def sha256_from_bucket_key(key: str) -> str | None:
     """El `sha256` de una clave con la forma de `bucket_key_for()`, o `None`.
 
@@ -282,4 +293,14 @@ class BlobStore(Protocol):
 
     def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
         """URL de `GET` de corta duración del paquete."""
+        ...
+
+    # --- capas de referencia (Fase C) -------------------------------------------
+
+    def put_layer(self, *, sha256: str, path: str, size: int) -> None:
+        """Sube una capa GeoJSON desde el servidor, verificada por `sha256`."""
+        ...
+
+    def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        """URL de `GET` de corta duración de la capa."""
         ...

@@ -45,6 +45,26 @@ En el Admin, ve a **Mapas base**, selecciónalo y elige la acción **Retirar**. 
 
 El archivo **se conserva** en el almacenamiento porque su clave es el `sha256`: otra organización podría estar ofreciendo el mismo contenido. Si hace falta borrarlo, que lo haga el operador de la plataforma tras comprobarlo.
 
+## Capas de referencia (GeoJSON)
+
+Además del mapa base, una organización puede publicar **capas** que el agente ve encima: predios, lotes, vías, puntos de muestreo. Al tocar un elemento en la app, se ven sus atributos.
+
+**Formato:** un GeoJSON (RFC 7946) en **EPSG:4326**, con puntos, líneas o polígonos, simples o múltiples. Desde QGIS: clic derecho en la capa → *Exportar → Guardar objetos como…* → formato **GeoJSON**, SRC **EPSG:4326**. Si la capa está en MAGNA-SIRGAS o UTM, se rechaza con un mensaje que explica cómo exportarla.
+
+**Límites:** hasta 20 MB (`LAYER_MAX_BYTES`), 50 000 entidades y 2 millones de vértices. Si la capa es más grande, simplifícala en QGIS (*Vectorial → Herramientas de geometría → Simplificar*).
+
+**Importar:**
+
+```bash
+docker compose cp predios.geojson api:/tmp/predios.geojson
+docker compose exec api python manage.py import_layer \
+    --org <uuid-de-la-organización> --by <usuario-admin> \
+    --name "Predios 2026" /tmp/predios.geojson
+docker compose exec api rm /tmp/predios.geojson
+```
+
+**Retirar:** en el Admin, ve a **Capas de referencia** y elige la acción **Retirar**.
+
 ## Seguridad
 
 - La app **no pide teselas a servidores de terceros**, así que nadie fuera de la organización sabe dónde trabaja cada agente (Ley 1581, minimización).

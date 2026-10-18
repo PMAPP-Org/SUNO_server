@@ -72,7 +72,12 @@ from visitacampo.core.models import (
     Visit,
     VisitAttachment,
 )
-from visitacampo.core.policies import PolicyDenied, check_write_visit
+from visitacampo.core.policies import (
+    CODE_FORBIDDEN,
+    PolicyDenied,
+    can_modify_visit,
+    check_write_visit,
+)
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.forms.answers import validate_answers, violation_details
 from visitacampo.forms.definition import (
@@ -122,6 +127,14 @@ class _OrgResource:
     """
 
     org_id: uuid.UUID
+
+
+@dataclass(slots=True)
+class _AuthoredVisit:
+    """Lo que `can_modify_visit` necesita de una visita existente, ya leído."""
+
+    org_id: uuid.UUID
+    created_by_id: uuid.UUID
 
 
 class DeviceMismatch(PolicyDenied):
@@ -487,6 +500,12 @@ def apply_push(
         live_visits = _live_visit_ids(
             ctx, [item for item in parsed.values() if isinstance(item, AttachmentWrite)]
         )
+        # Autores de las visitas que el lote edita o borra: una query, y
+        # ninguna si el lote solo trae altas. Una visita creada en este mismo
+        # lote la añade el bucle (su autor es quien la envía).
+        authors = _authors_of_modifications(
+            ctx, [item for item in parsed.values() if isinstance(item, VisitWrite)]
+        )
         allocator = ChangeSeqAllocator.for_org(ctx)
         now = timezone.now()
 
@@ -508,10 +527,17 @@ def apply_push(
                     references=references,
                     answers_gate=answers_gate,
                     live_visits=live_visits,
+                    authors=authors,
                     allocator=allocator,
                     now=now,
                 )
                 results.append(outcome)
+                if (
+                    op.entity == "visit"
+                    and op.op_type == "create"
+                    and outcome["status"] == STATUS_APPLIED
+                ):
+                    authors[uuid.UUID(outcome["entity_id"])] = ctx.user_id
                 saved[key] = outcome  # un `op_uuid` repetido en el mismo lote
                 _track_visit(live_visits, op, outcome)
 
@@ -544,6 +570,16 @@ def apply_push(
             scoped_qs(ctx, SyncOpLog).bulk_create(log_rows, ignore_conflicts=True)
 
     return results
+
+
+def _authors_of_modifications(
+    ctx: RequestContext, writes: list[VisitWrite]
+) -> dict[uuid.UUID, uuid.UUID]:
+    """`visit_id → created_by_id` de las visitas que el lote edita o borra."""
+    ids = {write.entity_id for write in writes if write.op_type != "create"}
+    if not ids:
+        return {}
+    return dict(scoped_qs(ctx, Visit).filter(pk__in=ids).values_list("pk", "created_by_id"))
 
 
 def _live_visit_ids(ctx: RequestContext, writes: list[AttachmentWrite]) -> set[uuid.UUID]:
@@ -631,6 +667,7 @@ def _process(
     references: _References,
     answers_gate: _AnswersGate,
     live_visits: set[uuid.UUID],
+    authors: dict[uuid.UUID, uuid.UUID],
     allocator: ChangeSeqAllocator,
     now: datetime,
 ) -> dict[str, Any]:
@@ -640,6 +677,21 @@ def _process(
     if isinstance(parsed, AttachmentWrite):
         return _process_attachment(
             ctx, cursor=cursor, op=op, parsed=parsed, live_visits=live_visits, allocator=allocator
+        )
+
+    # Editar o borrar una visita ajena: solo supervisión (`can_modify_visit`).
+    # El autor ya se leyó en lote, así que esto no cuesta queries. Una visita
+    # que no existe sigue su camino y acaba en `not_found` por el CAS.
+    author = authors.get(parsed.entity_id) if parsed.op_type != "create" else None
+    if author is not None and not can_modify_visit(ctx, _AuthoredVisit(ctx.org_id, author)):
+        return _rejected_result(
+            op,
+            Rejection(
+                code=CODE_FORBIDDEN,
+                message="Only the visit's author or a supervisor can modify it.",
+                details={"field": "created_by", "reason": "not_author"},
+                entity_id=parsed.entity_id,
+            ),
         )
 
     missing = references.missing(parsed.fields)

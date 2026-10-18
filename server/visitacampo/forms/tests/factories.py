@@ -21,8 +21,12 @@ INSPECCION_V1: dict[str, Any] = {
     "dsl": "visitacampo/form@1",
     "title": label("Inspección de cultivo"),
     "fields": [
-        {"key": "tiene_planta", "type": "boolean", "label": label("¿Hay planta?"),
-         "required": True},
+        {
+            "key": "tiene_planta",
+            "type": "boolean",
+            "label": label("¿Hay planta?"),
+            "required": True,
+        },
         {
             "key": "altura_cm",
             "type": "number",
@@ -61,8 +65,12 @@ INSPECCION_V2: dict[str, Any] = {
     "dsl": "visitacampo/form@1",
     "title": label("Inspección de cultivo"),
     "fields": [
-        {"key": "tiene_planta", "type": "boolean", "label": label("¿Hay planta?"),
-         "required": True},
+        {
+            "key": "tiene_planta",
+            "type": "boolean",
+            "label": label("¿Hay planta?"),
+            "required": True,
+        },
         {
             "key": "altura_m",
             "type": "number",

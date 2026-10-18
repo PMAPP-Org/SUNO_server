@@ -49,9 +49,7 @@ SECRET_KEY = _require_strong_secret_key(os.environ.get("DJANGO_SECRET_KEY"))
 # ALLOWED_HOSTS vacío con DEBUG=False hace que Django rechace todas las
 # peticiones (fail-closed, no fail-open).
 ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")
-    if host.strip()
+    host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if host.strip()
 ]
 
 # --- RD-15: cabeceras de proxy confiable detrás de Caddy (doc 08 §5, ADR-010) ---

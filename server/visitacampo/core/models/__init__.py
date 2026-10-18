@@ -33,6 +33,7 @@ from .base import (
 )
 from .basemap import BasemapPackage, TileFormat
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
+from .layer import ReferenceLayer
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
 from .tenancy import AppUser, Device, Membership, Organization
@@ -66,6 +67,7 @@ __all__ = [
     "Platform",
     "Role",
     "RateLimitBucket",
+    "ReferenceLayer",
     "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",

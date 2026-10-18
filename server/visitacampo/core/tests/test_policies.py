@@ -311,6 +311,7 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
         return {
             "can_read_visit": visit(),
             "can_write_visit": visit(),
+            "can_modify_visit": visit(),
             "can_read_members": ORG,
             "can_manage_device": device(),
             "can_publish_form_template": form_template(),
