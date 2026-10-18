@@ -10,9 +10,11 @@ name: DAST
 #   `not_a_server_error`: ninguna entrada produce un 5xx (OWASP A10:2025).
 #   `ignored_auth`: ningún endpoint protegido acepta peticiones sin
 #   credenciales o con credenciales inválidas (A01/A07).
-# - Schemathesis (informativo): conformidad completa con el contrato. Las
-#   desviaciones conocidas están en el issue enlazado desde
-#   docs/seguridad/owasp-top10-2025.md; no bloquean hasta corregirlas.
+# - Schemathesis (bloqueante desde #6): conformidad completa con el contrato.
+#   El servidor hace lo que el contrato dice y nada más (RD-03): códigos no
+#   documentados, datos válidos rechazados o inválidos aceptados fallan aquí.
+#   `schemathesis.toml` (raíz) ajusta qué cuenta como rechazo.
+# - Aislamiento entre organizaciones (bloqueante): infra/ci/idor_check.py.
 # - OWASP ZAP API scan (bloqueante en FAIL): escaneo activo con la política
 #   infra/zap/api-scan-rules.tsv (inyecciones, traversal, SSRF, cabeceras).
 #
@@ -84,6 +86,19 @@ jobs:
           echo "::add-mask::${TOKEN}" # nosemgrep: unsafe-add-mask-workflow-command
           echo "API_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
+      # H-16 de punta a punta: una segunda organización y un intento de
+      # alcanzar sus datos desde la primera (pull, bootstrap, push, presign,
+      # op_uuid). TLS verificado con la CA interna de Caddy.
+      - name: Aislamiento entre organizaciones (IDOR)
+        run: |
+          $COMPOSE exec -T api python manage.py bootstrap_demo \
+            --org-name "Organización B (DAST)" --username agente-b \
+            --password "$DEMO_PASSWORD" > /dev/null
+          $COMPOSE exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+          IDOR_PASSWORD="$DEMO_PASSWORD" python3 infra/ci/idor_check.py \
+            --base-url "https://${DAST_HOST}" --cafile caddy-root.crt \
+            --user-a agente-demo --user-b agente-b
+
       # El worker arranca encolando los periódicos y ejecuta el reaper en el
       # acto: si en 60 s no hay ningún job terminado, el worker no funciona.
       - name: El worker procesa la cola
@@ -134,8 +149,7 @@ jobs:
             --checks not_a_server_error,ignored_auth --max-examples 50 \
             --report junit --report-dir reports/schemathesis-security
 
-      - name: Schemathesis — conformidad completa con el contrato (informativo)
-        continue-on-error: true
+      - name: Schemathesis — conformidad completa con el contrato (bloqueante)
         run: |
           st run server/openapi/v1.yaml --url https://${DAST_HOST} --tls-verify false \
             -H "Authorization: Bearer ${API_TOKEN}" \

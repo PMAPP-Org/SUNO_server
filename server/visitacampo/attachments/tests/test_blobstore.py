@@ -313,15 +313,11 @@ class S3PresignTests(SimpleTestCase):
         self.assertTrue(query["X-Amz-Signature"][0])
 
     def test_upload_url_targets_the_content_addressed_key(self) -> None:
-        upload = self.store.presign_upload(
-            sha256=JPEG_SHA, size=1, mime=JPEG_MIME, expires_in=900
-        )
+        upload = self.store.presign_upload(sha256=JPEG_SHA, size=1, mime=JPEG_MIME, expires_in=900)
         self.assertIn(bucket_key_for(JPEG_SHA), urlparse(upload.url).path)
 
     def test_required_headers_are_what_the_client_must_send(self) -> None:
-        upload = self.store.presign_upload(
-            sha256=JPEG_SHA, size=99, mime=PNG_MIME, expires_in=900
-        )
+        upload = self.store.presign_upload(sha256=JPEG_SHA, size=99, mime=PNG_MIME, expires_in=900)
         self.assertEqual(
             upload.required_headers,
             {
@@ -343,12 +339,8 @@ class S3PresignTests(SimpleTestCase):
     def test_two_signatures_of_different_content_differ(self) -> None:
         """Prueba de que se está firmando de verdad y no devolviendo una plantilla."""
         other = digest_of(PNG_BYTES)
-        first = self.store.presign_upload(
-            sha256=JPEG_SHA, size=1, mime=JPEG_MIME, expires_in=900
-        )
-        second = self.store.presign_upload(
-            sha256=other, size=1, mime=JPEG_MIME, expires_in=900
-        )
+        first = self.store.presign_upload(sha256=JPEG_SHA, size=1, mime=JPEG_MIME, expires_in=900)
+        second = self.store.presign_upload(sha256=other, size=1, mime=JPEG_MIME, expires_in=900)
         self.assertNotEqual(
             parse_qs(urlparse(first.url).query)["X-Amz-Signature"],
             parse_qs(urlparse(second.url).query)["X-Amz-Signature"],

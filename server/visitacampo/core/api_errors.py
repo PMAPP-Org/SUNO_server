@@ -38,6 +38,7 @@ from typing import Any
 from django.core.exceptions import RequestDataTooBig
 from django.db import DatabaseError
 from django.http import HttpRequest, HttpResponse
+from django.http.multipartparser import MultiPartParserError
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError, HttpError
 from ninja.errors import ValidationError as NinjaValidationError
@@ -194,6 +195,23 @@ def register_error_handlers(api: NinjaAPI) -> None:
             # Sin `str(exc)` (RD-12): el mensaje de un `ValueError` puede
             # arrastrar fragmentos del propio cuerpo que lo provocó.
             error_body("validation_error", "Request body could not be parsed as JSON."),
+            status=400,
+        )
+
+    @api.exception_handler(MultiPartParserError)
+    def _on_multipart_error(request: HttpRequest, exc: Exception) -> HttpResponse:
+        """`Content-Type: multipart/form-data` con un cuerpo que no lo es ⇒ `400`.
+
+        La API solo habla JSON y Ninja lo parsea sin mirar el `Content-Type`,
+        pero `request.POST` (lo consulta django-axes en el login) intenta leer
+        el cuerpo como multipart y lanza esta excepción, que no es un
+        `ValueError`: sin este manejador salía un `500` (hallazgo de
+        Schemathesis, "Server error on unexpected Content-Type").
+        """
+        logger.warning("Cuerpo multipart inválido: %s", type(exc).__name__)
+        return api.create_response(
+            request,
+            error_body("validation_error", "Request body must be JSON (application/json)."),
             status=400,
         )
 

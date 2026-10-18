@@ -9,6 +9,7 @@ devuelto en la respuesta no aparece en ninguna columna de ninguna fila.
 from __future__ import annotations
 
 import hashlib
+import json
 import unittest
 import uuid
 
@@ -37,6 +38,17 @@ class LoginSuccessTests(TestCase):
         self.org = make_org()
         self.user = make_user(self.org)
         self.client = Client()
+
+    def test_a_multipart_body_without_boundary_is_a_400_not_a_500(self) -> None:
+        """Schemathesis (issue #6): django-axes lee `request.POST` y Django
+        intentaba parsear el cuerpo como multipart; salía un 500."""
+        response = self.client.post(
+            "/v1/auth/login",
+            data=json.dumps({"username": "agente", "password": "x", "device_info": device_info()}),
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.json()["code"], "validation_error")
 
     def test_returns_the_contract_shape(self) -> None:
         response = login(self.client)

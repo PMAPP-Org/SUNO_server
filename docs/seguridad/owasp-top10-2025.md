@@ -30,7 +30,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 | DAST: cabeceras/HSTS/redirect HTTPS del stack real | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: Schemathesis `not_a_server_error` + `ignored_auth` | `dast.yml` | PR, `master`, semanal | Sí |
 | DAST: OWASP ZAP API scan (reglas FAIL en `infra/zap/api-scan-rules.tsv`) | `dast.yml` | PR, `master`, semanal | Sí |
-| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | No, hasta cerrar [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6) |
+| DAST: conformidad completa con el contrato | `dast.yml` | PR, `master`, semanal | Sí (desde #6) |
+| DAST: aislamiento entre dos organizaciones (IDOR, H-16) | `dast.yml` + `infra/ci/idor_check.py` | PR, `master`, semanal | Sí |
 | Título de PR en Conventional Commits | `pr-title.yml` | PR | Sí |
 | Simulacro de restauración de backup (cifrado age, datos idénticos tras borrar la BD) | `backup.yml` | PR, `master`, semanal | Sí |
 | Monitoreo: `promtool`/`amtool`, pruebas unitarias de alertas, stack + ApiDown de punta a punta | `monitoring.yml` | PR, `master` | Sí |
@@ -45,7 +46,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: aislamiento por organización con `scoped_qs(ctx, Model)` y *deny-by-default* (RD-11, ADR-011); `RequestContext` inmutable resuelto una vez (ADR-013); recurso de otro tenant ⇒ `404`; FK compuesta que impide que un adjunto cruce organizaciones; nombres de archivo generados localmente (RD-06).
 - **Pruebas automatizadas**: test de arquitectura por AST que falla si un módulo de producción toca un manager sin scoping (`core/tests/test_architecture.py`); tests de políticas y scoping; traversal con 15 familias de entrada hostil (`attachments/tests/test_validation.py`); Schemathesis `ignored_auth`; ZAP reglas 6, 7, 40046 en FAIL; CodeQL.
-- **Pendiente**: DAST con dos organizaciones para probar IDOR entre tenants de punta a punta.
+- **Hecho**: DAST con dos organizaciones (`infra/ci/idor_check.py`): pull, bootstrap, push, presign y `op_uuid` de la organización A nunca alcanzan datos de la B, contra el stack de producción.
 
 ### A02:2025 Security Misconfiguration
 
@@ -74,8 +75,8 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 ### A06:2025 Insecure Design
 
 - **Controles**: modelado de amenazas derivado de una auditoría (doc 07 → RD-01…16) y ADRs con alternativas descartadas; contrato OpenAPI como fuente de verdad (RD-03); plan por pasos con criterios de salida.
-- **Pruebas automatizadas**: Schemathesis contra el contrato (conformidad completa, informativa); tests de concurrencia (CAS, `ON CONFLICT`, advisory locks, kill -9 del worker).
-- **Pendiente**: desviaciones de contrato en [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6).
+- **Pruebas automatizadas**: Schemathesis contra el contrato (conformidad completa, bloqueante); tests de concurrencia (CAS, `ON CONFLICT`, advisory locks, kill -9 del worker).
+- **Hecho**: desviaciones de contrato de [#6](https://github.com/PMAPP-Org/SUNO_server/issues/6) corregidas; de paso aparecieron y se corrigieron un `500` en el login con `multipart/form-data` y un `400` engañoso en el refresh con caracteres no ASCII.
 
 ### A07:2025 Authentication Failures
 

@@ -42,8 +42,9 @@
 	# La verificación funcional completa (Django confiando en este único
 	# proxy) se hace en el Paso 25.
 	# --- Back-office (/admin/) solo desde orígenes autorizados ------------------
-	# Django Admin no tiene MFA (ADR-004, fase 1): exponerlo a internet deja la
-	# contraseña como única barrera. Fuera de CADDY_ADMIN_ALLOWED_IPS (CIDR
+	# Defensa en profundidad sobre el MFA del Admin (TOTP, Paso 15), y la barrera
+	# principal mientras ese MFA esté apagado por la excepción temporal EXC-003
+	# (DJANGO_ADMIN_REQUIRE_OTP=false). Fuera de CADDY_ADMIN_ALLOWED_IPS (CIDR
 	# separados por espacio: IP de la oficina, de la VPN o 127.0.0.1 para un
 	# túnel SSH) responde 404, sin confirmar que el panel existe. Por defecto
 	# solo 127.0.0.1: cerrado salvo que se configure (OWASP A01/A07,

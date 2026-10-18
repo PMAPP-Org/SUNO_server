@@ -1,0 +1,10 @@
+# Configuración de Schemathesis (lo usa .github/workflows/dast.yml, que lo
+# ejecuta desde la raíz del repositorio).
+#
+# Un dato que viola el esquema tiene que rechazarse. La lista por defecto de
+# "rechazos" de Schemathesis no incluye 413, pero este contrato lo usa para
+# exactamente eso: un adjunto por encima de `attachment_max_bytes` (25 MiB) se
+# rechaza con `413 payload_too_large`, documentado en presign y commit
+# (server/openapi/v1.yaml). Resto: los valores por defecto de Schemathesis 4.
+[checks.negative_data_rejection]
+expected-statuses = ["400", "401", "403", "404", "405", "406", "409", "413", "415", "422", "428", "429", "5xx"]

@@ -22,6 +22,7 @@ import json
 from django.core.exceptions import RequestDataTooBig
 from django.db import DatabaseError, DataError, IntegrityError, OperationalError
 from django.http import HttpResponse
+from django.http.multipartparser import MultiPartParserError
 from django.test import Client, RequestFactory, SimpleTestCase
 from ninja import NinjaAPI
 from ninja.errors import AuthenticationError
@@ -87,6 +88,12 @@ class UniformBodyTests(SimpleTestCase):
         ("BD caída", OperationalError("connection lost"), 500, "internal_error"),
         ("cuerpo demasiado grande", RequestDataTooBig(), 413, "payload_too_large"),
         ("sin credenciales", AuthenticationError(), 401, "unauthenticated"),
+        (
+            "multipart sin boundary",
+            MultiPartParserError("Invalid boundary in multipart: None"),
+            400,
+            "validation_error",
+        ),
     )
 
     def test_every_handled_exception_produces_the_contract_body(self) -> None:

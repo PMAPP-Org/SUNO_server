@@ -134,7 +134,9 @@ class RefreshRejectionTests(RefreshTestsBase):
         self.assert_rejected(self.refresh(token=f"{'z' * 22}.{verifier}"))
 
     def test_rejects_a_malformed_token(self) -> None:
-        for malformed in ("", "sinpunto", "a.b.c", "."):
+        # Los no ASCII llegaban a `hash_verifier` y salían como 400 "cuerpo no
+        # parseable" en vez del 401 genérico (Schemathesis, issue #6).
+        for malformed in ("", "sinpunto", "a.b.c", ".", "ñ.ñ", "abc.déf", "a b.c", "🙂.x"):
             with self.subTest(value=malformed):
                 self.assert_rejected(self.refresh(token=malformed))
 
