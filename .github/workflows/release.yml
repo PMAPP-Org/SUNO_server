@@ -152,4 +152,4 @@ jobs:
     # workflow reutilizable si el llamador hereda los secretos: sin esta línea
     # llegaban vacíos y el despliegue de la v0.3.0 se omitió. Se heredan hacia
     # un archivo de este mismo repositorio (CODEOWNERS), no hacia terceros.
-    secrets: inherit # zizmor: ignore[secrets-inherit] reutilizable local; secretos del environment
+    secrets: inherit # zizmor: ignore[secrets-inherit] # nosemgrep: secrets-inherit
