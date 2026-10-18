@@ -48,7 +48,7 @@ Revisado paso a paso contra lo que hay de verdad en SUNO_server y SUNO_client, n
 | **25** Suite final | Ya hay tests de aislamiento, presupuesto de queries, traversal, checksum, reuso de token y spoof de `X-Forwarded-Proto`, pero dispersos. Faltan la suite consolidada, el **mapa H-01…H-21 → test** y un script de carga (no hay locust ni k6). | En parte: la carga y las mediciones de dispositivo van fuera de esta máquina |
 | **18** (resto) | Subida con la app cerrada (WorkManager/BGTask) y medición en iOS. | No: dispositivo real |
 | **14** E2E Fase 0 | No existen `docs/testing/e2e-fase0.md` ni `integration_test`. | No: emulador y Docker |
-| **Ley 1581 en la app** | La app no muestra aviso de privacidad ni pide autorización antes del primer login y antes de capturar ubicación o fotos (`docs/seguridad/tratamiento-datos-personales.md` §1). | La mecánica sí; el texto lo valida un abogado |
+| **Ley 1581 en la app** | Mecánica hecha: aviso de privacidad antes del login con autorización por finalidad ([SUNO_client#13](https://github.com/PMAPP-Org/SUNO_client/pull/13)) y prueba guardada en el servidor (`POST /v1/consents`, [SUNO_server#25](https://github.com/PMAPP-Org/SUNO_server/pull/25)). **Falta** la validación jurídica del texto del aviso. | El texto, no: asesor jurídico |
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
 
