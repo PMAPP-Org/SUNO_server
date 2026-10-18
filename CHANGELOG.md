@@ -4,6 +4,15 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.8.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.7.0...v0.8.0) (2026-10-18)
+
+
+### Agregado
+
+* **forms:** line and polygon field types (Fase C) ([#33](https://github.com/PMAPP-Org/SUNO_server/issues/33)) ([24bd623](https://github.com/PMAPP-Org/SUNO_server/commit/24bd623da998cb0344c60f09af826f8b3f9e6db6))
+* **layers:** reference GeoJSON layers per organization (Fase C) ([#35](https://github.com/PMAPP-Org/SUNO_server/issues/35)) ([9214fe3](https://github.com/PMAPP-Org/SUNO_server/commit/9214fe367a5827728397598b31c813c4d67349a2))
+* **web:** redesign SUNO public and workspace ([#36](https://github.com/PMAPP-Org/SUNO_server/issues/36)) ([dc1e430](https://github.com/PMAPP-Org/SUNO_server/commit/dc1e430e41e2f7f56424672b71ee6c40e1cf6c40))
+
 ## [0.7.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.6.0...v0.7.0) (2026-10-18)
 
 
