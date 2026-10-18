@@ -41,6 +41,7 @@
         <p class="form-kicker">Cuenta SUNO</p>
         <h2>Accede a tu organización</h2>
         {% if form.non_field_errors %}<div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>{% endif %}
+        <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -- the CSRF field is the first control inside this form. -->
         <form method="post" novalidate data-login-form>
           {% csrf_token %}
           <div class="field-row{% if form.username.errors %} has-error{% endif %}">
