@@ -78,6 +78,8 @@ tags:
     description: Liveness y readiness. Sin autenticación, sin filtrar información.
   - name: privacy
     description: Autorización del titular de los datos personales (Ley 1581 de 2012).
+  - name: basemaps
+    description: Paquetes de mapa base (MBTiles ráster) para trabajar sin red, por organización.
 
 security:
   - bearerAuth: []
@@ -485,6 +487,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsentResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ------------------------------------------------------------ basemaps ----
+
+  /v1/basemaps:
+    get:
+      operationId: basemapsList
+      tags: [basemaps]
+      summary: Mapas base offline de la organización
+      description: |
+        Los paquetes vigentes de la organización de quien llama (cualquier miembro). Los importa
+        un administrador desde el servidor; un paquete retirado deja de aparecer, y el cliente lo
+        borra del teléfono.
+      responses:
+        '200':
+          description: Paquetes vigentes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasemapList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/basemaps/{basemap_id}/download:
+    get:
+      operationId: basemapsDownload
+      tags: [basemaps]
+      summary: URL prefirmada de corta duración para descargar un mapa base
+      description: |
+        Devuelve una URL directa al almacenamiento y el `sha256` con el que el cliente verifica lo
+        descargado antes de usarlo. Un paquete inexistente, retirado o de otra organización
+        responde `404` sin distinguirlos (RD-11).
+      parameters:
+        - name: basemap_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: URL de descarga.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasemapDownload'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1773,6 +1825,69 @@ components:
           $ref: '#/components/schemas/Uuid'
         recorded_at:
           $ref: '#/components/schemas/Timestamp'
+
+    Basemap:
+      type: object
+      description: Un paquete MBTiles ráster de la organización.
+      required: [id, name, sha256, size, tile_format, min_zoom, max_zoom, bounds, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          maxLength: 128
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        size:
+          type: integer
+          minimum: 1
+          description: Bytes. El cliente comprueba espacio libre antes de descargar.
+        tile_format:
+          type: string
+          enum: [png, jpg, webp]
+        min_zoom:
+          type: integer
+          minimum: 0
+          maximum: 24
+        max_zoom:
+          type: integer
+          minimum: 0
+          maximum: 24
+        bounds:
+          type: object
+          required: [west, south, east, north]
+          properties:
+            west: { type: number, minimum: -180, maximum: 180 }
+            south: { type: number, minimum: -90, maximum: 90 }
+            east: { type: number, minimum: -180, maximum: 180 }
+            north: { type: number, minimum: -90, maximum: 90 }
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    BasemapList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Basemap'
+
+    BasemapDownload:
+      type: object
+      required: [url, expires_in, sha256, size]
+      properties:
+        url:
+          type: string
+          description: URL prefirmada de `GET`, de corta duración, directa al almacenamiento.
+        expires_in:
+          type: integer
+          minimum: 1
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        size:
+          type: integer
+          minimum: 1
 
     HealthStatus:
       type: object

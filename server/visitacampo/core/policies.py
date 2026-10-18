@@ -46,9 +46,11 @@ __all__ = [
     "PolicyDenied",
     "can_assign_work",
     "can_export_visits",
+    "can_manage_basemaps",
     "can_manage_device",
     "can_manage_personal_data",
     "can_publish_form_template",
+    "can_read_basemaps",
     "can_read_job_output",
     "can_read_members",
     "can_read_visit",
@@ -58,9 +60,11 @@ __all__ = [
     "can_write_visit",
     "check_assign_work",
     "check_export_visits",
+    "check_manage_basemaps",
     "check_manage_device",
     "check_manage_personal_data",
     "check_publish_form_template",
+    "check_read_basemaps",
     "check_read_job_output",
     "check_read_members",
     "check_read_visit",
@@ -319,6 +323,19 @@ def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
 
 
+def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
+    """Ver y descargar los mapas base de la organización (Fase B).
+
+    Cualquier miembro: el mapa es la herramienta de trabajo de campo.
+    """
+    return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
+
+
+def can_manage_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
+    """Importar o retirar mapas base: administración de la organización."""
+    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+
+
 def can_record_consent(ctx: RequestContext, org_id: UUID) -> bool:
     """Registrar la propia autorización de datos personales (Ley 1581, art. 9).
 
@@ -389,6 +406,16 @@ def check_export_visits(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_record_consent(ctx: RequestContext, org_id: UUID) -> None:
     if not can_record_consent(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_read_basemaps(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_read_basemaps(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_basemaps(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_basemaps(ctx, org_id):
         raise _denial(ctx, org_id)
 
 

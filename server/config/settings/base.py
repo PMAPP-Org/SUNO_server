@@ -354,6 +354,13 @@ ATTACHMENT_DOWNLOAD_URL_TTL_SECONDS = 300
 # `visitacampo/attachments/services.py::collect_unconfirmed_uploads`.
 ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS = 24
 
+# Mapas base offline (Fase B). La URL de descarga dura más que la de un
+# adjunto: el teléfono la usa enseguida, pero un paquete de cientos de MB por
+# wifi de campo tarda. El tope de tamaño queda por debajo del límite de un
+# solo `PUT` con checksum completo en S3/R2 (5 GB).
+BASEMAP_DOWNLOAD_URL_TTL_SECONDS = 3600
+BASEMAP_MAX_BYTES = int(os.environ.get("BASEMAP_MAX_BYTES", str(4 * 1024**3)))
+
 # --- Cola de trabajos (ADR-006, Paso 19) ------------------------------------
 # El worker es `python manage.py run_worker`: un proceso Python normal, sin
 # Redis, sin Celery y sin `docker.sock` (N-02 doc 08 §7.2).

@@ -40,6 +40,7 @@ from datetime import datetime
 from typing import Protocol
 
 __all__ = [
+    "BASEMAP_KEY_PREFIX",
     "BLOB_KEY_PREFIX",
     "SHA256_PATTERN",
     "BlobStore",
@@ -49,6 +50,7 @@ __all__ = [
     "ObjectNotFound",
     "PresignedUpload",
     "StoredObject",
+    "basemap_key_for",
     "bucket_key_for",
     "checksum_header_value",
     "normalize_sha256",
@@ -63,6 +65,11 @@ SHA256_PATTERN = re.compile(r"\A[0-9a-f]{64}\Z")
 #: prefijo propio es lo que permite que el GC enumere sin tropezar con backups
 #: u otros objetos que puedan compartir bucket.
 BLOB_KEY_PREFIX = "blobs/"
+
+#: Paquetes de mapa base (Fase B). Fuera de `BLOB_KEY_PREFIX` **a propósito**:
+#: el GC de adjuntos borra todo lo de ese prefijo que no esté en la tabla
+#: `blob`, y un mapa no es un adjunto (ni cabe en su allow-list de MIME).
+BASEMAP_KEY_PREFIX = "basemaps/"
 
 
 class BlobStoreError(RuntimeError):
@@ -172,6 +179,12 @@ def bucket_key_for(sha256: str) -> str:
     return f"{BLOB_KEY_PREFIX}{digest[0:2]}/{digest[2:4]}/{digest}"
 
 
+def basemap_key_for(sha256: str) -> str:
+    """`basemaps/{sha256}.mbtiles`. Misma garantía que `bucket_key_for()`: la
+    entrada se valida antes de componer, así que no hay ruta que inyectar."""
+    return f"{BASEMAP_KEY_PREFIX}{normalize_sha256(sha256)}.mbtiles"
+
+
 def sha256_from_bucket_key(key: str) -> str | None:
     """El `sha256` de una clave con la forma de `bucket_key_for()`, o `None`.
 
@@ -255,4 +268,18 @@ class BlobStore(Protocol):
 
     def delete(self, sha256: str) -> None:
         """Borra el objeto. Idempotente: borrar lo que no existe no es un error."""
+        ...
+
+    # --- mapas base (Fase B) ---------------------------------------------------
+
+    def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
+        """Sube un paquete de mapa **desde el servidor** (comando de importación).
+
+        El store verifica el `sha256` al recibirlo (checksum en la petición):
+        lo que queda guardado es exactamente lo que se validó.
+        """
+        ...
+
+    def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        """URL de `GET` de corta duración del paquete."""
         ...

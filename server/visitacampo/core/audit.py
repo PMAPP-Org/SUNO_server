@@ -80,6 +80,8 @@ class AuditAction:
     PERSONAL_DATA_EXPORTED = "backoffice.personal_data_exported"
     PERSONAL_DATA_SUPPRESSED = "backoffice.personal_data_suppressed"
     PRIVACY_CONSENT_RECORDED = "privacy.consent_recorded"
+    BASEMAP_IMPORTED = "basemaps.imported"
+    BASEMAP_RETIRED = "basemaps.retired"
 
 
 def hash_ip(ip: str | None) -> str | None:

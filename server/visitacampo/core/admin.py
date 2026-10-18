@@ -45,11 +45,13 @@ from visitacampo.backoffice.services import (
     review_visit,
     revoke_device_sessions,
 )
+from visitacampo.basemaps.services import retire as retire_basemap
 from visitacampo.core.audit import AuditAction, record
 from visitacampo.core.models import (
     AppUser,
     Assignment,
     AuditEvent,
+    BasemapPackage,
     Blob,
     Device,
     FormTemplate,
@@ -638,6 +640,37 @@ class PrivacyConsentAdmin(ReadOnlyAdmin):
     search_fields = ("user__username",)
     date_hierarchy = "recorded_at"
     ordering = ("-recorded_at",)
+
+
+@admin.register(BasemapPackage)
+class BasemapPackageAdmin(ReadOnlyAdmin):
+    """Mapas base offline (Fase B). Se importan desde el servidor
+    (`manage.py import_basemap`, archivos de cientos de MB que no deben pasar
+    por la web); aquí se ven y se retiran."""
+
+    list_display = (
+        "name",
+        "tile_format",
+        "min_zoom",
+        "max_zoom",
+        "size",
+        "created_at",
+        "deleted_at",
+    )
+    list_filter = ("tile_format",)
+    search_fields = ("name",)
+    ordering = ("-created_at",)
+    actions = ("retire_packages",)
+
+    @admin.action(description="Retirar (deja de ofrecerse a los teléfonos)", permissions=["view"])
+    def retire_packages(self, request: Any, queryset: QuerySet[BasemapPackage]) -> None:
+        run_action(
+            self,
+            request,
+            queryset.filter(deleted_at__isnull=True),
+            lambda ctx, package: retire_basemap(ctx, package.pk),
+            done="Mapas retirados",
+        )
 
 
 @admin.register(Blob)

@@ -332,6 +332,10 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_manage_personal_data": ORG,
             # Ley 1581: cualquier miembro registra su propia autorización.
             "can_record_consent": ORG,
+            # Fase B: todo miembro ve y descarga los mapas; solo
+            # administración los importa y retira.
+            "can_read_basemaps": ORG,
+            "can_manage_basemaps": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
