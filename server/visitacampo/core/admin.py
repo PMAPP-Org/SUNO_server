@@ -60,6 +60,7 @@ from visitacampo.core.models import (
     Membership,
     Organization,
     PrivacyConsent,
+    ReferenceLayer,
     SyncOpLog,
     Visit,
     VisitAttachment,
@@ -69,6 +70,7 @@ from visitacampo.core.models import (
 from visitacampo.core.policies import PolicyDenied, can_export_visits, can_read_job_output
 from visitacampo.forms.definition import TemplateDefinitionError, validate_definition
 from visitacampo.forms.services import publish_version
+from visitacampo.layers.services import retire as retire_layer
 
 # --- Organización, usuarios y membresías -------------------------------------
 
@@ -670,6 +672,27 @@ class BasemapPackageAdmin(ReadOnlyAdmin):
             queryset.filter(deleted_at__isnull=True),
             lambda ctx, package: retire_basemap(ctx, package.pk),
             done="Mapas retirados",
+        )
+
+
+@admin.register(ReferenceLayer)
+class ReferenceLayerAdmin(ReadOnlyAdmin):
+    """Capas de referencia GeoJSON (Fase C). Se importan con `manage.py
+    import_layer`; aquí se ven y se retiran."""
+
+    list_display = ("name", "feature_count", "geometry_types", "size", "created_at", "deleted_at")
+    search_fields = ("name",)
+    ordering = ("-created_at",)
+    actions = ("retire_layers",)
+
+    @admin.action(description="Retirar (deja de ofrecerse a los teléfonos)", permissions=["view"])
+    def retire_layers(self, request: Any, queryset: QuerySet[ReferenceLayer]) -> None:
+        run_action(
+            self,
+            request,
+            queryset.filter(deleted_at__isnull=True),
+            lambda ctx, layer: retire_layer(ctx, layer.pk),
+            done="Capas retiradas",
         )
 
 

@@ -361,6 +361,10 @@ ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS = 24
 BASEMAP_DOWNLOAD_URL_TTL_SECONDS = 3600
 BASEMAP_MAX_BYTES = int(os.environ.get("BASEMAP_MAX_BYTES", str(4 * 1024**3)))
 
+# Capas de referencia GeoJSON (Fase C). Un teléfono dibuja con soltura unos
+# pocos MB de GeoJSON; más que eso conviene simplificar la capa en QGIS.
+LAYER_MAX_BYTES = int(os.environ.get("LAYER_MAX_BYTES", str(20 * 1024**2)))
+
 # --- Cola de trabajos (ADR-006, Paso 19) ------------------------------------
 # El worker es `python manage.py run_worker`: un proceso Python normal, sin
 # Redis, sin Celery y sin `docker.sock` (N-02 doc 08 §7.2).
