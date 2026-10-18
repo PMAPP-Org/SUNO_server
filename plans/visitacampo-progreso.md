@@ -184,7 +184,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 ### Integración final y cierre
 
 - [x] **Paso 24** — Django Admin personalizado (back-office) + exportación CSV/Excel. Aislamiento por organización en todo el Admin (H-16 probado por HTTP), revisión de visitas (`VisitReview`), revocación de dispositivos, asignaciones con `change_seq`, publicación de plantillas validada, reintento de jobs, exportación CSV/XLSX con límite de 10 000 filas y neutralización de fórmulas, y derechos del titular (consulta y supresión por anonimización; ver `docs/seguridad/tratamiento-datos-personales.md`). Todas las acciones pasan por `backoffice/services.py` (política + auditoría).
-- [ ] **Paso 25** — Suite de seguridad, prueba de carga y validación de criterios de aceptación MVP
+- [ ] **Paso 25** — Suite de seguridad, prueba de carga y validación de criterios de aceptación MVP (en curso: suite y mapa H-01…H-21 automatizados, workflow de carga listo; faltan su primera ejecución y las mediciones en dispositivo, ver [`docs/seguridad/verificacion-mvp.md`](../docs/seguridad/verificacion-mvp.md))
 
 ---
 

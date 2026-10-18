@@ -1,0 +1,112 @@
+name: Load test
+
+# Prueba de carga del Paso 25 (tareas 9-11; riesgo S-05 de doc 08 §9):
+# 50 dispositivos de la misma organización vacían su outbox a la vez contra
+# `POST /v1/sync/push`, con 100 operaciones por lote, sobre el stack de
+# producción (PostgreSQL + imagen de server/Dockerfile + Caddy con TLS). Falla
+# si el p95 llega a 1,5 s (criterio de aceptación del MVP) o si alguna
+# operación no se aplica. El informe queda como artefacto.
+#
+# No corre en cada PR: un runner compartido mide con ruido y la prueba tarda.
+# Se lanza a mano (con otros parámetros si hace falta) y una vez por semana,
+# para ver la tendencia. La máquina de desarrollo local no es representativa
+# (plan, nota de entorno del Paso 25).
+
+on:
+  schedule:
+    - cron: "35 7 * * 1" # lunes 07:35 UTC, después de DAST
+  workflow_dispatch:
+    inputs:
+      devices:
+        description: Dispositivos concurrentes
+        default: "50"
+      ops:
+        description: Operaciones por lote
+        default: "100"
+      rounds:
+        description: Rondas de pushes simultáneos
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  load:
+    name: 50 dispositivos contra /v1/sync/push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LOAD_HOST: api.visitacampo.localhost
+      COMPOSE: docker compose --project-directory infra --env-file infra/.env -f infra/docker-compose.yml
+      DEVICES: ${{ inputs.devices || '50' }}
+      OPS: ${{ inputs.ops || '100' }}
+      ROUNDS: ${{ inputs.rounds || '3' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generar infra/.env efímero (secretos de un solo uso)
+        run: |
+          echo "127.0.0.1 ${LOAD_HOST}" | sudo tee -a /etc/hosts
+          LOAD_PASSWORD="$(bash infra/scripts/ci_dast_env.sh)"
+          echo "::add-mask::${LOAD_PASSWORD}" # nosemgrep: unsafe-add-mask-workflow-command
+          echo "LOAD_PASSWORD=${LOAD_PASSWORD}" >> "$GITHUB_ENV"
+          bash infra/scripts/check_envvars.sh infra/.env infra/.env.example
+
+      - name: Levantar db + api + worker + caddy
+        run: |
+          $COMPOSE up -d --build db api worker caddy
+          for _ in $(seq 1 60); do
+            if curl -sfk "https://${LOAD_HOST}/v1/healthz" > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          $COMPOSE logs api caddy
+          exit 1
+
+      # La CA interna de Caddy, para que el script verifique TLS de verdad.
+      - name: Sembrar la organización de carga y exportar la CA de Caddy
+        run: |
+          case "$DEVICES" in ''|*[!0-9]*) echo "devices no es un número"; exit 1;; esac
+          $COMPOSE exec -T api python manage.py bootstrap_demo \
+            --org-name "Prueba de carga" --username carga \
+            --password "$LOAD_PASSWORD" --extra-agents "$((DEVICES - 1))" > /dev/null
+          $COMPOSE exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Carga — p95 de push < 1,5 s
+        run: |
+          python infra/load/push_load.py \
+            --base-url "https://${LOAD_HOST}" --cafile caddy-root.crt \
+            --username carga --devices "$DEVICES" --ops "$OPS" --rounds "$ROUNDS" \
+            --report load-report.json
+
+      - name: Informe en el resumen
+        if: always()
+        run: |
+          if [ -f load-report.json ]; then
+            { echo '## Prueba de carga'; echo '```json'; cat load-report.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Logs del stack (si algo falló)
+        if: failure()
+        run: $COMPOSE logs --no-color api caddy | tail -200
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: load-report
+          path: load-report.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Bajar el stack
+        if: always()
+        run: $COMPOSE down -v

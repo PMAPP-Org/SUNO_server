@@ -16,7 +16,9 @@ from unittest import mock
 from xml.etree import ElementTree
 
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -214,6 +216,20 @@ class ExportTests(TestCase):
         self.a.visit(), self.a.visit()
         with mock.patch.object(export, "MAX_EXPORT_ROWS", 1), self.assertRaises(ExportTooLarge):
             visit_table(self.a.ctx(), Visit.objects.all())
+
+    def test_query_count_does_not_grow_with_the_rows(self) -> None:
+        """Paso 25, tarea 2 (H-07): coste fijo en queries, sin N+1 por fila."""
+
+        def queries_for(count: int) -> int:
+            tenant = make_tenant(f"Org {count} filas", staff_role=Role.SUPERVISOR)
+            for _ in range(count):
+                review_visit(tenant.ctx(), tenant.visit(), status="approved")
+            ctx = tenant.ctx()
+            with CaptureQueriesContext(connection) as captured:
+                visit_table(ctx, Visit.objects.all())
+            return len(captured.captured_queries)
+
+        self.assertEqual(queries_for(1), queries_for(30))
 
     def test_csv_and_xlsx_are_readable(self) -> None:
         self.a.visit(notas="ñandú & <b>")

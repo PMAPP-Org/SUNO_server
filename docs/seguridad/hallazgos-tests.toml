@@ -1,0 +1,224 @@
+# Mapa hallazgo → test (Paso 25; plan §8, criterio de salida "todos los
+# H-01…H-21 tienen al menos un test que los cubre").
+#
+# Los hallazgos vienen de la revisión de QField/QFieldCloud (doc 07). Cada uno
+# lista evidencias: un archivo de uno de los dos repositorios y un texto que
+# tiene que aparecer en él (el nombre del test, o el paso de CI). La CI de
+# cada repositorio comprueba **sus** evidencias con
+# `infra/scripts/check_findings_map.py` (SUNO_server) y
+# `tool/check_findings_map.py` (SUNO_client, que lee este archivo de
+# SUNO_server): si alguien renombra o borra el test que cubre un hallazgo, la
+# CI falla aquí en vez de dejar el hallazgo descubierto en silencio.
+#
+# `kind`: "test" (test automatizado que corre en CI), "lint" (gate de CI que
+# falla la build), "stack" (paso de CI contra el stack de producción real).
+# Cada hallazgo aplicable necesita al menos una evidencia "test" o "stack".
+
+[[finding]]
+id = "H-01"
+title = "Bypass de TLS para servidores propios"
+severity = "CRITICAL"
+rd = "RD-01"
+evidence = [
+  { repo = "client", kind = "test", path = "test/core/security/trust_store_test.dart", contains = "certificado no confiable y sin pin: rechazado, sin enviar nada" },
+  { repo = "client", kind = "test", path = "test/core/security/trust_store_test.dart", contains = "clave fuera de los pines: rechazado ANTES de enviar la petición" },
+  { repo = "client", kind = "test", path = "test/core/security/trust_store_test.dart", contains = "tras aprobarlo, conecta; si el certificado cambia, se bloquea" },
+  { repo = "client", kind = "test", path = "test/core/auth/tls_default_rejects_invalid_cert_test.dart", contains = "rechaza un certificado autofirmado" },
+  { repo = "client", kind = "test", path = "test/platform/platform_tls_config_test.dart", contains = "App Transport Security sin excepciones" },
+  { repo = "client", kind = "lint", path = "tool/lint_no_tls_bypass.sh", contains = "FORBIDDEN_PATTERN=" },
+]
+
+[[finding]]
+id = "H-02"
+title = "Desreferencia nula antes de validar datos externos"
+severity = "HIGH"
+rd = "RD-02"
+evidence = [
+  { repo = "client", kind = "test", path = "test/core/sync/sync_engine_test.dart", contains = "parseJson() produce Err ante un campo requerido ausente" },
+  { repo = "client", kind = "test", path = "test/core/auth/api_client_test.dart", contains = "cuerpo malformado (falta un campo requerido) -> malformedResponse, nunca una excepción" },
+]
+
+[[finding]]
+id = "H-03"
+title = "Validación solo con aserciones"
+severity = "HIGH"
+rd = "RD-03"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_push.py", contains = "def test_a_missing_mandatory_field_is_rejected" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_push.py", contains = "def test_an_unknown_field_is_rejected_not_ignored" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_push.py", contains = "def test_an_out_of_range_coordinate_is_rejected" },
+  { repo = "client", kind = "test", path = "test/core/forms/parity_test.dart", contains = "cualquier JSON arbitrario produce un resultado, nunca una excepción" },
+  { repo = "client", kind = "test", path = "test/core/forms/parity_test.dart", contains = "sin coerción de tipos" },
+]
+
+[[finding]]
+id = "H-04"
+title = "Carrera en la escritura local (deltafiles)"
+severity = "HIGH"
+rd = "RD-04"
+evidence = [
+  { repo = "client", kind = "test", path = "test/data/local/database_test.dart", contains = "atomicidad visita + outbox (RD-04)" },
+]
+
+[[finding]]
+id = "H-05"
+title = "Fuga de recursos en la subida multipart"
+severity = "HIGH"
+rd = "RD-05"
+evidence = [
+  { repo = "client", kind = "test", path = "test/core/attachments/attachment_upload_service_test.dart", contains = "H-05: si la subida se corta a mitad, el archivo se cierra igual" },
+]
+
+[[finding]]
+id = "H-06"
+title = "Ejecución de código y traversal en plugins"
+severity = "HIGH"
+rd = "RD-06"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/forms/tests/test_templates.py", contains = "def test_every_hostile_expression_is_rejected_when_validating_the_template" },
+  { repo = "client", kind = "test", path = "test/core/forms/parity_test.dart", contains = "se rechazan sin evaluarse (H-06)" },
+  { repo = "client", kind = "lint", path = "tool/lint_no_dynamic_code.sh", contains = "RD-06" },
+]
+
+[[finding]]
+id = "H-07"
+title = "N+1 de permisos dentro del bucle"
+severity = "HIGH"
+rd = "RD-07"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_query_budget.py", contains = "def test_the_marginal_cost_of_an_operation_is_one_query" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_query_budget.py", contains = "def test_permission_queries_are_constant" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_pull_isolation_budget.py", contains = "def test_the_number_of_queries_does_not_grow_with_the_rows" },
+  { repo = "server", kind = "test", path = "server/visitacampo/backoffice/tests/test_services.py", contains = "def test_query_count_does_not_grow_with_the_rows" },
+]
+
+[[finding]]
+id = "H-08"
+title = "Lost update en la última versión de un archivo"
+severity = "HIGH"
+rd = "RD-08"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/attachments/tests/test_concurrency.py", contains = "def test_exactly_one_of_them_reports_having_created_the_row" },
+  { repo = "server", kind = "test", path = "server/visitacampo/core/tests/test_models.py", contains = "def test_has_exactly_the_documented_fields" },
+]
+
+[[finding]]
+id = "H-09"
+title = "Downcast inseguro (static_cast)"
+severity = "MEDIUM"
+not_applicable = "Específico de C++/Qt. Dart verifica `as` en tiempo de ejecución y Python no tiene downcasts (ADR-001, ADR-004)."
+
+[[finding]]
+id = "H-10"
+title = "Clave de almacenamiento sin interpolar: cada cookie pisa la anterior"
+severity = "MEDIUM"
+evidence = [
+  { repo = "client", kind = "test", path = "test/core/security/pin_store_test.dart", contains = "tres hosts aprobados persisten tras reiniciar, sin pisarse" },
+]
+
+[[finding]]
+id = "H-11"
+title = "Caché global sin invalidación"
+severity = "MEDIUM"
+evidence = [
+  { repo = "client", kind = "test", path = "test/data/local/form_template_repository_test.dart", contains = "H-11: al llegar la v2, una visita nueva usa la v2" },
+]
+
+[[finding]]
+id = "H-12"
+title = "Jobs atascados en cola"
+severity = "MEDIUM"
+rd = "RD-13"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/jobs/tests/test_kill9.py", contains = "def test_a_worker_killed_mid_job_is_recovered_by_the_reaper" },
+  { repo = "server", kind = "stack", path = ".github/workflows/dast.yml", contains = "El worker procesa la cola" },
+]
+
+[[finding]]
+id = "H-13"
+title = "TOCTOU en \"un job activo por proyecto\""
+severity = "MEDIUM"
+rd = "RD-14"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/jobs/tests/test_toctou.py", contains = "def test_only_one_of_eight_simultaneous_enqueues_creates_the_job" },
+  { repo = "server", kind = "test", path = "server/visitacampo/jobs/tests/test_toctou.py", contains = "def test_the_invariant_is_enforced_by_the_database_itself" },
+]
+
+[[finding]]
+id = "H-14"
+title = "Tokens en texto plano"
+severity = "MEDIUM"
+rd = "RD-09"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/authn/tests/test_tokens.py", contains = "class RefreshSecretTests" },
+  { repo = "server", kind = "test", path = "server/visitacampo/authn/tests/test_tokens.py", contains = "def test_hash_fits_the_column" },
+  { repo = "client", kind = "test", path = "test/core/security/no_plaintext_secrets_test.dart", contains = "ningún log menciona tokens, contraseñas ni claves" },
+]
+
+[[finding]]
+id = "H-15"
+title = "Carrera en la invalidación de sesión"
+severity = "MEDIUM"
+rd = "RD-10"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/authn/tests/test_rotation.py", contains = "def test_reuse_after_the_window_revokes_the_whole_family" },
+  { repo = "server", kind = "test", path = "server/visitacampo/authn/tests/test_rotation.py", contains = "def test_simultaneous_refreshes_inside_the_window_all_succeed" },
+  { repo = "client", kind = "test", path = "test/core/auth/auth_controller_test.dart", contains = "familia revocada (401)" },
+]
+
+[[finding]]
+id = "H-16"
+title = "Fuga entre organizaciones (membresías)"
+severity = "MEDIUM"
+rd = "RD-11"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/core/tests/test_policies.py", contains = "class CanReadMembersTests" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_pull_isolation_budget.py", contains = "def test_pull_returns_only_the_own_organization" },
+  { repo = "server", kind = "test", path = "server/visitacampo/sync/tests/test_push.py", contains = "def test_a_create_over_an_id_owned_by_another_org_is_rejected_without_leaking" },
+  { repo = "server", kind = "test", path = "server/visitacampo/attachments/tests/test_presign_commit.py", contains = "def test_an_attachment_of_another_organization_is_a_404" },
+  { repo = "server", kind = "test", path = "server/visitacampo/backoffice/tests/test_admin_scoping.py", contains = "def test_every_list_shows_only_the_own_organization" },
+]
+
+[[finding]]
+id = "H-17"
+title = "La salida de un job expone secretos"
+severity = "MEDIUM"
+rd = "RD-12"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/jobs/tests/test_scrub.py", contains = "def test_a_sensitive_key_is_redacted_whatever_its_value" },
+  { repo = "server", kind = "test", path = "server/visitacampo/core/tests/test_policies.py", contains = "class CanReadJobOutputTests" },
+]
+
+[[finding]]
+id = "H-18"
+title = "SECURE_PROXY_SSL_HEADER sin validar"
+severity = "MEDIUM"
+rd = "RD-15"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/core/tests/test_prod_settings.py", contains = "def test_does_not_trust_x_forwarded_host" },
+  { repo = "server", kind = "stack", path = ".github/workflows/dast.yml", contains = "-H 'X-Forwarded-Proto: https' http://" },
+]
+
+[[finding]]
+id = "H-19"
+title = "Downcast type-unsafe (duplicado de H-09)"
+severity = "LOW"
+not_applicable = "Mismo caso que H-09."
+
+[[finding]]
+id = "H-20"
+title = "Consultas redundantes de la entidad de contexto"
+severity = "LOW"
+rd = "RD-16"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/core/tests/test_context.py", contains = "def test_loader_runs_once_for_repeated_lookups" },
+]
+
+[[finding]]
+id = "H-21"
+title = "Traversal en el almacenamiento (patrón a conservar)"
+severity = "LOW"
+rd = "RD-06"
+evidence = [
+  { repo = "server", kind = "test", path = "server/visitacampo/attachments/tests/test_blobstore.py", contains = "class TraversalTests" },
+]
