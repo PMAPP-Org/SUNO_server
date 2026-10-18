@@ -1,0 +1,61 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fffdf4">
+  <meta name="description" content="Acceso a la plataforma SUNO para integrantes de organizaciones.">
+  <title>Ingresar · SUNO</title>
+  <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/web.css' %}">
+</head>
+<body class="platform-page">
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+  <header class="site-header wrap compact-header">
+    <a class="suno-wordmark text-wordmark" href="{% url 'home' %}" aria-label="SUNO · Inicio"><span>SUNO</span></a>
+    <a class="quiet-link" href="{% url 'home' %}">Volver al inicio</a>
+  </header>
+
+  <main id="contenido" class="access-layout wrap">
+    <section class="access-intro" aria-labelledby="login-title">
+      <p class="eyebrow"><span></span> ACCESO A LA PLATAFORMA</p>
+      <h1 id="login-title">Continúa tu trabajo<span class="red">.</span></h1>
+      <p>Ingresa con la cuenta de tu organización para consultar tu espacio de trabajo SUNO.</p>
+      <div class="access-note">
+        <strong>¿Trabajas en administración?</strong>
+        <span>El panel interno tiene un acceso independiente y requiere permisos adicionales.</span>
+      </div>
+    </section>
+
+    <section class="login-card" aria-label="Formulario de acceso">
+      <p class="form-kicker">CUENTA SUNO</p>
+      {% if form.non_field_errors %}
+        <div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>
+      {% endif %}
+      <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -- the CSRF field is the first control inside this form. -->
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="field-row">
+          <label for="{{ form.username.id_for_label }}">Usuario</label>
+          {{ form.username }}
+          {% for error in form.username.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+        </div>
+        <div class="field-row">
+          <label for="{{ form.password.id_for_label }}">Contraseña</label>
+          {{ form.password }}
+          {% for error in form.password.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+        </div>
+        <button class="button form-button" type="submit">Ingresar a SUNO <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="login-help">Si todavía no tienes cuenta, solicítala al responsable de tu organización.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap access-footer">
+    <p>SUNO · Gestión de campo</p>
+    <a class="admin-link" href="{% url 'admin:index' %}">Acceso restringido para administración</a>
+  </footer>
+</body>
+</html>

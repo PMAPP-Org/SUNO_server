@@ -1,0 +1,35 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fffdf4">
+  <title>Mi espacio · SUNO</title>
+  <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/web.css' %}">
+</head>
+<body class="platform-page">
+  <header class="site-header wrap compact-header">
+    <a class="suno-wordmark text-wordmark" href="{% url 'platform_home' %}" aria-label="SUNO · Mi espacio"><span>SUNO</span></a>
+    <form method="post" action="{% url 'platform_logout' %}">{% csrf_token %}<button class="quiet-button" type="submit">Cerrar sesión</button></form>
+  </header>
+  <main id="contenido" class="workspace wrap">
+    <p class="eyebrow"><span></span> MI ESPACIO</p>
+    <h1>Hola, {{ request.user.display_name|default:request.user.username }}<span class="red">.</span></h1>
+    <div class="workspace-grid">
+      <section class="workspace-card">
+        <span>ORGANIZACIÓN</span>
+        <h2>{{ organization.name }}</h2>
+        <p>Tu cuenta está activa y vinculada a este espacio de trabajo.</p>
+      </section>
+      <section class="workspace-card">
+        <span>OPERACIÓN EN CAMPO</span>
+        <h2>Continúa desde la app SUNO</h2>
+        <p>Captura visitas, evidencia y ubicación desde el dispositivo asignado, incluso sin conexión.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

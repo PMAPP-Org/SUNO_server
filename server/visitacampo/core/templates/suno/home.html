@@ -21,7 +21,7 @@
     <nav aria-label="Navegación principal">
       <a href="#plataforma">Plataforma</a>
       <a href="#en-campo">En campo</a>
-      <a class="nav-access" href="{% url 'admin:index' %}">Acceso al panel <span aria-hidden="true">↗</span></a>
+      <a class="nav-access" href="{% url 'platform_login' %}">Ingresar <span aria-hidden="true">→</span></a>
     </nav>
   </header>
 
@@ -31,13 +31,21 @@
         <p class="eyebrow"><span></span> GESTIÓN Y SEGUIMIENTO DE CAMPO</p>
         <h1 id="hero-title">El territorio,<br>en contexto<span class="red">.</span></h1>
         <p class="hero-description">Cada visita cuenta una parte de la historia. Reúne los datos, la ubicación y la evidencia de tu equipo en un mismo lugar.</p>
-        <a class="button" href="{% url 'admin:index' %}">Entrar a la plataforma <span aria-hidden="true">↗</span></a>
+        <a class="button" href="{% url 'platform_login' %}">Entrar a la plataforma <span aria-hidden="true">→</span></a>
         <a class="text-link" href="#plataforma">Conocer SUNO <span aria-hidden="true">↓</span></a>
         <p class="hero-note">Del trabajo en territorio a la revisión en oficina.</p>
       </div>
       <figure class="hero-art">
         <div class="art-meta"><span>NATURALEZA / TECNOLOGÍA</span><span>01 — SUNO</span></div>
-        <img src="{% static 'suno/brand/Logo_Principal.png' %}" width="1280" height="1280" alt="Emblema SUNO: un ave en movimiento sobre un círculo rojo" fetchpriority="high">
+        <div class="territory-visual" aria-hidden="true">
+          <span class="territory-sun"></span>
+          <span class="territory-line territory-line-one"></span>
+          <span class="territory-line territory-line-two"></span>
+          <span class="territory-line territory-line-three"></span>
+          <span class="territory-point territory-point-one"></span>
+          <span class="territory-point territory-point-two"></span>
+          <span class="territory-point territory-point-three"></span>
+        </div>
         <figcaption><span>Una mirada al territorio.</span><span>Una visión compartida.</span></figcaption>
       </figure>
     </section>
@@ -61,8 +69,8 @@
         </ol>
       </div>
     </section>
-    <section class="closing wrap"><div><p class="eyebrow">UN MISMO PUNTO DE PARTIDA</p><h2>Tu equipo. Tu territorio. SUNO.</h2></div><a class="button" href="{% url 'admin:index' %}">Acceder al panel <span aria-hidden="true">↗</span></a></section>
+    <section class="closing wrap"><div><p class="eyebrow">UN MISMO PUNTO DE PARTIDA</p><h2>Tu equipo. Tu territorio. SUNO.</h2></div><a class="button" href="{% url 'platform_login' %}">Ingresar a SUNO <span aria-hidden="true">→</span></a></section>
   </main>
-  <footer class="site-footer wrap"><a class="suno-wordmark" href="{% url 'home' %}"><img src="{% static 'suno/brand/Logo_CabezaSinCirculo.png' %}" alt="" width="36" height="36"><span>SUNO</span></a><p>Gestión de campo · Información con contexto</p><a href="#contenido">Volver arriba ↑</a></footer>
+  <footer class="site-footer wrap"><a class="suno-wordmark" href="{% url 'home' %}"><img src="{% static 'suno/brand/Logo_CabezaSinCirculo.png' %}" alt="" width="36" height="36"><span>SUNO</span></a><p>Gestión de campo · Información con contexto</p><span class="footer-links"><a href="{% url 'admin:index' %}">Administración</a><a href="#contenido">Volver arriba ↑</a></span></footer>
 </body>
 </html>

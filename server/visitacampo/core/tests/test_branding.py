@@ -6,22 +6,37 @@ from django.test import SimpleTestCase, override_settings
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
 class BrandingTests(SimpleTestCase):
-    def test_home_is_public_and_links_to_the_protected_admin(self):
+    def test_home_prioritizes_public_platform_and_keeps_admin_restricted(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "SUNO")
+        self.assertContains(response, 'href="/plataforma/ingresar/"')
         self.assertContains(response, 'href="/admin/"')
+        self.assertContains(response, "Administración")
+        self.assertNotContains(response, 'width="1280"')
         self.assertContains(response, 'lang="es"')
         self.assertContains(response, "suno/css/web.css")
         self.assertRedirects(
             self.client.get("/admin/"), "/admin/login/?next=/admin/", fetch_redirect_response=False
         )
 
+    def test_public_platform_has_its_own_login(self):
+        response = self.client.get("/plataforma/ingresar/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ACCESO A LA PLATAFORMA")
+        self.assertContains(response, 'name="username"')
+        self.assertContains(response, 'name="password"')
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        form_html = response.content.decode().split("<form", 1)[1].split("</form>", 1)[0]
+        self.assertIn('name="csrfmiddlewaretoken"', form_html)
+        self.assertContains(response, "Acceso restringido para administración")
+        self.assertNotContains(response, "Logo_Principal.png")
+
     @override_settings(ADMIN_REQUIRE_OTP=True)
     def test_branded_login_keeps_csrf_password_and_otp(self):
         response = self.client.get("/admin/login/")
         self.assertContains(response, "suno/css/admin.css")
-        self.assertContains(response, "suno/brand/Logo_Principal.png")
+        self.assertNotContains(response, "suno/brand/Logo_Principal.png")
         for field in ("username", "password", "otp_token", "csrfmiddlewaretoken"):
             self.assertContains(response, f'name="{field}"')
 
