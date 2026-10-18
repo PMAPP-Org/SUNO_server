@@ -49,6 +49,7 @@ __all__ = [
     "can_manage_basemaps",
     "can_manage_device",
     "can_manage_personal_data",
+    "can_modify_visit",
     "can_publish_form_template",
     "can_read_basemaps",
     "can_read_job_output",
@@ -63,6 +64,7 @@ __all__ = [
     "check_manage_basemaps",
     "check_manage_device",
     "check_manage_personal_data",
+    "check_modify_visit",
     "check_publish_form_template",
     "check_read_basemaps",
     "check_read_job_output",
@@ -115,6 +117,12 @@ class OrgScopedResource(Protocol):
 
 class DeviceLike(OrgScopedResource, Protocol):
     owner_id: UUID
+
+
+class AuthoredResource(OrgScopedResource, Protocol):
+    """Un recurso con autor (`created_by_id`), ya resuelto: sin navegar relaciones."""
+
+    created_by_id: UUID
 
 
 class PolicyDenied(HttpError):
@@ -196,6 +204,22 @@ def can_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
     guardar, porque lo único que se lee es su `org_id`.
     """
     return user_has_organization_roles(ctx, visit.org_id, WRITE_VISIT_ROLES)
+
+
+def can_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> bool:
+    """Editar o borrar una visita **ya existente**: su autor o supervisión.
+
+    `can_write_visit` responde "¿puede escribir visitas en esta organización?";
+    esto, además, "¿esta en concreto?". Un agente de campo no cambia ni borra
+    el trabajo de otro agente, ni siquiera por la API (ISO 27001 A.5.15,
+    mínimo privilegio; antes la app lo impedía solo en pantalla). Supervisión
+    y administración sí, porque corregir es parte de revisar.
+    """
+    if user_has_organization_roles(ctx, visit.org_id, SUPERVISION_ROLES):
+        return True
+    return visit.created_by_id == ctx.user_id and user_has_organization_roles(
+        ctx, visit.org_id, WRITE_VISIT_ROLES
+    )
 
 
 def can_read_members(ctx: RequestContext, org_id: UUID) -> bool:
@@ -361,6 +385,11 @@ def check_read_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
 
 def check_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
     if not can_write_visit(ctx, visit):
+        raise _denial(ctx, visit.org_id)
+
+
+def check_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> None:
+    if not can_modify_visit(ctx, visit):
         raise _denial(ctx, visit.org_id)
 
 
