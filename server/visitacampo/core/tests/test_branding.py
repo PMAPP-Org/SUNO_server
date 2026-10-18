@@ -27,6 +27,8 @@ class BrandingTests(SimpleTestCase):
         self.assertContains(response, 'name="username"')
         self.assertContains(response, 'name="password"')
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        form_html = response.content.decode().split("<form", 1)[1].split("</form>", 1)[0]
+        self.assertIn('name="csrfmiddlewaretoken"', form_html)
         self.assertContains(response, "Acceso restringido para administración")
         self.assertNotContains(response, "Logo_Principal.png")
 

@@ -34,6 +34,7 @@
       {% if form.non_field_errors %}
         <div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>
       {% endif %}
+      <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -- the CSRF field is the first control inside this form. -->
       <form method="post" novalidate>
         {% csrf_token %}
         <div class="field-row">
