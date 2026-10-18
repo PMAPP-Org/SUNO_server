@@ -102,10 +102,19 @@ class ConsentTests(TestCase):
             ("campo desconocido", {**body(self.device_id), "extra": 1}),
             ("versión vacía", body(self.device_id, notice_version="")),
             ("versión con espacios", body(self.device_id, notice_version="v 1")),
+            ("fecha sin zona horaria", body(self.device_id, accepted_at="2026-10-18T09:30:00")),
         ):
             with self.subTest(case=label):
                 self.assertEqual(self.post(payload).status_code, 422)
         self.assertFalse(PrivacyConsent.objects.exists())
+
+    def test_an_extreme_but_valid_offset_is_stored_in_utc(self) -> None:
+        """Schemathesis encontró un 500: `timestamptz` no admite un desfase de
+        -18:47 aunque RFC 3339 sí. Se normaliza a UTC antes de guardar."""
+        response = self.post(body(self.device_id, accepted_at="1655-02-26T04:07:58-18:47"))
+        self.assertEqual(response.status_code, 201, response.content)
+        consent = PrivacyConsent.objects.get()
+        self.assertEqual(consent.accepted_at.isoformat(), "1655-02-26T22:54:58+00:00")
 
     def test_requires_authentication(self) -> None:
         response = post_json(Client(), URL, body(self.device_id))

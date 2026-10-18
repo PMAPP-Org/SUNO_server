@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Annotated, Literal
 
 from ninja import Schema
 from pydantic import ConfigDict, Field, field_validator
 
 from visitacampo.authn.schemas import Timestamp
+from visitacampo.core.timestamps import UtcDatetime
 
 __all__ = ["ConsentRequest", "ConsentResponse", "Purpose"]
 
@@ -29,7 +29,7 @@ class ConsentRequest(Schema):
     device_id: uuid.UUID
     notice_version: NoticeVersion
     purposes: list[Purpose] = Field(min_length=1, max_length=3)
-    accepted_at: datetime
+    accepted_at: UtcDatetime
 
     @field_validator("purposes")
     @classmethod

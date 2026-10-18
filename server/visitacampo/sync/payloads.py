@@ -74,7 +74,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import (
     AfterValidator,
-    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -86,6 +85,7 @@ from pydantic import (
 
 from visitacampo.core.api_errors import redacted_validation_details
 from visitacampo.core.models import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
+from visitacampo.core.timestamps import UtcDatetime
 
 __all__ = [
     "CODE_NOT_FOUND",
@@ -278,7 +278,7 @@ class _AttachmentCreatePayload(BaseModel):
     sha256: Sha256Hex
     role: Literal["foto", "firma", "doc"]
     caption: Caption | None = None
-    captured_at: AwareDatetime
+    captured_at: UtcDatetime
     # `StrictInt`: `true` no es la posición 1.
     order: StrictInt = Field(default=0, ge=0, le=_MAX_ORDER)
 
@@ -309,10 +309,11 @@ class _VisitCreatePayload(BaseModel):
     lon: Finite | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
     accuracy_m: Finite | None = Field(default=None, ge=0)
     altitude_m: Finite | None = None
-    # `AwareDatetime` y no `datetime`: el contrato exige RFC 3339 **con offset
-    # explícito**. Un instante sin zona no es un instante, y escribirlo con
-    # `USE_TZ=True` solo produciría un aviso y un dato ambiguo para siempre.
-    captured_at: AwareDatetime
+    # `UtcDatetime` y no `datetime`: el contrato exige RFC 3339 **con offset
+    # explícito** (un instante sin zona no es un instante), y se guarda en UTC
+    # porque `timestamptz` no admite todos los desfases que admite RFC 3339
+    # (`core/timestamps.py`).
+    captured_at: UtcDatetime
     device_id: uuid.UUID
 
 
@@ -329,7 +330,7 @@ class _VisitUpdatePayload(BaseModel):
     lon: Finite | None = Field(default=None, ge=LON_MIN, le=LON_MAX)
     accuracy_m: Finite | None = Field(default=None, ge=0)
     altitude_m: Finite | None = None
-    captured_at: AwareDatetime | None = None
+    captured_at: UtcDatetime | None = None
     device_id: uuid.UUID | None = None
 
     @field_validator(*_NON_NULLABLE_ON_UPDATE)
