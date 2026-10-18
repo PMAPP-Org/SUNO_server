@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#fffdf4">
-  <meta name="description" content="SUNO. Registro y seguimiento de visitas de campo: formularios, ubicación, fotografías y firma, incluso sin conexión.">
+  <meta name="theme-color" content="#faf9f2">
+  <meta name="description" content="SUNO centraliza proyectos, actividades de campo y evidencia georreferenciada en una sola plataforma.">
   <title>SUNO · El territorio, en contexto</title>
   <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
   <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
@@ -13,64 +13,105 @@
 </head>
 <body>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
-  <header class="site-header wrap">
-    <a class="suno-wordmark" href="{% url 'home' %}" aria-label="SUNO · Inicio">
-      <img src="{% static 'suno/brand/Logo_Principal.png' %}" width="52" height="52" alt="">
-      <span>SUNO</span>
-    </a>
-    <nav aria-label="Navegación principal">
-      <a href="#plataforma">Plataforma</a>
-      <a href="#en-campo">En campo</a>
-      <a class="nav-access" href="{% url 'platform_login' %}">Ingresar <span aria-hidden="true">→</span></a>
-    </nav>
+  <header class="site-header public-header">
+    <div class="public-wrap header-inner">
+      <a class="suno-wordmark" href="{% url 'home' %}" aria-label="SUNO · Inicio">
+        <img src="{% static 'suno/brand/Logo_Principal.png' %}" width="40" height="40" alt="">
+        <span>SUNO</span>
+      </a>
+      <nav class="public-nav" aria-label="Navegación principal">
+        <a href="#plataforma">Plataforma</a>
+        <a href="#soluciones">Soluciones</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#sobre-suno">Sobre SUNO</a>
+        <a class="nav-access" href="{% url 'platform_login' %}">Ingresar <span aria-hidden="true">→</span></a>
+      </nav>
+    </div>
   </header>
 
   <main id="contenido">
-    <section class="hero wrap" aria-labelledby="hero-title">
+    <section class="public-hero public-wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow"><span></span> GESTIÓN Y SEGUIMIENTO DE CAMPO</p>
-        <h1 id="hero-title">El territorio,<br>en contexto<span class="red">.</span></h1>
-        <p class="hero-description">Cada visita cuenta una parte de la historia. Reúne los datos, la ubicación y la evidencia de tu equipo en un mismo lugar.</p>
-        <a class="button" href="{% url 'platform_login' %}">Entrar a la plataforma <span aria-hidden="true">→</span></a>
-        <a class="text-link" href="#plataforma">Conocer SUNO <span aria-hidden="true">↓</span></a>
-        <p class="hero-note">Del trabajo en territorio a la revisión en oficina.</p>
-      </div>
-      <figure class="hero-art">
-        <div class="art-meta"><span>NATURALEZA / TECNOLOGÍA</span><span>01 — SUNO</span></div>
-        <div class="territory-visual" aria-hidden="true">
-          <span class="territory-sun"></span>
-          <span class="territory-line territory-line-one"></span>
-          <span class="territory-line territory-line-two"></span>
-          <span class="territory-line territory-line-three"></span>
-          <span class="territory-point territory-point-one"></span>
-          <span class="territory-point territory-point-two"></span>
-          <span class="territory-point territory-point-three"></span>
+        <p class="editorial-label">Gestión y seguimiento de campo</p>
+        <h1 id="hero-title">El territorio,<br>en contexto<span class="brand-dot">.</span></h1>
+        <p class="hero-description">Centraliza la información de tus proyectos, registra actividades en campo y consulta evidencias georreferenciadas desde una única plataforma.</p>
+        <div class="hero-actions">
+          <a class="button" href="#plataforma">Conocer SUNO <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="{% url 'platform_login' %}">Ingresar a la plataforma <span aria-hidden="true">→</span></a>
         </div>
-        <figcaption><span>Una mirada al territorio.</span><span>Una visión compartida.</span></figcaption>
+      </div>
+
+      <figure class="topography-figure" aria-label="Composición cartográfica basada en curvas de nivel">
+        <img src="{% static 'suno/brand/topography.png' %}" alt="" width="1224" height="1285">
+        <span class="map-orbit" aria-hidden="true"></span>
+        <span class="map-pin map-pin-primary" aria-hidden="true"></span>
+        <span class="map-pin map-pin-secondary" aria-hidden="true"></span>
+        <span class="coordinate coordinate-primary">6.2471° N<br>−75.563° W</span>
+        <span class="coordinate coordinate-secondary">PK 12+340<br>CONTROL 01</span>
       </figure>
-    </section>
 
-    <section class="capabilities wrap" id="plataforma" aria-labelledby="platform-title">
-      <div class="section-heading"><p class="eyebrow">LA PLATAFORMA</p><h2 id="platform-title">De la visita al dato.<br>Sin perder el detalle.</h2></div>
-      <div class="capability-grid">
-        <article><div class="feature-top"><span>01 / REGISTRAR</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 4H5v17h14V4h-4M9 2h6v4H9zM8 11h8M8 15h5"/></svg></div><h3>Evidencia en su lugar</h3><p>Formularios, fotografías, coordenadas y firma vinculados a cada visita. La información conserva su contexto.</p></article>
-        <article><div class="feature-top"><span>02 / SINCRONIZAR</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></svg></div><h3>El campo sigue</h3><p>Guarda las visitas en el teléfono y sincroniza cuando tengas conexión. Consulta qué está pendiente y qué requiere revisión.</p></article>
-        <article><div class="feature-top"><span>03 / REVISAR</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 4h18v14H3zM8 22h8m-4-4v4M7 9h10M7 13h6"/></svg></div><h3>Una visión de equipo</h3><p>Revisa las visitas y sus adjuntos desde el panel de administración, con acceso según los permisos de tu organización.</p></article>
+      <div class="concept-strip" aria-label="Principios de SUNO">
+        <article><span>01</span><h2>Información centralizada</h2><p>Proyectos, registros y documentación en una misma plataforma.</p></article>
+        <article><span>02</span><h2>Trabajo conectado</h2><p>Captura de información y evidencia directamente desde el territorio.</p></article>
+        <article><span>03</span><h2>Decisiones fundamentadas</h2><p>Consulta, seguimiento y análisis de información georreferenciada.</p></article>
       </div>
     </section>
 
-    <section class="field-section" id="en-campo" aria-labelledby="field-title">
-      <div class="wrap field-grid">
-        <div><p class="eyebrow">SUNO EN CAMPO</p><h2 id="field-title">Preparado para<br>estar allí.</h2><p class="field-intro">Una herramienta de trabajo para quienes recogen la información donde sucede.</p></div>
-        <ol class="workflow">
-          <li><span>01</span><div><h3>Prepara tu jornada</h3><p>Inicia sesión y sincroniza las plantillas que necesita tu equipo antes de salir.</p></div></li>
-          <li><span>02</span><div><h3>Registra la visita</h3><p>Completa el formulario, añade la evidencia y guarda, incluso sin cobertura.</p></div></li>
-          <li><span>03</span><div><h3>Conecta y continúa</h3><p>Sincroniza al recuperar la conexión y comprueba el estado de tus registros.</p></div></li>
-        </ol>
+    <section class="product-section" id="plataforma" aria-labelledby="product-title">
+      <div class="public-wrap product-heading">
+        <p class="editorial-index">01 / Plataforma</p>
+        <div><h2 id="product-title">Del trabajo en campo<br>a una lectura compartida.</h2><p>SUNO conserva la relación entre cada registro, su ubicación y la evidencia recopilada. La información puede capturarse sin conexión y sincronizarse cuando vuelve la cobertura.</p></div>
+      </div>
+
+      <div class="public-wrap product-stage" aria-label="Vista de producto SUNO">
+        <div class="product-rail" aria-hidden="true">
+          <span class="mini-brand"><img src="{% static 'suno/brand/Logo_Principal.png' %}" alt=""> SUNO</span>
+          <span class="active">Resumen</span><span>Mapa</span><span>Actividades</span><span>Registros</span>
+        </div>
+        <div class="product-map">
+          <img src="{% static 'suno/brand/topography.png' %}" alt="">
+          <span class="route-line"></span>
+          <span class="record-point point-a"></span><span class="record-point point-b"></span><span class="record-point point-c"></span>
+          <div class="map-controls" aria-hidden="true"><span>+</span><span>−</span><span>⌖</span></div>
+        </div>
+        <aside class="inspection-panel">
+          <p class="editorial-label">Registro de inspección</p>
+          <h3>Control de obra lineal</h3>
+          <dl>
+            <div><dt>Ubicación</dt><dd>PK 12+340</dd></div>
+            <div><dt>Evidencia</dt><dd>Fotografías y firma</dd></div>
+            <div><dt>Estado</dt><dd><span class="status-dot"></span> Sincronizado</dd></div>
+          </dl>
+          <p>La captura móvil, la ubicación y los formularios forman un mismo registro trazable.</p>
+        </aside>
       </div>
     </section>
-    <section class="closing wrap"><div><p class="eyebrow">UN MISMO PUNTO DE PARTIDA</p><h2>Tu equipo. Tu territorio. SUNO.</h2></div><a class="button" href="{% url 'platform_login' %}">Ingresar a SUNO <span aria-hidden="true">→</span></a></section>
+
+    <section class="workflow-section public-wrap" id="soluciones" aria-labelledby="workflow-title">
+      <div class="workflow-intro">
+        <p class="editorial-index">02 / Flujo de trabajo</p>
+        <h2 id="workflow-title">Tres momentos.<br>Una sola fuente de información.</h2>
+      </div>
+      <ol class="workflow-list" id="recursos">
+        <li><span>01</span><div><h3>Registrar en campo</h3><p>Completa formularios, captura ubicación, fotografías y firma desde la app móvil, incluso sin cobertura.</p></div></li>
+        <li><span>02</span><div><h3>Centralizar la información</h3><p>Sincroniza los registros con controles de integridad, aislamiento por organización y trazabilidad.</p></div></li>
+        <li><span>03</span><div><h3>Consultar y dar seguimiento</h3><p>Revisa actividad, evidencia y ubicación desde el espacio web de tu organización.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="about-section" id="sobre-suno">
+      <div class="public-wrap about-grid">
+        <p class="editorial-index">03 / SUNO</p>
+        <h2>Información técnica<br>con contexto territorial.</h2>
+        <div><p>Una plataforma creada para equipos que necesitan documentar el territorio con precisión y continuar trabajando cuando la conectividad es limitada.</p><a class="text-link" href="{% url 'platform_login' %}">Ingresar a SUNO <span aria-hidden="true">→</span></a></div>
+      </div>
+    </section>
   </main>
-  <footer class="site-footer wrap"><a class="suno-wordmark" href="{% url 'home' %}"><img src="{% static 'suno/brand/Logo_CabezaSinCirculo.png' %}" alt="" width="36" height="36"><span>SUNO</span></a><p>Gestión de campo · Información con contexto</p><span class="footer-links"><a href="{% url 'admin:index' %}">Administración</a><a href="#contenido">Volver arriba ↑</a></span></footer>
+
+  <footer class="site-footer public-wrap">
+    <a class="suno-wordmark" href="{% url 'home' %}"><img src="{% static 'suno/brand/Logo_CabezaSinCirculo.png' %}" alt="" width="30" height="30"><span>SUNO</span></a>
+    <p>Gestión de campo · Información con contexto</p>
+    <span class="footer-links"><a href="{% url 'admin:index' %}">Administración</a><a href="#contenido">Volver arriba ↑</a></span>
+  </footer>
 </body>
 </html>

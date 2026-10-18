@@ -7,23 +7,27 @@
 }
 
 :root {
-  --suno-red: #e84546;
-  --suno-action: #a5282c;
-  --suno-red-dark: #8f1d23;
-  --suno-pink: #d57c87;
-  --suno-cream: #fffdf4;
-  --suno-paper: #f6f3eb;
-  --suno-line: #e5e1da;
-  --suno-ink: #161715;
-  --suno-muted: #62655f;
-  --suno-green: #6b7f6b;
+  --suno-red: #a42730;
+  --suno-accent: #ed4248;
+  --suno-red-dark: #7f1d25;
+  --suno-cream: #faf9f2;
+  --suno-paper: #f2f0e9;
+  --suno-line: #dedcd3;
+  --suno-white: #ffffff;
+  --suno-ink: #171717;
+  --suno-muted: #666760;
+  --suno-green: #5f715f;
+  --suno-amber: #9a6a25;
+  --suno-topography: #a29968;
   --suno-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --suno-radius: 6px;
+  --suno-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --suno-radius: 2px;
+  --suno-content: 1360px;
 }
 
 .suno-wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
 .suno-wordmark img { object-fit: contain; flex-shrink: 0; }
-.suno-wordmark span { font: 750 26px/1 var(--suno-font); letter-spacing: .1em; }
+.suno-wordmark span { font: 720 20px/1 var(--suno-font); letter-spacing: .16em; }
 :focus-visible { outline: 3px solid var(--suno-action); outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
