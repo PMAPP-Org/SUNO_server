@@ -25,6 +25,7 @@ from visitacampo.authn.auth import JwtAuth
 from visitacampo.core.api_errors import register_error_handlers
 from visitacampo.health.api import router as health_router
 from visitacampo.jobs.api import router as jobs_router
+from visitacampo.privacy.api import router as privacy_router
 from visitacampo.serverinfo.api import router as server_info_router
 from visitacampo.sync.api import router as sync_router
 
@@ -46,3 +47,4 @@ api.add_router("", server_info_router)
 api.add_router("", sync_router)
 api.add_router("", attachments_router)
 api.add_router("", jobs_router)
+api.add_router("", privacy_router)

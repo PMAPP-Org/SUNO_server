@@ -27,6 +27,7 @@ from visitacampo.core.models import (
     FormTemplate,
     Job,
     Membership,
+    PrivacyConsent,
     Role,
     VisitAttachment,
     VisitReview,
@@ -78,6 +79,14 @@ class AdminScopingTests(TestCase):
                 assigned_to=tenant.agent,
             )
             audit = record(tenant.ctx(), action="test.action", target=f"marca-{tenant.org.name}")
+            consent = PrivacyConsent.objects.create(
+                org=tenant.org,
+                user=tenant.agent,
+                device=tenant.device,
+                notice_version="2026-10-18",
+                purposes=["account"],
+                accepted_at=timezone.now(),
+            )
             self.rows[tenant.org.name] = {
                 "visit": visit,
                 "visitattachment": attachment,
@@ -85,6 +94,7 @@ class AdminScopingTests(TestCase):
                 "visitreview": review,
                 "assignment": assignment,
                 "auditevent": audit,
+                "privacyconsent": consent,
                 "device": tenant.device,
                 "formtemplateversion": tenant.version,
                 "formtemplate": tenant.version.template,

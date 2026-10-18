@@ -32,7 +32,14 @@ from django_otp import devices_for_user
 from visitacampo.authn.models import RefreshToken
 from visitacampo.core.audit import AuditAction, record
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import AppUser, AuditEvent, Device, Membership, Visit
+from visitacampo.core.models import (
+    AppUser,
+    AuditEvent,
+    Device,
+    Membership,
+    PrivacyConsent,
+    Visit,
+)
 from visitacampo.core.policies import can_manage_personal_data
 from visitacampo.core.scoping import scoped_qs
 
@@ -95,6 +102,19 @@ def export_personal_data(ctx: RequestContext, user: AppUser) -> dict[str, Any]:
             .filter(created_by=user)
             .order_by("captured_at")
             .values_list("pk", "captured_at", "lat", "lon")
+        ],
+        # La prueba de que autorizó el tratamiento (Ley 1581, art. 9).
+        "autorizaciones": [
+            {
+                "version_aviso": version,
+                "finalidades": purposes,
+                "aceptado": iso(accepted),
+                "registrado": iso(recorded),
+            }
+            for version, purposes, accepted, recorded in scoped_qs(ctx, PrivacyConsent)
+            .filter(user=user)
+            .order_by("recorded_at")
+            .values_list("notice_version", "purposes", "accepted_at", "recorded_at")
         ],
         "auditoria": [
             {"accion": action, "objetivo": target, "fecha": iso(at)}
