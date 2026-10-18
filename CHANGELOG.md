@@ -4,6 +4,24 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.4.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.3.0...v0.4.0) (2026-10-18)
+
+
+### Agregado
+
+* **security:** findings map, isolation and query-budget tests, load test (Paso 25) ([#17](https://github.com/PMAPP-Org/SUNO_server/issues/17)) ([9202f95](https://github.com/PMAPP-Org/SUNO_server/commit/9202f9511b8e8ffa8249b90dd39920582cf568f3))
+
+
+### Documentación
+
+* **plan:** Paso 16 and 24 status; OWASP A04 with TrustStore ([#16](https://github.com/PMAPP-Org/SUNO_server/issues/16)) ([ceb937d](https://github.com/PMAPP-Org/SUNO_server/commit/ceb937d832559edde41fbb98cd998f9a7524337e))
+
+
+### Dependencias y build
+
+* **deps:** bump the python group in /server with 2 updates ([#15](https://github.com/PMAPP-Org/SUNO_server/issues/15)) ([f0f402a](https://github.com/PMAPP-Org/SUNO_server/commit/f0f402abf4c88e8a79eab14d2a8ceba7c020f6e3))
+* **deps:** safe Python bumps with regenerated locks; defer major migrations ([#13](https://github.com/PMAPP-Org/SUNO_server/issues/13)) ([7a58781](https://github.com/PMAPP-Org/SUNO_server/commit/7a587811225bc6a71b6aee2c36ce7e489b8cafc1))
+
 ## [0.3.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
