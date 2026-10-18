@@ -64,7 +64,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: Argon2id (ADR-008); JWT EdDSA con algoritmo fijado y claims obligatorios; refresh `selector.verifier` con solo `sha256(verifier)` en BD y comparación en tiempo constante (RD-09); SQLCipher con clave en Keystore/Keychain (ADR-002), Keychain `first_unlock_this_device`; TLS estricto sin bypass (RD-01) con `TrustStore` en la app: solo HTTPS, pinning SPKI del servidor oficial (dos pines con caducidad), TOFU con consentimiento explícito para autohospedados y verificación del certificado antes de enviar la petición (ADR-009); IP de auditoría como HMAC.
 - **Pruebas automatizadas**: lint RD-01 + tests de `TrustStore` contra servidores HTTPS reales (sin pin → rechazo; pin actual o siguiente → aceptado; pin caducado → CA; pin incorrecto → cero peticiones; certificado cambiado → bloqueo); tests de tokens; smoke test de cifrado SQLCipher; HSTS verificado en DAST.
-- **Pendiente**: rotación de la clave de firma JWT con dos claves vivas (Paso 15); pines SPKI reales del dominio oficial y prueba de `TrustStore` en dispositivo.
+- **Pendiente**: pines SPKI reales del dominio oficial y prueba de `TrustStore` en dispositivo.
 
 ### A05:2025 Injection
 
@@ -81,7 +81,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: bloqueo tras 5 fallos por usuario+IP (django-axes); rate limiting por IP, token y usuario (`core/ratelimit.py`); `401` genérico y mismo trabajo de hash sin oráculo de enumeración; rotación de refresh con `SELECT FOR UPDATE` y **revocación de la familia ante reuso** (RD-10, Paso 15); refresh atado al dispositivo; sesión cortada al perder la membresía; **MFA obligatorio en el Admin**.
 - **Pruebas automatizadas**: `authn/tests/` (lockout, rotación, reuso y ventana de gracia con concurrencia real, rate limiting, trabajo uniforme del login, logs sin secretos, robo desde otro dispositivo); `core/tests/test_admin_mfa.py` (login real del Admin con TOTP y códigos de respaldo); Schemathesis `ignored_auth`.
-- **Pendiente**: rotación de la llave de firma JWT con dos llaves vivas.
+- **Hecho**: rotación de la llave de firma JWT con dos llaves vivas y `kid` (`authn/tests/test_key_rotation.py`; procedimiento en `docs/operacion/incidentes.md`).
 
 ### A08:2025 Software or Data Integrity Failures
 

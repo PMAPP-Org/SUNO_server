@@ -292,6 +292,11 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
 # efímera en memoria (con aviso) solo cuando DEBUG=True.
 JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY", "")
 JWT_SIGNING_KEY_FILE = os.environ.get("JWT_SIGNING_KEY_FILE", "")
+# Rotación (ADR-008): la clave **anterior**, que solo verifica (nunca firma)
+# mientras quedan access tokens suyos vivos. Basta su clave pública. Vacía
+# fuera de una rotación. Ver `visitacampo/authn/keys.py`.
+JWT_PREVIOUS_KEY = os.environ.get("JWT_PREVIOUS_KEY", "")
+JWT_PREVIOUS_KEY_FILE = os.environ.get("JWT_PREVIOUS_KEY_FILE", "")
 
 # TTL del access token: 15 min (ADR-008). Corto a propósito — es lo que acota
 # el daño de un token robado, ya que el access token no se persiste y por

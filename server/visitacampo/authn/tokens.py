@@ -56,6 +56,7 @@ from django.conf import settings
 
 from visitacampo.authn.keys import (
     get_signing_key,
+    key_id,
     public_key_pem,
     reset_key_cache,
     verification_keys,
@@ -221,7 +222,13 @@ def issue_access_token(
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
-    token = jwt.encode(claims, get_signing_key(), algorithm=JWT_ALGORITHM)
+    signing_key = get_signing_key()
+    token = jwt.encode(
+        claims,
+        signing_key,
+        algorithm=JWT_ALGORITHM,
+        headers={"kid": key_id(signing_key.public_key())},
+    )
     return AccessToken(token=token, expires_in=ttl, expires_at=expires_at, jti=jti)
 
 
@@ -242,16 +249,22 @@ def decode_access_token(token: str) -> AccessTokenClaims | None:
     atacante deduzca si falló la firma, la expiración o el formato. Distinguir
     causas aquí solo serviría para construir ese oráculo.
 
-    `verification_keys()` es una lista mirando a la rotación con dos claves de
-    ADR-008; hoy tiene un elemento y el bucle sale a la primera.
+    Durante una rotación (ADR-008) hay dos claves aceptadas: se prueba primero
+    la que nombra el `kid` de la cabecera. El `kid` solo ordena, no decide:
+    la firma se verifica igual, y un `kid` falso o ausente cae en el resto.
     """
     if not token:
         return None
-    for key in verification_keys():
+    try:
+        kid = jwt.get_unverified_header(token).get("kid")
+    except jwt.InvalidTokenError:
+        return None
+    keys = sorted(verification_keys(), key=lambda k: key_id(k) != kid)
+    for key in keys:
         try:
             payload = jwt.decode(
                 token,
-                key.public_key(),
+                key,
                 algorithms=list(JWT_ALGORITHMS),
                 options={"require": ["sub", "org", "roles", "jti", "exp"]},
             )

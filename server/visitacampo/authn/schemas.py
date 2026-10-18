@@ -42,11 +42,7 @@ def rfc3339_utc(value: datetime) -> str:
     Dos implementaciones del formato de instante acabarían divergiendo en el
     `timespec`, y el cliente vería dos formatos distintos para la misma fecha.
     """
-    return (
-        value.astimezone(UTC)
-        .isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z")
-    )
+    return value.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 #: Instante tal y como lo emite el servidor en el contrato.

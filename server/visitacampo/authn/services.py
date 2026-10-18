@@ -399,9 +399,7 @@ def refresh_session(
     )
 
     def reject(reason: str) -> InvalidCredentials:
-        return _reject_refresh(
-            ctx, row, reason, presented_device_id=device_id, client_ip=client_ip
-        )
+        return _reject_refresh(ctx, row, reason, presented_device_id=device_id, client_ip=client_ip)
 
     # Un refresh está atado a su dispositivo (ADR-008, "un refresh por
     # dispositivo"): presentarlo desde otro `device_id` es material robado.
@@ -461,9 +459,7 @@ def refresh_session(
     raise reject(outcome)
 
 
-def log_out_session(
-    ctx: RequestContext, raw_token: str, *, client_ip: str | None = None
-) -> None:
+def log_out_session(ctx: RequestContext, raw_token: str, *, client_ip: str | None = None) -> None:
     """`POST /v1/auth/logout` — revoca todo refresh vivo del dispositivo.
 
     **Idempotente y sin oráculo**: sale en silencio si el token está
@@ -494,9 +490,7 @@ def log_out_session(
         return
     selector, verifier = parsed
 
-    row = (
-        scoped_qs(ctx, RefreshToken).filter(selector=selector, user_id=ctx.user_id).first()
-    )
+    row = scoped_qs(ctx, RefreshToken).filter(selector=selector, user_id=ctx.user_id).first()
     if row is None:
         return
     if not tokens.verifier_matches(verifier, row.verifier_hash):
