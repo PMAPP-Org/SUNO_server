@@ -1,0 +1,142 @@
+/* SUNO: retain Django's accessible controls and theme switcher. */
+:root, html[data-theme="light"] {
+  --primary: #a5282c;
+  --secondary: #161715;
+  --accent: #fffdf4;
+  --primary-fg: #fffdf4;
+  --body-fg: #161715;
+  --body-bg: #fffdf4;
+  --body-quiet-color: #62655f;
+  --body-medium-color: #464943;
+  --body-loud-color: #010101;
+  --header-color: #fffdf4;
+  --header-branding-color: #fffdf4;
+  --header-bg: #161715;
+  --header-link-color: #fffdf4;
+  --breadcrumbs-fg: #62655f;
+  --breadcrumbs-link-fg: #8f1d23;
+  --breadcrumbs-bg: #f6f3eb;
+  --link-fg: #8f1d23;
+  --link-hover-color: #a5282c;
+  --link-selected-fg: #8f1d23;
+  --hairline-color: #e5e1da;
+  --border-color: #d4d0c6;
+  --darkened-bg: #f6f3eb;
+  --selected-bg: #eeeae1;
+  --selected-row: #f8e8e4;
+  --button-fg: #fffdf4;
+  --button-bg: #a5282c;
+  --button-hover-bg: #8f1d23;
+  --default-button-bg: #a5282c;
+  --default-button-hover-bg: #8f1d23;
+  --close-button-bg: #62655f;
+  --close-button-hover-bg: #464943;
+  --delete-button-bg: #8f1d23;
+  --delete-button-hover-bg: #70161b;
+  --object-tools-fg: #fffdf4;
+  --object-tools-bg: #464943;
+  --object-tools-hover-bg: #161715;
+  --font-family-primary: var(--suno-font);
+  color-scheme: light;
+}
+html[data-theme="dark"] {
+  --primary: #d57c87;
+  --primary-fg: #161715;
+  --body-bg: #161715;
+  --body-fg: #f6f3eb;
+  --body-quiet-color: #c1c2b9;
+  --body-medium-color: #d5d5cd;
+  --body-loud-color: #fffdf4;
+  --darkened-bg: #222420;
+  --selected-bg: #30332d;
+  --selected-row: #3b2728;
+  --hairline-color: #41443c;
+  --border-color: #696c62;
+  --breadcrumbs-bg: #222420;
+  --breadcrumbs-fg: #c1c2b9;
+  --breadcrumbs-link-fg: #f0a0a5;
+  --link-fg: #f0a0a5;
+  --link-hover-color: #ffc5c8;
+  --link-selected-fg: #ffc5c8;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="dark"]) {
+    --primary: #d57c87; --primary-fg: #161715;
+    --body-bg: #161715; --body-fg: #f6f3eb; --body-quiet-color: #c1c2b9;
+    --body-medium-color: #d5d5cd; --body-loud-color: #fffdf4;
+    --darkened-bg: #222420; --selected-bg: #30332d; --selected-row: #3b2728;
+    --hairline-color: #41443c; --border-color: #696c62;
+    --breadcrumbs-bg: #222420; --breadcrumbs-fg: #c1c2b9; --breadcrumbs-link-fg: #f0a0a5;
+    --link-fg: #f0a0a5; --link-hover-color: #ffc5c8; --link-selected-fg: #ffc5c8;
+    color-scheme: dark;
+  }
+}
+body { font-family: var(--suno-font); -webkit-font-smoothing: antialiased; }
+#header { padding: 20px 32px; gap: 24px; border-bottom: 3px solid var(--suno-red); }
+.suno-admin-brand { display: flex; align-items: center; gap: 24px; }
+#header .suno-wordmark { color: var(--suno-cream); }
+.suno-admin-label { font-size: 11px; letter-spacing: .04em; border-left: 1px solid #575950; padding-left: 24px; max-width: 360px; }
+.suno-site-link { font-size: 11px; white-space: nowrap; padding-block: 12px; }
+#user-tools { font-size: 10px; line-height: 1.8; letter-spacing: .02em; }
+div.breadcrumbs { padding: 16px 32px; border-bottom: 1px solid var(--hairline-color); font-size: 12px; }
+#content { padding: 32px; }
+#content h1 { color: var(--body-loud-color); font-weight: 550; letter-spacing: -.035em; font-size: 30px; margin-bottom: 28px; }
+.module { border: 1px solid var(--hairline-color); border-radius: var(--suno-radius); overflow: hidden; }
+.module h2, .module caption, .inline-group h2 {
+  background: var(--darkened-bg); color: var(--body-fg); font-size: 11px; font-weight: 650;
+  letter-spacing: .08em; padding: 16px; border-bottom: 1px solid var(--hairline-color);
+}
+.module caption a.section:link, .module caption a.section:visited { color: var(--body-fg); }
+td, th { padding: 14px 16px; font-size: 12px; }
+thead th { background: var(--darkened-bg); color: var(--body-quiet-color); }
+.row1, .row2 { background: var(--body-bg); }
+.dashboard #content { width: auto; max-width: 1240px; }
+.dashboard #content-main { min-width: 0; }
+.dashboard .module table { width: 100%; }
+.dashboard .module table th { width: auto; }
+#nav-sidebar { background: var(--body-bg); border-right: 1px solid var(--hairline-color); }
+#nav-sidebar .module { border-radius: 0; border: 0; margin-bottom: 24px; }
+#nav-sidebar th, #nav-sidebar td { padding: 12px; }
+#nav-sidebar .current-model { border-left: 3px solid var(--suno-red); }
+.toggle-nav-sidebar { background: var(--darkened-bg); color: var(--link-fg); }
+input, textarea, select, button { font-family: var(--suno-font); }
+input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="url"], textarea, select {
+  border: 1px solid var(--border-color); border-radius: var(--suno-radius); padding: 10px 12px; min-height: 40px; box-sizing: border-box;
+}
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--link-fg); outline-offset: 2px; }
+input[type="checkbox"] { accent-color: var(--button-bg); }
+.button, input[type="submit"], input[type="button"], .submit-row input, a.button, .object-tools a {
+  border-radius: var(--suno-radius); min-height: 44px; padding: 13px 20px; box-sizing: border-box; font-weight: 600; font-size: 12px;
+}
+.object-tools a { display: inline-flex; align-items: center; }
+.submit-row { background: var(--darkened-bg); border-color: var(--hairline-color); border-radius: var(--suno-radius); }
+#changelist-filter h2 { background: var(--darkened-bg); color: var(--body-fg); }
+#changelist .actions { background: var(--body-bg); padding-block: 12px; }
+#changelist .actions .button { padding: 8px 14px; }
+#changelist #toolbar { background: var(--darkened-bg); padding: 16px; }
+#changelist .paginator { background: var(--body-bg); padding: 16px; }
+#changelist .results { overflow-x: auto; }
+body.login { background: var(--darkened-bg); padding: 0 20px; box-sizing: border-box; }
+body.login #container { background: var(--body-bg); width: min(100%, 440px); min-width: 0; margin: 8vh auto; border: 1px solid var(--hairline-color); border-radius: 8px; overflow: hidden; }
+body.login #header { padding: 28px 32px; }
+body.login .suno-admin-brand { flex-direction: column; align-items: flex-start; gap: 16px; }
+body.login .suno-admin-label { border: 0; padding: 0; text-align: left; line-height: 1.6; }
+body.login #content { padding: 32px; }
+body.login .form-row { padding: 8px 0 16px; }
+body.login .form-row label { font-size: 12px; padding-bottom: 10px; }
+body.login .form-row input { width: 100%; min-height: 48px; }
+body.login .submit-row { padding: 16px 0 0; background: transparent; }
+body.login .submit-row input { width: 100%; min-height: 48px; }
+@media (max-width: 767px) {
+  #header { padding: 16px 20px; gap: 16px; }
+  .suno-admin-brand { gap: 14px; flex-wrap: wrap; }
+  .suno-admin-label { padding-left: 14px; max-width: 220px; }
+  #content { padding: 24px 16px; }
+  #content h1 { font-size: 25px; }
+  div.breadcrumbs { padding: 14px 20px; }
+  body.login #container { margin-top: 24px; }
+  body.login #content, body.login #header { padding: 24px; }
+  td, th { padding: 12px; }
+  .closing { flex-direction: column; }
+}

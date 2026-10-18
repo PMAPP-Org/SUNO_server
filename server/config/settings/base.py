@@ -92,7 +92,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "visitacampo" / "core" / "templates"],
         # Requerido por django.contrib.admin (back-office de fase 1, ADR-004).
         "APP_DIRS": True,
         "OPTIONS": {

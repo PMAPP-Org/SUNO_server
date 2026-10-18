@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | SUNO{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
+<link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
+<link rel="stylesheet" href="{% static 'suno/css/admin.css' %}">
+{% endblock %}
+
+{% block branding %}
+<div class="suno-admin-brand">
+  <a class="suno-wordmark" href="{% url 'admin:index' %}" aria-label="SUNO · Administración">
+    <img src="{% static 'suno/brand/Logo_Principal.png' %}" alt="" width="48" height="48">
+    <span>SUNO</span>
+  </a>
+  <span class="suno-admin-label">{{ site_header }}</span>
+</div>
+{% endblock %}
+
+{% block nav-global %}<a class="suno-site-link" href="{% url 'home' %}">Ir a la web ↗</a>{% endblock %}
