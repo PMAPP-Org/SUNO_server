@@ -34,7 +34,7 @@ Las rutas `app/…` que citan los pasos anteriores corresponden ahora a la raíz
 
 **Pendiente de terceros:** rol Admin y revisión independiente de los PR (issue #7); aprobación del SGSI por la dirección; validación jurídica de Ley 1581; VPS, dominio, buckets R2 y SMTP.
 
-**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 (en curso) → 23 (en curso) → 24 → 16 → 25.
+**Orden de trabajo acordado a continuación:** (1) runbooks y este seguimiento ✔ → (2) MFA en el Admin + Paso 15 ✔ → (3) aprovisionamiento del VPS + workflow de despliegue ✔ → (4) Pasos 21 ✔ → 22 ✔ → 18 (en curso) → 23 ✔ → 24 ✔ → 16 ✔ → 25.
 
 ### Lo que falta, verificado contra el código (2026-10-18)
 
@@ -43,8 +43,8 @@ Revisado paso a paso contra lo que hay de verdad en SUNO_server y SUNO_client, n
 | Paso | Qué falta | ¿Se puede hacer sin hardware? |
 |---|---|---|
 | **23** Revisión de cuarentena | En [SUNO_client#4](https://github.com/PMAPP-Org/SUNO_client/pull/4): pantalla, corrección, reintento, descarte con confirmación y conflictos. El PR corrige además dos fallos: un conflicto pisaba la versión del agente, y el reintento reutilizaba el `op_uuid` y nunca podía funcionar. **Falta** el flujo de conflicto contra el backend real (entorno del Paso 14). | Sí, salvo esa prueba |
-| **24** Back-office | El Admin solo tiene el registro por defecto de 8 modelos. Faltan:<br>• filtros y columnas;<br>• vista previa de fotos con URL prefirmada;<br>• gestión de plantillas y versiones;<br>• registrar `Device` y la acción "revocar dispositivo" (familia de refresh tokens);<br>• `Job` y dead-letters según rol;<br>• exportación CSV/Excel con límite de filas;<br>• aislamiento por organización en el Admin (`test_admin_scoping.py`);<br>• la herramienta de **derechos del titular** (consulta, rectificación y supresión, Ley 1581).<br>`Assignment` y `FormTemplate` tampoco están registrados. | Sí |
-| **16** TLS y tokens del cliente | `lib/core/security/trust_store.dart` no existe: ni pinning SPKI ni TOFU. Faltan `network_security_config.xml` (sí está `usesCleartextTraffic=false`) y el ATS de iOS. `FlutterSecureStorage` usa opciones por defecto, sin Keychain *ThisDeviceOnly*. Tampoco hay reacción del cliente a una familia de tokens revocada (forzar un re-login limpio sin borrar el outbox). | Sí, salvo la prueba contra un certificado real (tarea 8 del Paso 25) |
+| **24** Back-office | Hecho en [SUNO_server#12](https://github.com/PMAPP-Org/SUNO_server/pull/12): Admin aislado por organización (probado por HTTP), revisión de visitas, revocación de dispositivos, asignaciones, plantillas, reintento de jobs, exportación CSV/XLSX con límite y derechos del titular. | — |
+| **16** TLS y tokens del cliente | Hecho en [SUNO_client#8](https://github.com/PMAPP-Org/SUNO_client/pull/8): `TrustStore` (pinning SPKI con dos pines y caducidad, TOFU con diálogo y bloqueo ante cambio de certificado, verificación antes de enviar la petición), Keychain *ThisDeviceOnly* con migración, `network_security_config.xml`, ATS sin excepciones y re-login limpio ante familia revocada. Falta probarlo en dispositivo y fijar los pines reales cuando exista el dominio oficial. | La prueba en dispositivo, no |
 | **25** Suite final | Ya hay tests de aislamiento, presupuesto de queries, traversal, checksum, reuso de token y spoof de `X-Forwarded-Proto`, pero dispersos. Faltan la suite consolidada, el **mapa H-01…H-21 → test** y un script de carga (no hay locust ni k6). | En parte: la carga y las mediciones de dispositivo van fuera de esta máquina |
 | **18** (resto) | Subida con la app cerrada (WorkManager/BGTask) y medición en iOS. | No: dispositivo real |
 | **14** E2E Fase 0 | No existen `docs/testing/e2e-fase0.md` ni `integration_test`. | No: emulador y Docker |
@@ -175,7 +175,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 
 ### Móvil
 
-- [ ] **Paso 16** — Autenticación cliente completa: `TrustStore`, TOFU explícito, pinning SPKI
+- [x] **Paso 16** — Autenticación cliente completa: `TrustStore`, TOFU explícito, pinning SPKI ([SUNO_client#8](https://github.com/PMAPP-Org/SUNO_client/pull/8); falta la prueba en dispositivo y los pines reales del dominio oficial)
 - [ ] **Paso 18** — Adjuntos móvil: subida en segundo plano con reintento (en curso: cola, reintento y streaming hechos en [SUNO_client#3](https://github.com/PMAPP-Org/SUNO_client/pull/3); falta la subida con la app cerrada y su medición en dispositivo)
 - [x] **Paso 21** — Renderer dinámico de formularios en Flutter
 - [x] **Paso 22** — Captura de visita: UI de formulario + GPS + fotos + firma (falta la prueba manual en emulador)
