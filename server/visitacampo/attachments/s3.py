@@ -47,6 +47,7 @@ from visitacampo.attachments.blobstore import (
     basemap_key_for,
     bucket_key_for,
     checksum_header_value,
+    layer_key_for,
     normalize_sha256,
     sha256_from_bucket_key,
     sha256_from_checksum_header,
@@ -213,7 +214,26 @@ class S3BlobStore:
     # --- mapas base (Fase B) ---------------------------------------------------
 
     def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
-        key = basemap_key_for(sha256)
+        self._put_verified(
+            basemap_key_for(sha256), sha256=sha256, path=path, size=size, mime=BASEMAP_MIME
+        )
+
+    def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        return self._presign_get(basemap_key_for(sha256), BASEMAP_MIME, expires_in, filename)
+
+    # --- capas de referencia (Fase C) -------------------------------------------
+
+    def put_layer(self, *, sha256: str, path: str, size: int) -> None:
+        self._put_verified(
+            layer_key_for(sha256), sha256=sha256, path=path, size=size, mime=LAYER_MIME
+        )
+
+    def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        return self._presign_get(layer_key_for(sha256), LAYER_MIME, expires_in, filename)
+
+    # --- archivos del servidor (mapas base, capas) -------------------------------
+
+    def _put_verified(self, key: str, *, sha256: str, path: str, size: int, mime: str) -> None:
         try:
             with open(path, "rb") as body:  # noqa: PTH123 — el `with` cierra si falla el PUT
                 # Un solo `PUT` (hasta 5 GB en S3/R2) con el checksum completo:
@@ -223,20 +243,20 @@ class S3BlobStore:
                     Key=key,
                     Body=body,
                     ContentLength=size,
-                    ContentType=BASEMAP_MIME,
+                    ContentType=mime,
                     ChecksumSHA256=checksum_header_value(sha256),
                 )
         except Exception as exc:  # noqa: BLE001 — se reclasifica justo debajo
             raise _translate(exc, key) from exc
 
-    def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+    def _presign_get(self, key: str, mime: str, expires_in: int, filename: str) -> str:
         return str(
             self._client.generate_presigned_url(
                 "get_object",
                 Params={
                     "Bucket": self._config.bucket,
-                    "Key": basemap_key_for(sha256),
-                    "ResponseContentType": BASEMAP_MIME,
+                    "Key": key,
+                    "ResponseContentType": mime,
                     "ResponseContentDisposition": f'attachment; filename="{filename}"',
                 },
                 ExpiresIn=expires_in,
@@ -247,6 +267,9 @@ class S3BlobStore:
 
 #: Tipo de los paquetes MBTiles (una base SQLite).
 BASEMAP_MIME = "application/vnd.sqlite3"
+
+#: Tipo de las capas de referencia (RFC 7946).
+LAYER_MIME = "application/geo+json"
 
 
 def _translate(exc: Exception, key: str) -> BlobStoreError:

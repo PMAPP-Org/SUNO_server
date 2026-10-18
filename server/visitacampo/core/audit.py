@@ -82,6 +82,8 @@ class AuditAction:
     PRIVACY_CONSENT_RECORDED = "privacy.consent_recorded"
     BASEMAP_IMPORTED = "basemaps.imported"
     BASEMAP_RETIRED = "basemaps.retired"
+    LAYER_IMPORTED = "layers.imported"
+    LAYER_RETIRED = "layers.retired"
 
 
 def hash_ip(ip: str | None) -> str | None:

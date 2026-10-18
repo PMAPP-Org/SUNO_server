@@ -80,6 +80,8 @@ tags:
     description: Autorización del titular de los datos personales (Ley 1581 de 2012).
   - name: basemaps
     description: Paquetes de mapa base (MBTiles ráster) para trabajar sin red, por organización.
+  - name: layers
+    description: Capas de referencia GeoJSON (RFC 7946, WGS84) para ver sobre el mapa, por organización.
 
 security:
   - bearerAuth: []
@@ -526,6 +528,55 @@ paths:
         responde `404` sin distinguirlos (RD-11).
       parameters:
         - name: basemap_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: URL de descarga.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasemapDownload'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # -------------------------------------------------------------- layers ----
+
+  /v1/layers:
+    get:
+      operationId: layersList
+      tags: [layers]
+      summary: Capas de referencia de la organización
+      description: |
+        Las capas GeoJSON vigentes de la organización de quien llama (cualquier miembro):
+        predios, lotes, vías… para dibujar sobre el mapa. Las importa un administrador desde el
+        servidor; una capa retirada deja de aparecer y el cliente la borra del teléfono.
+      responses:
+        '200':
+          description: Capas vigentes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayerList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/layers/{layer_id}/download:
+    get:
+      operationId: layersDownload
+      tags: [layers]
+      summary: URL prefirmada de corta duración para descargar una capa
+      description: |
+        URL directa al almacenamiento y el `sha256` con el que el cliente verifica lo descargado.
+        Una capa inexistente, retirada o de otra organización responde `404` (RD-11).
+      parameters:
+        - name: layer_id
           in: path
           required: true
           schema:
@@ -1888,6 +1939,49 @@ components:
         size:
           type: integer
           minimum: 1
+
+    Layer:
+      type: object
+      description: Una capa de referencia GeoJSON de la organización.
+      required: [id, name, sha256, size, feature_count, geometry_types, bounds, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          maxLength: 128
+        sha256:
+          $ref: '#/components/schemas/Sha256'
+        size:
+          type: integer
+          minimum: 1
+        feature_count:
+          type: integer
+          minimum: 1
+        geometry_types:
+          type: array
+          items:
+            type: string
+            enum: [Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon]
+        bounds:
+          type: object
+          required: [west, south, east, north]
+          properties:
+            west: { type: number, minimum: -180, maximum: 180 }
+            south: { type: number, minimum: -90, maximum: 90 }
+            east: { type: number, minimum: -180, maximum: 180 }
+            north: { type: number, minimum: -90, maximum: 90 }
+        created_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    LayerList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Layer'
 
     HealthStatus:
       type: object

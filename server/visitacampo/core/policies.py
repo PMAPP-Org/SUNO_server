@@ -348,7 +348,7 @@ def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
 
 
 def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
-    """Ver y descargar los mapas base de la organización (Fase B).
+    """Ver y descargar los mapas base y las capas de referencia (Fase B/C).
 
     Cualquier miembro: el mapa es la herramienta de trabajo de campo.
     """
@@ -356,7 +356,7 @@ def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
 
 
 def can_manage_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
-    """Importar o retirar mapas base: administración de la organización."""
+    """Importar o retirar mapas base y capas: administración de la organización."""
     return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
 
 
