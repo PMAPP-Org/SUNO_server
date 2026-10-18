@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.7.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.6.0...v0.7.0) (2026-10-18)
+
+
+### Agregado
+
+* **sync:** only the author or a supervisor can edit or delete a visit ([#31](https://github.com/PMAPP-Org/SUNO_server/issues/31)) ([b500081](https://github.com/PMAPP-Org/SUNO_server/commit/b500081cd5fc26c2401cedead4231b3521e640bd))
+
 ## [0.6.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.5.0...v0.6.0) (2026-10-18)
 
 
