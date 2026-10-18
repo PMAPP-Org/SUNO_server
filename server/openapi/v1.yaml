@@ -858,16 +858,20 @@ components:
         os_version:
           type: [string, 'null']
           maxLength: 64
+          pattern: '^[^\u0000]*$'
         model:
           type: [string, 'null']
           maxLength: 128
+          pattern: '^[^\u0000]*$'
         app_version:
           type: string
           maxLength: 32
+          pattern: '^[^\u0000]*$'
           description: Versión de la app Flutter (semver).
         display_name:
           type: [string, 'null']
           maxLength: 128
+          pattern: '^[^\u0000]*$'
           description: Nombre visible del dispositivo en el back-office ("Tablet campo 3").
 
     LoginRequest:
@@ -878,10 +882,12 @@ components:
           type: string
           minLength: 1
           maxLength: 254
+          pattern: '^[^\u0000]*$'
         password:
           type: string
           minLength: 1
           maxLength: 256
+          pattern: '^[^\u0000]*$'
           format: password
         device_info:
           $ref: '#/components/schemas/DeviceInfo'
