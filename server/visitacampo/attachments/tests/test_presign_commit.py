@@ -70,9 +70,7 @@ class _AttachmentsTestCase(TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        overrides = override_settings(
-            STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name
-        )
+        overrides = override_settings(STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name)
         overrides.enable()
         self.addCleanup(overrides.disable)
 
@@ -104,6 +102,14 @@ class _AttachmentsTestCase(TestCase):
 
 @skip_without_db
 class PresignTests(_AttachmentsTestCase):
+    def test_an_unknown_field_is_rejected_not_ignored(self) -> None:
+        """RD-03, como en el push: el contrato declara `additionalProperties:
+        false` y el servidor lo cumple (Schemathesis, issue #6)."""
+        body = {**presign_body(), "x-campo-desconocido": 42}
+        self.assertEqual(self.client_post(PRESIGN_URL, body).status_code, 422)
+        commit = self.client_post(commit_url("a" * 64), {"size": 1, "mime": JPEG_MIME, "extra": 1})
+        self.assertEqual(commit.status_code, 422)
+
     def test_presign_of_new_content_returns_a_signed_url(self) -> None:
         response = self.presign()
         self.assertEqual(response.status_code, 200)
@@ -134,7 +140,7 @@ class PresignTests(_AttachmentsTestCase):
         self.assertIsNone(body["required_headers"])
 
     def test_dedup_does_not_touch_the_object_store(self) -> None:
-        """"Deduplicación gratis" en sentido literal: ni una escritura."""
+        """ "Deduplicación gratis" en sentido literal: ni una escritura."""
         Blob.objects.create(
             sha256=JPEG_SHA,
             size=len(JPEG_BYTES),
@@ -320,9 +326,7 @@ class CommitTests(_AttachmentsTestCase):
         """Traversal por la ruta del commit: muere en el `pattern` del contrato."""
         for value in ("..%2f..%2fetc%2fpasswd", "aa/bb", JPEG_SHA.upper()):
             with self.subTest(sha256=value):
-                response = self.client_post(
-                    commit_url(value), {"size": 1, "mime": JPEG_MIME}
-                )
+                response = self.client_post(commit_url(value), {"size": 1, "mime": JPEG_MIME})
                 self.assertIn(response.status_code, (404, 422))
                 self.assertEqual(Blob.objects.count(), 0)
 
@@ -405,9 +409,7 @@ class DownloadUrlTests(_AttachmentsTestCase):
 
     def test_a_deleted_attachment_no_longer_grants_access(self) -> None:
         self._commit_and_attach()
-        VisitAttachment.objects.filter(blob_id=JPEG_SHA).update(
-            deleted_at="2026-08-01T00:00:00Z"
-        )
+        VisitAttachment.objects.filter(blob_id=JPEG_SHA).update(deleted_at="2026-08-01T00:00:00Z")
         self.assertEqual(self.get(JPEG_SHA).status_code, 404)
 
     def test_a_pending_blob_is_a_404_not_a_broken_url(self) -> None:

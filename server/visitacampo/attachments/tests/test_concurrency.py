@@ -75,9 +75,7 @@ class SimultaneousCommitTests(TransactionTestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        overrides = override_settings(
-            STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name
-        )
+        overrides = override_settings(STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name)
         overrides.enable()
         self.addCleanup(overrides.disable)
 

@@ -69,9 +69,7 @@ class AllowListTests(SimpleTestCase):
 
     def test_it_matches_what_the_server_announces(self) -> None:
         """La lista anunciada y la que se aplica no pueden divergir."""
-        self.assertEqual(
-            set(validation.allowed_mime_types()), set(caps.ATTACHMENT_ALLOWED_MIME)
-        )
+        self.assertEqual(set(validation.allowed_mime_types()), set(caps.ATTACHMENT_ALLOWED_MIME))
 
     def test_every_allowed_type_has_an_extension(self) -> None:
         for mime in validation.allowed_mime_types():
@@ -128,9 +126,7 @@ class MagicBytesTests(SimpleTestCase):
         """WebP necesita 12 bytes (`RIFF` + tamaño + `WEBP`); leer menos no bastaría."""
         self.assertGreaterEqual(validation.SNIFF_LENGTH, 12)
         self.assertTrue(
-            validation.magic_bytes_match(
-                WEBP_BYTES[: validation.SNIFF_LENGTH], WEBP_MIME
-            )
+            validation.magic_bytes_match(WEBP_BYTES[: validation.SNIFF_LENGTH], WEBP_MIME)
         )
 
 

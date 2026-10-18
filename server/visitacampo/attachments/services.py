@@ -365,9 +365,7 @@ def commit(
 def _verify_head(head: ObjectHead, *, digest: str, size: int, mime: str) -> None:
     """Tamaño, checksum y `Content-Type` contra el objeto realmente almacenado."""
     if head.size != size:
-        raise ChecksumMismatch(
-            f"Stored object is {head.size} bytes; {size} were declared."
-        )
+        raise ChecksumMismatch(f"Stored object is {head.size} bytes; {size} were declared.")
     if head.sha256 is None:
         raise ChecksumMismatch(
             "The blob store did not certify a SHA-256 checksum for the uploaded "
@@ -376,9 +374,7 @@ def _verify_head(head: ObjectHead, *, digest: str, size: int, mime: str) -> None
     if head.sha256 != digest:
         # Sin el checksum real en el mensaje: es un dato del objeto de otro y
         # no le dice nada útil a quien sube (RD-12).
-        raise ChecksumMismatch(
-            "Stored object checksum does not match the declared sha256."
-        )
+        raise ChecksumMismatch("Stored object checksum does not match the declared sha256.")
     if head.content_type is not None and head.content_type != mime:
         raise MimeNotAcceptable(
             f"Stored object was uploaded as {head.content_type!r}, not {mime!r}."
@@ -389,9 +385,7 @@ def _verify_magic_bytes(store: BlobStore, *, digest: str, mime: str) -> None:
     """*Sniffing* de los primeros bytes (tarea 5): los bytes mandan sobre lo declarado."""
     prefix = store.read_prefix(digest, validation.SNIFF_LENGTH)
     if not validation.magic_bytes_match(prefix, mime):
-        raise MimeNotAcceptable(
-            f"The uploaded bytes do not start like a {mime} file."
-        )
+        raise MimeNotAcceptable(f"The uploaded bytes do not start like a {mime} file.")
 
 
 def _register(digest: str, *, size: int, mime: str) -> CommitResult:

@@ -241,9 +241,7 @@ class BlobStore(Protocol):
         """Metadatos del objeto ya subido. Lanza `ObjectNotFound` si no existe."""
         ...
 
-    def presign_download(
-        self, *, sha256: str, expires_in: int, mime: str, filename: str
-    ) -> str:
+    def presign_download(self, *, sha256: str, expires_in: int, mime: str, filename: str) -> str:
         """URL de `GET` de corta duración. `filename` lo **genera el servidor**."""
         ...
 

@@ -112,9 +112,7 @@ class CollectUnconfirmedUploadsTests(TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        overrides = override_settings(
-            STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name
-        )
+        overrides = override_settings(STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name)
         overrides.enable()
         self.addCleanup(overrides.disable)
         self.store = LocalFsBlobStore(self._tmp.name)
@@ -142,9 +140,7 @@ class CollectUnconfirmedUploadsTests(TestCase):
         self.assertEqual(report.inspected, 2)
         self.assertEqual(report.deleted, (PNG_SHA,))
         self.assertEqual(report.reclaimed_bytes, len(PNG_BYTES))
-        self.assertEqual(
-            {entry.sha256 for entry in self.store.list_objects()}, {JPEG_SHA}
-        )
+        self.assertEqual({entry.sha256 for entry in self.store.list_objects()}, {JPEG_SHA})
 
     def test_a_recent_orphan_survives(self) -> None:
         self.store.put_object(PNG_SHA, PNG_BYTES, PNG_MIME)

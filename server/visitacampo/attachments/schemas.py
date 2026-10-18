@@ -31,7 +31,7 @@ import uuid
 from typing import Annotated, Literal
 
 from ninja import Schema
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from visitacampo.authn.schemas import Timestamp
 
@@ -69,7 +69,13 @@ Mime = Literal["image/jpeg", "image/png", "image/webp", "application/pdf"]
 
 
 class PresignRequest(Schema):
-    """`components.schemas.PresignRequest`."""
+    """`components.schemas.PresignRequest`.
+
+    `extra="forbid"`, como los payloads del push (RD-03): un campo que el
+    contrato no declara se rechaza, no se ignora en silencio.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     sha256: Sha256
     size: int = Field(ge=1)
@@ -97,6 +103,8 @@ class PresignResponse(Schema):
 
 class CommitRequest(Schema):
     """`components.schemas.CommitRequest`. El `sha256` va en la ruta, no aquí."""
+
+    model_config = ConfigDict(extra="forbid")
 
     size: int = Field(ge=1)
     mime: Mime
