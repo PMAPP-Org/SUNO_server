@@ -44,6 +44,7 @@ from visitacampo.attachments.blobstore import (
     ObjectNotFound,
     PresignedUpload,
     StoredObject,
+    basemap_key_for,
     bucket_key_for,
     checksum_header_value,
     normalize_sha256,
@@ -208,6 +209,44 @@ class S3BlobStore:
             if isinstance(translated, ObjectNotFound):
                 return
             raise translated from exc
+
+    # --- mapas base (Fase B) ---------------------------------------------------
+
+    def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
+        key = basemap_key_for(sha256)
+        try:
+            with open(path, "rb") as body:  # noqa: PTH123 — el `with` cierra si falla el PUT
+                # Un solo `PUT` (hasta 5 GB en S3/R2) con el checksum completo:
+                # una subida multiparte solo certificaría un checksum compuesto.
+                self._client.put_object(
+                    Bucket=self._config.bucket,
+                    Key=key,
+                    Body=body,
+                    ContentLength=size,
+                    ContentType=BASEMAP_MIME,
+                    ChecksumSHA256=checksum_header_value(sha256),
+                )
+        except Exception as exc:  # noqa: BLE001 — se reclasifica justo debajo
+            raise _translate(exc, key) from exc
+
+    def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        return str(
+            self._client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": self._config.bucket,
+                    "Key": basemap_key_for(sha256),
+                    "ResponseContentType": BASEMAP_MIME,
+                    "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                },
+                ExpiresIn=expires_in,
+                HttpMethod="GET",
+            )
+        )
+
+
+#: Tipo de los paquetes MBTiles (una base SQLite).
+BASEMAP_MIME = "application/vnd.sqlite3"
 
 
 def _translate(exc: Exception, key: str) -> BlobStoreError:

@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -45,6 +46,7 @@ from visitacampo.attachments.blobstore import (
     ObjectNotFound,
     PresignedUpload,
     StoredObject,
+    basemap_key_for,
     bucket_key_for,
     checksum_header_value,
     normalize_sha256,
@@ -176,6 +178,31 @@ class LocalFsBlobStore:
         path = self._path(normalize_sha256(sha256))
         path.unlink(missing_ok=True)
         path.with_name(path.name + _META_SUFFIX).unlink(missing_ok=True)
+
+    # --- mapas base (Fase B) ---------------------------------------------------
+
+    def _basemap_path(self, sha256: str) -> Path:
+        candidate = (self._root / basemap_key_for(sha256)).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise BlobStoreError("La ruta resuelta cae fuera del directorio de blobs.")
+        return candidate
+
+    def put_basemap(self, *, sha256: str, path: str, size: int) -> None:
+        # Como el store real: lo guardado tiene que ser lo declarado.
+        source = Path(path)
+        if source.stat().st_size != size or _digest_of(source) != sha256:
+            raise BlobStoreError("El paquete no coincide con el tamaño o el sha256 declarados.")
+        target = self._basemap_path(sha256)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+    def basemap_exists(self, sha256: str) -> bool:
+        """**Solo para tests**: ¿se guardó el paquete?"""
+        return self._basemap_path(sha256).is_file()
+
+    def presign_basemap_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
+        query = f"expires={int(time.time()) + expires_in}&filename={quote(filename)}"
+        return f"{self._base_url}{basemap_key_for(sha256)}?{query}"
 
     # --- interno ----------------------------------------------------------------
 

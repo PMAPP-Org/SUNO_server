@@ -19,13 +19,14 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from ninja import Schema
-from pydantic import Field, PlainSerializer
+from pydantic import AfterValidator, Field, PlainSerializer
 
 __all__ = [
     "DeviceInfoSchema",
     "LoginRequest",
     "LoginResponse",
     "LogoutRequest",
+    "NoNulStr",
     "RefreshRequest",
     "TokenPair",
     "UserProfile",
@@ -45,6 +46,20 @@ def rfc3339_utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _without_nul(value: str) -> str:
+    """PostgreSQL no guarda `U+0000` en columnas de texto: un NUL que llegara a
+    la BD (el usuario de un login fallido que registra django-axes, el modelo
+    del dispositivo…) sería un `DataError` y un `500`. Lo encontró Schemathesis
+    en `POST /v1/auth/login`. Ningún dato legítimo lo contiene ⇒ `422`."""
+    if "\x00" in value:
+        raise ValueError("must not contain NUL characters")
+    return value
+
+
+#: Texto que puede acabar en la BD: sin NUL.
+NoNulStr = Annotated[str, AfterValidator(_without_nul)]
+
+
 #: Instante tal y como lo emite el servidor en el contrato.
 Timestamp = Annotated[datetime, PlainSerializer(rfc3339_utc, return_type=str)]
 
@@ -54,10 +69,10 @@ class DeviceInfoSchema(Schema):
 
     device_id: uuid.UUID
     platform: Literal["android", "ios"]
-    app_version: str = Field(max_length=32)
-    os_version: str | None = Field(default=None, max_length=64)
-    model: str | None = Field(default=None, max_length=128)
-    display_name: str | None = Field(default=None, max_length=128)
+    app_version: NoNulStr = Field(max_length=32)
+    os_version: NoNulStr | None = Field(default=None, max_length=64)
+    model: NoNulStr | None = Field(default=None, max_length=128)
+    display_name: NoNulStr | None = Field(default=None, max_length=128)
 
 
 class LoginRequest(Schema):
@@ -67,8 +82,8 @@ class LoginRequest(Schema):
     que llega a `authenticate()` (y por tanto a Argon2) antes de tocar la BD.
     """
 
-    username: str = Field(min_length=1, max_length=254)
-    password: str = Field(min_length=1, max_length=256)
+    username: NoNulStr = Field(min_length=1, max_length=254)
+    password: NoNulStr = Field(min_length=1, max_length=256)
     device_info: DeviceInfoSchema
 
 

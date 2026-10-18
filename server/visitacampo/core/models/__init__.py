@@ -31,6 +31,7 @@ from .base import (
     SyncedModel,
     SyncEntityType,
 )
+from .basemap import BasemapPackage, TileFormat
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
@@ -47,6 +48,7 @@ __all__ = [
     "RETENTION_DAYS",
     "AppUser",
     "Assignment",
+    "BasemapPackage",
     "AttachmentRole",
     "AuditEvent",
     "Blob",
@@ -68,6 +70,7 @@ __all__ = [
     "SyncEntityType",
     "SyncOpLog",
     "SyncedModel",
+    "TileFormat",
     "Visit",
     "VisitAttachment",
     "VisitReview",

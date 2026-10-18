@@ -22,6 +22,7 @@ from ninja import NinjaAPI
 from visitacampo.attachments.api import router as attachments_router
 from visitacampo.authn.api import router as auth_router
 from visitacampo.authn.auth import JwtAuth
+from visitacampo.basemaps.api import router as basemaps_router
 from visitacampo.core.api_errors import register_error_handlers
 from visitacampo.health.api import router as health_router
 from visitacampo.jobs.api import router as jobs_router
@@ -48,3 +49,4 @@ api.add_router("", sync_router)
 api.add_router("", attachments_router)
 api.add_router("", jobs_router)
 api.add_router("", privacy_router)
+api.add_router("", basemaps_router)
