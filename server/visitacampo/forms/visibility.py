@@ -143,7 +143,7 @@ class Membership(_Expr):
 
 
 class Presence(_Expr):
-    """"¿tiene respuesta?" — el único predicado unario sobre un campo."""
+    """ "¿tiene respuesta?" — el único predicado unario sobre un campo."""
 
     op: Literal["is_empty", "is_not_empty"]
     field: FieldKey
@@ -210,7 +210,7 @@ def referenced_fields(expr: VisibilityExpr) -> set[str]:
 
 
 def is_blank(value: Any) -> bool:
-    """"Sin responder": `None`, cadena vacía, lista vacía u objeto vacío.
+    """ "Sin responder": `None`, cadena vacía, lista vacía u objeto vacío.
 
     `False` y `0` **no** son vacíos: son respuestas legítimas de un campo
     booleano o numérico, y tratarlas como ausencia es el clásico bug de
