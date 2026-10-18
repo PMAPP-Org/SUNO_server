@@ -4,6 +4,18 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.6.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.5.0...v0.6.0) (2026-10-18)
+
+
+### Agregado
+
+* **basemaps:** offline basemap packages per organization (Fase B) ([#27](https://github.com/PMAPP-Org/SUNO_server/issues/27)) ([5792ce7](https://github.com/PMAPP-Org/SUNO_server/commit/5792ce7fb41b2acde927c2c55e65e54f89ab53f3))
+
+
+### Corregido
+
+* **web:** separate public platform access from admin ([#28](https://github.com/PMAPP-Org/SUNO_server/issues/28)) ([88764b9](https://github.com/PMAPP-Org/SUNO_server/commit/88764b92c997ba97fc19ed76a704289f04708cd4))
+
 ## [0.5.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.4.0...v0.5.0) (2026-10-18)
 
 
