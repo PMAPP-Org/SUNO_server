@@ -164,6 +164,28 @@ def test_missing_sheet_and_dimensions():
         import_xlsform(
             workbook([["type", "name", "label"], ["text", "a", "A"], ["text", "b", "B"]])
         )
+
+
+@pytest.mark.parametrize(
+    "needle,replacement",
+    [
+        (b'r="2"', b'r="1000000000"'),
+        (b'r="A2"', b'r="ZZ2"'),
+        (b'r="A2"', b'r="A1000000000"'),
+    ],
+)
+def test_sparse_xml_is_rejected_before_workbook_iteration(needle, replacement):
+    data = workbook([["type", "name", "label"], ["text", "x", "X"]])
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(buffer, "w") as target:
+        for item in source.infolist():
+            contents = source.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                contents = contents.replace(needle, replacement)
+            target.writestr(item.filename, contents)
+    with patch("visitacampo.forms.xlsform.load_workbook") as load, pytest.raises(InvalidXlsForm):
+        import_xlsform(buffer.getvalue())
+    load.assert_not_called()
     with pytest.raises(InvalidXlsForm):
         import_xlsform(
             workbook(

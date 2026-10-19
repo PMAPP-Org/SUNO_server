@@ -8,7 +8,7 @@ import zipfile
 from typing import Any
 
 from defusedxml.common import DefusedXmlException
-from defusedxml.ElementTree import ParseError
+from defusedxml.ElementTree import ParseError, iterparse
 from openpyxl import load_workbook
 
 from visitacampo.forms.definition import (
@@ -42,11 +42,9 @@ class InvalidXlsForm(ValueError):
 
 
 def _rows(sheet: Any, allowed: set[str]) -> list[tuple[int, dict[str, Any]]]:
-    # Do not trust dimensions supplied in the XML; cap iteration itself.
+    # Actual XML row/column references were bounded before openpyxl sees them.
+    # Ignore the dimension hint: it can claim a billion empty rows.
     sheet.reset_dimensions()
-    sheet.calculate_dimension(force=True)
-    if sheet.max_row > MAX_SHEET_ROWS or sheet.max_column > 32:
-        raise InvalidXlsForm(f"{sheet.title}: límite de filas/columnas excedido.")
     rows = sheet.iter_rows(max_row=MAX_SHEET_ROWS + 1)
     header = next(rows, ())
     names = [str(c.value).strip() if c.value is not None else "" for c in header]
@@ -73,6 +71,40 @@ def _rows(sheet: Any, allowed: set[str]) -> list[tuple[int, dict[str, Any]]]:
             row[name] = cell.value
         result.append((number, row))
     return result
+
+
+def _check_xml_bounds(archive: zipfile.ZipFile) -> None:
+    namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    for entry in archive.infolist():
+        if not entry.filename.endswith(".xml"):
+            continue
+        rows = cells = 0
+        # Includes nonstandard worksheet paths referenced by workbook relations.
+        with archive.open(entry) as source:
+            for _, element in iterparse(source, events=("end",), forbid_dtd=True):
+                if element.tag == namespace + "c":
+                    cells += 1
+                    reference = element.get("r")
+                    if reference:
+                        match = re.fullmatch(r"([A-Z]{1,2})([1-9][0-9]{0,9})", reference)
+                        if not match:
+                            raise InvalidXlsForm("Referencia de celda fuera de límites.")
+                        letters, number = match.groups()
+                        column = 0
+                        for letter in letters:
+                            column = column * 26 + ord(letter) - ord("A") + 1
+                        if column > 32 or int(number) > MAX_SHEET_ROWS:
+                            raise InvalidXlsForm("Referencia de celda fuera de límites.")
+                elif element.tag == namespace + "row":
+                    rows += 1
+                    if (
+                        rows > MAX_SHEET_ROWS
+                        or int(element.get("r", rows)) > MAX_SHEET_ROWS
+                        or cells > 32
+                    ):
+                        raise InvalidXlsForm("La hoja supera el límite de filas/columnas.")
+                    cells = 0
+                element.clear()
 
 
 def _relevant(text: Any) -> dict[str, Any]:
@@ -106,6 +138,7 @@ def import_xlsform(data: bytes) -> FormDefinition:
                 for e in entries
             ):
                 raise InvalidXlsForm("No se admiten macros ni enlaces externos.")
+            _check_xml_bounds(archive)
         workbook = load_workbook(
             io.BytesIO(data), read_only=True, data_only=False, keep_links=False
         )
