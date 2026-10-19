@@ -22,15 +22,24 @@
 
 ## Secuencia y verificación
 
-- [ ] Extender definición/validación de servidor y casos de paridad.
-- [ ] Importar XLSForm con límites de archivo, errores útiles y publicación autorizada.
-- [ ] Extender parser, editor de repeticiones, defaults y QR en Flutter.
-- [ ] Verificar captura/edición/sincronización de campos y adjuntos repetidos.
-- [ ] Exportaciones GeoJSON/GeoPackage y PDF con controles de acceso.
-- [ ] Exportación local y compartir desde el detalle móvil.
-- [ ] Pruebas funcionales, aislamiento, límites y renderizado visual de PDF.
-- [ ] Actualizar contrato fijado, documentación y CI de ambos repositorios.
+- [x] Extender definición/validación de servidor y casos de paridad.
+- [x] Importar XLSForm con límites de archivo, errores útiles y publicación autorizada.
+- [x] Extender parser, editor de repeticiones, defaults y QR en Flutter.
+- [x] Verificar captura/edición/sincronización de campos y adjuntos repetidos.
+- [x] Exportaciones GeoJSON/GeoPackage y PDF con controles de acceso.
+- [x] Exportación local y compartir desde el detalle móvil.
+- [x] Pruebas funcionales, aislamiento, límites y renderizado visual de PDF.
+- [x] Actualizar contrato fijado, documentación y CI de ambos repositorios.
 
 La prueba física de cámara QR, GPS y compartir archivos sigue requiriendo un
 teléfono. El OTP y la sincronización con la app cerrada no forman parte de estos
 bloques.
+
+## Evidencia
+
+Suite local: 870 pruebas y 90.15% de cobertura; 118 pruebas dirigidas tras
+ampliar los casos de exportaci?n. Ruff, mypy, Bandit y lockfiles correctos.
+PDF de servidor y app renderizados y revisados. GeoPackage abierto con GDAL
+y coordenadas EPSG:4326 comprobadas. CI y revisi?n: PR #37 del servidor.
+La app fija el contrato en el commit 8546e55; sus pruebas recorren los mismos
+vectores de paridad. La prueba f?sica indicada abajo sigue pendiente.
