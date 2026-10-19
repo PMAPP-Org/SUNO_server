@@ -1285,7 +1285,16 @@ components:
         definition:
           type: object
           additionalProperties: true
-          description: Definición declarativa del formulario. Nunca contiene código ejecutable.
+          description: |
+            Definición declarativa del formulario (visitacampo/form@1). Nunca contiene código ejecutable.
+            C5 añade `qr` (texto capturado o escaneado), `default` (literal validado al publicar,
+            aplicado solo al crear un formulario o fila) y `repeat` (lista de objetos de respuestas).
+            Un grupo declara `fields`, `min_rows` (0 por defecto) y `max_rows` (100 por defecto).
+            Máximo 3 niveles de repetición, 300 campos declarados y capacidad total de 10000 campos
+            expandidos. Las condiciones solo referencian campos hermanos anteriores.
+            Los errores de hijos usan rutas como `answers.predios.0.codigo`.
+            La fuente normativa del catálogo y sus restricciones es el meta-schema de forms/definition.py;
+            los vectores de paridad están en openapi/fixtures/forms_parity.json.
         published_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'

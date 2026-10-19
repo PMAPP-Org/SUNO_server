@@ -44,7 +44,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from visitacampo.forms.definition import FormDefinition
+from visitacampo.forms.definition import FormDefinition, FormFieldUnion, RepeatField
 from visitacampo.forms.visibility import evaluate, is_blank
 
 __all__ = ["MAX_VIOLATIONS", "AnswerViolation", "validate_answers", "violation_details"]
@@ -74,26 +74,46 @@ class AnswerViolation:
 
 def validate_answers(template: FormDefinition, answers: dict[str, Any]) -> list[AnswerViolation]:
     """Violaciones de `answers` frente a `template`. Lista vacía ⇒ válido."""
+    return _validate_fields(template.fields, answers)
+
+
+def _validate_fields(
+    fields: list[FormFieldUnion],
+    answers: dict[str, Any],
+    prefix: str = "",
+    *,
+    required: bool = True,
+) -> list[AnswerViolation]:
     violations: list[AnswerViolation] = []
-    declared = {field.key for field in template.fields}
+    declared = {field.key for field in fields}
 
     for key in answers:
         if key not in declared:
-            violations.append(AnswerViolation.of(key, "unknown_field"))
+            violations.append(AnswerViolation.of(prefix + key, "unknown_field"))
             if len(violations) >= MAX_VIOLATIONS:
                 return violations
 
-    for field in template.fields:
+    for field in fields:
         value = answers.get(field.key)
-        visible = evaluate(field.visible_if, answers)
+        visible = required and evaluate(field.visible_if, answers)
+        path = prefix + field.key
         if is_blank(value):
             # Un campo en blanco solo es un problema si se le exigía respuesta.
             if field.required and visible:
-                violations.append(AnswerViolation.of(field.key, "required"))
+                violations.append(AnswerViolation.of(path, "required"))
+            elif isinstance(field, RepeatField) and field.min_rows > 0 and visible:
+                violations.append(AnswerViolation.of(path, "too_few_rows"))
         else:
             reason = field.check_answer(value)
             if reason is not None:
-                violations.append(AnswerViolation.of(field.key, reason))
+                violations.append(AnswerViolation.of(path, reason))
+            elif isinstance(field, RepeatField) and isinstance(value, list):
+                for index, row in enumerate(value):
+                    violations.extend(
+                        _validate_fields(field.fields, row, f"{path}.{index}.", required=visible)
+                    )
+                    if len(violations) >= MAX_VIOLATIONS:
+                        break
         if len(violations) >= MAX_VIOLATIONS:
             break
 
