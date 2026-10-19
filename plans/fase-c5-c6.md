@@ -38,8 +38,8 @@ bloques.
 ## Evidencia
 
 Suite local: 870 pruebas y 90.15% de cobertura; 118 pruebas dirigidas tras
-ampliar los casos de exportaci?n. Ruff, mypy, Bandit y lockfiles correctos.
+ampliar los casos de exportación. Ruff, mypy, Bandit y lockfiles correctos.
 PDF de servidor y app renderizados y revisados. GeoPackage abierto con GDAL
-y coordenadas EPSG:4326 comprobadas. CI y revisi?n: PR #37 del servidor.
+y coordenadas EPSG:4326 comprobadas. CI y revisión: PR #37 del servidor.
 La app fija el contrato en el commit 8546e55; sus pruebas recorren los mismos
-vectores de paridad. La prueba f?sica indicada abajo sigue pendiente.
+vectores de paridad. La prueba física indicada arriba sigue pendiente.
