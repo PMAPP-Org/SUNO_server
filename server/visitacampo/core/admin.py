@@ -31,6 +31,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import F, Max, Q, QuerySet
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils import timezone
 from django.utils.html import format_html
 
@@ -45,6 +46,15 @@ from visitacampo.backoffice.services import (
     review_visit,
     revoke_device_sessions,
 )
+from visitacampo.backoffice.spatial_export import (
+    ExportContentTooLarge,
+    export_visits,
+    to_geojson,
+    to_geopackage,
+    visit_features,
+)
+from visitacampo.backoffice.visit_pdf import visit_pdf
+from visitacampo.backoffice.xlsform_admin import import_view
 from visitacampo.basemaps.services import retire as retire_basemap
 from visitacampo.core.audit import AuditAction, record
 from visitacampo.core.models import (
@@ -306,7 +316,15 @@ class VisitAdmin(ReadOnlyAdmin):
     )
     readonly_fields = fields
     inlines = (VisitAttachmentInline, VisitReviewInline)
-    actions = ("approve", "reject", "export_csv", "export_xlsx")
+    actions = (
+        "approve",
+        "reject",
+        "export_csv",
+        "export_xlsx",
+        "export_geojson",
+        "export_gpkg",
+        "export_pdf",
+    )
 
     def get_queryset(self, request: Any) -> QuerySet[Visit]:
         return (
@@ -391,6 +409,57 @@ class VisitAdmin(ReadOnlyAdmin):
     def export_xlsx(self, request: Any, queryset: QuerySet[Visit]) -> Any:
         return self._export(request, queryset, "xlsx")
 
+    def _document_export(self, request: Any, queryset: QuerySet[Visit], fmt: str) -> Any:
+        ctx = admin_context(request)
+        try:
+            visits = export_visits(ctx, queryset)
+        except (ExportTooLarge, PermissionDenied) as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return None
+        if fmt == "pdf" and len(visits) != 1:
+            self.message_user(
+                request, "Selecciona exactamente una visita para su informe PDF.", messages.ERROR
+            )
+            return None
+        if fmt == "pdf":
+            data, mime = visit_pdf(visits[0]), "application/pdf"
+        else:
+            try:
+                collection = visit_features(visits)
+            except ExportContentTooLarge as exc:
+                self.message_user(request, str(exc), messages.ERROR)
+                return None
+            data, mime = (
+                (to_geojson(collection), "application/geo+json")
+                if fmt == "geojson"
+                else (to_geopackage(collection), "application/geopackage+sqlite3")
+            )
+        record(
+            ctx,
+            action=AuditAction.VISITS_EXPORTED,
+            target=f"org:{ctx.org_id}",
+            metadata={"rows": len(visits), "format": fmt},
+            ip=request.META.get("REMOTE_ADDR"),
+        )
+        response = HttpResponse(data, content_type=mime)
+        response["Content-Disposition"] = (
+            f'attachment; filename="visitas-{timezone.now():%Y%m%d-%H%M}.{fmt}"'
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+    @admin.action(description="Exportar a GeoJSON (EPSG:4326)", permissions=["view"])
+    def export_geojson(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+        return self._document_export(request, queryset, "geojson")
+
+    @admin.action(description="Exportar a GeoPackage (.gpkg)", permissions=["view"])
+    def export_gpkg(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+        return self._document_export(request, queryset, "gpkg")
+
+    @admin.action(description="Informe PDF de una visita", permissions=["view"])
+    def export_pdf(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+        return self._document_export(request, queryset, "pdf")
+
 
 @admin.register(VisitAttachment)
 class VisitAttachmentAdmin(ReadOnlyAdmin):
@@ -449,8 +518,22 @@ class VisitReviewAdmin(OrgScopedAdmin):
 
 @admin.register(FormTemplate)
 class FormTemplateAdmin(OrgScopedAdmin):
+    change_form_template = "admin/core/formtemplate/change_form.html"
     list_display = ("name", "created_at")
     search_fields = ("name",)
+
+    def get_urls(self) -> Any:
+        return [
+            path(
+                "<uuid:object_id>/import-xlsform/",
+                self.admin_site.admin_view(self.import_xlsform),
+                name="core_formtemplate_import_xlsform",
+            ),
+            *super().get_urls(),
+        ]
+
+    def import_xlsform(self, request: Any, object_id: str) -> Any:
+        return import_view(self, request, object_id)
 
     def has_delete_permission(self, request: Any, obj: Any = None) -> bool:
         return False

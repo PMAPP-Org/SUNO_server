@@ -66,3 +66,8 @@ whitenoise==6.12.0
 # (riesgo R-20, ISO 27001 A.8.5). Sin extras: el alta muestra la URI otpauth
 # y el secreto, que cualquier app de autenticación acepta.
 django-otp==1.7.5
+
+# C5/C6: bounded XLSForm parsing and printable per-visit reports.
+openpyxl==3.1.5
+defusedxml==0.7.1
+reportlab==5.0.1

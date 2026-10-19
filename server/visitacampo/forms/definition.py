@@ -186,6 +186,16 @@ class _FieldBase(_Sealed):
     help: I18nText | None = None
     required: bool = False
     visible_if: VisibilityExpr | None = None
+    default: Any = None
+
+    @model_validator(mode="after")
+    def _check_default(self) -> _FieldBase:
+        if self.default is not None:
+            if isinstance(self, (_AttachmentRefField, RepeatField)):
+                raise ValueError("defaults are not supported for attachments or repeat groups")
+            if self.check_answer(self.default) is not None:
+                raise ValueError("default does not satisfy the field constraints")
+        return self
 
     def check_answer(self, value: Any) -> str | None:  # pragma: no cover - abstracto
         raise NotImplementedError
@@ -475,6 +485,36 @@ class PolygonField(_FieldBase):
         return None
 
 
+class QrField(TextField):
+    """Texto de un QR; no se ejecuta ni se abre como enlace."""
+
+    type: Literal["qr"]  # type: ignore[assignment]
+
+
+class RepeatField(_FieldBase):
+    type: Literal["repeat"]
+    fields: list[FormFieldUnion] = Field(min_length=1, max_length=MAX_FIELDS)
+    min_rows: int = Field(default=0, ge=0, le=100)
+    max_rows: int = Field(default=100, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _check_rows(self) -> RepeatField:
+        if self.min_rows > self.max_rows:
+            raise ValueError("min_rows cannot be greater than max_rows")
+        return self
+
+    def check_answer(self, value: Any) -> str | None:
+        if not isinstance(value, list):
+            return "not_a_list"
+        if len(value) < self.min_rows:
+            return "too_few_rows"
+        if len(value) > self.max_rows:
+            return "too_many_rows"
+        if any(not isinstance(row, dict) for row in value):
+            return "not_an_object"
+        return None
+
+
 #: El catálogo cerrado, como unión discriminada por `type`.
 FormFieldUnion = Annotated[
     TextField
@@ -489,9 +529,13 @@ FormFieldUnion = Annotated[
     | SignatureField
     | LocationField
     | LineField
-    | PolygonField,
+    | PolygonField
+    | QrField
+    | RepeatField,
     Field(discriminator="type"),
 ]
+
+RepeatField.model_rebuild()
 
 #: Los tipos del catálogo, derivados de la propia unión (no reescritos a mano).
 FIELD_TYPES: frozenset[str] = frozenset(
@@ -501,7 +545,7 @@ FIELD_TYPES: frozenset[str] = frozenset(
 
 #: Tipos sobre los que tiene sentido comparar por igualdad/pertenencia.
 _EQUALITY_TYPES: frozenset[str] = frozenset(
-    {"text", "number", "integer", "boolean", "date", "datetime", "single_choice"}
+    {"text", "qr", "number", "integer", "boolean", "date", "datetime", "single_choice"}
 )
 
 #: Tipos sobre los que tiene sentido ordenar (`gt`/`gte`/`lt`/`lte`).
@@ -543,13 +587,28 @@ class FormDefinition(_Sealed):
                 f"(supported: {sorted(SUPPORTED_DSL_VERSIONS)})"
             )
 
-        declared: dict[str, Any] = {}
-        for field in self.fields:
-            if field.key in declared:
-                raise ValueError(f"duplicate field key {field.key!r}")
-            if field.visible_if is not None:
-                self._check_visibility(field, declared)
-            declared[field.key] = field
+        count = 0
+        expanded = 0
+        stack = [(self.fields, 0, 1)]
+        while stack:
+            fields, depth, multiplier = stack.pop()
+            if depth > 3:
+                raise ValueError("repeat groups exceed 3 levels")
+            declared: dict[str, Any] = {}
+            for field in fields:
+                count += 1
+                expanded += multiplier
+                if expanded > 10_000:
+                    raise ValueError("repeat capacity exceeds 10000 answer fields")
+                if count > MAX_FIELDS:
+                    raise ValueError("too many fields including repeated groups")
+                if field.key in declared:
+                    raise ValueError(f"duplicate field key {field.key!r}")
+                if field.visible_if is not None:
+                    self._check_visibility(field, declared)
+                declared[field.key] = field
+                if isinstance(field, RepeatField):
+                    stack.append((field.fields, depth + 1, multiplier * field.max_rows))
         return self
 
     @staticmethod

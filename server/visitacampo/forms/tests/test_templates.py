@@ -167,6 +167,8 @@ class MetaSchemaTests(SimpleTestCase):
                 "location",
                 "line",
                 "polygon",
+                "qr",
+                "repeat",
             },
         )
 

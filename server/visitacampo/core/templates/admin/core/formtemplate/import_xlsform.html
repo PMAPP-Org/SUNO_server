@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <p>Se validará el libro y se publicará una nueva versión. Las versiones anteriores se conservarán.</p>
+  <p>Admite campos de texto, números, fechas, opciones, GPS, líneas, polígonos, imágenes, firmas, QR y grupos repetibles. Las reglas no compatibles se rechazan con su fila y motivo.</p>
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" value="Validar y publicar nueva versión">
+  </form>
+{% endblock %}
