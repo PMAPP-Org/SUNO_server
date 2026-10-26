@@ -35,7 +35,7 @@ cryptography==50.0.2
 #
 # Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
 # dependencias suyas y las resuelve pip con las versiones que boto3 declara.
-boto3==1.43.111
+boto3==1.43.114
 
 # ADR-004: rate limiting de login (Paso de endurecimiento del demo — ver
 # plans/visitacampo-despliegue-demo-implementacion.md). Se instala y

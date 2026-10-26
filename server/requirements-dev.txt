@@ -3,7 +3,7 @@
 # `requirements-dev.lock` (versiones exactas + hashes de todo el árbol), que
 # se regenera con el comando de la cabecera de ese archivo.
 -r requirements.txt
-ruff==0.17.0
+ruff==0.17.1
 mypy==2.4.0
 pytest==9.1.1
 
