@@ -1,5 +1,7 @@
 # Demo desplegable VisitaCampo — Plan de implementación
 
+> **Estado (2026-10-29): completado.** Las casillas de abajo no se fueron marcando. El código existe en los dos repositorios (`server/Dockerfile`, `server/entrypoint.sh`, `server/wait_for_db.py`, `django-axes`, RD-15 en `prod.py`; login, captura y sincronización en SUNO_client). Seguimiento en [visitacampo-progreso.md](visitacampo-progreso.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dejar VisitaCampo en estado desplegable en un VPS real (Docker Compose + Caddy) y con una app móvil capaz de ejecutar, de punta a punta, el ciclo login → capturar visita (formulario fijo + GPS + una foto) → sincronizar → ver la visita en el backend.

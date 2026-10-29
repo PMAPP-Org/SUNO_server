@@ -1,7 +1,32 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-10-17 (línea base de seguridad ISO 27001 / OWASP, Paso 19 cerrado, plan de demo completado; ver «Estado al 2026-10-17» abajo. Anterior: 2026-08-05, Paso 17 cerrado)
+**Última actualización**: 2026-10-29 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
+
+
+## Estado al 2026-10-29
+
+**Qué cambió desde el 18 de octubre.** Después de cerrar los pasos que no exigían hardware, el trabajo pasó a una serie de funcionalidades de campo agrupadas en **Fases A, B y C**. Esa hoja de ruta no está escrita en ningún documento de los repositorios; se reconstruye aquí a partir de los PR. Versiones publicadas: SUNO_server **0.8.0**, SUNO_client **0.9.0**.
+
+| Fase | Qué cubre | PR |
+|---|---|---|
+| Cierre de pasos | Paso 16 (TrustStore), mapa H-01…H-21 y prueba de carga (Paso 25), rotación de la clave JWT, conformidad con el contrato, Ley 1581 (aviso y registro de la autorización), identidad visual SUNO | server #16–#26; client #8, #10–#13 |
+| **A** — uso diario sin conexión | sesión offline tras reiniciar, sincronización automática con la app abierta, GPS preciso con promedio, detalle/búsqueda/paginación, edición y borrado offline, ajustes y traspaso seguro del dispositivo | client #14, #15, #17–#20 |
+| **B** — mapa y asignaciones | asignaciones desde el servidor, mapa de visitas/asignaciones/posición, mapas base offline por organización (descarga automática y reanudable) | server #27; client #21, #22, #24, #26, #27 |
+| **C** — geodatos | selección de CRS, campos línea y polígono, capas GeoJSON de referencia por organización | server #33, #35; client #30, #31, #34 |
+| Transversal | solo el autor o un supervisor edita/borra una visita; rediseño web público y del espacio de trabajo | server #31, #36; client #29, #33 |
+
+**Abierto, con CI en verde y sin fusionar (revisado el 2026-10-29):**
+
+| PR | Contenido | Hallazgos de la revisión |
+|---|---|---|
+| [SUNO_client#36](https://github.com/PMAPP-Org/SUNO_client/pull/36) | **C4** navegación a la asignación | GPS apagado durante la sesión se muestra como «sin señal»; el mapa vuelve a pedir permiso de ubicación al volver de la navegación; la pantalla puede quedarse en «Comprobando el GPS…» sin reintento |
+| [SUNO_server#37](https://github.com/PMAPP-Org/SUNO_server/pull/37) | **C5** repetibles, valores iniciales, QR, importación XLSForm; **C6** GeoJSON, GeoPackage y PDF | repetibles anidados siempre superan el tope de 10 000 campos (no se llega a los 3 niveles anunciados); `relevant` compuesto se importa como literal basura; fechas de Excel y `TypeError` en defaults rompen la importación (500); CSV/XLSX siguen exportando visitas borradas |
+| [SUNO_client#37](https://github.com/PMAPP-Org/SUNO_client/pull/37) | **C5/C6** en la app | un repetible oculto con filas bloquea el guardado; errores del servidor dentro de filas no se pueden limpiar; PDF sin GPS muestra «null, null»; GeoJSON copia todas las respuestas en cada geometría |
+
+Los dos #37 van juntos (el cliente fija el contrato a `SUNO_server@8546e55`). El plan de C5/C6 vive en `plans/fase-c5-c6.md` de la rama `feat/forms-and-exports` y entra con el PR.
+
+**Sigue pendiente, sin cambios respecto a la tabla de abajo:** Pasos 14 (14c–14e), 18 (subida con la app cerrada), 23 (conflicto contra backend real), 25 (primera ejecución de la carga y mediciones en dispositivo) y la prueba en dispositivo del Paso 16; las pruebas físicas de C4–C6 (cámara QR, compartir, GPS); issues #7 (Admin) y #21 (sustituto de MinIO); validación jurídica del aviso y aprobación del SGSI.
 
 
 ## Estado al 2026-10-17
@@ -199,8 +224,10 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 | Fase | Pasos completados | Total |
 |---|---|---|
 | Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
-| Fase 1 | 6 (Pasos 15, 17, 19, 20, 21, 22) | 11 (Pasos 15–25) |
-| **Total** | **20** | **26** |
+| Fase 1 | 8 (Pasos 15, 16, 17, 19, 20, 21, 22, 24) | 11 (Pasos 15–25) |
+| **Total** | **22** | **26** |
+
+Las Fases A, B y C (posteriores a este plan) se siguen en «Estado al 2026-10-29», arriba.
 
 **Estado del Paso 18 (móvil, en curso; [SUNO_client#3](https://github.com/PMAPP-Org/SUNO_client/pull/3))**:
 - **Hecho y verificado** (`flutter test` 175 passed, cobertura 84,5 %):
