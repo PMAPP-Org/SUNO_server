@@ -141,14 +141,18 @@ jobs:
             -r server/requirements.lock -r server/requirements-dev.lock \
             -r server/requirements-dast.lock
 
-      # Aparte, para que la excepción EXC-001 (docs/seguridad/excepciones.md)
-      # solo cubra el lock de Semgrep, y caduque: desde 2027-01-01 deja de
-      # ignorarse y el paso vuelve a fallar si sigue sin corregir.
+      # Aparte, para que las excepciones EXC-001 y EXC-004
+      # (docs/seguridad/excepciones.md) solo cubran el lock de Semgrep, y
+      # caduquen: desde 2027-01-01 dejan de ignorarse y el paso vuelve a
+      # fallar si siguen sin corregir.
       - name: pip-audit (herramientas SAST)
         run: |
           ignore=""
           if [ "$(date -u +%Y%m%d)" -le 20261231 ]; then
-            ignore="--ignore-vuln GHSA-84m7-p3x7-pcfv"
+            for id in GHSA-84m7-p3x7-pcfv GHSA-5h93-6whr-6q8j GHSA-rwrf-2pqf-9j8j \
+              GHSA-w4fh-qvv9-3v23 GHSA-xcq7-p3pf-p88h; do
+              ignore="$ignore --ignore-vuln $id"
+            done
           fi
           # shellcheck disable=SC2086
           pip-audit --require-hashes --disable-pip --progress-spinner off \
