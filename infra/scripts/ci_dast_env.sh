@@ -11,7 +11,9 @@
 # siembra con `bootstrap_demo`.
 set -euo pipefail
 
-ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+# Ruta de salida: infra/.env por defecto (DAST de CI). La E2E local
+# (SUNO_client tool/e2e.sh) pasa otra para no pisar el .env de desarrollo.
+ENV_FILE="${ENV_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env}"
 
 # Nombre con punto bajo `.localhost`: Caddy le emite certificado con su CA
 # interna igual que a `localhost`, pero un cliente Java (ZAP) solo envía SNI
