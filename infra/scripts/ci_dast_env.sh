@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Genera infra/.env para levantar el stack de producción en CI
+# Genera infra/.env (u otra ruta con ENV_FILE) para levantar el stack de producción en CI
 # (.github/workflows/dast.yml): settings de prod, secretos aleatorios de un
 # solo uso, clave JWT Ed25519 nueva, Caddy sirviendo `$DAST_HOST` con su CA
 # interna y adjuntos en el filesystem del contenedor (sin R2/MinIO).
