@@ -4,6 +4,23 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.9.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.8.0...v0.9.0) (2026-10-29)
+
+
+### Agregado
+
+* C5 formularios y C6 exportaciones geográficas y PDF ([#37](https://github.com/PMAPP-Org/SUNO_server/issues/37)) ([ae782ad](https://github.com/PMAPP-Org/SUNO_server/commit/ae782ad63b85acfbc4f5ded426101b1063bd7ce8))
+
+
+### Documentación
+
+* **plan:** progress through Fases A-C; open C4-C6 PRs and review findings ([#39](https://github.com/PMAPP-Org/SUNO_server/issues/39)) ([dfac167](https://github.com/PMAPP-Org/SUNO_server/commit/dfac1672bb911f33cd0356c0cc1b4a9eef0d668b))
+
+
+### Dependencias y build
+
+* **deps:** fix new CVEs in lockfiles and the base image ([#40](https://github.com/PMAPP-Org/SUNO_server/issues/40)) ([c69030a](https://github.com/PMAPP-Org/SUNO_server/commit/c69030aceb9517d54eb4171850214145fe5fa241))
+
 ## [0.8.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.7.0...v0.8.0) (2026-10-18)
 
 
