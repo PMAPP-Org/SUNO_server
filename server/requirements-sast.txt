@@ -4,4 +4,4 @@
 #
 # Semgrep con las reglas OWASP Top 10, Python/Django, auditoría de seguridad,
 # secretos, Dockerfile y GitHub Actions (OWASP A01–A10:2025; ISO 27001 A.8.28).
-semgrep==1.181.0
+semgrep==1.182.1

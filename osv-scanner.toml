@@ -5,4 +5,24 @@
 [[IgnoredVulns]]
 id = "GHSA-84m7-p3x7-pcfv" # CVE-2026-59951, mcp 1.29.0 (vía semgrep, solo requirements-sast.lock)
 ignoreUntil = 2026-12-31T00:00:00Z
-reason = "DoS del servidor MCP StreamableHTTP; semgrep scan en CI no arranca ese servidor. Semgrep 1.181.0 fija mcp==1.29.0 y es la última versión. Ver docs/seguridad/excepciones.md EXC-001."
+reason = "DoS del servidor MCP StreamableHTTP; semgrep scan en CI no arranca ese servidor. Semgrep 1.182.1 fija mcp==1.29.0 y es la última versión. Ver docs/seguridad/excepciones.md EXC-001."
+
+[[IgnoredVulns]]
+id = "GHSA-5h93-6whr-6q8j" # CVE-2026-116685, mcp 1.29.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "Redirecciones de los transportes cliente MCP; semgrep scan no actúa como cliente MCP. Semgrep 1.182.1 fija mcp==1.29.0. Ver docs/seguridad/excepciones.md EXC-004."
+
+[[IgnoredVulns]]
+id = "GHSA-rwrf-2pqf-9j8j" # CVE-2026-116686, mcp 1.29.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "$ref remotos en la validación del cliente MCP; semgrep scan no actúa como cliente MCP. Semgrep 1.182.1 fija mcp==1.29.0. Ver docs/seguridad/excepciones.md EXC-004."
+
+[[IgnoredVulns]]
+id = "GHSA-w4fh-qvv9-3v23" # CVE-2026-116684, mcp 1.29.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "Audiencia de tokens del servidor MCP; semgrep scan no arranca ese servidor. Semgrep 1.182.1 fija mcp==1.29.0. Ver docs/seguridad/excepciones.md EXC-004."
+
+[[IgnoredVulns]]
+id = "GHSA-xcq7-p3pf-p88h" # CVE-2026-114603, opentelemetry-api 1.37.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "Análisis de tracestate entrante; semgrep scan no recibe peticiones HTTP. Semgrep 1.182.1 fija opentelemetry-api 1.37.0. Ver docs/seguridad/excepciones.md EXC-004."
