@@ -48,7 +48,7 @@ Subconjunto admitido, basado en [XLSForm](https://xlsform.org/):
 
 | Hoja | Columnas |
 |---|---|
-| survey | type, name, label, hint, required, default, relevant, appearance |
+| survey | type, name, label, hint, required, default, relevant, appearance, repeat_count |
 | choices | list_name, name, label |
 | settings | form_title, form_id, version (identificadores de origen; SUNO asigna su propia versión) |
 
@@ -57,12 +57,16 @@ geopoint, geotrace, geoshape, image, barcode, begin_repeat/end_repeat (también
 con espacio). `image` con `appearance=signature` produce una firma.
 Las etiquetas se importan como español. `required` admite yes/no o true/false.
 `relevant` admite una comparación `${campo} = 'literal'` o `!=`, `<`, `<=`, `>`,
-`>=`, con texto entre comillas o un número literal. No ejecuta XPath.
+`>=`, con texto entre comillas o un número literal; `and`/`or` se rechazan.
+No ejecuta XPath. `repeat_count` solo admite un entero literal (1–100) en
+`begin_repeat` y se convierte en `max_rows`; es necesario para anidar grupos,
+porque con el máximo por defecto (100) dos niveles ya superan las 10000
+posiciones de respuesta.
 
 Las columnas no admitidas con contenido, cálculos, constraints, funciones,
 listas externas, grupos no repetibles y apariencias distintas se rechazan;
-no se ignoran reglas. Los valores iniciales son literales; las fechas deben ser
-texto ISO. Máximo 5 MiB de archivo, 20 MiB expandido, 100 entradas ZIP, 2000 filas
+no se ignoran reglas. Los valores iniciales son literales; las fechas pueden ser
+texto ISO o una celda de fecha de Excel sin hora. Máximo 5 MiB de archivo, 20 MiB expandido, 100 entradas ZIP, 2000 filas
 y 32 columnas por hoja. Se rechazan macros, enlaces externos y fórmulas Excel;
 el XML se analiza con defusedxml. Un error indica hoja/fila cuando corresponde.
 

@@ -18,7 +18,7 @@ from django.utils import timezone
 from pypdf import PdfReader
 from pypdf.generic import DictionaryObject
 
-from visitacampo.backoffice import spatial_export
+from visitacampo.backoffice import export, spatial_export
 from visitacampo.backoffice.export import ExportTooLarge
 from visitacampo.backoffice.spatial_export import (
     export_visits,
@@ -74,10 +74,14 @@ class FormsAndExportsTests(TestCase):
                 action=AuditAction.VISITS_EXPORTED, metadata__format="geojson"
             ).exists()
         )
-        with patch.object(spatial_export, "MAX_EXPORT_ROWS", 0), self.assertRaises(ExportTooLarge):
+        with patch.object(export, "MAX_EXPORT_ROWS", 0), self.assertRaises(ExportTooLarge):
             export_visits(self.a.ctx(), Visit.objects.all())
-        with patch.object(spatial_export, "MAX_EXPORT_ROWS", 0):
+        with patch.object(export, "MAX_EXPORT_ROWS", 0):
             self.assertEqual(self.action("export_gpkg", [own]).status_code, 302)
+        # CSV/XLSX share the selection: deleted visits never leave either.
+        csv = self.action("export_csv", [own, deleted]).content.decode()
+        self.assertIn(str(own.pk), csv)
+        self.assertNotIn(str(deleted.pk), csv)
 
     def test_agent_staff_cannot_export_and_pdf_requires_one_visit(self):
         self.a.agent.is_staff = True
@@ -128,6 +132,10 @@ class FormsAndExportsTests(TestCase):
         self.assertIn("Activos / 1 / Estado", text)
         self.assertIn("Bueno", text)
         self.assertNotIn("Sin responder", text)
+        # Historical values that do not fit the choice type print as stored.
+        legacy = self.a.visit(rows=[{"state": {"x": 1}, "many": [{"y": 2}]}])
+        text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(visit_pdf(legacy))).pages)
+        self.assertIn("Activos / 1 / Estado", text)
 
     def test_geometry_roundtrip_all_kinds_nested_and_null(self):
         line = {"type": "LineString", "coordinates": [[-74.1, 4.6], [-74.0, 4.7]]}
@@ -250,13 +258,20 @@ class FormsAndExportsTests(TestCase):
             ).status_code,
             404,
         )
+        change = f"/admin/core/formtemplate/{self.a.version.template_id}/change/"
+        self.assertContains(client.get(change), "Importar XLSForm")
         supervisor = make_tenant("Supervisor", staff_role=Role.SUPERVISOR)
+        supervisor_client = admin_client(supervisor.staff)
         self.assertEqual(
-            admin_client(supervisor.staff)
-            .get(f"/admin/core/formtemplate/{supervisor.version.template_id}/import-xlsform/")
-            .status_code,
+            supervisor_client.get(
+                f"/admin/core/formtemplate/{supervisor.version.template_id}/import-xlsform/"
+            ).status_code,
             403,
         )
+        supervisor_change = supervisor_client.get(
+            f"/admin/core/formtemplate/{supervisor.version.template_id}/change/"
+        )
+        self.assertNotContains(supervisor_change, "Importar XLSForm")
 
     def test_import_command_validation_publication_and_denials(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -274,10 +289,10 @@ class FormsAndExportsTests(TestCase):
                 1,
             )
             call_command("import_xlsform", str(path), **options)
-            self.assertEqual(
-                FormTemplateVersion.objects.filter(template_id=self.a.version.template_id).count(),
-                2,
-            )
+            versions = FormTemplateVersion.objects.filter(template_id=self.a.version.template_id)
+            self.assertEqual(versions.count(), 2)
+            # Without --name the version takes the template's name, as in the admin.
+            self.assertEqual(versions.get(version_number=2).name, self.a.version.template.name)
             for overrides in (
                 {"by": self.a.agent.username},
                 {"by": "missing"},

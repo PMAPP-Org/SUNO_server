@@ -599,7 +599,10 @@ class FormDefinition(_Sealed):
                 count += 1
                 expanded += multiplier
                 if expanded > 10_000:
-                    raise ValueError("repeat capacity exceeds 10000 answer fields")
+                    raise ValueError(
+                        "repeat capacity exceeds 10000 answer fields "
+                        "(lower max_rows of the nested repeat groups)"
+                    )
                 if count > MAX_FIELDS:
                     raise ValueError("too many fields including repeated groups")
                 if field.key in declared:

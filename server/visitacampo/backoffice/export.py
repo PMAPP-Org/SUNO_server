@@ -35,7 +35,15 @@ from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Visit, VisitReview
 from visitacampo.core.scoping import scoped_qs
 
-__all__ = ["MAX_EXPORT_ROWS", "ExportTooLarge", "safe_cell", "to_csv", "to_xlsx", "visit_table"]
+__all__ = [
+    "MAX_EXPORT_ROWS",
+    "ExportTooLarge",
+    "exportable_visits",
+    "safe_cell",
+    "to_csv",
+    "to_xlsx",
+    "visit_table",
+]
 
 MAX_EXPORT_ROWS = 10_000
 
@@ -93,28 +101,28 @@ def safe_cell(value: Any) -> Any:
     return f"'{text}" if text.startswith(_FORMULA_PREFIXES) else text
 
 
-def visit_table(
-    ctx: RequestContext, queryset: QuerySet[Visit]
-) -> tuple[list[str], list[list[Any]]]:
-    """Cabecera y filas de las visitas de [queryset] **de la organización de
-    [ctx]** (las de otra se ignoran: nunca salen en un archivo ajeno). Lanza
-    [ExportTooLarge]."""
-    queryset = queryset.filter(org_id=ctx.org_id)
+def exportable_visits(ctx: RequestContext, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
+    """Las visitas vivas de [queryset] **de la organización de [ctx]** (las de
+    otra se ignoran: nunca salen en un archivo ajeno; las borradas tampoco),
+    en orden estable. Lanza [ExportTooLarge]. Común a todos los formatos."""
+    queryset = queryset.filter(org_id=ctx.org_id, deleted_at__isnull=True)
     count = queryset.count()
     if count > MAX_EXPORT_ROWS:
         raise ExportTooLarge(count)
+    return queryset.select_related("template_version", "created_by").order_by("captured_at", "id")
 
+
+def visit_table(
+    ctx: RequestContext, queryset: QuerySet[Visit]
+) -> tuple[list[str], list[list[Any]]]:
+    """Cabecera y filas de [exportable_visits]. Lanza [ExportTooLarge]."""
     latest_review = (
         scoped_qs(ctx, VisitReview)
         .filter(visit=OuterRef("pk"))
         .order_by("-created_at")
         .values("status")[:1]
     )
-    visits = list(
-        queryset.select_related("template_version", "created_by")
-        .annotate(review_status=Subquery(latest_review))
-        .order_by("captured_at", "id")
-    )
+    visits = list(exportable_visits(ctx, queryset).annotate(review_status=Subquery(latest_review)))
     answer_keys = sorted({key for visit in visits for key in (visit.answers or {})})
     header = [*_BASE_COLUMNS, *(f"answers.{key}" for key in answer_keys)]
     rows = [

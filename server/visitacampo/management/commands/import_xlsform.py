@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
+from django.db import transaction
 
 from visitacampo.core.audit import AuditAction, record
 from visitacampo.core.context import Principal, resolve_request_context, system_context
-from visitacampo.core.models import Membership
+from visitacampo.core.models import FormTemplate, Membership
 from visitacampo.core.policies import PolicyDenied
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.forms.services import publish_version
@@ -45,18 +46,26 @@ class Command(BaseCommand):
                     self.style.SUCCESS("XLSForm válido; no se publicó ninguna versión.")
                 )
                 return
-            published = publish_version(
-                ctx,
-                template_id=options["template"],
-                definition=parsed.model_dump(mode="json", exclude_none=True),
-                name=options["name"],
+            template_name = (
+                scoped_qs(ctx, FormTemplate)
+                .filter(pk=options["template"])
+                .values_list("name", flat=True)
+                .first()
             )
-            record(
-                ctx,
-                action=AuditAction.TEMPLATE_PUBLISHED,
-                target=f"form_template_version:{published.pk}",
-                metadata={"version_number": published.version_number, "source": "xlsform"},
-            )
+            # Igual que la importación desde el Admin: versión y auditoría juntas.
+            with transaction.atomic():
+                published = publish_version(
+                    ctx,
+                    template_id=options["template"],
+                    definition=parsed.model_dump(mode="json", exclude_none=True),
+                    name=options["name"] or template_name,
+                )
+                record(
+                    ctx,
+                    action=AuditAction.TEMPLATE_PUBLISHED,
+                    target=f"form_template_version:{published.pk}",
+                    metadata={"version_number": published.version_number, "source": "xlsform"},
+                )
         except (InvalidXlsForm, OSError, PolicyDenied) as exc:
             raise CommandError(f"Importación rechazada: {exc}") from exc
         self.stdout.write(

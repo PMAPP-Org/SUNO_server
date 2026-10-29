@@ -37,7 +37,9 @@ def answer_lines(
                 if isinstance(row, dict):
                     lines.extend(answer_lines(field.fields, row, f"{label} / {i + 1} / "))
         else:
-            if field.type in ("single_choice", "multi_choice"):
+            # Un valor histórico que no cumple el tipo se imprime tal cual.
+            is_choice = field.type in ("single_choice", "multi_choice")
+            if is_choice and field.check_answer(value) is None:
                 options = {
                     o.value: o.label.get("es") or next(iter(o.label.values()))
                     for o in field.options

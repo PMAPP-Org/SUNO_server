@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from datetime import datetime, time
 from typing import Any
 
 from defusedxml.common import DefusedXmlException
@@ -112,8 +113,12 @@ def _relevant(text: Any) -> dict[str, Any]:
     if not match:
         raise InvalidXlsForm("relevant: solo se admite ${campo} operador literal.")
     key, operator, literal = match.groups()
-    if len(literal) >= 2 and literal[0] == literal[-1] and literal[0] in "\"'":
-        value: Any = literal[1:-1]
+    literal = literal.strip()
+    # Una sola cadena entre comillas, sin comillas dentro: `'A' and ${x} = 'B'`
+    # empieza y acaba en comilla pero es una expresión compuesta, no un literal.
+    quoted = re.fullmatch(r"'([^'\"]*)'|\"([^'\"]*)\"", literal)
+    if quoted:
+        value: Any = quoted.group(1) if quoted.group(1) is not None else quoted.group(2)
     elif re.fullmatch(r"-?\d+(\.\d+)?", literal):
         value = float(literal) if "." in literal else int(literal)
     else:
@@ -151,6 +156,7 @@ def import_xlsform(data: bytes) -> FormDefinition:
     except (
         TemplateDefinitionError,
         ValueError,
+        TypeError,
         KeyError,
         OSError,
         zipfile.BadZipFile,
@@ -183,7 +189,17 @@ def _convert(workbook: Any) -> FormDefinition:
     stack = [definition["fields"]]
     for number, row in _rows(
         workbook["survey"],
-        {"type", "name", "label", "hint", "required", "default", "relevant", "appearance"},
+        {
+            "type",
+            "name",
+            "label",
+            "hint",
+            "required",
+            "default",
+            "relevant",
+            "appearance",
+            "repeat_count",
+        },
     ):
         try:
             kind = (
@@ -227,23 +243,40 @@ def _convert(workbook: Any) -> FormDefinition:
             if "default" in row:
                 value = row["default"]
                 if field["type"] in ("integer", "number"):
+                    if isinstance(value, bool) or not isinstance(value, int | float | str):
+                        raise InvalidXlsForm("default numérico no admitido.")
                     value = float(value)
                     if field["type"] == "integer" and value.is_integer():
                         value = int(value)
                 elif field["type"] == "multi_choice":
                     value = str(value).split()
+                elif field["type"] == "date" and isinstance(value, datetime):
+                    # Excel guarda las fechas como números y openpyxl las
+                    # devuelve como datetime a medianoche.
+                    if value.time() != time(0):
+                        raise InvalidXlsForm("default de fecha con hora.")
+                    value = value.date().isoformat()
                 else:
                     value = str(value)
-                    if "${" in value or re.search(r"\w+\s*\(", value):
+                    # XPath: `today()`, `concat(...)`. Un texto como
+                    # "Lote 3 (A)" sigue siendo un literal.
+                    if "${" in value or re.match(r"\s*[a-z][a-z0-9_:-]*\(", value):
                         raise InvalidXlsForm("default solo admite valores literales.")
                 field["default"] = value
+            if "repeat_count" in row:
+                count = row["repeat_count"]
+                if field["type"] != "repeat":
+                    raise InvalidXlsForm("repeat_count solo se admite en begin_repeat.")
+                if isinstance(count, bool) or not re.fullmatch(r"\d{1,3}", str(count).strip()):
+                    raise InvalidXlsForm("repeat_count debe ser un entero literal (1–100).")
+                field["max_rows"] = int(str(count).strip())
             stack[-1].append(field)
             if field["type"] == "repeat":
                 field["fields"] = []
                 stack.append(field["fields"])
                 if len(stack) > 4:
                     raise InvalidXlsForm("máximo tres niveles de grupos repetibles.")
-        except (ValueError, InvalidXlsForm) as exc:
+        except (ValueError, TypeError, InvalidXlsForm) as exc:
             raise InvalidXlsForm(f"survey, fila {number}: {exc}") from exc
     if len(stack) != 1:
         raise InvalidXlsForm("Falta end_repeat.")

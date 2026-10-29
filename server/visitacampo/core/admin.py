@@ -77,7 +77,12 @@ from visitacampo.core.models import (
     VisitReview,
     VisitReviewStatus,
 )
-from visitacampo.core.policies import PolicyDenied, can_export_visits, can_read_job_output
+from visitacampo.core.policies import (
+    PolicyDenied,
+    can_export_visits,
+    can_publish_form_template,
+    can_read_job_output,
+)
 from visitacampo.forms.definition import TemplateDefinitionError, validate_definition
 from visitacampo.forms.services import publish_version
 from visitacampo.layers.services import retire as retire_layer
@@ -534,6 +539,19 @@ class FormTemplateAdmin(OrgScopedAdmin):
 
     def import_xlsform(self, request: Any, object_id: str) -> Any:
         return import_view(self, request, object_id)
+
+    def render_change_form(
+        self, request: Any, context: Any, add: bool = False, change: bool = False, **kwargs: Any
+    ) -> Any:
+        # El mismo criterio que import_view: supervisión puede editar la
+        # plantilla, pero no publicar versiones, así que no ve el enlace.
+        obj = kwargs.get("obj")
+        context["can_import_xlsform"] = (
+            obj is not None
+            and self.has_change_permission(request, obj)
+            and can_publish_form_template(admin_context(request), obj)
+        )
+        return super().render_change_form(request, context, add, change, **kwargs)
 
     def has_delete_permission(self, request: Any, obj: Any = None) -> bool:
         return False

@@ -13,7 +13,7 @@ from typing import Any
 from django.core.exceptions import PermissionDenied
 from django.db.models import QuerySet
 
-from visitacampo.backoffice.export import MAX_EXPORT_ROWS, ExportTooLarge
+from visitacampo.backoffice.export import exportable_visits
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Visit
 from visitacampo.core.policies import can_export_visits
@@ -31,13 +31,7 @@ class ExportContentTooLarge(ValueError):
 def export_visits(ctx: RequestContext, queryset: QuerySet[Visit]) -> list[Visit]:
     if not can_export_visits(ctx, ctx.org_id):
         raise PermissionDenied("No puede exportar visitas.")
-    queryset = queryset.filter(org_id=ctx.org_id, deleted_at__isnull=True)
-    count = queryset.count()
-    if count > MAX_EXPORT_ROWS:
-        raise ExportTooLarge(count)
-    return list(
-        queryset.select_related("template_version", "created_by").order_by("captured_at", "id")
-    )
+    return list(exportable_visits(ctx, queryset))
 
 
 def answer_geometries(
@@ -72,27 +66,32 @@ def visit_features(visits: list[Visit]) -> dict[str, Any]:
             geometries.extend(answer_geometries(definition.fields, visit.answers or {}))
         if not geometries:
             geometries.append(("visit", None))
+        # Las respuestas completas van en cada entidad (docs/forms-and-exports.md):
+        # se miden una vez por visita, no una por entidad.
+        answers_size = len(
+            json.dumps(visit.answers, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        )
         for path, geometry in geometries:
-            features.append(
-                {
-                    "type": "Feature",
-                    "id": f"{visit.pk}:{path}",
-                    "geometry": geometry,
-                    "properties": {
-                        "visit_id": str(visit.pk),
-                        "field": path,
-                        "captured_at": visit.captured_at.isoformat(),
-                        "template": visit.template_version.name,
-                        "template_version": visit.template_version.version_number,
-                        "created_by": str(visit.created_by_id),
-                        "accuracy_m": visit.accuracy_m,
-                        "answers": visit.answers,
-                    },
-                }
+            properties = {
+                "visit_id": str(visit.pk),
+                "field": path,
+                "captured_at": visit.captured_at.isoformat(),
+                "template": visit.template_version.name,
+                "template_version": visit.template_version.version_number,
+                "created_by": str(visit.created_by_id),
+                "accuracy_m": visit.accuracy_m,
+            }
+            feature = {
+                "type": "Feature",
+                "id": f"{visit.pk}:{path}",
+                "geometry": geometry,
+                "properties": properties,
+            }
+            size += answers_size + len(
+                json.dumps(feature, ensure_ascii=False, allow_nan=False).encode("utf-8")
             )
-            size += len(
-                json.dumps(features[-1], ensure_ascii=False, allow_nan=False).encode("utf-8")
-            )
+            properties["answers"] = visit.answers
+            features.append(feature)
             if len(features) > MAX_EXPORT_FEATURES or size > MAX_EXPORT_BYTES:
                 raise ExportContentTooLarge
     return {"type": "FeatureCollection", "features": features}

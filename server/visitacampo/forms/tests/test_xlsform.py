@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -120,11 +121,78 @@ def test_signature_appearance_and_numeric_literal():
         [["type", "name", "label"], ["text", "x", "X"], ["text", "x", "X"]],
         [["type", "name", "name"], ["text", "x", "X"]],
         [["type", "name", "label", None], ["text", "x", "X", "unheaded"]],
+        [
+            ["type", "name", "label", "relevant"],
+            ["text", "a", "A"],
+            ["text", "x", "X", "${a} = 'A' and ${a} = 'B'"],
+        ],
+        [
+            ["type", "name", "label", "relevant"],
+            ["text", "a", "A"],
+            ["text", "x", "X", "${a} = 'A' or ${a} = \"B\""],
+        ],
+        [["type", "name", "label", "default"], ["text", "x", "X", "concat('a', 'b')"]],
+        [["type", "name", "label", "default"], ["date", "x", "X", datetime(2024, 1, 2, 8, 30)]],
+        [["type", "name", "label", "default"], ["integer", "x", "X", datetime(2024, 1, 2)]],
+        [["type", "name", "label", "default"], ["integer", "x", "X", True]],
+        [["type", "name", "label", "repeat_count"], ["text", "x", "X", 3]],
+        [
+            ["type", "name", "label", "repeat_count"],
+            ["begin repeat", "r", "R", "${n}"],
+            ["text", "x", "X"],
+            ["end repeat"],
+        ],
+        [
+            ["type", "name", "label"],
+            ["begin repeat", "outer", "O"],
+            ["begin repeat", "inner", "I"],
+            ["text", "x", "X"],
+            ["end repeat"],
+            ["end repeat"],
+        ],
     ],
 )
 def test_rules_are_never_silently_lost(rows):
     with pytest.raises(InvalidXlsForm):
         import_xlsform(workbook(rows))
+
+
+def test_plain_text_defaults_with_parentheses_are_literals():
+    parsed = import_xlsform(
+        workbook([["type", "name", "label", "default"], ["text", "x", "X", "Lote 3 (A)"]])
+    )
+    assert parsed.fields[0].default == "Lote 3 (A)"
+
+
+def test_excel_date_cell_default_becomes_iso_date():
+    parsed = import_xlsform(
+        workbook([["type", "name", "label", "default"], ["date", "x", "X", datetime(2024, 1, 2)]])
+    )
+    assert parsed.fields[0].default == "2024-01-02"
+
+
+def test_repeat_count_bounds_nested_repeats():
+    parsed = import_xlsform(
+        workbook(
+            [
+                ["type", "name", "label", "repeat_count"],
+                ["begin repeat", "outer", "O", 10],
+                ["begin repeat", "middle", "M", 10],
+                ["begin repeat", "inner", "I", 10],
+                ["text", "x", "X"],
+                ["end repeat"],
+                ["end repeat"],
+                ["end repeat"],
+            ]
+        )
+    )
+    outer = parsed.fields[0]
+    assert isinstance(outer, RepeatField)
+    middle = outer.fields[0]
+    assert isinstance(middle, RepeatField)
+    inner = middle.fields[0]
+    assert isinstance(inner, RepeatField)
+    assert (outer.max_rows, middle.max_rows, inner.max_rows) == (10, 10, 10)
 
 
 def test_archive_limits_and_bad_files():
