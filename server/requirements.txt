@@ -35,7 +35,7 @@ cryptography==50.0.2
 #
 # Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
 # dependencias suyas y las resuelve pip con las versiones que boto3 declara.
-boto3==1.43.111
+boto3==1.43.118
 
 # ADR-004: rate limiting de login (Paso de endurecimiento del demo — ver
 # plans/visitacampo-despliegue-demo-implementacion.md). Se instala y
@@ -70,4 +70,4 @@ django-otp==1.7.5
 # C5/C6: bounded XLSForm parsing and printable per-visit reports.
 openpyxl==3.1.5
 defusedxml==0.7.1
-reportlab==5.0.1
+reportlab==5.1.0
