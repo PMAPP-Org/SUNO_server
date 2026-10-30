@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Genera infra/.env para levantar el stack de producción en CI
+# Genera infra/.env (u otra ruta con ENV_FILE) para levantar el stack de producción en CI
 # (.github/workflows/dast.yml): settings de prod, secretos aleatorios de un
 # solo uso, clave JWT Ed25519 nueva, Caddy sirviendo `$DAST_HOST` con su CA
 # interna y adjuntos en el filesystem del contenedor (sin R2/MinIO).
@@ -11,7 +11,9 @@
 # siembra con `bootstrap_demo`.
 set -euo pipefail
 
-ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+# Ruta de salida: infra/.env por defecto (DAST de CI). La E2E local
+# (SUNO_client tool/e2e.sh) pasa otra para no pisar el .env de desarrollo.
+ENV_FILE="${ENV_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env}"
 
 # Nombre con punto bajo `.localhost`: Caddy le emite certificado con su CA
 # interna igual que a `localhost`, pero un cliente Java (ZAP) solo envía SNI

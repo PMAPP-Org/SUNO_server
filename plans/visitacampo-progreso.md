@@ -26,7 +26,7 @@
 
 Los dos #37 van juntos (el cliente fija el contrato a `SUNO_server@8546e55`). El plan de C5/C6 vive en `plans/fase-c5-c6.md` de la rama `feat/forms-and-exports` y entra con el PR.
 
-**Sigue pendiente, sin cambios respecto a la tabla de abajo:** Pasos 14 (14c–14e), 18 (subida con la app cerrada), 23 (conflicto contra backend real), 25 (primera ejecución de la carga y mediciones en dispositivo) y la prueba en dispositivo del Paso 16; las pruebas físicas de C4–C6 (cámara QR, compartir, GPS); issues #7 (Admin) y #21 (sustituto de MinIO); validación jurídica del aviso y aprobación del SGSI.
+**Sigue pendiente, sin cambios respecto a la tabla de abajo:** Pasos 18 (subida con la app cerrada), 23 (conflicto contra backend real), 25 (primera ejecución de la carga y mediciones en dispositivo) y la prueba en dispositivo del Paso 16; las pruebas físicas de C4–C6 (cámara QR, compartir, GPS); issues #7 (Admin) y #21 (sustituto de MinIO); validación jurídica del aviso y aprobación del SGSI.
 
 
 ## Estado al 2026-10-17
@@ -72,7 +72,7 @@ Revisado paso a paso contra lo que hay de verdad en SUNO_server y SUNO_client, n
 | **16** TLS y tokens del cliente | Hecho en [SUNO_client#8](https://github.com/PMAPP-Org/SUNO_client/pull/8): `TrustStore` (pinning SPKI con dos pines y caducidad, TOFU con diálogo y bloqueo ante cambio de certificado, verificación antes de enviar la petición), Keychain *ThisDeviceOnly* con migración, `network_security_config.xml`, ATS sin excepciones y re-login limpio ante familia revocada. Falta probarlo en dispositivo y fijar los pines reales cuando exista el dominio oficial. | La prueba en dispositivo, no |
 | **25** Suite final | Ya hay tests de aislamiento, presupuesto de queries, traversal, checksum, reuso de token y spoof de `X-Forwarded-Proto`, pero dispersos. Faltan la suite consolidada, el **mapa H-01…H-21 → test** y un script de carga (no hay locust ni k6). | En parte: la carga y las mediciones de dispositivo van fuera de esta máquina |
 | **18** (resto) | Subida con la app cerrada (WorkManager/BGTask) y medición en iOS. | No: dispositivo real |
-| **14** E2E Fase 0 | No existen `docs/testing/e2e-fase0.md` ni `integration_test`. | No: emulador y Docker |
+| **14** E2E Fase 0 | Cerrado el 2026-10-29 (ver Paso 14 abajo). | — |
 | **Ley 1581 en la app** | Mecánica hecha: aviso de privacidad antes del login con autorización por finalidad ([SUNO_client#13](https://github.com/PMAPP-Org/SUNO_client/pull/13)) y prueba guardada en el servidor (`POST /v1/consents`, [SUNO_server#25](https://github.com/PMAPP-Org/SUNO_server/pull/25)). **Falta** la validación jurídica del texto del aviso. | El texto, no: asesor jurídico |
 
 **Entorno de desarrollo (máquina actual):** no tiene Python 3.12, Flutter ni Docker en marcha. Se verifica con herramientas montadas en un directorio temporal (Python 3.12 con uv, PostgreSQL 16 embebido, Flutter 3.44.9). Los stacks con Docker (DAST, simulacro de backup, monitoreo) solo se verifican en GitHub Actions.
@@ -172,7 +172,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 
 ### Integración
 
-- [ ] **Paso 14** — Integración end-to-end: cierre de Fase 0 (checkpoints 14a–14e, ver §12 del plan)
+- [x] **Paso 14** — Integración end-to-end: cierre de Fase 0 (checkpoints 14a–14e, ver §12 del plan). **Cerrado el 2026-10-29**: 14c–14e con la prueba automática de [docs/testing/e2e-fase0.md](../docs/testing/e2e-fase0.md) ([SUNO_server#43](https://github.com/PMAPP-Org/SUNO_server/pull/43) y la rama `feat/e2e-fase0` de SUNO_client). Una visita creada en modo avión en el emulador API 36 llega al servidor al reconectar, con TOFU real y settings de producción; dos ejecuciones seguidas en verde (`version=1`, `change_seq=2`). Lo que sigue debajo sobre 14c/14d describe el intento de agosto y queda como historia.
   - [x] 14a — Registrar Visit/VisitAttachment/SyncOpLog en Admin
     `43e4c29` Registra Visit/VisitAttachment/SyncOpLog en Django Admin (Paso 14, checkpoint 14a)
   - [x] 14b — Backend solo, sin emulador
@@ -223,9 +223,9 @@ Ver [visitacampo-construccion.md §9](visitacampo-construccion.md#9-roadmap-de-a
 
 | Fase | Pasos completados | Total |
 |---|---|---|
-| Fase 0 | 14 (Pasos 0–13) | 15 (Pasos 0–14) |
+| Fase 0 | 15 (Pasos 0–14) | 15 (Pasos 0–14) |
 | Fase 1 | 8 (Pasos 15, 16, 17, 19, 20, 21, 22, 24) | 11 (Pasos 15–25) |
-| **Total** | **22** | **26** |
+| **Total** | **23** | **26** |
 
 Las Fases A, B y C (posteriores a este plan) se siguen en «Estado al 2026-10-29», arriba.
 

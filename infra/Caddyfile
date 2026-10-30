@@ -23,6 +23,12 @@
 #
 {
 	email {$CADDY_ACME_EMAIL:admin@example.com}
+	# Un cliente que conecta por IP no envía SNI (RFC 6066) y sin SNI Caddy no
+	# sabe qué certificado servir. Con esto sirve el del dominio configurado:
+	# la app en el emulador conecta a https://10.0.2.2 (E2E, docs/testing/
+	# e2e-fase0.md). En producción los clientes envían SNI; una conexión
+	# directa a la IP recibe el certificado público en vez de un error.
+	default_sni {$CADDY_DOMAIN:localhost}
 }
 
 {$CADDY_DOMAIN:localhost} {
