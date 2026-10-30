@@ -9,6 +9,8 @@ Cierra el Paso 14 del plan de construcción.
 - Docker Desktop en marcha.
 - Flutter 3.44.9 y Android SDK en el PATH; `openssl` en el PATH (Windows:
   `C:\Program Files\Git\usr\bin`).
+- JDK 17 o superior para Gradle. Si el sistema tiene un Java 8, apúntale
+  Flutter con `flutter config --jdk-dir <ruta del JDK 17>`.
 - Un emulador Android arrancado (cualquiera; API 36 probado, `emulator -avd suno_api36`
   en esta configuración).
 - Los puertos 80 y 443 del equipo libres (Caddy los publica; en Windows suelen
@@ -36,7 +38,8 @@ locales y certificados aprobados.
    Caddy firma `10.0.2.2` con su CA interna y lo sirve también sin SNI
    (`default_sni`).
 3. Siembra una organización y un usuario únicos (`bootstrap_demo`).
-4. Lanza `integration_test/e2e_fase0_test.dart`, que:
+4. Lanza `integration_test/e2e_fase0_test.dart` con `flutter drive --no-dds`
+   (con `flutter test`, el DDS no llega a conectarse al emulador API 36), que:
    acepta el aviso de privacidad, hace login, **acepta el certificado
    (TOFU)**, sincroniza, espera a que el script active el modo avión,
    captura una visita con una marca única, comprueba que queda *Pendiente*,
@@ -51,8 +54,11 @@ El script y la prueba se coordinan por marcas en `adb logcat`:
 
 ## Si falla
 
-- Cada espera tiene límite: API 120 s, marcas del log 180 s, sincronización
-  120 s. El mensaje de error indica en qué paso se quedó.
+- Cada espera tiene límite: la API 120 s (script); en la prueba, cada pantalla
+  30–60 s, el modo avión 60 s y la sincronización 120 s. El mensaje de error
+  indica en qué paso se quedó.
+- `adb: device offline` o `Service connection disposed`: el emulador perdió la
+  conexión con adb (suele pasar con el equipo muy cargado). Vuelve a ejecutar.
 - Ante un fallo, el script imprime las últimas líneas de
   `docker compose logs api caddy` y termina con código distinto de cero.
 - Las marcas de la prueba son líneas `print` leídas con `adb logcat -s flutter`;
