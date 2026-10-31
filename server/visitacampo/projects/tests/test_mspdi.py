@@ -103,7 +103,10 @@ class RejectionTests(SimpleTestCase):
         self.assertRejected(b"<html><body/></html>", "MSPDI")
 
     def test_task_without_name(self) -> None:
-        bad = "<Task><UID>5</UID><OutlineNumber>1</OutlineNumber><OutlineLevel>1</OutlineLevel></Task>"
+        bad = (
+            "<Task><UID>5</UID><OutlineNumber>1</OutlineNumber>"
+            "<OutlineLevel>1</OutlineLevel></Task>"
+        )
         self.assertRejected(project_xml([bad]), "La tarea 5 no tiene nombre")
 
     def test_task_without_uid(self) -> None:

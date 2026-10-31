@@ -228,8 +228,12 @@ def _tasks(
                 finish=_to_date(r.text(el, "Finish"), uid),
                 actual_finish=_to_date(r.text(el, "ActualFinish"), uid),
                 duration_days=_duration_days(r.text(el, "Duration"), minutes_per_day),
-                baseline_start=_to_date(r.text(baseline, "Start"), uid) if baseline is not None else None,
-                baseline_finish=_to_date(r.text(baseline, "Finish"), uid) if baseline is not None else None,
+                baseline_start=_to_date(r.text(baseline, "Start"), uid)
+                if baseline is not None
+                else None,
+                baseline_finish=_to_date(r.text(baseline, "Finish"), uid)
+                if baseline is not None
+                else None,
                 baseline_duration_days=(
                     _duration_days(r.text(baseline, "Duration"), minutes_per_day)
                     if baseline is not None

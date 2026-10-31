@@ -67,7 +67,9 @@ class ProjectModelTests(TestCase):
 
     def test_responsible_is_unique_per_task_and_user(self) -> None:
         task = self._task(1)
-        TaskResponsible.objects.create(org=self.org, task=task, user=self.user, assigned_by=self.user)
+        TaskResponsible.objects.create(
+            org=self.org, task=task, user=self.user, assigned_by=self.user
+        )
         with self.assertRaises(IntegrityError), transaction.atomic():
             TaskResponsible.objects.create(
                 org=self.org, task=task, user=self.user, assigned_by=self.user
