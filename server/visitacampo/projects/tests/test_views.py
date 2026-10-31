@@ -268,16 +268,30 @@ class ImportPagesTests(ViewTestCase):
         self.assertEqual(self.client.get(f"{BASE}{self.project.pk}/importar/").status_code, 403)
         self.assertEqual(self.upload(v1()).status_code, 403)
 
-    def test_history_lists_applied_imports_and_downloads_xml(self) -> None:
+    def test_history_lists_applied_imports_and_supervisor_downloads_xml(self) -> None:
         self.import_v1()
-        self.as_user(self.viewer)
+        self.as_user(self.supervisor)
         response = self.client.get(f"{BASE}{self.project.pk}/historial/")
         self.assertContains(response, "v1.xml")
+        self.assertContains(response, "/xml")
         imp = ScheduleImport.objects.get(project=self.project)
         download = self.client.get(f"{BASE}{self.project.pk}/historial/{imp.pk}/xml")
         self.assertEqual(download.status_code, 200)
         self.assertEqual(download.content, v1())
         self.assertIn("attachment", download["Content-Disposition"])
+        event = AuditEvent.objects.get(action="projects.schedule_source_downloaded")
+        self.assertEqual(event.metadata, {"version": 1})
+
+    def test_viewer_sees_history_but_cannot_download_xml(self) -> None:
+        self.import_v1()
+        self.as_user(self.viewer)
+        response = self.client.get(f"{BASE}{self.project.pk}/historial/")
+        self.assertContains(response, "v1.xml")
+        self.assertNotContains(response, "/xml")
+        imp = ScheduleImport.objects.get(project=self.project)
+        download = self.client.get(f"{BASE}{self.project.pk}/historial/{imp.pk}/xml")
+        self.assertEqual(download.status_code, 403)
+        self.assertFalse(AuditEvent.objects.filter(action="projects.schedule_source_downloaded"))
 
 
 @skip_without_db
@@ -299,6 +313,20 @@ class GanttPageTests(ViewTestCase):
         )
         self.assertTrue(columns["critical"])
         self.assertEqual(len(payload["links"]), 3)
+
+    def test_scale_is_restored_from_querystring(self) -> None:
+        self.import_v1()
+        self.as_user(self.viewer)
+        url = f"{BASE}{self.project.pk}/gantt/"
+        self.assertContains(self.client.get(url + "?escala=36"), 'value="36" selected')
+        self.assertContains(self.client.get(url + "?escala=999"), 'value="18" selected')
+        self.assertContains(self.client.get(url), 'name="escala"')
+
+    def test_header_shows_schedule_cut(self) -> None:
+        self.import_v1()
+        self.as_user(self.viewer)
+        response = self.client.get(f"{BASE}{self.project.pk}/gantt/?corte=2026-04-01")
+        self.assertContains(response, "01/04/2026")
 
     def test_payload_escapes_markup(self) -> None:
         self.import_v1()
@@ -328,6 +356,10 @@ class ExportTests(ViewTestCase):
         self.assertIn("pct_suno", sheet)
         self.assertIn("2026-03-18", sheet)
         self.assertTrue(AuditEvent.objects.filter(action="projects.schedule_exported").exists())
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="proyecto-cronograma-2026-03-20.xlsx"',
+        )
 
     def test_viewer_cannot_export(self) -> None:
         self.import_v1()

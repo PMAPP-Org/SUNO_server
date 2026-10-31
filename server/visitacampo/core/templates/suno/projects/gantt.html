@@ -6,7 +6,7 @@
 <section class="pj-panel">
   <form method="get" class="pj-filters">
     <label>Fecha de corte <input type="date" name="corte" value="{{ schedule.cut|date:'Y-m-d' }}"></label>
-    <label>Escala <select data-gantt-scale><option value="8">Mes</option><option value="18" selected>Semana</option><option value="36">Día</option></select></label>
+    <label>Escala <select name="escala" data-gantt-scale><option value="8"{% if scale == "8" %} selected{% endif %}>Mes</option><option value="18"{% if scale == "18" %} selected{% endif %}>Semana</option><option value="36"{% if scale == "36" %} selected{% endif %}>Día</option></select></label>
     <button class="button" type="submit">Aplicar</button>
     <span class="pj-muted">Rojo: ruta crítica · barra clara: línea base · línea punteada: fecha de corte</span>
   </form>

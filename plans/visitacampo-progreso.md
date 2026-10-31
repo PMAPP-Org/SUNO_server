@@ -1,7 +1,7 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-10-29 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
+**Última actualización**: 2026-10-31 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
 
 ## Módulo de costos — Etapa 1 (Cronograma), servidor — 2026-10-31
 
@@ -15,7 +15,7 @@
 
 **Mejoras pendientes**: la lista de proyectos recalcula el cronograma de cada proyecto en cada petición (O(proyectos × tareas)); cachear o guardar el rollup cuando llegue el avance de campo.
 
-**Pendiente**: avance desde campo (plan `2026-10-31-costos-etapa1-campo-plan.md`).
+**Pendiente**: avance desde campo (plan `2026-10-31-costos-etapa1-campo-plan.md`, por escribir).
 
 
 ## Estado al 2026-10-29

@@ -44,9 +44,9 @@ class ProjectModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             self._task(1)
 
-    def test_project_name_is_unique_per_org(self) -> None:
+    def test_project_name_is_unique_per_org_ignoring_case(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Project.objects.create(org=self.org, name="Obra", created_by=self.user)
+            Project.objects.create(org=self.org, name="OBRA", created_by=self.user)
 
     def test_import_number_is_unique_per_project_but_pending_has_none(self) -> None:
         def make(number: int | None) -> ScheduleImport:

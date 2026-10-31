@@ -142,6 +142,11 @@ def _parse_uuid(value: str | None) -> UUID | None:
         return None
 
 
+def _safe_code(project: Project) -> str:
+    """Código del proyecto apto para nombres de archivo."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", project.code or "proyecto")
+
+
 def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]:
     return {
         "project": project,
@@ -382,15 +387,25 @@ def history(request: HttpRequest, project_id: UUID) -> HttpResponse:
 def import_xml(request: HttpRequest, project_id: UUID, import_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_visible_project(ctx, project_id)
+    if not can_export_schedule(ctx, ctx.org_id):
+        raise PermissionDenied
     try:
         imp = scoped_qs(ctx, ScheduleImport).get(
             pk=import_id, project=project, status=ScheduleImportStatus.APPLIED
         )
     except ScheduleImport.DoesNotExist as exc:
         raise Http404 from exc
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.SCHEDULE_SOURCE_DOWNLOADED,
+            target=f"project:{project.pk}",
+            metadata={"version": imp.number},
+        )
     response = HttpResponse(gzip.decompress(bytes(imp.source_xml)), content_type="application/xml")
-    safe_code = re.sub(r"[^A-Za-z0-9_.-]", "_", project.code or "proyecto")
-    response["Content-Disposition"] = f'attachment; filename="{safe_code}-v{imp.number}.xml"'
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_safe_code(project)}-v{imp.number}.xml"'
+    )
     return response
 
 
@@ -399,6 +414,9 @@ def gantt(request: HttpRequest, project_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_visible_project(ctx, project_id)
     data = build_schedule(ctx, project, cut=_parse_date(request.GET.get("corte")))
+    scale = request.GET.get("escala", "")
+    if scale not in {"8", "18", "36"}:
+        scale = "18"
 
     def iso(value: date | None) -> str | None:
         return value.isoformat() if value else None
@@ -439,7 +457,12 @@ def gantt(request: HttpRequest, project_id: UUID) -> HttpResponse:
         request,
         ctx,
         "suno/projects/gantt.html",
-        {**_project_context(ctx, project), "gantt_json": payload, "schedule": data},
+        {
+            **_project_context(ctx, project),
+            "gantt_json": payload,
+            "schedule": data,
+            "scale": scale,
+        },
     )
 
 
@@ -504,6 +527,6 @@ def export_schedule(request: HttpRequest, project_id: UUID) -> HttpResponse:
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = (
-        f'attachment; filename="cronograma-{data.cut.isoformat()}.xlsx"'
+        f'attachment; filename="{_safe_code(project)}-cronograma-{data.cut.isoformat()}.xlsx"'
     )
     return response

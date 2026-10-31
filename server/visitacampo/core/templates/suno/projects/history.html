@@ -17,7 +17,7 @@
         <td class="num">{{ imp.summary.retired }}</td>
         <td class="num">{{ imp.summary.modified }}</td>
         <td>{% if imp.summary.baseline_changed %}<span class="pj-late">cambió</span>{% else %}igual{% endif %}</td>
-        <td><a href="{% url 'projects:import_xml' project.pk imp.pk %}">XML</a></td>
+        <td>{% if can_export %}<a href="{% url 'projects:import_xml' project.pk imp.pk %}">XML</a>{% endif %}</td>
       </tr>
     {% empty %}
       <tr><td colspan="10" class="pj-empty">Sin importaciones aplicadas.</td></tr>

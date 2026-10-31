@@ -1,6 +1,6 @@
 // Gantt del cronograma: SVG propio, sin librerías. Lee #gantt-data
 // ({cut, rows, links}) y dibuja una fila por tarea con su barra programada,
-// la línea base debajo, los hitos como rombos, las dependencias fin→comienzo
+// la línea base debajo, los hitos como rombos, las dependencias (FC, CC, FF, CF)
 // y la fecha de corte. Rojo = ruta crítica (dato del Project).
 (() => {
   const host = document.querySelector('[data-gantt]');
@@ -33,8 +33,8 @@
     const times = rows.flatMap((r) => [r.start, r.finish, r.bstart, r.bfinish].map(toTime)).filter((t) => t !== null);
     const cut = toTime(data.cut);
     if (cut !== null) times.push(cut);
-    const min = Math.min(...times) - 2 * DAY;
-    const max = Math.max(...times) + 3 * DAY;
+    const min = times.reduce((a, b) => (b < a ? b : a), Infinity) - 2 * DAY;
+    const max = times.reduce((a, b) => (b > a ? b : a), -Infinity) + 3 * DAY;
     const x = (t) => LABEL + ((t - min) / DAY) * pxPerDay;
     const width = x(max) + 20;
     const height = HEAD + rows.length * ROW + 10;
@@ -55,7 +55,9 @@
     rows.forEach((r, i) => {
       const y = HEAD + i * ROW;
       const name = `${r.wbs} ${r.name}`;
-      svg.appendChild(el('text', { x: 4 + (r.level - 1) * 12, y: y + 16, 'font-weight': r.summary ? 600 : 400 }, name.length > 44 ? name.slice(0, 43) + '…' : name));
+      // El sangrado come ancho de la columna de etiquetas: se acorta el texto en proporción.
+      const maxChars = Math.max(12, 44 - 2 * (r.level - 1));
+      svg.appendChild(el('text', { x: 4 + (r.level - 1) * 12, y: y + 16, 'font-weight': r.summary ? 600 : 400 }, name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name));
       const bs = toTime(r.bstart);
       const bf = toTime(r.bfinish);
       if (bs !== null && bf !== null && !r.milestone) {
@@ -67,7 +69,9 @@
       const cls = `${r.summary ? 'summary' : ''} ${r.critical ? 'critical' : ''}`;
       if (r.milestone) {
         const cx = x(f);
-        svg.appendChild(el('path', { d: `M${cx} ${y + 4} l7 7 l-7 7 l-7 -7 z`, class: `milestone ${cls}` }));
+        const diamond = el('path', { d: `M${cx} ${y + 4} l7 7 l-7 7 l-7 -7 z`, class: `milestone ${cls}` });
+        diamond.appendChild(el('title', {}, `${name}\n${r.finish}`));
+        svg.appendChild(diamond);
       } else {
         const bar = el('rect', { x: x(s), y: y + (r.summary ? 8 : 5), width: Math.max(2, x(f + DAY) - x(s)), height: r.summary ? 6 : 11, class: `bar ${cls}` });
         bar.appendChild(el('title', {}, `${name}\n${r.start} → ${r.finish}${r.bfinish ? `\nLínea base: ${r.bstart} → ${r.bfinish}` : ''}`));
@@ -81,12 +85,18 @@
       if (a === undefined || b === undefined) return;
       const from = rows[a];
       const to = rows[b];
-      if (!from.finish || !to.start) return;
-      const x1 = x(toTime(from.finish) + DAY);
+      const kind = ['FS', 'SS', 'FF', 'SF'].includes(link.type) ? link.type : 'FS';
+      const fromStart = kind === 'SS' || kind === 'SF';
+      const toFinish = kind === 'FF' || kind === 'SF';
+      const fromIso = fromStart ? from.start : from.finish;
+      const toIso = toFinish ? to.finish : to.start;
+      if (!fromIso || !toIso) return;
+      // Fin de tarea = fin del último día; comienzo = inicio del primer día.
+      const x1 = x(toTime(fromIso) + (fromStart ? 0 : DAY));
       const y1 = HEAD + a * ROW + 10;
-      const x2 = x(toTime(to.start));
+      const x2 = x(toTime(toIso) + (toFinish ? DAY : 0));
       const y2 = HEAD + b * ROW + 10;
-      const mid = Math.max(x1 + 6, x2 - 6);
+      const mid = toFinish ? Math.max(x1 + 6, x2 + 6) : fromStart ? Math.min(x1 - 6, x2 - 6) : Math.max(x1 + 6, x2 - 6);
       svg.appendChild(el('path', { d: `M${x1} ${y1} H${mid} V${y2} H${x2}`, class: 'link' }));
     });
 

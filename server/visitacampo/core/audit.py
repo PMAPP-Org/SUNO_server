@@ -91,6 +91,7 @@ class AuditAction:
     TASK_RESPONSIBLE_ASSIGNED = "projects.responsible_assigned"
     TASK_RESPONSIBLE_REMOVED = "projects.responsible_removed"
     SCHEDULE_EXPORTED = "projects.schedule_exported"
+    SCHEDULE_SOURCE_DOWNLOADED = "projects.schedule_source_downloaded"
 
 
 def hash_ip(ip: str | None) -> str | None:

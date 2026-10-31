@@ -12,7 +12,7 @@
     <label><span><input type="checkbox" name="criticas" value="1" {% if filters.criticas %}checked{% endif %}> Solo críticas</span></label>
     <label><span><input type="checkbox" name="atrasadas" value="1" {% if filters.atrasadas %}checked{% endif %}> Solo atrasadas</span></label>
     <button class="button" type="submit">Aplicar</button>
-    {% if can_export %}<a class="text-link" href="{% url 'projects:export' project.pk %}?corte={{ schedule.cut|date:'Y-m-d' }}">Exportar a Excel</a>{% endif %}
+    {% if can_export %}<a class="text-link" href="{% url 'projects:export' project.pk %}?corte={{ schedule.cut|date:'Y-m-d' }}">Exportar cronograma completo (Excel)</a>{% endif %}
   </form>
 </section>
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 
 from django.db import models
+from django.db.models.functions import Lower
 
 from .base import OrgScopedModel
 
@@ -44,7 +45,7 @@ class Project(OrgScopedModel):
         verbose_name = "proyecto"
         verbose_name_plural = "proyectos"
         constraints = [
-            models.UniqueConstraint(fields=["org", "name"], name="project_org_name_uq"),
+            models.UniqueConstraint(Lower("name"), "org", name="project_org_name_ci_uq"),
         ]
 
     def __str__(self) -> str:
@@ -151,7 +152,7 @@ class Task(OrgScopedModel):
     )
 
     class Meta:
-        db_table = "task"
+        db_table = "project_task"
         ordering = ["sort_order"]
         verbose_name = "tarea"
         verbose_name_plural = "tareas"
@@ -182,7 +183,7 @@ class TaskDependency(OrgScopedModel):
     lag_days = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     class Meta:
-        db_table = "task_dependency"
+        db_table = "project_task_dependency"
         constraints = [
             models.UniqueConstraint(
                 fields=["predecessor", "successor"], name="task_dependency_pair_uq"
@@ -199,7 +200,7 @@ class Resource(OrgScopedModel):
     name = models.CharField(max_length=255)
 
     class Meta:
-        db_table = "resource"
+        db_table = "project_resource"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(fields=["project", "uid"], name="resource_project_uid_uq"),
@@ -215,7 +216,7 @@ class TaskResource(OrgScopedModel):
     resource = models.ForeignKey(Resource, on_delete=models.CASCADE, related_name="task_links")
 
     class Meta:
-        db_table = "task_resource"
+        db_table = "project_task_resource"
         constraints = [
             models.UniqueConstraint(fields=["task", "resource"], name="task_resource_pair_uq"),
         ]
@@ -233,7 +234,7 @@ class TaskResponsible(OrgScopedModel):
     assigned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = "task_responsible"
+        db_table = "project_task_responsible"
         constraints = [
             models.UniqueConstraint(fields=["task", "user"], name="task_responsible_pair_uq"),
         ]

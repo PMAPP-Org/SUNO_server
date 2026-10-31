@@ -9,5 +9,5 @@
       {% if can_manage %}<a href="{% url 'projects:import' project.pk %}" {% if tab == "import" %}aria-current="page"{% endif %}>Importar XML</a>{% endif %}
     </nav>
   </div>
-  <p class="workspace-scope">Fecha de corte<br><span>{{ project.status_date|date:"d/m/Y"|default:"sin importar" }}</span></p>
+  <p class="workspace-scope">Fecha de corte<br><span>{% if schedule %}{{ schedule.cut|date:"d/m/Y" }}{% else %}{{ project.status_date|date:"d/m/Y"|default:"sin importar" }}{% endif %}</span></p>
 </section>
