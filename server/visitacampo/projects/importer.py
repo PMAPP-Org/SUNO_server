@@ -14,9 +14,23 @@ from __future__ import annotations
 import gzip
 from collections.abc import Mapping
 from typing import Any
+from uuid import UUID
+
+from django.db import DatabaseError, transaction
+from django.db.models import Max
+from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Project, ScheduleImport, Task, TaskResponsible
+from visitacampo.core.models import (
+    Project,
+    Resource,
+    ScheduleImport,
+    ScheduleImportStatus,
+    Task,
+    TaskDependency,
+    TaskResource,
+    TaskResponsible,
+)
 from visitacampo.core.scoping import scoped_qs
 
 from .mspdi import MspdiError, ParsedSchedule, parse_mspdi
@@ -149,4 +163,145 @@ def stage_import(
         uploaded_by_id=ctx.user_id,
         status_date=parsed.status_date,
         summary=summary,
+    )
+
+
+def _locked_pending(ctx: RequestContext, import_id: UUID) -> tuple[ScheduleImport, Project]:
+    try:
+        imp = scoped_qs(ctx, ScheduleImport).get(pk=import_id)
+    except ScheduleImport.DoesNotExist as exc:
+        raise ImportRejected("La importación no existe.") from exc
+    try:
+        project = scoped_qs(ctx, Project).select_for_update(nowait=True).get(pk=imp.project_id)
+    except DatabaseError as exc:
+        raise ImportRejected(
+            "Otra importación de este proyecto está en curso; intenta de nuevo en unos segundos."
+        ) from exc
+    imp = scoped_qs(ctx, ScheduleImport).select_for_update().get(pk=import_id)
+    if imp.status != ScheduleImportStatus.PENDING:
+        raise ImportRejected("Esta importación ya fue aplicada o descartada.")
+    return imp, project
+
+
+def apply_import(ctx: RequestContext, import_id: UUID) -> ScheduleImport:
+    with transaction.atomic():
+        imp, project = _locked_pending(ctx, import_id)
+        imports = scoped_qs(ctx, ScheduleImport).filter(project=project)
+        if imports.filter(
+            status=ScheduleImportStatus.APPLIED, applied_at__gt=imp.uploaded_at
+        ).exists():
+            raise ImportRejected(
+                "Se aplicó otra versión después de subir esta. "
+                "Vuelve a subir el archivo para ver los cambios actualizados."
+            )
+        parsed = _parse(gzip.decompress(bytes(imp.source_xml)))
+        _apply_tasks(ctx, project, imp, parsed)
+        _apply_links(ctx, project, parsed)
+
+        imp.number = (imports.aggregate(n=Max("number"))["n"] or 0) + 1
+        imp.status = ScheduleImportStatus.APPLIED
+        imp.applied_at = timezone.now()
+        imp.save(update_fields=["number", "status", "applied_at"])
+        project.calendar = parsed.calendar.to_json()
+        project.status_date = parsed.status_date
+        project.save(update_fields=["calendar", "status_date"])
+        return imp
+
+
+def discard_import(ctx: RequestContext, import_id: UUID) -> ScheduleImport:
+    with transaction.atomic():
+        imp, _ = _locked_pending(ctx, import_id)
+        imp.status = ScheduleImportStatus.DISCARDED
+        imp.save(update_fields=["status"])
+        return imp
+
+
+def _apply_tasks(
+    ctx: RequestContext, project: Project, imp: ScheduleImport, parsed: ParsedSchedule
+) -> None:
+    tasks = scoped_qs(ctx, Task).filter(project=project)
+    by_uid = {t.uid: t for t in tasks}
+    new: list[Task] = []
+    changed: list[Task] = []
+    for p in parsed.tasks:
+        values = {f: getattr(p, f) for f in TASK_FIELDS}
+        task = by_uid.get(p.uid)
+        if task is None:
+            task = Task(org_id=ctx.org_id, project=project, uid=p.uid, **values)
+            new.append(task)
+            by_uid[p.uid] = task
+        else:
+            for field, value in values.items():
+                setattr(task, field, value)
+            task.retired_in = None
+            changed.append(task)
+    tasks.bulk_create(new)
+    tasks.bulk_update(changed, [*TASK_FIELDS, "retired_in"], batch_size=500)
+
+    parsed_uids = {p.uid for p in parsed.tasks}
+    tasks.filter(retired_in__isnull=True).exclude(uid__in=parsed_uids).update(retired_in=imp)
+
+    by_outline = {p.outline_number: by_uid[p.uid] for p in parsed.tasks}
+    hierarchy: list[Task] = []
+    for p in parsed.tasks:
+        task = by_uid[p.uid]
+        parent_outline = p.outline_number.rsplit(".", 1)[0] if "." in p.outline_number else None
+        task.parent = by_outline.get(parent_outline) if parent_outline else None
+        task.stage = by_outline.get(p.outline_number.split(".", 1)[0])
+        hierarchy.append(task)
+    tasks.bulk_update(hierarchy, ["parent", "stage"], batch_size=500)
+
+
+def _apply_links(ctx: RequestContext, project: Project, parsed: ParsedSchedule) -> None:
+    task_ids = dict(
+        scoped_qs(ctx, Task)
+        .filter(project=project, retired_in__isnull=True)
+        .values_list("uid", "id")
+    )
+    deps = scoped_qs(ctx, TaskDependency)
+    deps.filter(project=project).delete()
+    seen_pairs: set[tuple[int, int]] = set()
+    new_deps = []
+    for d in parsed.dependencies:
+        pair = (d.predecessor_uid, d.successor_uid)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        new_deps.append(
+            TaskDependency(
+                org_id=ctx.org_id,
+                project=project,
+                predecessor_id=task_ids[d.predecessor_uid],
+                successor_id=task_ids[d.successor_uid],
+                type=d.type,
+                lag_days=d.lag_days,
+            )
+        )
+    deps.bulk_create(new_deps)
+
+    scoped_qs(ctx, TaskResource).filter(task__project=project).delete()
+    resources = scoped_qs(ctx, Resource).filter(project=project)
+    existing = {r.uid: r for r in resources}
+    for parsed_resource in parsed.resources:
+        current = existing.get(parsed_resource.uid)
+        if current is None:
+            existing[parsed_resource.uid] = resources.create(
+                org_id=ctx.org_id,
+                project=project,
+                uid=parsed_resource.uid,
+                name=parsed_resource.name,
+            )
+        elif current.name != parsed_resource.name:
+            current.name = parsed_resource.name
+            current.save(update_fields=["name"])
+    resources.exclude(uid__in=[r.uid for r in parsed.resources]).delete()
+    scoped_qs(ctx, TaskResource).bulk_create(
+        [
+            TaskResource(
+                org_id=ctx.org_id,
+                task_id=task_ids[task_uid],
+                resource_id=existing[resource_uid].pk,
+            )
+            for task_uid, resource_uid in parsed.assignments
+        ]
     )
