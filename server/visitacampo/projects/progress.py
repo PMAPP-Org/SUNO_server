@@ -129,7 +129,8 @@ def _leaf(task: TaskInput, suno: float, calendar: WorkCalendar, cut: date) -> Ta
 def _source(
     task: TaskInput, planned: float, actual: float, calendar: WorkCalendar, cut: date
 ) -> SourceIndicators:
-    assert task.baseline_finish is not None
+    if task.baseline_finish is None:  # `_leaf` solo llama con línea base
+        raise ValueError("La tarea no tiene línea base.")
     if actual >= 100:
         projected = task.actual_finish or task.finish
     else:

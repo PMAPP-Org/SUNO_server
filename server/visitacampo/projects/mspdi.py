@@ -15,11 +15,14 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Any
-from xml.etree.ElementTree import Element, ParseError
+from typing import TYPE_CHECKING, Any
 
 from defusedxml import DefusedXmlException
-from defusedxml.ElementTree import fromstring
+from defusedxml.ElementTree import ParseError, fromstring
+
+if TYPE_CHECKING:
+    # Solo el tipo para las anotaciones: el parseo siempre es con defusedxml.
+    from xml.etree.ElementTree import Element  # nosec B405  # nosemgrep
 
 from .workdays import CalendarException, WorkCalendar
 

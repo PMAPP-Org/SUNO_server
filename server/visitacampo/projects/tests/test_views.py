@@ -297,13 +297,11 @@ class ImportPagesTests(ViewTestCase):
 @skip_without_db
 class GanttPageTests(ViewTestCase):
     def test_embeds_rows_links_and_cut(self) -> None:
-        import json
-
         self.import_v1()
         self.as_user(self.viewer)
         response = self.client.get(f"{BASE}{self.project.pk}/gantt/")
         self.assertContains(response, 'id="gantt-data"')
-        payload = json.loads(response.context["gantt_json"])
+        payload = response.context["gantt_data"]
         self.assertEqual(payload["cut"], "2026-03-20")
         self.assertEqual(len(payload["rows"]), 6)
         columns = next(r for r in payload["rows"] if r["name"] == "Columnas")

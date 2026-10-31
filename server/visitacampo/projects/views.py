@@ -9,7 +9,6 @@ rol responde 403.
 from __future__ import annotations
 
 import gzip
-import json
 import re
 from datetime import date
 from decimal import Decimal
@@ -445,21 +444,16 @@ def gantt(request: HttpRequest, project_id: UUID) -> HttpResponse:
         .values_list("predecessor_id", "successor_id", "type")
         if str(a) in ids and str(b) in ids
     ]
-    # Los nombres vienen del XML: se escapan <, > y & para que el JSON dentro de
-    # <script> no pueda cerrar la etiqueta (json.loads los decodifica igual).
-    payload = (
-        json.dumps({"cut": data.cut.isoformat(), "rows": rows, "links": links})
-        .replace("<", "\\u003c")
-        .replace(">", "\\u003e")
-        .replace("&", "\\u0026")
-    )
+    # Los nombres vienen del XML: la plantilla lo emite con `json_script`, que
+    # escapa <, > y & para que el JSON no pueda cerrar la etiqueta <script>.
+    payload = {"cut": data.cut.isoformat(), "rows": rows, "links": links}
     return _render(
         request,
         ctx,
         "suno/projects/gantt.html",
         {
             **_project_context(ctx, project),
-            "gantt_json": payload,
+            "gantt_data": payload,
             "schedule": data,
             "scale": scale,
         },

@@ -12,6 +12,6 @@
   </form>
   <div class="pj-gantt" data-gantt></div>
 </section>
-<script type="application/json" id="gantt-data">{{ gantt_json|safe }}</script>
+{{ gantt_data|json_script:"gantt-data" }}
 {% endblock %}
 {% block scripts %}<script src="{% static 'suno/js/gantt.js' %}" defer></script>{% endblock %}
