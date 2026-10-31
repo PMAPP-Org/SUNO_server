@@ -4,6 +4,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.10.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.9.0...v0.10.0) (2026-10-31)
+
+
+### Agregado
+
+* **infra:** E2E Fase 0 infrastructure (Caddy default_sni, ENV_FILE) and procedure ([#43](https://github.com/PMAPP-Org/SUNO_server/issues/43)) ([39c11f7](https://github.com/PMAPP-Org/SUNO_server/commit/39c11f7492a523d407668d9afa16287621fe5fb6))
+* **projects:** módulo de costos, etapa 1 — cronograma desde MS Project (servidor) ([#45](https://github.com/PMAPP-Org/SUNO_server/issues/45)) ([427f073](https://github.com/PMAPP-Org/SUNO_server/commit/427f0739719318022c5d720233e19926982f1bcc))
+
 ## [0.9.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.8.0...v0.9.0) (2026-10-29)
 
 
