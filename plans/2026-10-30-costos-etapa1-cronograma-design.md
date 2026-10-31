@@ -41,7 +41,7 @@ App nueva `visitacampo/projects`. Todos los modelos heredan de `OrgScopedModel`.
   semana y excepciones; se reemplaza en cada importación), `status_date` (la `StatusDate`
   de la última importación, opcional), marcas de creación.
 - **ScheduleImport**: `project`, `number` (consecutivo por proyecto, único),
-  `source_file` (XML original), `uploaded_by`, `uploaded_at`, `status_date`, `summary`
+  `status` (pending / applied / discarded), `file_name`, `source_xml` (XML original comprimido con gzip), `uploaded_by`, `uploaded_at`, `status_date`, `summary`
   (JSON: `added`, `retired`, `reactivated`, `modified`, `baseline_changed`, advertencias).
 - **Task**: `project`, `uid` (UniqueID; único por proyecto), `wbs`, `outline_level`,
   `parent` (FK a sí misma), `name`, `is_summary`, `is_milestone`, `start`, `finish`,
@@ -70,9 +70,11 @@ en el cronograma vigente y se reactivan si el `UniqueID` vuelve a aparecer.
 ## 2. Importación
 
 1. El usuario sube el XML en `/plataforma/proyectos/<id>/importar/`.
-2. Un trabajo de la cola existente (`jobs`) lo lee y calcula la vista previa: nuevas,
+2. El servidor lo lee en la misma petición (≈1 s para 5.000 tareas), guarda un
+   `ScheduleImport` en estado `pending` con el XML y calcula la vista previa: nuevas,
    retiradas, reactivadas, modificadas, cambio de línea base y advertencias (tareas
-   retiradas con responsables o con avance de campo).
+   retiradas con responsables o con avance de campo). *Decidido al planear: sin la cola
+   `jobs`, que obligaría a una pantalla de espera con sondeo.*
 3. El usuario confirma y se aplica en **una sola transacción**: actualizar o crear tareas,
    marcar retiradas, recalcular `stage` y `parent`, reemplazar dependencias, recursos y
    calendario, crear el `ScheduleImport`.
@@ -128,7 +130,7 @@ Plantillas Django con el login de `/plataforma/`, filtradas por organización y 
   solo críticas, solo atrasadas. Selector de fecha de corte. Exportación a Excel
   reusando `backoffice/export.py`.
 - **Gantt**: barras programadas y de línea base, dependencias, ruta crítica en rojo,
-  línea de fecha de corte. Frappe Gantt desde CDN con versión fija.
+  línea de fecha de corte. SVG propio (`suno/js/gantt.js`), sin librerías de terceros en el navegador.
 - **Tarea**: datos, visitas vinculadas con su % y estado de revisión, asignación de
   responsables.
 - **Importar**: subida, vista previa y confirmación.
