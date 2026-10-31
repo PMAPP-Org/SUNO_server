@@ -9,8 +9,10 @@ rol responde 403.
 from __future__ import annotations
 
 import gzip
+import json
 import re
 from datetime import date
+from decimal import Decimal
 from typing import cast
 from uuid import UUID
 
@@ -24,6 +26,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
+from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
@@ -48,7 +51,7 @@ from visitacampo.core.scoping import get_organization, scoped_qs
 from .access import effective_responsibles, get_visible_project, visible_projects
 from .importer import ImportRejected, apply_import, discard_import, stage_import
 from .mspdi import MAX_BYTES
-from .schedule import build_schedule, filter_rows
+from .schedule import ScheduleRow, build_schedule, filter_rows
 
 
 def _ctx(request: HttpRequest) -> RequestContext:
@@ -367,4 +370,119 @@ def import_xml(request: HttpRequest, project_id: UUID, import_id: UUID) -> HttpR
     response = HttpResponse(gzip.decompress(bytes(imp.source_xml)), content_type="application/xml")
     safe_code = re.sub(r"[^A-Za-z0-9_.-]", "_", project.code or "proyecto")
     response["Content-Disposition"] = f'attachment; filename="{safe_code}-v{imp.number}.xml"'
+    return response
+
+
+@login_required(login_url="platform_login")
+def gantt(request: HttpRequest, project_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    data = build_schedule(ctx, project, cut=_parse_date(request.GET.get("corte")))
+
+    def iso(value: date | None) -> str | None:
+        return value.isoformat() if value else None
+
+    rows = [
+        {
+            "id": str(row.task.pk),
+            "wbs": row.task.wbs,
+            "name": row.task.name,
+            "level": row.task.outline_level,
+            "start": iso(row.task.start),
+            "finish": iso(row.task.finish),
+            "bstart": iso(row.task.baseline_start),
+            "bfinish": iso(row.task.baseline_finish),
+            "summary": row.task.is_summary,
+            "milestone": row.task.is_milestone,
+            "critical": row.task.is_critical,
+        }
+        for row in data.rows
+    ]
+    ids = {r["id"] for r in rows}
+    links = [
+        {"from": str(a), "to": str(b), "type": t}
+        for a, b, t in scoped_qs(ctx, TaskDependency)
+        .filter(project=project)
+        .values_list("predecessor_id", "successor_id", "type")
+        if str(a) in ids and str(b) in ids
+    ]
+    # Los nombres vienen del XML: se escapan <, > y & para que el JSON dentro de
+    # <script> no pueda cerrar la etiqueta (json.loads los decodifica igual).
+    payload = (
+        json.dumps({"cut": data.cut.isoformat(), "rows": rows, "links": links})
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+    return _render(
+        request,
+        ctx,
+        "suno/projects/gantt.html",
+        {**_project_context(ctx, project), "gantt_json": payload, "schedule": data},
+    )
+
+
+EXPORT_HEADER = [
+    "edt", "tarea", "nivel", "etapa", "resumen", "hito", "critica",
+    "ejecutores", "responsables", "inicio", "fin", "inicio_lb", "fin_lb",
+    "pct_programado", "pct_suno", "pct_project",
+    "atraso_pct_suno", "atraso_pct_project", "atraso_dias_suno", "atraso_dias_project",
+    "holgura_total_dias", "holgura_libre_dias",
+]  # fmt: skip
+
+
+def _export_value(value: object) -> object:
+    """`safe_cell` no conoce fechas ni Decimal: se convierten antes."""
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+@login_required(login_url="platform_login")
+def export_schedule(request: HttpRequest, project_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    if not can_export_schedule(ctx, ctx.org_id):
+        raise PermissionDenied
+    data = build_schedule(ctx, project, cut=_parse_date(request.GET.get("corte")))
+    stage_names = {s.pk: s.name for s in data.stages}
+
+    def row_values(row: ScheduleRow) -> list[object]:
+        t, ind = row.task, row.indicators
+        return [
+            safe_cell(_export_value(value))
+            for value in (
+                t.wbs, t.name, t.outline_level, stage_names.get(t.stage_id, ""),
+                "sí" if t.is_summary else "no", "sí" if t.is_milestone else "no",
+                "sí" if t.is_critical else "no",
+                ", ".join(row.executors),
+                ", ".join(u.display_name or u.username for u in row.responsibles),
+                t.start, t.finish, t.baseline_start, t.baseline_finish,
+                ind.planned_pct if ind else None,
+                ind.suno.actual_pct if ind else None,
+                ind.project.actual_pct if ind else None,
+                ind.suno.delay_pct if ind else None,
+                ind.project.delay_pct if ind else None,
+                ind.suno.delay_days if ind else None,
+                ind.project.delay_days if ind else None,
+                t.total_slack_days, t.free_slack_days,
+            )
+        ]  # fmt: skip
+
+    content = to_xlsx(EXPORT_HEADER, (row_values(r) for r in data.rows))
+    audit.record(
+        ctx,
+        action=AuditAction.SCHEDULE_EXPORTED,
+        target=f"project:{project.pk}",
+        metadata={"cut": data.cut.isoformat(), "rows": len(data.rows)},
+    )
+    response = HttpResponse(
+        content,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="cronograma-{data.cut.isoformat()}.xlsx"'
+    )
     return response

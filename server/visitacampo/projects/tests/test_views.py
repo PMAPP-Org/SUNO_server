@@ -15,6 +15,7 @@ from visitacampo.core.models import (
     Project,
     Role,
     ScheduleImport,
+    Task,
     TaskResponsible,
 )
 from visitacampo.core.tests.dbsupport import (
@@ -237,3 +238,58 @@ class ImportPagesTests(ViewTestCase):
         self.assertEqual(download.status_code, 200)
         self.assertEqual(download.content, v1())
         self.assertIn("attachment", download["Content-Disposition"])
+
+
+@skip_without_db
+class GanttPageTests(ViewTestCase):
+    def test_embeds_rows_links_and_cut(self) -> None:
+        import json
+
+        self.import_v1()
+        self.as_user(self.viewer)
+        response = self.client.get(f"{BASE}{self.project.pk}/gantt/")
+        self.assertContains(response, 'id="gantt-data"')
+        payload = json.loads(response.context["gantt_json"])
+        self.assertEqual(payload["cut"], "2026-03-20")
+        self.assertEqual(len(payload["rows"]), 6)
+        columns = next(r for r in payload["rows"] if r["name"] == "Columnas")
+        self.assertEqual(
+            (columns["start"], columns["finish"], columns["bstart"], columns["bfinish"]),
+            ("2026-03-18", "2026-03-30", "2026-03-16", "2026-03-26"),
+        )
+        self.assertTrue(columns["critical"])
+        self.assertEqual(len(payload["links"]), 3)
+
+    def test_payload_escapes_markup(self) -> None:
+        self.import_v1()
+        task = Task.objects.filter(project=self.project).first()
+        assert task is not None
+        task.name = "</script><b>&"
+        task.save()
+        self.as_user(self.viewer)
+        response = self.client.get(f"{BASE}{self.project.pk}/gantt/")
+        self.assertNotContains(response, "</script><b>")
+
+
+@skip_without_db
+class ExportTests(ViewTestCase):
+    def test_supervisor_exports_xlsx_and_it_is_audited(self) -> None:
+        import io
+        import zipfile
+
+        self.import_v1()
+        self.as_user(self.supervisor)
+        response = self.client.get(f"{BASE}{self.project.pk}/exportar.xlsx")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("spreadsheetml", response["Content-Type"])
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            sheet = book.read("xl/worksheets/sheet1.xml").decode()
+        self.assertIn("Descapote", sheet)
+        self.assertIn("pct_suno", sheet)
+        self.assertIn("2026-03-18", sheet)
+        self.assertTrue(AuditEvent.objects.filter(action="projects.schedule_exported").exists())
+
+    def test_viewer_cannot_export(self) -> None:
+        self.import_v1()
+        self.as_user(self.viewer)
+        self.assertEqual(self.client.get(f"{BASE}{self.project.pk}/exportar.xlsx").status_code, 403)

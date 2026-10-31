@@ -1,0 +1,17 @@
+{% extends "suno/projects/base.html" %}
+{% load static %}
+{% block title %}Gantt · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="gantt" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters">
+    <label>Fecha de corte <input type="date" name="corte" value="{{ schedule.cut|date:'Y-m-d' }}"></label>
+    <label>Escala <select data-gantt-scale><option value="8">Mes</option><option value="18" selected>Semana</option><option value="36">Día</option></select></label>
+    <button class="button" type="submit">Aplicar</button>
+    <span class="pj-muted">Rojo: ruta crítica · barra clara: línea base · línea punteada: fecha de corte</span>
+  </form>
+  <div class="pj-gantt" data-gantt></div>
+</section>
+<script type="application/json" id="gantt-data">{{ gantt_json|safe }}</script>
+{% endblock %}
+{% block scripts %}<script src="{% static 'suno/js/gantt.js' %}" defer></script>{% endblock %}
