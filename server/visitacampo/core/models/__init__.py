@@ -9,6 +9,7 @@ al del propio doc 08:
 - `catalog`  — `FormTemplate`, `FormTemplateVersion`, `Assignment`.
 - `visit`    — `Visit`, `Blob`, `VisitAttachment`.
 - `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
+- `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
 
 Todos los modelos se reexportan aquí para que `from visitacampo.core.models
 import Visit` funcione igual que con un `models.py` plano.
@@ -36,6 +37,17 @@ from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .layer import ReferenceLayer
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
+from .project import (
+    DependencyType,
+    Project,
+    Resource,
+    ScheduleImport,
+    ScheduleImportStatus,
+    Task,
+    TaskDependency,
+    TaskResource,
+    TaskResponsible,
+)
 from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
@@ -54,6 +66,7 @@ __all__ = [
     "AuditEvent",
     "Blob",
     "Device",
+    "DependencyType",
     "FormTemplate",
     "FormTemplateVersion",
     "Job",
@@ -64,14 +77,22 @@ __all__ = [
     "Organization",
     "PrivacyConsent",
     "PrivacyPurpose",
+    "Project",
     "Platform",
     "Role",
     "RateLimitBucket",
     "ReferenceLayer",
+    "Resource",
+    "ScheduleImport",
+    "ScheduleImportStatus",
     "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",
     "SyncedModel",
+    "Task",
+    "TaskDependency",
+    "TaskResource",
+    "TaskResponsible",
     "TileFormat",
     "Visit",
     "VisitAttachment",
