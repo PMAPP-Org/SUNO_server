@@ -10,7 +10,7 @@
     <tbody>
     {% for item in items %}
       <tr>
-        <td><a href="{% url 'projects:schedule' item.project.pk %}"><strong>{{ item.project.name }}</strong></a>{% if item.project.code %} <small class="pj-muted">{{ item.project.code }}</small>{% endif %}</td>
+        <td class="pj-name"><a href="{% url 'projects:schedule' item.project.pk %}"><strong>{{ item.project.name }}</strong></a>{% if item.project.code %} <small class="pj-muted">{{ item.project.code }}</small>{% endif %}</td>
         <td>{{ item.project.status_date|date:"d/m/Y"|default:"—" }}</td>
         {% if item.total %}
           <td class="num">{{ item.total.planned_pct|floatformat:1 }}</td>

@@ -12,7 +12,10 @@
   const NS = 'http://www.w3.org/2000/svg';
   const DAY = 86400000;
   const ROW = 26;
-  const LABEL = 300;
+  // En pantallas angostas la columna de nombres se reduce para que se vean barras.
+  const NARROW = host.clientWidth < 640;
+  const LABEL = NARROW ? 150 : 300;
+  const LABEL_CHARS = NARROW ? 22 : 44;
   const HEAD = 30;
 
   const toTime = (iso) => (iso ? Date.parse(iso + 'T00:00:00Z') : null);
@@ -56,7 +59,7 @@
       const y = HEAD + i * ROW;
       const name = `${r.wbs} ${r.name}`;
       // El sangrado come ancho de la columna de etiquetas: se acorta el texto en proporción.
-      const maxChars = Math.max(12, 44 - 2 * (r.level - 1));
+      const maxChars = Math.max(12, LABEL_CHARS - 2 * (r.level - 1));
       svg.appendChild(el('text', { x: 4 + (r.level - 1) * 12, y: y + 16, 'font-weight': r.summary ? 600 : 400 }, name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name));
       const bs = toTime(r.bstart);
       const bf = toTime(r.bfinish);

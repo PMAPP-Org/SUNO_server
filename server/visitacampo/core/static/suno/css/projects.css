@@ -38,3 +38,30 @@
 .pj-gantt .grid { stroke: var(--suno-line); }
 .pj-toggle { border: 0; background: none; cursor: pointer; padding: 0 4px; font: inherit; }
 .pj-message-warning { border-color: var(--suno-amber); }
+/* Botones con aspecto de enlace (Quitar, Descartar, Expandir/Contraer). */
+button.text-link { min-height: 0; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; font-size: 12px; font-weight: 550; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+button.text-link:hover { color: var(--suno-red); }
+.pj-tree-actions { margin: 0 0 12px; font-size: 12px; color: var(--suno-muted); }
+/* Celdas de texto libre: se parten en varias líneas en vez de ensanchar la tabla. */
+.pj-table td.pj-wrap { white-space: normal; min-width: 120px; max-width: 200px; }
+/* Nombres de proyecto largos: título más contenido que el de la portada. */
+.pj-page .workspace-heading h1 { font-size: clamp(28px, 3vw, 42px); letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; }
+.pj-page .workspace-heading > div { min-width: 0; }
+.pj-page .workspace-scope { flex-shrink: 0; }
+@media (max-width: 767px) {
+  .pj-panel { padding: 14px; }
+  .pj-filters { gap: 10px; }
+  .pj-filters select, .pj-filters input[type="date"] { max-width: 100%; }
+}
+/* Cronograma: EDT y Tarea quedan fijas al desplazar la tabla en horizontal. */
+.pj-schedule th:nth-child(-n+2), .pj-schedule td:nth-child(-n+2) { position: sticky; z-index: 1; background: var(--suno-white); }
+.pj-schedule th:nth-child(-n+2) { z-index: 2; background: var(--suno-paper); }
+.pj-schedule tr.pj-stage td:nth-child(-n+2) { background: var(--suno-paper); }
+.pj-schedule th:nth-child(1), .pj-schedule td:nth-child(1) { left: 0; width: 44px; min-width: 44px; }
+.pj-schedule th:nth-child(2), .pj-schedule td:nth-child(2) { left: 44px; box-shadow: 1px 0 0 var(--suno-line); }
+.pj-schedule td.pj-name { min-width: 220px; max-width: 300px; }
+@media (max-width: 767px) { .pj-schedule td.pj-name { min-width: 160px; max-width: 200px; } }
+/* Contenedor propio del desplazamiento horizontal: sin relleno, para que las
+   columnas fijas tapen por completo lo que pasa por debajo. */
+.pj-scroll { overflow-x: auto; }
+.pj-panel:has(> .pj-scroll) { overflow-x: visible; }

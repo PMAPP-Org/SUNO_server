@@ -99,6 +99,7 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         "pending_assignment_count": pending_assignments,
         "member_count": scoped_qs(request_context, Membership).count(),
         "projects": list(visible_projects(request_context).order_by("name")[:6]),
+        "project_count": visible_projects(request_context).count(),
     }
     return render(request, "suno/platform.html", context)
 
