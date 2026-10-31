@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.core.context import Principal, resolve_request_context
-from visitacampo.core.models import AppUser, Project, Role
+from visitacampo.core.models import AppUser, AuditEvent, Project, Role, TaskResponsible
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -132,3 +132,47 @@ class SchedulePageTests(ViewTestCase):
         outsider = make_user(other, username="otro", role=Role.ADMIN)
         self.as_user(outsider)
         self.assertEqual(self.client.get(self.url).status_code, 404)
+
+
+@skip_without_db
+class TaskPageTests(ViewTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.import_v1()
+        self.task = self.project.tasks.get(uid=3)
+        self.url = f"{BASE}{self.project.pk}/tareas/{self.task.pk}/"
+
+    def test_shows_task_data(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Descapote")
+        self.assertContains(response, "Cuadrilla A")
+        self.assertNotContains(response, 'name="user"')  # el observador no asigna
+
+    def test_supervisor_assigns_and_removes_responsible(self) -> None:
+        self.as_user(self.supervisor)
+        response = self.client.post(self.url, {"action": "add", "user": str(self.agent.pk)})
+        self.assertRedirects(response, self.url)
+        self.assertTrue(TaskResponsible.objects.filter(task=self.task, user=self.agent).exists())
+        self.assertTrue(AuditEvent.objects.filter(action="projects.responsible_assigned").exists())
+        self.client.post(self.url, {"action": "remove", "user": str(self.agent.pk)})
+        self.assertFalse(TaskResponsible.objects.filter(task=self.task).exists())
+
+    def test_cannot_assign_user_from_another_org(self) -> None:
+        other = make_org("Otra")
+        outsider = make_user(other, username="otro")
+        self.as_user(self.admin)
+        response = self.client.post(self.url, {"action": "add", "user": str(outsider.pk)})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TaskResponsible.objects.exists())
+
+    def test_viewer_cannot_assign(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.post(self.url, {"action": "add", "user": str(self.agent.pk)})
+        self.assertEqual(response.status_code, 403)
+
+    def test_task_of_other_project_is_404(self) -> None:
+        other = Project.objects.create(org=self.org, name="Otra obra", created_by=self.admin)
+        self.as_user(self.admin)
+        url = f"{BASE}{other.pk}/tareas/{self.task.pk}/"
+        self.assertEqual(self.client.get(url).status_code, 404)
