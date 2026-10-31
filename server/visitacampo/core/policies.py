@@ -41,14 +41,18 @@ __all__ = [
     "ADMIN_ROLES",
     "DEVICE_OWNER_ROLES",
     "MEMBER_ROLES",
+    "PROJECT_READ_ALL_ROLES",
     "SUPERVISION_ROLES",
     "WRITE_VISIT_ROLES",
     "PolicyDenied",
+    "can_assign_task_responsibles",
     "can_assign_work",
+    "can_export_schedule",
     "can_export_visits",
     "can_manage_basemaps",
     "can_manage_device",
     "can_manage_personal_data",
+    "can_manage_projects",
     "can_modify_visit",
     "can_publish_form_template",
     "can_read_basemaps",
@@ -59,11 +63,14 @@ __all__ = [
     "can_review_visit",
     "can_upload_attachment",
     "can_write_visit",
+    "check_assign_task_responsibles",
     "check_assign_work",
+    "check_export_schedule",
     "check_export_visits",
     "check_manage_basemaps",
     "check_manage_device",
     "check_manage_personal_data",
+    "check_manage_projects",
     "check_modify_visit",
     "check_publish_form_template",
     "check_read_basemaps",
@@ -98,6 +105,13 @@ DEVICE_OWNER_ROLES: frozenset[RoleValue] = WRITE_VISIT_ROLES
 #: Back-office (Paso 24): quien supervisa el trabajo de campo — lo valida o
 #: rechaza y lo exporta. `FIELD_AGENT` y `VIEWER` quedan fuera.
 SUPERVISION_ROLES: frozenset[RoleValue] = frozenset({Role.OWNER, Role.ADMIN, Role.SUPERVISOR})
+
+#: Cronograma de proyectos (costos, etapa 1): quién ve **todos** los proyectos
+#: de la organización. Un `FIELD_AGENT` solo ve aquellos donde es responsable
+#: de alguna tarea (`projects.access.visible_projects`).
+PROJECT_READ_ALL_ROLES: frozenset[RoleValue] = frozenset(
+    {Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.VIEWER}
+)
 
 # --- Códigos de error del contrato (`components.schemas.ErrorCode`) ---------
 CODE_FORBIDDEN = "forbidden"
@@ -347,6 +361,21 @@ def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
 
 
+def can_manage_projects(ctx: RequestContext, org_id: UUID) -> bool:
+    """Crear proyectos e importar cronogramas: administración de la organización."""
+    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+
+
+def can_assign_task_responsibles(ctx: RequestContext, org_id: UUID) -> bool:
+    """Asignar o quitar responsables de tareas: supervisión."""
+    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+
+
+def can_export_schedule(ctx: RequestContext, org_id: UUID) -> bool:
+    """Exportar el cronograma a Excel: el archivo sale del control de la app."""
+    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+
+
 def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
     """Ver y descargar los mapas base y las capas de referencia (Fase B/C).
 
@@ -450,4 +479,19 @@ def check_manage_basemaps(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_manage_personal_data(ctx: RequestContext, org_id: UUID) -> None:
     if not can_manage_personal_data(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_projects(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_projects(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_assign_task_responsibles(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_assign_task_responsibles(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_export_schedule(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_export_schedule(ctx, org_id):
         raise _denial(ctx, org_id)

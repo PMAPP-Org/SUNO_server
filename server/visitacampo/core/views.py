@@ -21,6 +21,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Assignment, Membership, Visit
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.projects.access import visible_projects
 
 
 def _context_for(user: AppUser) -> RequestContext:
@@ -97,6 +98,8 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         "pending_review_count": visits.filter(reviews__isnull=True).count(),
         "pending_assignment_count": pending_assignments,
         "member_count": scoped_qs(request_context, Membership).count(),
+        "projects": list(visible_projects(request_context).order_by("name")[:6]),
+        "project_count": visible_projects(request_context).count(),
     }
     return render(request, "suno/platform.html", context)
 

@@ -1,0 +1,44 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{{ task.name }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="" %}
+
+{% if retired %}<p class="pj-message pj-message-warning" role="status">Tarea retirada en la versión v{{ retired_version }}</p>{% endif %}
+<section class="pj-panel">
+  <h2>{{ task.wbs }} {{ task.name }}{% if task.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</h2>
+  <table class="pj-table">
+    <tbody>
+      <tr><th>Etapa</th><td>{{ task.stage.name|default:"—" }}</td></tr>
+      <tr><th>Inicio / fin</th><td>{{ task.start|date:"d/m/Y"|default:"—" }} → {{ task.finish|date:"d/m/Y"|default:"—" }}</td></tr>
+      <tr><th>Línea base</th><td>{{ task.baseline_start|date:"d/m/Y"|default:"—" }} → {{ task.baseline_finish|date:"d/m/Y"|default:"—" }}</td></tr>
+      <tr><th>% Project / % físico Project</th><td>{{ task.project_pct|floatformat:1|default:"—" }} / {{ task.project_physical_pct|floatformat:1|default:"—" }}</td></tr>
+      <tr><th>Holgura total / libre (días)</th><td>{{ task.total_slack_days|floatformat:1|default:"—" }} / {{ task.free_slack_days|floatformat:1|default:"—" }}</td></tr>
+      <tr><th>Ejecutores (Project)</th><td>{{ executors|join:", "|default:"—" }}</td></tr>
+      <tr><th>Predecesoras</th><td>{% for link in predecessors %}{{ link.predecessor.wbs }} {{ link.predecessor.name }} ({{ link.type }}){% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="pj-panel">
+  <h2>Responsables</h2>
+  <ul>
+    {% for link in direct %}
+      <li>{{ link.user.display_name|default:link.user.username }}
+        {% if can_assign %}<form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ link.user.pk }}"><button type="submit" class="text-link" aria-label="Quitar a {{ link.user.display_name|default:link.user.username }}">Quitar</button></form>{% endif %}
+      </li>
+    {% endfor %}
+    {% for user in inherited %}<li>{{ user.display_name|default:user.username }} <small class="pj-muted">(por la rama superior)</small></li>{% endfor %}
+    {% if not direct and not inherited %}<li class="pj-muted">Sin responsables.</li>{% endif %}
+  </ul>
+  {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+  {% if can_assign and not retired %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <label>Asignar a <select name="user">{% for member in members %}<option value="{{ member.pk }}">{{ member.display_name|default:member.username }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Asignar</button>
+    {% if task.is_summary %}<small class="pj-muted">Asignar en una tarea resumen cubre toda su rama.</small>{% endif %}
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

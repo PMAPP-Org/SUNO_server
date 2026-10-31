@@ -1,0 +1,24 @@
+{% load static %}
+{% static 'suno/brand/icons.svg' as suno_icons %}
+    <aside class="sidebar" id="workspace-sidebar" aria-label="Navegación de la plataforma">
+      <a class="suno-wordmark sidebar-brand" href="{% url 'platform_home' %}" aria-label="SUNO · Mi espacio"><img src="{% static 'suno/brand/Logo_Principal.png' %}" width="36" height="36" alt=""><span>SUNO</span></a>
+      <nav class="sidebar-nav">
+        <p>General</p>
+        <a {% if active == "home" %}class="active" {% endif %}href="{% url 'platform_home' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#home"></use></svg> Inicio</a>
+        <a {% if active == "projects" %}class="active" {% endif %}href="{% url 'projects:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#folder"></use></svg> Proyectos</a>
+        <a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#map"></use></svg> Mapa</a>
+        <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#activity"></use></svg> Actividades</a>
+        <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#record"></use></svg> Registros</a>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#report"></use></svg> Reportes <small>Próximamente</small></span>
+        <p>Gestión</p>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Equipos</span>
+        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#form"></use></svg> Formularios</span>
+        <a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg> Capas GIS</a>
+        {% if request.user.is_staff %}<a href="{% url 'admin:index' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#settings"></use></svg> Administración</a>{% endif %}
+      </nav>
+      <div class="sidebar-user">
+        <span class="user-avatar">{{ request.user.display_name|default:request.user.username|first|upper }}</span>
+        <span><strong>{{ request.user.display_name|default:request.user.username }}</strong><small>{{ organization.name }}</small></span>
+        <form method="post" action="{% url 'platform_logout' %}">{% csrf_token %}<button type="submit" aria-label="Cerrar sesión" title="Cerrar sesión"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#logout"></use></svg></button></form>
+      </div>
+    </aside>

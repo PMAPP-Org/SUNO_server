@@ -1,0 +1,26 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Vista previa · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="import" %}
+<section class="pj-panel">
+  <h2>Cambios de {{ imp.file_name }}</h2>
+  <p>{{ s.task_count }} tareas en el archivo · fecha de corte {{ imp.status_date|date:"d/m/Y"|default:"no indicada" }}</p>
+  <ul>
+    <li><strong>{{ s.added }} nuevas</strong>{% if s.examples.added %}: {{ s.examples.added|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.retired }} retiradas</strong>{% if s.examples.retired %}: {{ s.examples.retired|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.reactivated }} reactivadas</strong>{% if s.examples.reactivated %}: {{ s.examples.reactivated|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.modified }} modificadas</strong>{% if s.examples.modified %}: {{ s.examples.modified|join:", " }}{% endif %}</li>
+  </ul>
+  {% if s.baseline_changed %}<p class="pj-warning">Esta versión <strong>cambia la línea base</strong>: los atrasos se medirán contra la nueva.</p>{% endif %}
+  {% for warning in s.warnings %}<p class="pj-warning">{{ warning }}</p>{% endfor %}
+  {% if imp.status == "pending" %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <button class="button" type="submit" name="action" value="confirm">Aplicar esta versión</button>
+    <button class="text-link" type="submit" name="action" value="discard">Descartar</button>
+  </form>
+  {% else %}
+  <p class="pj-muted">Esta importación está {{ imp.get_status_display|lower }}.</p>
+  {% endif %}
+</section>
+{% endblock %}

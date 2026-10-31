@@ -7,6 +7,7 @@ import unittest
 from django.test import TestCase
 
 from visitacampo.authn.tests.factories import PASSWORD, make_org, make_user
+from visitacampo.core.models import Project, Role
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -80,3 +81,11 @@ class PlatformAccessTests(TestCase):
         self.assertEqual(self.client.get("/plataforma/salir/").status_code, 405)
         self.assertRedirects(self.client.post("/plataforma/salir/"), "/")
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_home_lists_visible_projects(self) -> None:
+        admin = make_user(self.org, username="admin-home", role=Role.ADMIN)
+        Project.objects.create(org=self.org, name="Obra Portada", created_by=admin)
+        self.client.force_login(admin)
+        response = self.client.get("/plataforma/")
+        self.assertContains(response, "Obra Portada")
+        self.assertContains(response, "/plataforma/proyectos/")

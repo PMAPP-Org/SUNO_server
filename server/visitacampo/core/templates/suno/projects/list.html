@@ -1,0 +1,45 @@
+{% extends "suno/projects/base.html" %}
+{% block content %}
+<section class="workspace-heading">
+  <div><p class="editorial-label">Costos y presupuesto</p><h1>Proyectos</h1><p>Cronogramas importados de MS Project, con avance y atrasos.</p></div>
+</section>
+
+<section class="pj-panel">
+  <table class="pj-table">
+    <thead><tr><th>Proyecto</th><th>Fecha de corte</th><th class="num">% programado</th><th class="num">% SUNO</th><th class="num">% Project</th><th class="num">Atraso (días hábiles)<br><small>SUNO / Project</small></th><th class="num">Versión</th></tr></thead>
+    <tbody>
+    {% for item in items %}
+      <tr>
+        <td class="pj-name"><a href="{% url 'projects:schedule' item.project.pk %}"><strong>{{ item.project.name }}</strong></a>{% if item.project.code %} <small class="pj-muted">{{ item.project.code }}</small>{% endif %}</td>
+        <td>{{ item.project.status_date|date:"d/m/Y"|default:"—" }}</td>
+        {% if item.total %}
+          <td class="num">{{ item.total.planned_pct|floatformat:1 }}</td>
+          <td class="num">{{ item.total.suno.actual_pct|floatformat:1 }}</td>
+          <td class="num">{{ item.total.project.actual_pct|floatformat:1 }}</td>
+          <td class="num">{{ item.total.suno.delay_days|default_if_none:"—" }} / {{ item.total.project.delay_days|default_if_none:"—" }}</td>
+        {% else %}
+          <td class="num" colspan="4">Sin cronograma con línea base</td>
+        {% endif %}
+        <td class="num">{{ item.version|default:"—" }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7" class="pj-empty">No hay proyectos visibles para ti.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if can_manage %}
+<section class="pj-panel">
+  <h2>Nuevo proyecto</h2>
+  <form method="post" class="pj-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label>Nombre {{ form.name }}</label>{{ form.name.errors }}
+    <label>Código {{ form.code }}</label>
+    <label>Descripción {{ form.description }}</label>
+    <button class="button" type="submit">Crear proyecto</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

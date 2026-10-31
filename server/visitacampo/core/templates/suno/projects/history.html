@@ -1,0 +1,28 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Historial · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="history" %}
+<section class="pj-panel">
+  <table class="pj-table">
+    <thead><tr><th>Versión</th><th>Archivo</th><th>Subido por</th><th>Aplicado</th><th>Corte</th><th class="num">Nuevas</th><th class="num">Retiradas</th><th class="num">Modificadas</th><th>Línea base</th><th></th></tr></thead>
+    <tbody>
+    {% for imp in imports %}
+      <tr>
+        <td>v{{ imp.number }}</td>
+        <td>{{ imp.file_name }}</td>
+        <td>{{ imp.uploaded_by.display_name|default:imp.uploaded_by.username }}</td>
+        <td>{{ imp.applied_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ imp.status_date|date:"d/m/Y"|default:"—" }}</td>
+        <td class="num">{{ imp.summary.added }}</td>
+        <td class="num">{{ imp.summary.retired }}</td>
+        <td class="num">{{ imp.summary.modified }}</td>
+        <td>{% if imp.summary.baseline_changed %}<span class="pj-late">cambió</span>{% else %}igual{% endif %}</td>
+        <td>{% if can_export %}<a href="{% url 'projects:import_xml' project.pk imp.pk %}">XML</a>{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="10" class="pj-empty">Sin importaciones aplicadas.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

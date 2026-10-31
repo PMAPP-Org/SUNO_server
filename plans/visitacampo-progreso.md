@@ -1,7 +1,21 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-10-29 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
+**Última actualización**: 2026-10-31 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
+
+## Módulo de costos — Etapa 1 (Cronograma), servidor — 2026-10-31
+
+**PR**: (PR pendiente). Rama `feat/costos-etapa1-servidor`. Plan: [2026-10-31-costos-etapa1-servidor-plan.md](2026-10-31-costos-etapa1-servidor-plan.md).
+
+**Qué entra (Tasks 1–14, más portada)**: modelos y migración (proyecto, importación, tarea, responsables); calendario laboral; lector MSPDI; cálculos de atraso y avance por fuente (SUNO / Project); permisos y visibilidad por rol; importación en dos pasos (vista previa y aplicar/descartar en una transacción bloqueada); armado del cronograma; páginas en `/plataforma/proyectos/` (lista, cronograma con filtros, ficha de tarea con responsables, importar, vista previa, historial y descarga del XML); Gantt SVG propio con línea base, ruta crítica, dependencias y fecha de corte; exportación a Excel auditada; la portada de la plataforma lista los proyectos visibles.
+
+**Verificación (números reales)**: suite completa 995 tests: 991 pasan y 4 fallan en `sync/tests/test_load_script.py` por entorno (el contenedor de pruebas no monta `/infra/load/push_load.py`; en CI el repo completo sí está). Cobertura 93,12 % (suelo 90 %). `ruff check` y `mypy` limpios (219 archivos), `makemigrations --check` sin cambios. Pruebas nuevas en las últimas tasks: Gantt 2, Excel 2, portada 1. La prueba manual en navegador (Task 15 paso 3) queda pendiente.
+
+**Desviaciones de la spec**: (1) la importación se calcula en la misma petición, sin la cola `jobs`; (2) Gantt en SVG propio en vez de Frappe Gantt desde CDN.
+
+**Mejoras pendientes**: la lista de proyectos recalcula el cronograma de cada proyecto en cada petición (O(proyectos × tareas)); cachear o guardar el rollup cuando llegue el avance de campo.
+
+**Pendiente**: avance desde campo (plan `2026-10-31-costos-etapa1-campo-plan.md`, por escribir).
 
 
 ## Estado al 2026-10-29

@@ -1,0 +1,15 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Importar · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="import" %}
+<section class="pj-panel">
+  <h2>Importar cronograma</h2>
+  <p>En MS Project: <strong>Archivo → Guardar como → XML</strong>. Máximo 50 MB. Antes de aplicar verás qué cambia.</p>
+  <form method="post" enctype="multipart/form-data" class="pj-form">
+    {% csrf_token %}
+    <label>Archivo XML <input type="file" name="file" accept=".xml" required></label>
+    {% if error %}<p class="pj-late">{{ error }}</p>{% endif %}
+    <button class="button" type="submit">Ver cambios</button>
+  </form>
+</section>
+{% endblock %}
