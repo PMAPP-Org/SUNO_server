@@ -112,7 +112,7 @@ def summarize_changes(
         if uid in responsible_uids:
             retired_with_responsibles.append(label)
 
-    warnings: list[str] = []
+    warnings: list[str] = list(parsed.warnings)
     if parsed.tasks and not any(t.baseline_finish for t in parsed.tasks):
         warnings.append("Sin línea base: no se calcularán atrasos.")
     undated = sum(1 for t in parsed.tasks if t.start is None or t.finish is None)

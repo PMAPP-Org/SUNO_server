@@ -19,6 +19,8 @@ from typing import Any
 ONE_DAY = timedelta(days=1)
 #: Una excepción más larga que esto es un error del archivo, no un calendario.
 MAX_EXCEPTION_DAYS = 3660
+#: Tope de la suma de días de todas las excepciones (acota memoria y tiempo de carga).
+MAX_TOTAL_EXCEPTION_DAYS = 20000
 DEFAULT_WEEKDAYS = frozenset(range(5))  # lunes (0) a viernes (4)
 
 
@@ -40,10 +42,17 @@ class WorkCalendar:
         self.working_weekdays = frozenset(working_weekdays)
         self.exceptions = tuple(exceptions)
         overrides: dict[date, bool] = {}
+        total_days = 0
         for exc in self.exceptions:
             if (exc.end - exc.start).days > MAX_EXCEPTION_DAYS:
                 raise ValueError(
                     f"Excepción de calendario demasiado larga: {exc.start} a {exc.end}."
+                )
+            total_days += (exc.end - exc.start).days + 1
+            if total_days > MAX_TOTAL_EXCEPTION_DAYS:
+                raise ValueError(
+                    f"Demasiados días de excepciones de calendario (máximo "
+                    f"{MAX_TOTAL_EXCEPTION_DAYS})."
                 )
             day = exc.start
             while day <= exc.end:

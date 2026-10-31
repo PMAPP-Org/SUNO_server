@@ -175,7 +175,7 @@ class DependencyType(models.TextChoices):
 
 class TaskDependency(OrgScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="+")
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, related_name="+")
     predecessor = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="successor_links")
     successor = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="predecessor_links")
     type = models.CharField(max_length=2, choices=DependencyType.choices, default=DependencyType.FS)

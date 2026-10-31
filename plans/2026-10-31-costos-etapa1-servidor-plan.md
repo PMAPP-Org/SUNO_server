@@ -1417,11 +1417,12 @@ def _tasks(
             pred = r.integer(link, "PredecessorUID")
             if pred is None:
                 continue
+            link_type = r.integer(link, "Type")
             deps.append(
                 ParsedDependency(
                     predecessor_uid=pred,
                     successor_uid=uid,
-                    type=LINK_TYPES.get(r.integer(link, "Type") or 1, "FS"),
+                    type=LINK_TYPES.get(1 if link_type is None else link_type, "FS"),
                     lag_days=_tenths_to_days(r.decimal(link, "LinkLag"), minutes_per_day)
                     or Decimal(0),
                 )

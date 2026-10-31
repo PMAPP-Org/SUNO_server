@@ -34,7 +34,7 @@ if [ -z "$(docker ps -q -f "name=^${DB}$")" ]; then
 fi
 
 if [ "${1:-}" = "--cmd" ]; then
-	CMD="$2"
+	CMD="${2:?falta el comando para --cmd}"
 else
 	CMD="pytest -q -p no:cacheprovider $*"
 fi

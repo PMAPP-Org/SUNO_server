@@ -70,6 +70,17 @@ class WorkCalendarTests(SimpleTestCase):
         cal = WorkCalendar.from_json({})
         self.assertEqual(cal.working_weekdays, frozenset(range(5)))
 
+    def test_rejects_too_many_total_exception_days(self) -> None:
+        # Cada una cabe en el límite individual, pero juntas pasan de 20 000 días.
+        many = [
+            CalendarException(
+                start=D(1900 + 10 * i, 1, 1), end=D(1909 + 10 * i, 12, 31), working=False
+            )
+            for i in range(7)
+        ]
+        with self.assertRaises(ValueError):
+            WorkCalendar(exceptions=many)
+
     def test_rejects_absurdly_long_exception(self) -> None:
         huge = CalendarException(start=D(2000, 1, 1), end=D(2100, 1, 1), working=False)
         with self.assertRaises(ValueError):

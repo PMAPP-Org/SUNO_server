@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import unittest
 
 from django.test import TestCase
@@ -52,6 +53,11 @@ class SummarizeChangesTests(unittest.TestCase):
     def test_no_baseline_warning(self) -> None:
         summary = summarize_changes({}, parse_mspdi(project_xml([task_xml(1, "A", "1")])), set())
         self.assertIn("Sin línea base: no se calcularán atrasos.", summary["warnings"])
+
+    def test_parser_warnings_are_included(self) -> None:
+        parsed = dataclasses.replace(parse_mspdi(v1()), warnings=("Aviso del lector.",))
+        summary = summarize_changes({}, parsed, set())
+        self.assertIn("Aviso del lector.", summary["warnings"])
 
 
 @skip_without_db

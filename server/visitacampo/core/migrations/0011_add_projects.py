@@ -115,7 +115,7 @@ class Migration(migrations.Migration):
                 ('lag_days', models.DecimalField(decimal_places=2, default=0, max_digits=10)),
                 ('org', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='%(class)ss', to='core.organization', verbose_name='organización')),
                 ('predecessor', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='successor_links', to='core.task')),
-                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='+', to='core.project')),
+                ('project', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='+', to='core.project')),
                 ('successor', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='predecessor_links', to='core.task')),
             ],
             options={

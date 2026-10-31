@@ -29,9 +29,11 @@ DEFAULT_MINUTES_PER_DAY = 480
 LINK_TYPES = {0: "FF", 1: "FS", 2: "SF", 3: "SS"}
 #: `Assignment/ResourceUID` de una tarea sin recurso.
 UNASSIGNED_RESOURCE = -65535
+# La parte de horas/minutos/segundos exige la `T`: sin ella `P1M` son meses, no minutos.
 _DURATION = re.compile(
-    r"^-?P(?:(?P<d>\d+(?:\.\d+)?)D)?T?(?:(?P<h>\d+(?:\.\d+)?)H)?"
-    r"(?:(?P<m>\d+(?:\.\d+)?)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?$"
+    r"^(?P<sign>-)?P(?:(?P<d>\d+(?:\.\d+)?)D)?"
+    r"(?:T(?:(?P<h>\d+(?:\.\d+)?)H)?(?:(?P<m>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<s>\d+(?:\.\d+)?)S)?)?$"
 )
 
 
@@ -86,6 +88,8 @@ class ParsedSchedule:
     resources: tuple[ParsedResource, ...]
     #: Pares (task_uid, resource_uid).
     assignments: tuple[tuple[int, int], ...]
+    #: Avisos del lector (cosas que se ignoraron) para mostrar en la vista previa.
+    warnings: tuple[str, ...] = ()
 
 
 class _Reader:
@@ -108,22 +112,20 @@ class _Reader:
         return value or None
 
     def integer(self, el: Element, name: str) -> int | None:
-        value = self.text(el, name)
-        if value is None:
-            return None
-        try:
-            return int(Decimal(value))
-        except InvalidOperation as exc:
-            raise MspdiError(f"Número inválido en <{name}>: {value}.") from exc
+        value = self.decimal(el, name)
+        return None if value is None else int(value)
 
     def decimal(self, el: Element, name: str) -> Decimal | None:
         value = self.text(el, name)
         if value is None:
             return None
         try:
-            return Decimal(value)
+            number = Decimal(value)
         except InvalidOperation as exc:
             raise MspdiError(f"Número inválido en <{name}>: {value}.") from exc
+        if not number.is_finite():  # NaN / Infinity: `int()` y la base de datos fallarían
+            raise MspdiError(f"Número inválido en <{name}>: {value}.")
+        return number
 
     def flag(self, el: Element, name: str) -> bool:
         return self.text(el, name) in ("1", "true")
@@ -144,9 +146,11 @@ def _duration_days(value: str | None, minutes_per_day: int) -> Decimal | None:
     match = _DURATION.match(value)
     if match is None:
         return None
-    parts = {k: Decimal(v) if v else Decimal(0) for k, v in match.groupdict().items()}
+    groups = match.groupdict()
+    parts = {k: Decimal(groups[k] or 0) for k in ("d", "h", "m", "s")}
     minutes = parts["d"] * minutes_per_day + parts["h"] * 60 + parts["m"] + parts["s"] / 60
-    return (minutes / minutes_per_day).quantize(Decimal("0.01"))
+    days = (minutes / minutes_per_day).quantize(Decimal("0.01"))
+    return -days if groups["sign"] else days
 
 
 def _tenths_to_days(value: Decimal | None, minutes_per_day: int) -> Decimal | None:
@@ -175,17 +179,24 @@ def parse_mspdi(data: bytes, *, max_bytes: int = MAX_BYTES) -> ParsedSchedule:
     resources = _resources(r, root)
     resource_uids = {res.uid for res in resources}
     assignments: list[tuple[int, int]] = []
+    seen_pairs: set[tuple[int, int]] = set()
     for el in root.iterfind(r.path("Assignments", "Assignment")):
-        pair = (r.integer(el, "TaskUID"), r.integer(el, "ResourceUID"))
-        if pair[0] in task_uids and pair[1] in resource_uids and pair not in assignments:
-            assignments.append(pair)  # type: ignore[arg-type]
+        task_uid, resource_uid = r.integer(el, "TaskUID"), r.integer(el, "ResourceUID")
+        if task_uid is None or resource_uid is None:
+            continue
+        pair = (task_uid, resource_uid)
+        if task_uid in task_uids and resource_uid in resource_uids and pair not in seen_pairs:
+            seen_pairs.add(pair)
+            assignments.append(pair)
+    calendar, warnings = _calendar(r, root)
     return ParsedSchedule(
         status_date=_to_date(r.text(root, "StatusDate"), "del proyecto"),
-        calendar=_calendar(r, root),
+        calendar=calendar,
         tasks=tasks,
         dependencies=dependencies,
         resources=resources,
         assignments=tuple(assignments),
+        warnings=tuple(warnings),
     )
 
 
@@ -239,8 +250,8 @@ def _tasks(
                     if baseline is not None
                     else None
                 ),
-                project_pct=r.decimal(el, "PercentComplete"),
-                project_physical_pct=r.decimal(el, "PhysicalPercentComplete"),
+                project_pct=_percent(r, el, "PercentComplete", uid),
+                project_physical_pct=_percent(r, el, "PhysicalPercentComplete", uid),
                 total_slack_days=_tenths_to_days(r.decimal(el, "TotalSlack"), minutes_per_day),
                 free_slack_days=_tenths_to_days(r.decimal(el, "FreeSlack"), minutes_per_day),
                 is_critical=r.flag(el, "Critical"),
@@ -250,16 +261,24 @@ def _tasks(
             pred = r.integer(link, "PredecessorUID")
             if pred is None:
                 continue
+            link_type = r.integer(link, "Type")
             deps.append(
                 ParsedDependency(
                     predecessor_uid=pred,
                     successor_uid=uid,
-                    type=LINK_TYPES.get(r.integer(link, "Type") or 1, "FS"),
+                    type=LINK_TYPES.get(1 if link_type is None else link_type, "FS"),
                     lag_days=_tenths_to_days(r.decimal(link, "LinkLag"), minutes_per_day)
                     or Decimal(0),
                 )
             )
     return tuple(tasks), tuple(deps)
+
+
+def _percent(r: _Reader, el: Element, name: str, uid: int) -> Decimal | None:
+    value = r.decimal(el, name)
+    if value is not None and not 0 <= value <= 100:
+        raise MspdiError(f"Porcentaje fuera de 0–100 en la tarea {uid}: <{name}> = {value}.")
+    return value
 
 
 def _baseline(r: _Reader, el: Element) -> Element | None:
@@ -279,12 +298,13 @@ def _resources(r: _Reader, root: Element) -> tuple[ParsedResource, ...]:
     return tuple(out.values())
 
 
-def _calendar(r: _Reader, root: Element) -> WorkCalendar:
+def _calendar(r: _Reader, root: Element) -> tuple[WorkCalendar, list[str]]:
     calendars: dict[str | None, Any] = {
         r.text(c, "UID"): c for c in root.iterfind(r.path("Calendars", "Calendar"))
     }
+    warnings: list[str] = []
     if not calendars:
-        return WorkCalendar()
+        return WorkCalendar(), warnings
     cal = calendars.get(r.text(root, "CalendarUID"))
     if cal is None:
         cal = next(iter(calendars.values()))
@@ -306,11 +326,20 @@ def _calendar(r: _Reader, root: Element) -> WorkCalendar:
                 python_weekday = (day_type + 5) % 7  # 1 = domingo → 6; 2 = lunes → 0
                 (weekdays.add if working else weekdays.discard)(python_weekday)
         for ex in c.iterfind(r.path("Exceptions", "Exception")):
+            ex_type = r.integer(ex, "Type")
+            if ex_type is not None and ex_type != 1:
+                # Recurrente (semanal, mensual, anual...): su TimePeriod abarca toda la
+                # serie, así que leerlo como un bloque continuo marcaría días de más.
+                label = r.text(ex, "Name") or _period_label(r, ex)
+                warnings.append(
+                    f"Excepción de calendario recurrente no soportada (se ignoró): {label}."
+                )
+                continue
             period = _period(r, ex, r.flag(ex, "DayWorking"))
             if period:
                 exceptions.append(period)
     try:
-        return WorkCalendar(working_weekdays=weekdays, exceptions=exceptions)
+        return WorkCalendar(working_weekdays=weekdays, exceptions=exceptions), warnings
     except ValueError as exc:
         raise MspdiError(str(exc)) from exc
 
@@ -324,3 +353,11 @@ def _period(r: _Reader, el: Element, working: bool) -> CalendarException | None:
     if start is None or end is None or end < start:
         return None
     return CalendarException(start=start, end=end, working=working)
+
+
+def _period_label(r: _Reader, el: Element) -> str:
+    period = el.find(r.q("TimePeriod"))
+    if period is None:
+        return "sin fechas"
+    start, end = r.text(period, "FromDate"), r.text(period, "ToDate")
+    return f"{(start or '?')[:10]} a {(end or '?')[:10]}"

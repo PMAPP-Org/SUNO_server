@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from visitacampo.projects.mspdi import MspdiError, parse_mspdi
+from visitacampo.projects.mspdi import MspdiError, _duration_days, parse_mspdi
 
 from .samples import project_xml, task_xml, v1
 
@@ -136,3 +136,69 @@ class RejectionTests(SimpleTestCase):
             b'<!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><Project>&b;</Project>'
         )
         self.assertRejected(bomb, "no es un XML")
+
+    def test_nan_is_rejected(self) -> None:
+        bad = task_xml(1, "A", "1").replace(
+            "</Task>", "<PercentComplete>NaN</PercentComplete></Task>"
+        )
+        self.assertRejected(project_xml([bad]), "Número inválido")
+
+    def test_infinity_in_integer_is_rejected(self) -> None:
+        bad = task_xml(1, "A", "1").replace("<ID>1</ID>", "<ID>Infinity</ID>")
+        self.assertRejected(project_xml([bad]), "Número inválido")
+
+    def test_percent_out_of_range_is_rejected(self) -> None:
+        self.assertRejected(project_xml([task_xml(7, "A", "1", pct=150)]), "tarea 7")
+        self.assertRejected(project_xml([task_xml(8, "A", "1", physical_pct=-5)]), "tarea 8")
+
+
+class LinkTypeTests(SimpleTestCase):
+    def test_ff_and_ss_links_keep_their_type(self) -> None:
+        data = project_xml(
+            [
+                task_xml(1, "A", "1"),
+                task_xml(2, "B", "2"),
+                task_xml(3, "C", "3", preds=((1, 0), (2, 3))),
+            ]
+        )
+        types = {d.predecessor_uid: d.type for d in parse_mspdi(data).dependencies}
+        self.assertEqual(types, {1: "FF", 2: "SS"})
+
+
+def _with_exception(extra: str) -> bytes:
+    data = project_xml([task_xml(1, "A", "1")]).decode("utf-8")
+    return data.replace("<Exceptions>", f"<Exceptions>{extra}", 1).encode("utf-8")
+
+
+YEARLY = (
+    "<Exception>{name}<Type>4</Type><Occurrences>5</Occurrences><TimePeriod>"
+    "<FromDate>2026-12-25T00:00:00</FromDate><ToDate>2030-12-25T23:59:00</ToDate>"
+    "</TimePeriod><DayWorking>0</DayWorking></Exception>"
+)
+
+
+class RecurringExceptionTests(SimpleTestCase):
+    def test_recurring_exception_is_skipped_with_warning(self) -> None:
+        schedule = parse_mspdi(_with_exception(YEARLY.format(name="<Name>Navidad</Name>")))
+        self.assertTrue(schedule.calendar.is_working(date(2027, 6, 1)))
+        self.assertEqual(len(schedule.warnings), 1)
+        self.assertIn("recurrente", schedule.warnings[0])
+        self.assertIn("Navidad", schedule.warnings[0])
+
+    def test_daily_exception_type_one_is_kept(self) -> None:
+        daily = YEARLY.format(name="").replace("<Type>4</Type>", "<Type>1</Type>")
+        daily = daily.replace("2030-12-25", "2026-12-26")
+        schedule = parse_mspdi(_with_exception(daily))
+        self.assertFalse(schedule.calendar.is_working(date(2026, 12, 25)))
+        self.assertEqual(schedule.warnings, ())
+
+
+class DurationTests(SimpleTestCase):
+    def test_forms(self) -> None:
+        self.assertEqual(_duration_days("PT40H0M0S", 480), Decimal("5.00"))
+        self.assertEqual(_duration_days("P1DT4H0M0S", 480), Decimal("1.50"))
+        self.assertEqual(_duration_days("-PT8H0M0S", 480), Decimal("-1.00"))
+
+    def test_months_are_not_minutes(self) -> None:
+        self.assertIsNone(_duration_days("P1M", 480))
+        self.assertIsNone(_duration_days("P1Y", 480))
