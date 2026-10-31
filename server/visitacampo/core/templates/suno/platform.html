@@ -43,7 +43,11 @@
             <div class="module-heading"><div><p class="editorial-index">Operación</p><h2 id="projects-title">Proyectos</h2></div><span class="module-note">Datos reales</span></div>
             <div class="projects-table" role="table" aria-label="Proyectos de la organización">
               <div class="table-head" role="row"><span role="columnheader">Proyecto</span><span role="columnheader">Estado</span><span role="columnheader">Última actividad</span><span role="columnheader">Acceso</span></div>
-              <div class="empty-row" role="row"><div><strong>Sin proyectos configurados</strong><p>El modelo de proyectos todavía no forma parte de este entorno. Los registros y el mapa muestran únicamente información existente.</p></div></div>
+              {% for project in projects %}
+              <div class="activity-row" role="row"><span><a href="{% url 'projects:schedule' project.pk %}"><strong>{{ project.name }}</strong></a></span><span>{% if project.status_date %}Corte {{ project.status_date|date:"d/m/Y" }}{% else %}Sin cronograma{% endif %}</span><span></span><span><a class="text-link" href="{% url 'projects:schedule' project.pk %}">Abrir</a></span></div>
+              {% empty %}
+              <div class="empty-row" role="row"><div><strong>Sin proyectos</strong><p>Crea un proyecto e importa su cronograma de MS Project en <a href="{% url 'projects:list' %}">Proyectos</a>.</p></div></div>
+              {% endfor %}
             </div>
             <div class="quick-links" aria-label="Accesos rápidos">
               <a href="#mapa">Abrir mapa <span aria-hidden="true">→</span></a>
