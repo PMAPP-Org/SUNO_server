@@ -84,6 +84,13 @@ class AuditAction:
     BASEMAP_RETIRED = "basemaps.retired"
     LAYER_IMPORTED = "layers.imported"
     LAYER_RETIRED = "layers.retired"
+    # Cronograma de proyectos (costos, etapa 1).
+    PROJECT_CREATED = "projects.created"
+    SCHEDULE_IMPORTED = "projects.schedule_imported"
+    SCHEDULE_IMPORT_DISCARDED = "projects.schedule_import_discarded"
+    TASK_RESPONSIBLE_ASSIGNED = "projects.responsible_assigned"
+    TASK_RESPONSIBLE_REMOVED = "projects.responsible_removed"
+    SCHEDULE_EXPORTED = "projects.schedule_exported"
 
 
 def hash_ip(ip: str | None) -> str | None:

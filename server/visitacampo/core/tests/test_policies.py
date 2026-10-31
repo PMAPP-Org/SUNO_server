@@ -337,6 +337,10 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             # administración los importa y retira.
             "can_read_basemaps": ORG,
             "can_manage_basemaps": ORG,
+            # Costos, etapa 1 (cronograma de proyectos).
+            "can_manage_projects": ORG,
+            "can_assign_task_responsibles": ORG,
+            "can_export_schedule": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
