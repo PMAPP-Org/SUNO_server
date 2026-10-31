@@ -6,4 +6,4 @@
 # Fuzzing guiado por el contrato OpenAPI (server/openapi/v1.yaml): ningún 5xx
 # ante entradas arbitrarias (OWASP A10:2025) y ningún endpoint protegido que
 # acepte peticiones sin credenciales válidas (A01/A07).
-schemathesis==4.31.1
+schemathesis==4.32.4
