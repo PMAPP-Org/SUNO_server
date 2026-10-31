@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import unittest
 from datetime import date
+from decimal import Decimal
 
+from django.http import Http404
 from django.test import TestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
@@ -62,6 +64,21 @@ class BuildScheduleTests(TestCase):
         row = next(r for r in schedule.rows if r.task.uid == 3)
         assert row.indicators is not None
         self.assertEqual(row.indicators.suno.actual_pct, 100.0)
+
+    def test_suno_progress_accepts_decimals(self) -> None:
+        task = self.project.tasks.get(uid=3)
+        pct = {task.pk: Decimal("100")}
+        schedule = build_schedule(self.ctx, self.project, suno_pct=pct)  # type: ignore[arg-type]
+        row = next(r for r in schedule.rows if r.task.uid == 3)
+        assert row.indicators is not None
+        self.assertEqual(row.indicators.suno.actual_pct, 100.0)
+
+    def test_foreign_project_is_refused(self) -> None:
+        other_org = make_org("Otra")
+        other_admin = make_user(other_org, username="otro", role=Role.ADMIN)
+        foreign = Project.objects.create(org=other_org, name="Ajena", created_by=other_admin)
+        with self.assertRaises(Http404):
+            build_schedule(self.ctx, foreign)
 
     def test_retired_tasks_are_not_listed(self) -> None:
         staged = stage_import(self.ctx, self.project, file_name="v2.xml", data=v2())

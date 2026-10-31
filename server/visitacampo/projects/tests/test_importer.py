@@ -5,7 +5,9 @@ from __future__ import annotations
 import dataclasses
 import unittest
 
-from django.test import TestCase
+from django.db import connection, connections
+from django.http import Http404
+from django.test import TestCase, TransactionTestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.core.context import Principal, resolve_request_context
@@ -75,6 +77,18 @@ class StageImportTests(TestCase):
         self.assertEqual(imp.summary["added"], 6)
         self.assertEqual(str(imp.status_date), "2026-03-20")
         self.assertEqual(self.project.tasks.count(), 0)  # nada aplicado aún
+
+    def test_stage_rejects_empty_schedule(self) -> None:
+        with self.assertRaises(ImportRejected) as caught:
+            stage_import(self.ctx, self.project, file_name="x.xml", data=project_xml([]))
+        self.assertIn("no contiene tareas", str(caught.exception))
+
+    def test_stage_refuses_foreign_project(self) -> None:
+        other_org = make_org("Otra")
+        other_admin = make_user(other_org, username="otro", role=Role.ADMIN)
+        foreign = Project.objects.create(org=other_org, name="Ajena", created_by=other_admin)
+        with self.assertRaises(Http404):
+            stage_import(self.ctx, foreign, file_name="x.xml", data=v1())
 
     def test_stage_rejects_invalid_file(self) -> None:
         with self.assertRaises(ImportRejected) as caught:
@@ -166,3 +180,30 @@ class ApplyImportTests(TestCase):
         self.assertEqual(staged.status, ScheduleImportStatus.DISCARDED)
         with self.assertRaises(ImportRejected):
             apply_import(self.ctx, staged.pk)
+
+
+@skip_without_db
+class ConcurrentImportTests(TransactionTestCase):
+    """Otra transacción tiene bloqueado el proyecto: se rechaza sin esperar."""
+
+    def test_apply_is_rejected_while_project_is_locked(self) -> None:
+        org = make_org("Constructora")
+        admin = make_user(org, username="admin", role=Role.ADMIN)
+        ctx = resolve_request_context(Principal(user_id=admin.pk, org_id=org.pk))
+        project = Project.objects.create(org=org, name="Obra", created_by=admin)
+        staged = stage_import(ctx, project, file_name="obra.xml", data=v1())
+
+        other = connections.create_connection("default")
+        other.set_autocommit(False)
+        try:
+            with other.cursor() as cursor:
+                table = connection.ops.quote_name(Project._meta.db_table)
+                cursor.execute(f"SELECT id FROM {table} WHERE id = %s FOR UPDATE", [project.pk])
+            with self.assertRaises(ImportRejected) as caught:
+                apply_import(ctx, staged.pk)
+            self.assertIn("en curso", str(caught.exception))
+        finally:
+            other.rollback()
+            other.close()
+        staged.refresh_from_db()
+        self.assertEqual(staged.status, ScheduleImportStatus.PENDING)

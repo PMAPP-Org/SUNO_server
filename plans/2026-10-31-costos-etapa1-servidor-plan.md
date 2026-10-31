@@ -2401,6 +2401,33 @@ class ApplyImportTests(TestCase):
         self.assertEqual(staged.status, ScheduleImportStatus.DISCARDED)
         with self.assertRaises(ImportRejected):
             apply_import(self.ctx, staged.pk)
+
+
+@skip_without_db
+class ConcurrentImportTests(TransactionTestCase):
+    """Otra transacción tiene bloqueado el proyecto: se rechaza sin esperar."""
+
+    def test_apply_is_rejected_while_project_is_locked(self) -> None:
+        org = make_org("Constructora")
+        admin = make_user(org, username="admin", role=Role.ADMIN)
+        ctx = resolve_request_context(Principal(user_id=admin.pk, org_id=org.pk))
+        project = Project.objects.create(org=org, name="Obra", created_by=admin)
+        staged = stage_import(ctx, project, file_name="obra.xml", data=v1())
+
+        other = connections.create_connection("default")
+        other.set_autocommit(False)
+        try:
+            with other.cursor() as cursor:
+                table = connection.ops.quote_name(Project._meta.db_table)
+                cursor.execute(f"SELECT id FROM {table} WHERE id = %s FOR UPDATE", [project.pk])
+            with self.assertRaises(ImportRejected) as caught:
+                apply_import(ctx, staged.pk)
+            self.assertIn("en curso", str(caught.exception))
+        finally:
+            other.rollback()
+            other.close()
+        staged.refresh_from_db()
+        self.assertEqual(staged.status, ScheduleImportStatus.PENDING)
 ```
 
 - [ ] **Step 2: Correr y ver que falla**

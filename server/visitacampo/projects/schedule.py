@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from uuid import UUID
 
+from django.http import Http404
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
@@ -48,6 +49,8 @@ def build_schedule(
     `suno_pct`: % SUNO por id de tarea (avance de campo validado). Lo
     alimenta la parte de campo de la etapa 1; sin él, todo vale 0.
     """
+    if project.org_id != ctx.org_id:
+        raise Http404("Proyecto no encontrado.")
     cut = cut or project.status_date or timezone.localdate()
     tasks = list(
         scoped_qs(ctx, Task).filter(project=project, retired_in__isnull=True).order_by("sort_order")
@@ -75,7 +78,7 @@ def build_schedule(
         )
         for t in tasks
     ]
-    suno = {str(k): v for k, v in (suno_pct or {}).items()}
+    suno = {str(k): float(v) for k, v in (suno_pct or {}).items()}
     indicators = compute_indicators(inputs, suno, WorkCalendar.from_json(project.calendar), cut)
     rows = [
         ScheduleRow(

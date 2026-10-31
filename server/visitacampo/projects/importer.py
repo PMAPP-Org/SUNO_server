@@ -18,6 +18,7 @@ from uuid import UUID
 
 from django.db import DatabaseError, transaction
 from django.db.models import Max
+from django.http import Http404
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
@@ -148,13 +149,19 @@ def _parse(data: bytes) -> ParsedSchedule:
 def stage_import(
     ctx: RequestContext, project: Project, *, file_name: str, data: bytes
 ) -> ScheduleImport:
+    if project.org_id != ctx.org_id:
+        raise Http404("Proyecto no encontrado.")
     parsed = _parse(data)
+    if not parsed.tasks:
+        raise ImportRejected("El archivo no contiene tareas.")
     responsible_uids = set(
         scoped_qs(ctx, TaskResponsible)
         .filter(task__project=project)
         .values_list("task__uid", flat=True)
     )
     summary = summarize_changes(_existing(ctx, project), parsed, responsible_uids)
+    # Versión sobre la que se calculó la vista previa; si cambia, hay que re-subir.
+    summary["base_number"] = _current_number(ctx, project)
     return scoped_qs(ctx, ScheduleImport).create(
         org_id=ctx.org_id,
         project=project,
@@ -164,6 +171,15 @@ def stage_import(
         status_date=parsed.status_date,
         summary=summary,
     )
+
+
+def _current_number(ctx: RequestContext, project: Project) -> int | None:
+    """Número de la última importación aplicada del proyecto (None si no hay)."""
+    applied = scoped_qs(ctx, ScheduleImport).filter(
+        project=project, status=ScheduleImportStatus.APPLIED
+    )
+    number: int | None = applied.aggregate(n=Max("number"))["n"]
+    return number
 
 
 def _locked_pending(ctx: RequestContext, import_id: UUID) -> tuple[ScheduleImport, Project]:
@@ -187,9 +203,7 @@ def apply_import(ctx: RequestContext, import_id: UUID) -> ScheduleImport:
     with transaction.atomic():
         imp, project = _locked_pending(ctx, import_id)
         imports = scoped_qs(ctx, ScheduleImport).filter(project=project)
-        if imports.filter(
-            status=ScheduleImportStatus.APPLIED, applied_at__gt=imp.uploaded_at
-        ).exists():
+        if _current_number(ctx, project) != imp.summary.get("base_number"):
             raise ImportRejected(
                 "Se aplicó otra versión después de subir esta. "
                 "Vuelve a subir el archivo para ver los cambios actualizados."
