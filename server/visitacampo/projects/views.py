@@ -8,6 +8,8 @@ rol responde 403.
 
 from __future__ import annotations
 
+import gzip
+import re
 from datetime import date
 from typing import cast
 from uuid import UUID
@@ -44,6 +46,8 @@ from visitacampo.core.policies import (
 from visitacampo.core.scoping import get_organization, scoped_qs
 
 from .access import effective_responsibles, get_visible_project, visible_projects
+from .importer import ImportRejected, apply_import, discard_import, stage_import
+from .mspdi import MAX_BYTES
 from .schedule import build_schedule, filter_rows
 
 
@@ -251,3 +255,116 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             .select_related("predecessor"),
         },
     )
+
+
+def _require_manage(ctx: RequestContext) -> None:
+    if not can_manage_projects(ctx, ctx.org_id):
+        raise PermissionDenied
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def import_upload(request: HttpRequest, project_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    _require_manage(ctx)
+    error = ""
+    if request.method == "POST":
+        upload = request.FILES.get("file")
+        if upload is None:
+            error = "Elige un archivo XML."
+        elif upload.size is not None and upload.size > MAX_BYTES:
+            error = "El archivo supera 50 MB."
+        else:
+            try:
+                staged = stage_import(
+                    ctx, project, file_name=upload.name or "cronograma.xml", data=upload.read()
+                )
+            except ImportRejected as exc:
+                error = str(exc)
+            else:
+                return redirect("projects:import_preview", project.pk, staged.pk)
+    return _render(
+        request,
+        ctx,
+        "suno/projects/import.html",
+        {**_project_context(ctx, project), "error": error},
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def import_preview(request: HttpRequest, project_id: UUID, import_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    _require_manage(ctx)
+    try:
+        imp = scoped_qs(ctx, ScheduleImport).get(pk=import_id, project=project)
+    except ScheduleImport.DoesNotExist as exc:
+        raise Http404 from exc
+    if request.method == "POST":
+        action = request.POST.get("action")
+        try:
+            if action == "confirm":
+                applied = apply_import(ctx, imp.pk)
+                audit.record(
+                    ctx,
+                    action=AuditAction.SCHEDULE_IMPORTED,
+                    target=f"project:{project.pk}",
+                    metadata={"version": applied.number, "file": applied.file_name},
+                )
+                messages.success(request, f"Versión {applied.number} aplicada.")
+                return redirect("projects:schedule", project.pk)
+            if action == "discard":
+                discard_import(ctx, imp.pk)
+                audit.record(
+                    ctx,
+                    action=AuditAction.SCHEDULE_IMPORT_DISCARDED,
+                    target=f"project:{project.pk}",
+                    metadata={"file": imp.file_name},
+                )
+                messages.info(request, "Importación descartada.")
+                return redirect("projects:schedule", project.pk)
+        except ImportRejected as exc:
+            messages.error(request, str(exc))
+            return redirect("projects:import_preview", project.pk, imp.pk)
+    return _render(
+        request,
+        ctx,
+        "suno/projects/import_preview.html",
+        {**_project_context(ctx, project), "imp": imp, "s": imp.summary},
+    )
+
+
+@login_required(login_url="platform_login")
+def history(request: HttpRequest, project_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    imports = (
+        scoped_qs(ctx, ScheduleImport)
+        .filter(project=project, status=ScheduleImportStatus.APPLIED)
+        .select_related("uploaded_by")
+        .order_by("-number")
+    )
+    return _render(
+        request,
+        ctx,
+        "suno/projects/history.html",
+        {**_project_context(ctx, project), "imports": imports},
+    )
+
+
+@login_required(login_url="platform_login")
+def import_xml(request: HttpRequest, project_id: UUID, import_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    try:
+        imp = scoped_qs(ctx, ScheduleImport).get(
+            pk=import_id, project=project, status=ScheduleImportStatus.APPLIED
+        )
+    except ScheduleImport.DoesNotExist as exc:
+        raise Http404 from exc
+    response = HttpResponse(gzip.decompress(bytes(imp.source_xml)), content_type="application/xml")
+    safe_code = re.sub(r"[^A-Za-z0-9_.-]", "_", project.code or "proyecto")
+    response["Content-Disposition"] = f'attachment; filename="{safe_code}-v{imp.number}.xml"'
+    return response

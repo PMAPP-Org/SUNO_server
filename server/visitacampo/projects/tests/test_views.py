@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import unittest
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.core.context import Principal, resolve_request_context
-from visitacampo.core.models import AppUser, AuditEvent, Project, Role, TaskResponsible
+from visitacampo.core.models import (
+    AppUser,
+    AuditEvent,
+    Project,
+    Role,
+    ScheduleImport,
+    TaskResponsible,
+)
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -176,3 +184,56 @@ class TaskPageTests(ViewTestCase):
         self.as_user(self.admin)
         url = f"{BASE}{other.pk}/tareas/{self.task.pk}/"
         self.assertEqual(self.client.get(url).status_code, 404)
+
+
+@skip_without_db
+class ImportPagesTests(ViewTestCase):
+    def upload(self, data: bytes, name: str = "obra.xml"):
+        return self.client.post(
+            f"{BASE}{self.project.pk}/importar/",
+            {"file": SimpleUploadedFile(name, data, content_type="text/xml")},
+        )
+
+    def test_upload_shows_preview_then_confirm_applies(self) -> None:
+        self.as_user(self.admin)
+        response = self.upload(v1())
+        staged = ScheduleImport.objects.get(project=self.project)
+        preview_url = f"{BASE}{self.project.pk}/importar/{staged.pk}/"
+        self.assertRedirects(response, preview_url)
+        preview = self.client.get(preview_url)
+        self.assertContains(preview, "6 nuevas")
+        response = self.client.post(preview_url, {"action": "confirm"})
+        self.assertRedirects(response, f"{BASE}{self.project.pk}/")
+        self.assertEqual(self.project.tasks.count(), 6)
+        self.assertTrue(AuditEvent.objects.filter(action="projects.schedule_imported").exists())
+
+    def test_discard(self) -> None:
+        self.as_user(self.admin)
+        self.upload(v1())
+        staged = ScheduleImport.objects.get(project=self.project)
+        self.client.post(f"{BASE}{self.project.pk}/importar/{staged.pk}/", {"action": "discard"})
+        staged.refresh_from_db()
+        self.assertEqual(staged.status, "discarded")
+        self.assertEqual(self.project.tasks.count(), 0)
+
+    def test_invalid_file_shows_error(self) -> None:
+        self.as_user(self.admin)
+        response = self.upload(b"<html/>")
+        self.assertContains(response, "MSPDI")
+        self.assertFalse(ScheduleImport.objects.exists())
+
+    def test_supervisor_cannot_import(self) -> None:
+        self.as_user(self.supervisor)
+        self.assertEqual(self.client.get(f"{BASE}{self.project.pk}/importar/").status_code, 403)
+        self.assertEqual(self.upload(v1()).status_code, 403)
+
+    def test_history_lists_applied_imports_and_downloads_xml(self) -> None:
+        self.import_v1()
+        self.as_user(self.viewer)
+        response = self.client.get(f"{BASE}{self.project.pk}/historial/")
+        self.assertContains(response, "v1.xml")
+        imp = ScheduleImport.objects.get(project=self.project)
+        download = self.client.get(f"{BASE}{self.project.pk}/historial/{imp.pk}/xml")
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(download.content, v1())
+        self.assertIn("attachment", download["Content-Disposition"])
