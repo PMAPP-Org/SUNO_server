@@ -15,14 +15,15 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import ParseError, fromstring
 
-if TYPE_CHECKING:
-    # Solo el tipo para las anotaciones: el parseo siempre es con defusedxml.
-    from xml.etree.ElementTree import Element  # nosec B405  # nosemgrep
+#: Nodo del árbol que devuelve `defusedxml`. Se tipa como `Any` para no importar
+#: nada de `xml.etree`: los escáneres (bandit B405, semgrep) lo marcan aunque sea
+#: solo para anotaciones, y el parseo siempre pasa por `defusedxml`.
+Element = Any
 
 from .workdays import CalendarException, WorkCalendar
 
