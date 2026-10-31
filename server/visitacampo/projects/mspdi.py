@@ -20,12 +20,12 @@ from typing import Any
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import ParseError, fromstring
 
+from .workdays import CalendarException, WorkCalendar
+
 #: Nodo del árbol que devuelve `defusedxml`. Se tipa como `Any` para no importar
 #: nada de `xml.etree`: los escáneres (bandit B405, semgrep) lo marcan aunque sea
 #: solo para anotaciones, y el parseo siempre pasa por `defusedxml`.
 Element = Any
-
-from .workdays import CalendarException, WorkCalendar
 
 MAX_BYTES = 50 * 1024 * 1024
 DEFAULT_MINUTES_PER_DAY = 480
