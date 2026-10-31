@@ -1,0 +1,70 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="schedule" %}
+
+<section class="pj-panel">
+  <form method="get" class="pj-filters">
+    <label>Fecha de corte <input type="date" name="corte" value="{{ schedule.cut|date:'Y-m-d' }}"></label>
+    <label>Etapa <select name="etapa"><option value="">Todas</option>{% for stage in schedule.stages %}<option value="{{ stage.pk }}" {% if filters.etapa == stage.pk|stringformat:"s" %}selected{% endif %}>{{ stage.outline_number }} {{ stage.name }}</option>{% endfor %}</select></label>
+    <label>Responsable <select name="responsable"><option value="">Todos</option>{% for user in responsible_choices %}<option value="{{ user.pk }}" {% if filters.responsable == user.pk|stringformat:"s" %}selected{% endif %}>{{ user.display_name|default:user.username }}</option>{% endfor %}</select></label>
+    <label><span><input type="checkbox" name="criticas" value="1" {% if filters.criticas %}checked{% endif %}> Solo críticas</span></label>
+    <label><span><input type="checkbox" name="atrasadas" value="1" {% if filters.atrasadas %}checked{% endif %}> Solo atrasadas</span></label>
+    <button class="button" type="submit">Aplicar</button>
+    {% if can_export %}<a class="text-link" href="{% url 'projects:export' project.pk %}?corte={{ schedule.cut|date:'Y-m-d' }}">Exportar a Excel</a>{% endif %}
+  </form>
+</section>
+
+{% if schedule.total %}
+<section class="metrics-strip" aria-label="Avance del proyecto">
+  <div><span>% programado</span><strong>{{ schedule.total.planned_pct|floatformat:1 }}</strong></div>
+  <div><span>% SUNO</span><strong>{{ schedule.total.suno.actual_pct|floatformat:1 }}</strong></div>
+  <div><span>% Project</span><strong>{{ schedule.total.project.actual_pct|floatformat:1 }}</strong></div>
+  <div><span>Atraso SUNO / Project</span><strong>{{ schedule.total.suno.delay_days|default_if_none:"—" }} / {{ schedule.total.project.delay_days|default_if_none:"—" }} días</strong></div>
+</section>
+{% endif %}
+
+<section class="pj-panel">
+  <table class="pj-table">
+    <thead>
+      <tr>
+        <th>EDT</th><th>Tarea</th><th>Ejecutores</th><th>Responsables</th>
+        <th>Inicio</th><th>Fin</th><th>Inicio LB</th><th>Fin LB</th>
+        <th class="num">% prog.</th><th class="num">% SUNO</th><th class="num">% Project</th>
+        <th class="num">Atraso %<br><small>SUNO / Project</small></th>
+        <th class="num">Atraso días<br><small>SUNO / Project</small></th>
+        <th class="num">Holgura total</th><th class="num">Holgura libre</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+      {% with t=row.task ind=row.indicators %}
+      <tr class="{% if t.outline_level == 1 %}pj-stage{% elif t.is_summary %}pj-summary{% endif %}{% if t.is_critical %} pj-critical{% endif %}">
+        <td>{{ t.wbs }}</td>
+        <td class="pj-name" style="padding-left: {{ t.outline_level }}em"><a href="{% url 'projects:task' project.pk t.pk %}">{{ t.name }}</a>{% if t.is_milestone %} ◆{% endif %}{% if t.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</td>
+        <td>{{ row.executors|join:", "|default:"—" }}</td>
+        <td>{% for u in row.responsibles %}{{ u.display_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+        <td>{{ t.start|date:"d/m/y"|default:"—" }}</td>
+        <td>{{ t.finish|date:"d/m/y"|default:"—" }}</td>
+        <td>{{ t.baseline_start|date:"d/m/y"|default:"—" }}</td>
+        <td>{{ t.baseline_finish|date:"d/m/y"|default:"—" }}</td>
+        {% if ind %}
+          <td class="num">{{ ind.planned_pct|floatformat:1 }}</td>
+          <td class="num">{{ ind.suno.actual_pct|floatformat:1 }}</td>
+          <td class="num">{{ ind.project.actual_pct|floatformat:1 }}</td>
+          <td class="num"><span class="{% if ind.suno.delay_pct > 0 %}pj-late{% endif %}">{{ ind.suno.delay_pct|floatformat:1 }}</span> / <span class="{% if ind.project.delay_pct > 0 %}pj-late{% endif %}">{{ ind.project.delay_pct|floatformat:1 }}</span></td>
+          <td class="num"><span class="{% if ind.suno.delay_days > 0 %}pj-late{% endif %}">{{ ind.suno.delay_days|default_if_none:"—" }}</span> / <span class="{% if ind.project.delay_days > 0 %}pj-late{% endif %}">{{ ind.project.delay_days|default_if_none:"—" }}</span></td>
+        {% else %}
+          <td class="num" colspan="5">—</td>
+        {% endif %}
+        <td class="num">{{ t.total_slack_days|floatformat:1|default:"—" }}</td>
+        <td class="num">{{ t.free_slack_days|floatformat:1|default:"—" }}</td>
+      </tr>
+      {% endwith %}
+    {% empty %}
+      <tr><td colspan="15" class="pj-empty">{% if can_manage %}Todavía no hay cronograma: <a href="{% url 'projects:import' project.pk %}">importa el XML de MS Project</a>.{% else %}Todavía no hay cronograma importado.{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

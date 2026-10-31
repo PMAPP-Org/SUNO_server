@@ -73,7 +73,7 @@ class ProjectListTests(ViewTestCase):
         self.as_user(self.admin)
         response = self.client.post(BASE, {"name": "Obra Sur", "code": "OS-1", "description": ""})
         project = Project.objects.get(name="Obra Sur")
-        self.assertRedirects(response, f"{BASE}{project.pk}/", fetch_redirect_response=False)
+        self.assertRedirects(response, f"{BASE}{project.pk}/")
         self.assertEqual(project.org_id, self.org.pk)
 
     def test_duplicate_name_shows_error(self) -> None:
@@ -91,3 +91,44 @@ class ProjectListTests(ViewTestCase):
         self.as_user(self.admin)
         response = self.client.get(BASE)
         self.assertContains(response, "83,3")  # % programado del proyecto
+
+
+@skip_without_db
+class SchedulePageTests(ViewTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.import_v1()
+        self.url = f"{BASE}{self.project.pk}/"
+
+    def test_shows_wbs_with_both_progress_columns(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Descapote")
+        self.assertContains(response, "% SUNO")
+        self.assertContains(response, "% Project")
+        self.assertContains(response, "Cuadrilla A")
+        self.assertContains(response, 'class="pj-badge"', count=3)  # 3 tareas críticas
+
+    def test_filters_by_critical(self) -> None:
+        self.as_user(self.admin)
+        response = self.client.get(self.url, {"criticas": "1"})
+        self.assertNotContains(response, "Localización")
+        self.assertContains(response, "Descapote")
+
+    def test_cut_date_parameter(self) -> None:
+        self.as_user(self.admin)
+        response = self.client.get(self.url, {"corte": "2026-03-06"})
+        self.assertContains(response, 'value="2026-03-06"')
+
+    def test_bad_cut_date_falls_back_to_status_date(self) -> None:
+        self.as_user(self.admin)
+        response = self.client.get(self.url, {"corte": "ayer"})
+        self.assertContains(response, 'value="2026-03-20"')
+
+    def test_foreign_or_invisible_project_is_404(self) -> None:
+        self.as_user(self.agent)
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        other = make_org("Otra")
+        outsider = make_user(other, username="otro", role=Role.ADMIN)
+        self.as_user(outsider)
+        self.assertEqual(self.client.get(self.url).status_code, 404)

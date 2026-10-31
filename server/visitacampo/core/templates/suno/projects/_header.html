@@ -1,0 +1,13 @@
+<section class="workspace-heading">
+  <div>
+    <p class="editorial-label"><a href="{% url 'projects:list' %}">Proyectos</a></p>
+    <h1>{{ project.name }}</h1>
+    <nav class="pj-tabs" aria-label="Secciones del proyecto">
+      <a href="{% url 'projects:schedule' project.pk %}" {% if tab == "schedule" %}aria-current="page"{% endif %}>Cronograma</a>
+      <a href="{% url 'projects:gantt' project.pk %}" {% if tab == "gantt" %}aria-current="page"{% endif %}>Gantt</a>
+      <a href="{% url 'projects:history' project.pk %}" {% if tab == "history" %}aria-current="page"{% endif %}>Historial</a>
+      {% if can_manage %}<a href="{% url 'projects:import' project.pk %}" {% if tab == "import" %}aria-current="page"{% endif %}>Importar XML</a>{% endif %}
+    </nav>
+  </div>
+  <p class="workspace-scope">Fecha de corte<br><span>{{ project.status_date|date:"d/m/Y"|default:"sin importar" }}</span></p>
+</section>

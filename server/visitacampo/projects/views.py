@@ -8,7 +8,9 @@ rol responde 403.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import cast
+from uuid import UUID
 
 from django import forms
 from django.contrib.auth.decorators import login_required
@@ -22,11 +24,11 @@ from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Project, ScheduleImport, ScheduleImportStatus
-from visitacampo.core.policies import can_manage_projects
+from visitacampo.core.policies import can_export_schedule, can_manage_projects
 from visitacampo.core.scoping import get_organization, scoped_qs
 
-from .access import visible_projects
-from .schedule import build_schedule
+from .access import get_visible_project, visible_projects
+from .schedule import build_schedule, filter_rows
 
 
 def _ctx(request: HttpRequest) -> RequestContext:
@@ -95,4 +97,62 @@ def project_list(request: HttpRequest) -> HttpResponse:
         ctx,
         "suno/projects/list.html",
         {"items": items, "form": form, "can_manage": can_manage},
+    )
+
+
+def _parse_date(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
+
+def _parse_uuid(value: str | None) -> UUID | None:
+    try:
+        return UUID(value) if value else None
+    except ValueError:
+        return None
+
+
+def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]:
+    return {
+        "project": project,
+        "can_manage": can_manage_projects(ctx, ctx.org_id),
+        "can_export": can_export_schedule(ctx, ctx.org_id),
+    }
+
+
+@login_required(login_url="platform_login")
+def schedule(request: HttpRequest, project_id: UUID, task_id: UUID | None = None) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_visible_project(ctx, project_id)
+    data = build_schedule(ctx, project, cut=_parse_date(request.GET.get("corte")))
+    filters = {
+        "etapa": request.GET.get("etapa", ""),
+        "responsable": request.GET.get("responsable", ""),
+        "criticas": request.GET.get("criticas") == "1",
+        "atrasadas": request.GET.get("atrasadas") == "1",
+    }
+    rows = filter_rows(
+        data.rows,
+        stage_id=_parse_uuid(filters["etapa"] or None),
+        responsible_id=_parse_uuid(filters["responsable"] or None),
+        critical_only=bool(filters["criticas"]),
+        delayed_only=bool(filters["atrasadas"]),
+    )
+    responsible_choices = sorted(
+        {u.pk: u for row in data.rows for u in row.responsibles}.values(),
+        key=lambda u: (u.display_name or u.username).lower(),
+    )
+    return _render(
+        request,
+        ctx,
+        "suno/projects/schedule.html",
+        {
+            **_project_context(ctx, project),
+            "schedule": data,
+            "rows": rows,
+            "filters": filters,
+            "responsible_choices": responsible_choices,
+        },
     )
