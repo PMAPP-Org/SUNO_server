@@ -1,4 +1,5 @@
 {% extends "suno/projects/base.html" %}
+{% load static %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block content %}
 {% include "suno/projects/_header.html" with tab="schedule" %}
@@ -25,7 +26,8 @@
 {% endif %}
 
 <section class="pj-panel">
-  <table class="pj-table">
+  <p class="pj-tree-actions"><button type="button" class="text-link" data-expand-all>Expandir todo</button> · <button type="button" class="text-link" data-collapse-all>Contraer todo</button></p>
+  <table class="pj-table" data-wbs>
     <thead>
       <tr>
         <th>EDT</th><th>Tarea</th><th>Ejecutores</th><th>Responsables</th>
@@ -39,9 +41,9 @@
     <tbody>
     {% for row in rows %}
       {% with t=row.task ind=row.indicators %}
-      <tr class="{% if t.outline_level == 1 %}pj-stage{% elif t.is_summary %}pj-summary{% endif %}{% if t.is_critical %} pj-critical{% endif %}">
+      <tr data-id="{{ t.pk }}"{% if t.parent_id %} data-parent="{{ t.parent_id }}"{% endif %} class="{% if t.outline_level == 1 %}pj-stage{% elif t.is_summary %}pj-summary{% endif %}{% if t.is_critical %} pj-critical{% endif %}">
         <td>{{ t.wbs }}</td>
-        <td class="pj-name" style="padding-left: {{ t.outline_level }}em"><a href="{% url 'projects:task' project.pk t.pk %}">{{ t.name }}</a>{% if t.is_milestone %} ◆{% endif %}{% if t.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</td>
+        <td class="pj-name" style="padding-left: {{ t.outline_level }}em">{% if t.is_summary %}<button type="button" class="pj-toggle" data-toggle aria-expanded="true" aria-label="Plegar {{ t.name }}">▾</button> {% endif %}<a href="{% url 'projects:task' project.pk t.pk %}">{{ t.name }}</a>{% if t.is_milestone %} <span role="img" aria-label="hito">◆</span>{% endif %}{% if t.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</td>
         <td>{{ row.executors|join:", "|default:"—" }}</td>
         <td>{% for u in row.responsibles %}{{ u.display_name|default:u.username }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
         <td>{{ t.start|date:"d/m/y"|default:"—" }}</td>
@@ -68,3 +70,4 @@
   </table>
 </section>
 {% endblock %}
+{% block scripts %}<script src="{% static 'suno/js/schedule.js' %}" defer></script>{% endblock %}

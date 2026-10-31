@@ -88,17 +88,22 @@ def project_list(request: HttpRequest) -> HttpResponse:
             if scoped_qs(ctx, Project).filter(name__iexact=name).exists():
                 form.add_error("name", "Ya existe un proyecto con ese nombre.")
             else:
-                project = scoped_qs(ctx, Project).create(
-                    org_id=ctx.org_id,
-                    name=name,
-                    code=form.cleaned_data["code"].strip(),
-                    description=form.cleaned_data["description"].strip(),
-                    created_by_id=ctx.user_id,
-                )
-                audit.record(
-                    ctx, action=AuditAction.PROJECT_CREATED, target=f"project:{project.pk}"
-                )
-                return redirect("projects:schedule", project.pk)
+                try:
+                    with transaction.atomic():
+                        project = scoped_qs(ctx, Project).create(
+                            org_id=ctx.org_id,
+                            name=name,
+                            code=form.cleaned_data["code"].strip(),
+                            description=form.cleaned_data["description"].strip(),
+                            created_by_id=ctx.user_id,
+                        )
+                        audit.record(
+                            ctx, action=AuditAction.PROJECT_CREATED, target=f"project:{project.pk}"
+                        )
+                except IntegrityError:
+                    form.add_error("name", "Ya existe un proyecto con ese nombre.")
+                else:
+                    return redirect("projects:schedule", project.pk)
 
     versions = dict(
         scoped_qs(ctx, ScheduleImport)
@@ -151,8 +156,8 @@ def schedule(request: HttpRequest, project_id: UUID) -> HttpResponse:
     project = get_visible_project(ctx, project_id)
     data = build_schedule(ctx, project, cut=_parse_date(request.GET.get("corte")))
     filters = {
-        "etapa": request.GET.get("etapa", ""),
-        "responsable": request.GET.get("responsable", ""),
+        "etapa": str(_parse_uuid(request.GET.get("etapa")) or ""),
+        "responsable": str(_parse_uuid(request.GET.get("responsable")) or ""),
         "criticas": request.GET.get("criticas") == "1",
         "atrasadas": request.GET.get("atrasadas") == "1",
     }
@@ -187,45 +192,52 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     ctx = _ctx(request)
     project = get_visible_project(ctx, project_id)
     try:
-        task = scoped_qs(ctx, Task).select_related("stage").get(pk=task_id, project=project)
+        task = (
+            scoped_qs(ctx, Task)
+            .select_related("stage", "retired_in")
+            .get(pk=task_id, project=project)
+        )
     except Task.DoesNotExist as exc:
         raise Http404 from exc
     can_assign = can_assign_task_responsibles(ctx, ctx.org_id)
+    retired = task.retired_in_id is not None
     error = ""
     if request.method == "POST":
         if not can_assign:
             raise PermissionDenied
         user_id = _parse_uuid(request.POST.get("user"))
-        is_member = (
-            user_id is not None and scoped_qs(ctx, Membership).filter(user_id=user_id).exists()
-        )
-        if not is_member:
-            error = "El usuario no pertenece a la organización."
-        elif request.POST.get("action") == "remove":
-            deleted, _ = scoped_qs(ctx, TaskResponsible).filter(task=task, user_id=user_id).delete()
-            if deleted:
-                audit.record(
-                    ctx,
-                    action=AuditAction.TASK_RESPONSIBLE_REMOVED,
-                    target=f"task:{task.pk}",
-                    metadata={"user": str(user_id)},
-                )
+        if request.POST.get("action") == "remove":
+            if user_id is not None:
+                with transaction.atomic():
+                    deleted, _ = (
+                        scoped_qs(ctx, TaskResponsible).filter(task=task, user_id=user_id).delete()
+                    )
+                    if deleted:
+                        audit.record(
+                            ctx,
+                            action=AuditAction.TASK_RESPONSIBLE_REMOVED,
+                            target=f"task:{task.pk}",
+                            metadata={"user": str(user_id)},
+                        )
             return redirect("projects:task", project.pk, task.pk)
+        if retired:
+            error = "La tarea está retirada: no se le pueden asignar responsables."
+        elif user_id is None or not scoped_qs(ctx, Membership).filter(user_id=user_id).exists():
+            error = "El usuario no pertenece a la organización."
         else:
             try:
                 with transaction.atomic():
                     scoped_qs(ctx, TaskResponsible).create(
                         org_id=ctx.org_id, task=task, user_id=user_id, assigned_by_id=ctx.user_id
                     )
+                    audit.record(
+                        ctx,
+                        action=AuditAction.TASK_RESPONSIBLE_ASSIGNED,
+                        target=f"task:{task.pk}",
+                        metadata={"user": str(user_id)},
+                    )
             except IntegrityError:
                 messages.info(request, "Ya era responsable de esta tarea.")
-            else:
-                audit.record(
-                    ctx,
-                    action=AuditAction.TASK_RESPONSIBLE_ASSIGNED,
-                    target=f"task:{task.pk}",
-                    metadata={"user": str(user_id)},
-                )
             return redirect("projects:task", project.pk, task.pk)
 
     direct = list(scoped_qs(ctx, TaskResponsible).filter(task=task).select_related("user"))
@@ -233,9 +245,14 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     inherited = [
         u for u in effective_responsibles(ctx, project).get(task.pk, []) if u.pk not in direct_ids
     ]
-    members = [
-        m.user for m in scoped_qs(ctx, Membership).select_related("user").order_by("user__username")
-    ]
+    members = (
+        [
+            m.user
+            for m in scoped_qs(ctx, Membership).select_related("user").order_by("user__username")
+        ]
+        if can_assign and not retired
+        else []
+    )
     return _render(
         request,
         ctx,
@@ -247,6 +264,8 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "inherited": inherited,
             "members": members,
             "can_assign": can_assign,
+            "retired": retired,
+            "retired_version": task.retired_in.number if task.retired_in else None,
             "error": error,
             "executors": list(
                 scoped_qs(ctx, TaskResource)
@@ -309,23 +328,25 @@ def import_preview(request: HttpRequest, project_id: UUID, import_id: UUID) -> H
         action = request.POST.get("action")
         try:
             if action == "confirm":
-                applied = apply_import(ctx, imp.pk)
-                audit.record(
-                    ctx,
-                    action=AuditAction.SCHEDULE_IMPORTED,
-                    target=f"project:{project.pk}",
-                    metadata={"version": applied.number, "file": applied.file_name},
-                )
+                with transaction.atomic():
+                    applied = apply_import(ctx, imp.pk)
+                    audit.record(
+                        ctx,
+                        action=AuditAction.SCHEDULE_IMPORTED,
+                        target=f"project:{project.pk}",
+                        metadata={"version": applied.number, "file": applied.file_name},
+                    )
                 messages.success(request, f"Versión {applied.number} aplicada.")
                 return redirect("projects:schedule", project.pk)
             if action == "discard":
-                discard_import(ctx, imp.pk)
-                audit.record(
-                    ctx,
-                    action=AuditAction.SCHEDULE_IMPORT_DISCARDED,
-                    target=f"project:{project.pk}",
-                    metadata={"file": imp.file_name},
-                )
+                with transaction.atomic():
+                    discard_import(ctx, imp.pk)
+                    audit.record(
+                        ctx,
+                        action=AuditAction.SCHEDULE_IMPORT_DISCARDED,
+                        target=f"project:{project.pk}",
+                        metadata={"file": imp.file_name},
+                    )
                 messages.info(request, "Importación descartada.")
                 return redirect("projects:schedule", project.pk)
         except ImportRejected as exc:

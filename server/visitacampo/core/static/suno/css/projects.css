@@ -36,3 +36,5 @@
 .pj-gantt .link { stroke: var(--suno-muted); fill: none; }
 .pj-gantt .cut { stroke: var(--suno-amber); stroke-width: 2; stroke-dasharray: 4 3; }
 .pj-gantt .grid { stroke: var(--suno-line); }
+.pj-toggle { border: 0; background: none; cursor: pointer; padding: 0 4px; font: inherit; }
+.pj-message-warning { border-color: var(--suno-amber); }

@@ -12,6 +12,7 @@ from visitacampo.core.context import Principal, resolve_request_context
 from visitacampo.core.models import (
     AppUser,
     AuditEvent,
+    Membership,
     Project,
     Role,
     ScheduleImport,
@@ -109,6 +110,18 @@ class SchedulePageTests(ViewTestCase):
         self.import_v1()
         self.url = f"{BASE}{self.project.pk}/"
 
+    def test_summary_rows_have_toggle_and_parent_links(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.url)
+        self.assertContains(response, "data-toggle", count=2)  # etapas 1 y 2
+        self.assertContains(response, "data-parent=", count=4)
+        self.assertContains(response, 'aria-label="hito"')
+
+    def test_filter_ids_are_normalised(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.url, {"etapa": "no-es-uuid"})
+        self.assertEqual(response.context["filters"]["etapa"], "")
+
     def test_shows_wbs_with_both_progress_columns(self) -> None:
         self.as_user(self.viewer)
         response = self.client.get(self.url)
@@ -179,6 +192,33 @@ class TaskPageTests(ViewTestCase):
         self.as_user(self.viewer)
         response = self.client.post(self.url, {"action": "add", "user": str(self.agent.pk)})
         self.assertEqual(response.status_code, 403)
+
+    def test_can_remove_responsible_whose_membership_was_deleted(self) -> None:
+        TaskResponsible.objects.create(
+            org=self.org, task=self.task, user=self.agent, assigned_by=self.admin
+        )
+        Membership.objects.filter(user=self.agent).delete()
+        self.as_user(self.supervisor)
+        self.client.post(self.url, {"action": "remove", "user": str(self.agent.pk)})
+        self.assertFalse(TaskResponsible.objects.filter(task=self.task).exists())
+
+    def test_retired_task_is_read_only(self) -> None:
+        stale = ScheduleImport.objects.get(project=self.project, number=1)
+        self.task.retired_in = stale
+        self.task.save()
+        TaskResponsible.objects.create(
+            org=self.org, task=self.task, user=self.viewer, assigned_by=self.admin
+        )
+        self.as_user(self.supervisor)
+        page = self.client.get(self.url)
+        self.assertContains(page, "Tarea retirada en la versión v1")
+        self.assertNotContains(page, 'value="add"')
+        response = self.client.post(self.url, {"action": "add", "user": str(self.agent.pk)})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La tarea está retirada")
+        self.assertFalse(TaskResponsible.objects.filter(user=self.agent).exists())
+        self.client.post(self.url, {"action": "remove", "user": str(self.viewer.pk)})
+        self.assertFalse(TaskResponsible.objects.filter(task=self.task).exists())
 
     def test_task_of_other_project_is_404(self) -> None:
         other = Project.objects.create(org=self.org, name="Otra obra", created_by=self.admin)

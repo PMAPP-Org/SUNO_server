@@ -3,6 +3,7 @@
 {% block content %}
 {% include "suno/projects/_header.html" with tab="" %}
 
+{% if retired %}<p class="pj-message pj-message-warning" role="status">Tarea retirada en la versión v{{ retired_version }}</p>{% endif %}
 <section class="pj-panel">
   <h2>{{ task.wbs }} {{ task.name }}{% if task.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</h2>
   <table class="pj-table">
@@ -23,13 +24,14 @@
   <ul>
     {% for link in direct %}
       <li>{{ link.user.display_name|default:link.user.username }}
-        {% if can_assign %}<form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ link.user.pk }}"><button type="submit" class="text-link">Quitar</button></form>{% endif %}
+        {% if can_assign %}<form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ link.user.pk }}"><button type="submit" class="text-link" aria-label="Quitar a {{ link.user.display_name|default:link.user.username }}">Quitar</button></form>{% endif %}
       </li>
     {% endfor %}
     {% for user in inherited %}<li>{{ user.display_name|default:user.username }} <small class="pj-muted">(por la rama superior)</small></li>{% endfor %}
     {% if not direct and not inherited %}<li class="pj-muted">Sin responsables.</li>{% endif %}
   </ul>
-  {% if can_assign %}
+  {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+  {% if can_assign and not retired %}
   <form method="post" class="pj-filters">
     {% csrf_token %}
     <input type="hidden" name="action" value="add">
@@ -37,7 +39,6 @@
     <button class="button" type="submit">Asignar</button>
     {% if task.is_summary %}<small class="pj-muted">Asignar en una tarea resumen cubre toda su rama.</small>{% endif %}
   </form>
-  {% if error %}<p class="pj-late">{{ error }}</p>{% endif %}
   {% endif %}
 </section>
 {% endblock %}

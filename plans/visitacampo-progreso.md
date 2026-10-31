@@ -13,6 +13,8 @@
 
 **Desviaciones de la spec**: (1) la importación se calcula en la misma petición, sin la cola `jobs`; (2) Gantt en SVG propio en vez de Frappe Gantt desde CDN.
 
+**Mejoras pendientes**: la lista de proyectos recalcula el cronograma de cada proyecto en cada petición (O(proyectos × tareas)); cachear o guardar el rollup cuando llegue el avance de campo.
+
 **Pendiente**: avance desde campo (plan `2026-10-31-costos-etapa1-campo-plan.md`).
 
 

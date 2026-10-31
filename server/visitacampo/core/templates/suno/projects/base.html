@@ -24,7 +24,7 @@
         <div class="project-selector"><span>Organización</span><strong>{{ organization.name }}</strong></div>
       </header>
       <main id="workspace-content" class="workspace-content">
-        {% if messages %}<ul class="pj-messages">{% for message in messages %}<li class="pj-message pj-message-{{ message.tags }}">{{ message }}</li>{% endfor %}</ul>{% endif %}
+        {% if messages %}<ul class="pj-messages" role="status">{% for message in messages %}<li class="pj-message pj-message-{{ message.tags }}"{% if message.level_tag == "error" %} role="alert"{% endif %}>{{ message }}</li>{% endfor %}</ul>{% endif %}
         {% block content %}{% endblock %}
       </main>
     </div>
