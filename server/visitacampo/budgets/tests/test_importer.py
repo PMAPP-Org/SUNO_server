@@ -6,8 +6,8 @@ import unittest
 from decimal import Decimal
 from unittest import mock
 
-from django.http import Http404
 from django.db import connection, connections
+from django.http import Http404
 from django.test import TestCase, TransactionTestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
