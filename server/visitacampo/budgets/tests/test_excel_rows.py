@@ -179,3 +179,28 @@ class ParseBudgetTests(unittest.TestCase):
         self.assertEqual(parsed.direct_cost, D("9130000.00"))
         totals = {r.code: r.total for r in parsed.rows if r.kind == KIND_CHAPTER}
         self.assertEqual(totals, {"1": D("1150000.00"), "2": D("7980000.00")})
+
+
+class NumberReadingTests(unittest.TestCase):
+    def test_huge_product_is_rejected_with_a_message(self) -> None:
+        with self.assertRaises(ExcelRejected) as caught:
+            interpret([["1.1", "A", "u", 10**13, 10**14]])
+        self.assertIn("el total es demasiado grande", str(caught.exception))
+
+    def test_huge_excel_total_only_warns(self) -> None:
+        parsed = interpret([["1.1", "A", "u", 1, 1, 10**40]])
+        self.assertEqual(parsed.total_mismatches, 1)
+
+    def test_dot_with_three_digits_is_read_as_thousands_and_warned(self) -> None:
+        parsed = interpret(
+            [
+                ["1.1", "A", "u", "1.234", "2,5"],
+                ["1.2", "B", "u", 3, "1.5"],
+                ["1.3", "C", "u", 1, 1],
+            ]
+        )
+        self.assertEqual(parsed.rows[0].quantity, D("1234"))
+        self.assertEqual(parsed.rows[1].unit_price, D("1.50"))
+        self.assertEqual(len(parsed.warnings), 1)
+        self.assertIn("1 celda(s) de texto con un punto seguido de 3 dígitos", parsed.warnings[0])
+        self.assertIn("fila 2 (1.234)", parsed.warnings[0])

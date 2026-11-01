@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 
 CENT = Decimal("0.01")
 QUANTITY_STEP = Decimal("0.0001")
@@ -37,6 +37,12 @@ MAX_CHARGE_NAME = 100
 
 _LINE = re.compile(r"line:([1-9][0-9]?)")
 _NUMBER_TEXT = re.compile(r"[0-9.,]+")
+_STRIP = re.compile(r"[\s$]+")
+_GROUPED_DOT = re.compile(r"\d{1,3}(?:\.\d{3})+")
+_GROUPED_COMMA = re.compile(r"\d{1,3}(?:,\d{3})+")
+_DOT_THOUSANDS = re.compile(r"[1-9]\d{0,2}\.\d{3}")
+#: Precisión para multiplicar y redondear sin desbordar el contexto de 28 dígitos.
+WIDE_PRECISION = 60
 
 
 class ChargeError(ValueError):
@@ -44,16 +50,22 @@ class ChargeError(ValueError):
 
 
 def money(value: Decimal) -> Decimal:
-    return value.quantize(CENT, rounding=ROUND_HALF_UP)
+    with localcontext() as context:
+        context.prec = WIDE_PRECISION
+        return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def quantity(value: Decimal) -> Decimal:
-    return value.quantize(QUANTITY_STEP, rounding=ROUND_HALF_UP)
+    with localcontext() as context:
+        context.prec = WIDE_PRECISION
+        return value.quantize(QUANTITY_STEP, rounding=ROUND_HALF_UP)
 
 
 def item_total(qty: Decimal, unit_price: Decimal) -> Decimal:
     """Total de un ítem: cantidad × valor unitario, a centavos."""
-    return money(qty * unit_price)
+    with localcontext() as context:
+        context.prec = WIDE_PRECISION
+        return money(qty * unit_price)
 
 
 def pct_change(old: Decimal, new: Decimal) -> Decimal | None:
@@ -71,11 +83,24 @@ def pct_text(value: Decimal) -> str:
 def parse_number(value: object) -> Decimal | None:
     """Número de una celda o de un campo de texto; None si está vacío.
 
-    Lanza `ValueError` si no es un número. En texto acepta separadores de miles
-    y decimales en los dos estilos ("1.234,56" y "1,234.56"), `$` y espacios.
+    Lanza `ValueError` si no es un número. Ver `parse_number_detail`.
+    """
+    return parse_number_detail(value)[0]
+
+
+def parse_number_detail(value: object) -> tuple[Decimal | None, bool]:
+    """Como `parse_number`, y si el texto se leyó con la regla "punto + 3 dígitos".
+
+    En texto se aceptan `$` y cualquier espacio (también NBSP, U+202F y tabuladores)
+    y los dos estilos de separadores ("1.234,56" y "1,234.56"). Con un solo
+    separador rige la convención colombiana: la coma es decimal ("1,234" = 1,234);
+    un punto seguido de exactamente 3 dígitos son miles ("1.234" = 1234; el
+    segundo valor es True, para avisar) y con otra cantidad de dígitos es decimal
+    ("1.5"). Cuando un separador son miles, los grupos son de exactamente 3 dígitos.
     """
     if value is None:
-        return None
+        return None, False
+    guessed = False
     if isinstance(value, bool):
         raise ValueError("booleano")
     if isinstance(value, int | Decimal):
@@ -83,16 +108,17 @@ def parse_number(value: object) -> Decimal | None:
     elif isinstance(value, float):
         result = Decimal(repr(value))
     elif isinstance(value, str):
-        text = value.replace("$", "").replace(" ", "").replace(" ", "").strip()
+        text = _STRIP.sub("", value)
         if not text:
-            return None
+            return None, False
         negative = text.startswith("-")
         if negative:
             text = text[1:]
         if not _NUMBER_TEXT.fullmatch(text):
             raise ValueError(value)
         try:
-            result = Decimal(_normalize_separators(text))
+            normalized, guessed = _normalize_separators(text)
+            result = Decimal(normalized)
         except InvalidOperation as exc:
             raise ValueError(value) from exc
         if negative:
@@ -101,23 +127,36 @@ def parse_number(value: object) -> Decimal | None:
         raise ValueError(value)
     if not result.is_finite():
         raise ValueError(value)
-    return result
+    return result, guessed
 
 
-def _normalize_separators(text: str) -> str:
+def _normalize_separators(text: str) -> tuple[str, bool]:
+    """El texto con punto decimal y sin miles; y si se aplicó "punto + 3 dígitos"."""
     dots, commas = text.count("."), text.count(",")
     if dots and commas:
         decimal_sep = "." if text.rfind(".") > text.rfind(",") else ","
         thousands = "," if decimal_sep == "." else "."
-        text = text.replace(thousands, "")
-        if text.count(decimal_sep) > 1:
+        whole, _, fraction = text.rpartition(decimal_sep)
+        if thousands == "." and not _GROUPED_DOT.fullmatch(whole):
             raise ValueError(text)
-        return text.replace(",", ".")
+        if thousands == "," and not _GROUPED_COMMA.fullmatch(whole):
+            raise ValueError(text)
+        if not fraction.isdigit():
+            raise ValueError(text)
+        return whole.replace(thousands, "") + "." + fraction, False
     if commas:
-        return text.replace(",", "") if commas > 1 else text.replace(",", ".")
+        if commas == 1:
+            return text.replace(",", "."), False
+        if not _GROUPED_COMMA.fullmatch(text):
+            raise ValueError(text)
+        return text.replace(",", ""), False
     if dots > 1:
-        return text.replace(".", "")
-    return text
+        if not _GROUPED_DOT.fullmatch(text):
+            raise ValueError(text)
+        return text.replace(".", ""), False
+    if dots == 1 and _DOT_THOUSANDS.fullmatch(text):
+        return text.replace(".", ""), True
+    return text, False
 
 
 @dataclass(frozen=True)

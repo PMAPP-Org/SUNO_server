@@ -69,6 +69,28 @@ class BudgetModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             self._version(1)
 
+    def test_number_is_set_if_and_only_if_applied(self) -> None:
+        def make(status: str, number: int | None) -> BudgetVersion:
+            return BudgetVersion.objects.create(
+                org=self.org,
+                budget=self.budget,
+                number=number,
+                status=status,
+                file_name="p.xlsx",
+                source_file=b"",
+                uploaded_by=self.user,
+            )
+
+        for status, number in (
+            (BudgetVersionStatus.APPLIED, None),
+            (BudgetVersionStatus.PENDING, 5),
+            (BudgetVersionStatus.DISCARDED, 6),
+        ):
+            with self.subTest(status=str(status), number=number):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    make(str(status), number)
+        make(str(BudgetVersionStatus.DISCARDED), None)
+
     def test_item_code_is_unique_per_budget(self) -> None:
         BudgetItem.objects.create(org=self.org, budget=self.budget, code="1.1")
         with self.assertRaises(IntegrityError), transaction.atomic():

@@ -104,3 +104,10 @@ class SummarizeChangesTests(unittest.TestCase):
         self.assertEqual(summary["ignored_rows"], 1)
         self.assertEqual(summary["ignored_examples"], [9])
         self.assertEqual(len(summary["warnings"]), 1)
+
+
+class SummaryWarningsTests(unittest.TestCase):
+    def test_dot_thousands_warning_reaches_the_summary(self) -> None:
+        summary = summarize_changes({}, parsed([["1.1", "A", "u", "1.234", 5]]), set())
+        self.assertEqual(len(summary["warnings"]), 1)
+        self.assertIn("miles", summary["warnings"][0])

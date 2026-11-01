@@ -41,7 +41,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
 from .mapping import FIELDS, MAX_COLUMNS, ColumnMapping, fold
-from .totals import ZERO, item_total, money, parse_number, quantity
+from .totals import ZERO, item_total, money, parse_number_detail, quantity
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 20_000
@@ -234,15 +234,24 @@ def _is_total_label(text: str) -> bool:
     return bool(text) and _TOTAL_LABEL.match(fold(text).strip()) is not None
 
 
-def _number(value: Any, number: int, code: str, label: str, limit: Decimal) -> Decimal | None:
+def _number(
+    value: Any,
+    number: int,
+    code: str,
+    label: str,
+    limit: Decimal,
+    guesses: list[str] | None = None,
+) -> Decimal | None:
     try:
-        parsed = parse_number(value)
+        parsed, guessed = parse_number_detail(value)
     except ValueError:
         raise ExcelRejected(
             f"Fila {number} (código {code}): {label} «{_text(value)[:40]}» no es un número."
         ) from None
     if parsed is None:
         return None
+    if guessed and guesses is not None:
+        guesses.append(f"fila {number} ({_text(value)[:20]})")
     if parsed < 0:
         raise ExcelRejected(
             f"Fila {number} (código {code}): {label} tiene un valor negativo ({_text(value)})."
@@ -254,9 +263,12 @@ def _number(value: Any, number: int, code: str, label: str, limit: Decimal) -> D
 
 def _optional_number(value: Any) -> Decimal | None:
     try:
-        return parse_number(value)
+        parsed = parse_number_detail(value)[0]
     except ValueError:
         return None  # el total del Excel solo se usa para avisar
+    if parsed is not None and abs(parsed) >= MAX_MONEY:
+        return MAX_MONEY  # nunca coincide con un total calculado (< MAX_MONEY)
+    return parsed
 
 
 def _prefix_parent(code: str, chapters: Collection[str]) -> str | None:
@@ -311,6 +323,7 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
     found: list[_Found] = []
     first_seen: dict[str, int] = {}
     ignored: list[int] = []
+    guesses: list[str] = []
     for number in range(mapping.first_row, len(rows) + 1):
         row = rows[number - 1]
         if not any(_present(value) for value in row):
@@ -325,8 +338,12 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
                 f"Fila {number}: el código «{code[:20]}…» tiene más de "
                 f"{MAX_CODE_LENGTH} caracteres."
             )
-        qty = _number(_cell(row, col["quantity"]), number, code, "la cantidad", MAX_QUANTITY)
-        price = _number(_cell(row, col["unit_price"]), number, code, "el valor unitario", MAX_MONEY)
+        qty = _number(
+            _cell(row, col["quantity"]), number, code, "la cantidad", MAX_QUANTITY, guesses
+        )
+        price = _number(
+            _cell(row, col["unit_price"]), number, code, "el valor unitario", MAX_MONEY, guesses
+        )
         if qty is None and price is None:
             if not description:
                 ignored.append(number)
@@ -379,6 +396,12 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
         warnings.append(
             f"{len(ignored)} fila(s) ignorada(s) por no tener código o ser de subtotal/total: "
             f"{_examples([str(n) for n in ignored])}."
+        )
+    if guesses:
+        warnings.append(
+            f"{len(guesses)} celda(s) de texto con un punto seguido de 3 dígitos se leyeron "
+            "como miles (por ejemplo, «1.234» = 1234); revisa que sea correcto: "
+            f"{_examples(guesses)}."
         )
     if mismatches:
         warnings.append(

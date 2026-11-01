@@ -122,6 +122,10 @@ class Migration(migrations.Migration):
             model_name='budgetversion',
             constraint=models.UniqueConstraint(condition=models.Q(('number__isnull', False)), fields=('budget', 'number'), name='budget_version_number_uq'),
         ),
+        migrations.AddConstraint(
+            model_name='budgetversion',
+            constraint=models.CheckConstraint(condition=models.Q(models.Q(('number__isnull', False), ('status', 'applied')), models.Q(models.Q(('status', 'applied'), _negated=True), ('number__isnull', True)), _connector='OR'), name='budget_version_number_iff_applied'),
+        ),
         migrations.AddIndex(
             model_name='budgetitemversion',
             index=models.Index(fields=['version', 'sort_order'], name='budget_row_version_order_idx'),

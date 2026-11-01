@@ -17,6 +17,7 @@ from visitacampo.budgets.totals import (
     line_base,
     money,
     parse_number,
+    parse_number_detail,
     pct_change,
     pct_text,
     validate_charges,
@@ -135,3 +136,42 @@ class ChargesTests(unittest.TestCase):
         self.assertEqual(describe_base("subtotal", names), "subtotal")
         self.assertEqual(describe_base("line:3", names), "línea 3 (Utilidad)")
         self.assertEqual(describe_base("line:2", names), "línea 2")
+
+
+class WideContextAndParsingTests(unittest.TestCase):
+    def test_huge_products_do_not_overflow_the_default_context(self) -> None:
+        self.assertEqual(item_total(D("1e13"), D("1e14")), D("1" + "0" * 27 + ".00"))
+        self.assertEqual(money(D("1e30")), D("1" + "0" * 30 + ".00"))
+
+    def test_any_whitespace_and_dollar_are_stripped(self) -> None:
+        for value, expected in (
+            ("1 234,5", D("1234.5")),
+            ("1\t234", D("1234")),
+            ("1 234,5", D("1234.5")),
+            ("1 234,5", D("1234.5")),
+            ("1 234,5", D("1234.5")),
+            ("$ 1.500,00", D("1500.00")),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(parse_number(value), expected)
+
+    def test_thousands_need_groups_of_three(self) -> None:
+        for value in ("1.5.0", "12.345.6", "1,23,456", "1.234,5,6", "1,234.5.6", "12.34.567,8"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_number(value)
+
+    def test_single_separator_convention(self) -> None:
+        for value, expected, guessed in (
+            ("1.234", D("1234"), True),
+            ("12.500", D("12500"), True),
+            ("1,234", D("1.234"), False),
+            ("1,5", D("1.5"), False),
+            ("1.5", D("1.5"), False),
+            ("1.50", D("1.50"), False),
+            ("1234.567", D("1234.567"), False),
+            ("0.333", D("0.333"), False),
+            ("1.234.567", D("1234567"), False),
+            ("1.234,5", D("1234.5"), False),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(parse_number_detail(value), (expected, guessed))

@@ -181,3 +181,8 @@ Precisiones del plan `2026-11-01-costos-pieza3-presupuesto-plan.md`; no cambian 
    "vuelven" (ítems que existieron antes y regresan con la misma identidad).
 8. **Cargos.** Máximo 20 líneas numeradas en orden; solo se editan en una versión pendiente.
 9. **Exportación.** El Excel de la comparación es completo (sin filtros), con cargos y totales.
+10. **Un solo separador en texto.** Convención colombiana: la coma es decimal ("1,234" = 1,234);
+    un punto seguido de exactamente 3 dígitos son miles ("1.234" = 1234, salvo entero "0"); otro
+    número de dígitos es decimal ("1.5"). Los grupos de miles son de exactamente 3 dígitos o se
+    rechaza. La vista previa avisa cuántas celdas se leyeron con la regla "punto + 3 dígitos".
+    Esto precisa el punto 5.

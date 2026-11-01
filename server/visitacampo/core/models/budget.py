@@ -112,6 +112,13 @@ class BudgetVersion(OrgScopedModel):
                 condition=models.Q(number__isnull=False),
                 name="budget_version_number_uq",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="applied", number__isnull=False)
+                    | (~models.Q(status="applied") & models.Q(number__isnull=True))
+                ),
+                name="budget_version_number_iff_applied",
+            ),
         ]
 
     def __str__(self) -> str:
