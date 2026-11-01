@@ -1,0 +1,43 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Mapeo de columnas · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Mapeo de columnas de {{ version.file_name }}</h2>
+  <p>Indica dónde está cada dato. SUNO sugiere las columnas por los encabezados: revísalas antes de seguir. El mapeo se guarda para las próximas versiones de este presupuesto.</p>
+  {% if sheet_names|length > 1 %}
+  <form method="get" class="pj-filters">
+    <label>Hoja <select name="hoja">{% for name in sheet_names %}<option value="{{ name }}" {% if name == sheet %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Ver hoja</button>
+  </form>
+  {% endif %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="sheet" value="{{ sheet }}">
+    <label>Los datos empiezan en la fila <input type="number" name="first_row" min="1" max="20000" value="{{ first_row }}" required></label>
+    {% for field in fields %}
+    <label>{{ field.label }}{% if field.required %} *{% endif %} <select name="col_{{ field.name }}"><option value="">—</option>{% for letter in letters %}<option value="{{ letter }}" {% if letter == field.value %}selected{% endif %}>{{ letter }}</option>{% endfor %}</select></label>
+    {% endfor %}
+    {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+    <button class="button" type="submit">Ver cambios</button>
+  </form>
+  <form method="post" action="{% url 'budgets:import_preview' project.pk budget.pk version.pk %}">
+    {% csrf_token %}
+    <button class="text-link" type="submit" name="action" value="discard">Descartar esta carga</button>
+  </form>
+</section>
+<section class="pj-panel">
+  <h2>Primeras filas de «{{ sheet }}»</h2>
+  <div class="pj-scroll">
+  <table class="pj-table bg-sheet">
+    <thead><tr><th>Fila</th>{% for letter in letters %}<th>{{ letter }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for number, cells in preview_rows %}
+      <tr><th scope="row">{{ number }}</th>{% for value in cells %}<td>{{ value }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

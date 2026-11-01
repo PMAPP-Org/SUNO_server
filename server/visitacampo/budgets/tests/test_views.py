@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import unittest
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from visitacampo.authn.tests.factories import make_org, make_user
@@ -15,6 +17,7 @@ from visitacampo.core.models import (
     AuditEvent,
     Budget,
     BudgetItem,
+    BudgetVersion,
     Project,
     Role,
     Task,
@@ -28,8 +31,8 @@ from visitacampo.core.tests.dbsupport import (
 from visitacampo.projects.importer import apply_import, stage_import
 from visitacampo.projects.tests.samples import v1 as schedule_v1
 
-from .factories import apply_rows, make_budget
-from .samples import AIU, V1_ROWS, V2_ROWS
+from .factories import apply_rows, make_budget, stage_rows
+from .samples import AIU, V1_ROWS, V2_ROWS, xlsx
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -37,6 +40,7 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 D = Decimal
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class BudgetViewTestCase(TestCase):
@@ -65,7 +69,14 @@ class BudgetViewTestCase(TestCase):
 
     def budget_urls(self, budget: Budget) -> list[str]:
         """Todas las URL de presupuestos (las tareas siguientes añaden las suyas)."""
-        return [self.base, f"{self.base}{budget.pk}/"]
+        some = uuid4()
+        return [
+            self.base,
+            f"{self.base}{budget.pk}/",
+            f"{self.base}{budget.pk}/importar/",
+            f"{self.base}{budget.pk}/importar/{some}/",
+            f"{self.base}{budget.pk}/importar/{some}/mapeo/",
+        ]
 
     def make_agent_see_the_project(self) -> None:
         """El agente ve el proyecto (es responsable de una tarea del cronograma)."""
@@ -208,3 +219,167 @@ class ComparisonPageTests(BudgetViewTestCase):
         self.as_user(self.viewer)
         response = self.client.get(f"{self.base}{empty.pk}/")
         self.assertContains(response, "Todavía no hay versiones aplicadas")
+
+
+@skip_without_db
+class ImportPagesTests(BudgetViewTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.budget = make_budget(self.project, self.admin)
+        self.url = f"{self.base}{self.budget.pk}/importar/"
+
+    def upload(self, rows: list[list[Any]], name: str = "v1.xlsx", **extra: str) -> Any:
+        upload = SimpleUploadedFile(name, xlsx(rows), content_type=XLSX)
+        return self.client.post(self.url, {"file": upload, **extra})
+
+    def pending(self) -> BudgetVersion:
+        return BudgetVersion.objects.get(budget=self.budget, status="pending")
+
+    @staticmethod
+    def mapping_post(**changes: str) -> dict[str, str]:
+        data = {
+            "sheet": "Presupuesto",
+            "first_row": "2",
+            "col_code": "A",
+            "col_description": "B",
+            "col_unit": "C",
+            "col_quantity": "D",
+            "col_unit_price": "E",
+            "col_total": "F",
+        }
+        return {**data, **changes}
+
+    @staticmethod
+    def charges_post(action: str = "confirm", label: str = "") -> dict[str, str]:
+        """El formulario de la vista previa con AIU 10 / 5 / 5 / IVA 19 % sobre la utilidad."""
+        data = {"action": action, "label": label, "charge_count": "5"}
+        lines = [
+            ("Administración", "10", "direct"),
+            ("Imprevistos", "5", "direct"),
+            ("Utilidad", "5", "direct"),
+            ("IVA sobre utilidad", "19", "line:3"),
+        ]
+        for index, (name, pct, base) in enumerate(lines, start=1):
+            data[f"charge_{index}_name"] = name
+            data[f"charge_{index}_pct"] = pct
+            data[f"charge_{index}_base"] = base
+        return data
+
+    def test_first_upload_goes_through_mapping_and_preview_and_applies(self) -> None:
+        self.as_user(self.admin)
+        response = self.upload(V1_ROWS)
+        version = self.pending()
+        mapping_url = f"{self.url}{version.pk}/mapeo/"
+        self.assertRedirects(response, mapping_url)
+
+        page = self.client.get(mapping_url)
+        self.assertContains(page, "Vr. unitario")
+        fields = {f["name"]: f["value"] for f in page.context["fields"]}
+        self.assertEqual(
+            fields,
+            {
+                "code": "A",
+                "description": "B",
+                "unit": "C",
+                "quantity": "D",
+                "unit_price": "E",
+                "total": "F",
+            },
+        )
+        self.assertEqual(page.context["first_row"], 2)
+
+        preview_url = f"{self.url}{version.pk}/"
+        self.assertRedirects(self.client.post(mapping_url, self.mapping_post()), preview_url)
+        preview = self.client.get(preview_url)
+        self.assertContains(preview, "5 no previstos")
+        self.assertContains(preview, "9.130.000,00")
+        self.assertContains(preview, 'name="charge_4_base"')
+
+        response = self.client.post(preview_url, self.charges_post(label="Contrato"))
+        self.assertRedirects(response, f"{self.base}{self.budget.pk}/")
+        version.refresh_from_db()
+        self.assertEqual(
+            (version.number, version.label, version.total), (1, "Contrato", D("11042735.00"))
+        )
+        self.budget.refresh_from_db()
+        self.assertEqual(self.budget.contractual_version_id, version.pk)
+        event = AuditEvent.objects.get(action="budgets.version_applied")
+        self.assertEqual(event.metadata["version"], 1)
+
+    def test_second_upload_reuses_the_saved_mapping(self) -> None:
+        apply_rows(self.ctx, self.budget, V1_ROWS, charges=AIU)
+        self.as_user(self.admin)
+        response = self.upload(V2_ROWS, name="v2.xlsx")
+        version = self.pending()
+        self.assertRedirects(response, f"{self.url}{version.pk}/")
+        preview = self.client.get(f"{self.url}{version.pk}/")
+        for text in (
+            "1 no previstos",
+            "1 eliminados",
+            "1 con mayor cantidad",
+            "1 con menor cantidad",
+            "1 con cambio de precio",
+            "10.510.555,00",
+        ):
+            with self.subTest(text=text):
+                self.assertContains(preview, text)
+
+    def test_asking_to_change_the_mapping(self) -> None:
+        apply_rows(self.ctx, self.budget, V1_ROWS)
+        self.as_user(self.admin)
+        response = self.upload(V2_ROWS, cambiar_mapeo="1")
+        self.assertRedirects(response, f"{self.url}{self.pending().pk}/mapeo/")
+
+    def test_mapping_errors_are_shown_and_nothing_is_saved(self) -> None:
+        self.as_user(self.admin)
+        self.upload(V1_ROWS)
+        mapping_url = f"{self.url}{self.pending().pk}/mapeo/"
+        response = self.client.post(mapping_url, self.mapping_post(col_description="A"))
+        self.assertContains(response, "Una misma columna no puede tener dos significados")
+        response = self.client.post(mapping_url, self.mapping_post(first_row="1"))
+        self.assertContains(response, "Fila 1 (código Ítem)")
+        self.budget.refresh_from_db()
+        self.assertEqual(self.budget.column_mapping, {})
+
+    def test_xlsm_is_rejected(self) -> None:
+        self.as_user(self.admin)
+        response = self.upload(V1_ROWS, name="v1.xlsm")
+        self.assertContains(response, "macros")
+        self.assertFalse(BudgetVersion.objects.exists())
+
+    def test_save_shows_amounts_bad_charges_show_an_error_and_discard(self) -> None:
+        self.as_user(self.admin)
+        self.upload(V1_ROWS)
+        version = self.pending()
+        self.client.post(f"{self.url}{version.pk}/mapeo/", self.mapping_post())
+        preview_url = f"{self.url}{version.pk}/"
+
+        saved = self.client.post(
+            preview_url, self.charges_post(action="save", label="Contrato"), follow=True
+        )
+        self.assertContains(saved, "913.000,00")
+        version.refresh_from_db()
+        self.assertEqual(version.label, "Contrato")
+
+        bad = {**self.charges_post(action="save"), "charge_4_base": "line:4"}
+        self.assertContains(self.client.post(preview_url, bad, follow=True), "la base debe ser")
+
+        response = self.client.post(preview_url, {"action": "discard"})
+        self.assertRedirects(response, f"{self.base}{self.budget.pk}/")
+        version.refresh_from_db()
+        self.assertEqual(version.status, "discarded")
+        self.assertTrue(AuditEvent.objects.filter(action="budgets.version_discarded"))
+
+    def test_stale_preview_is_rejected_with_a_message(self) -> None:
+        old = stage_rows(self.ctx, self.budget, V1_ROWS)
+        apply_rows(self.ctx, self.budget, V2_ROWS)
+        self.as_user(self.admin)
+        response = self.client.post(f"{self.url}{old.pk}/", self.charges_post(), follow=True)
+        self.assertContains(response, "Vuelve a subir el archivo")
+        old.refresh_from_db()
+        self.assertEqual(old.status, "pending")
+
+    def test_supervisor_cannot_import(self) -> None:
+        self.as_user(self.supervisor)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.upload(V1_ROWS).status_code, 403)

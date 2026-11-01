@@ -73,7 +73,7 @@
   </div>
 </section>
 {% else %}
-<section class="pj-panel"><p class="pj-empty">Todavía no hay versiones aplicadas de este presupuesto.</p></section>
+<section class="pj-panel"><p class="pj-empty">Todavía no hay versiones aplicadas de este presupuesto.{% if can_manage_budgets %} <a href="{% url 'budgets:import' project.pk budget.pk %}">Importa su Excel</a>.{% endif %}</p></section>
 {% endif %}
 {% endblock %}
 {% block scripts %}<script src="{% static 'suno/js/schedule.js' %}" defer></script>{% endblock %}
