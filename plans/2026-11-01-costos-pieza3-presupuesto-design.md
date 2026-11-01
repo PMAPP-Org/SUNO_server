@@ -157,3 +157,27 @@ exportación y descarga del Excel original.
   eliminados que estén homologados.
 - **APU**: tablas de insumos y su relación con `BudgetItemVersion`, sin cambiar la
   identidad de los ítems.
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-01-costos-pieza3-presupuesto-plan.md`; no cambian lo aprobado.
+
+1. **Mapeo entre subida y vista previa.** La versión pendiente se crea al subir el archivo;
+   si el presupuesto no tiene mapeo (o se pide cambiarlo) se pasa por la página de mapeo.
+   El mapeo se guarda en el presupuesto solo cuando produce una lectura válida, y la vista
+   previa guarda el mapeo con que se leyó: al confirmar se vuelve a leer el archivo con él.
+2. **Columna "capítulo".** No se implementa: el capítulo se reconoce por la fila (código y
+   descripción sin cantidad ni valor unitario). Queda como extensión `columns.chapter`.
+3. **Niveles.** Capítulo con puntos: su padre es el capítulo prefijo más largo. Capítulo sin
+   puntos: primer nivel. Ítem: el capítulo prefijo o, si no hay, el último capítulo encima.
+4. **Filas a medias.** Con código y solo cantidad o solo valor unitario: se rechaza nombrando
+   la fila. Con código sin descripción ni números: se ignora y se cuenta.
+5. **Números en texto.** Se aceptan con separadores de miles y decimales ("1.234,56",
+   "1,234.56"); cantidad a 4 decimales y valor unitario a centavos (`ROUND_HALF_UP`) al leer.
+6. **Límites.** Además de 20 MB y 20.000 filas: 60 columnas (A–BH), ZIP de máximo 1.000
+   entradas y 200 MB descomprimidos, y rechazo de macros aunque el archivo se llame `.xlsx`.
+   Datos más allá de la fila 20.000 rechazan la importación (no se trunca).
+7. **Vista previa.** Compara contra la versión vigente y solo cuenta ítems; añade el grupo
+   "vuelven" (ítems que existieron antes y regresan con la misma identidad).
+8. **Cargos.** Máximo 20 líneas numeradas en orden; solo se editan en una versión pendiente.
+9. **Exportación.** El Excel de la comparación es completo (sin filtros), con cargos y totales.
