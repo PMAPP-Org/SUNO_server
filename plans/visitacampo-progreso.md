@@ -3,6 +3,18 @@
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
 **Última actualización**: 2026-10-31 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
 
+## Módulo de costos — Etapa 1 (Cronograma), avance desde campo — servidor — 2026-10-31
+
+**PR**: (PR pendiente). Rama `feat/costos-etapa1-campo`. Plan: [2026-10-31-costos-etapa1-campo-plan.md](2026-10-31-costos-etapa1-campo-plan.md).
+
+**Qué entra (Tasks A1–A12, más una corrección de revisión)**: `Visit.task` y `Visit.progress_pct` (migración `0012`, `CHECK` de par, índice) y su viaje por el contrato de sync (campos opcionales: los clientes anteriores no cambian); responsable efectivo por rama del número de esquema (`projects/access.py`); validación de la tarea en el push (organización, vigente, de detalle, responsable, 0–100); `projects/field_progress.py` (último % validado por tarea y "menor que el último validado", calculado al leer); el % SUNO del cronograma, lista, Gantt y Excel sale de las visitas validadas; `GET /v1/projects/tasks` (lista completa con `version`, `changed: false` si no cambió); ficha de tarea con "Avance de campo"; Admin de visitas con columna, filtro y aviso de retroceso; aviso en la vista previa de importación de tareas retiradas con avance de campo; `bootstrap_demo --with-schedule` para la E2E. Corrección de revisión: la importación rechaza un XML cuya tarea no trae su tarea superior (p. ej. "1.2.3" sin "1.2"), para que la responsabilidad por esquema y la herencia por `parent` nunca discrepen.
+
+**Verificación (números reales)**: suite completa 1053 tests: 1049 pasan y 4 fallan en `sync/tests/test_load_script.py` por entorno (el contenedor no monta `/infra/load/push_load.py`). Cobertura 93,39 % (suelo 90 %). `ruff check` y `mypy` limpios (228 archivos), `makemigrations --check` sin cambios, contrato `v1.yaml` válido. La prueba manual en navegador (Task A13 paso 2) queda pendiente.
+
+**Decisiones que cambian la spec**: (1) la descarga de tareas es un endpoint propio con lista completa y `version`, no el pull por `change_seq`; (4) solo se reporta avance en tareas de detalle; (7) quien vincula una tarea debe ser responsable efectivo (desvincular no lo exige); (8) "menor que el último validado" se calcula al leer, no se guarda; (13) la ruta es `/v1/projects/tasks` sin barra final.
+
+**Pendiente: app (Parte B del mismo plan)**, que fija su `contract/` al commit de merge de este PR.
+
 ## Módulo de costos — Etapa 1 (Cronograma), servidor — 2026-10-31
 
 **PR**: (PR pendiente). Rama `feat/costos-etapa1-servidor`. Plan: [2026-10-31-costos-etapa1-servidor-plan.md](2026-10-31-costos-etapa1-servidor-plan.md).
