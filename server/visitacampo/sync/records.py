@@ -83,6 +83,9 @@ def visit_record(visit: Visit) -> dict[str, Any]:
             "captured_at": iso(visit.captured_at),
             "device_id": str(visit.device_id),
             "created_by": str(visit.created_by_id),
+            "task_id": uuid_str(visit.task_id),
+            # `numeric` → número JSON (el contrato dice `number`, no texto).
+            "progress_pct": None if visit.progress_pct is None else float(visit.progress_pct),
         },
     }
 

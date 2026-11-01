@@ -131,6 +131,8 @@ class VisitData(Schema):
     captured_at: Timestamp
     device_id: uuid.UUID
     created_by: uuid.UUID
+    task_id: uuid.UUID | None
+    progress_pct: float | None
 
 
 class VisitRecord(Schema):

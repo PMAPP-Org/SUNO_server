@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from decimal import Decimal
 
 from django.test import SimpleTestCase
 
@@ -51,9 +52,13 @@ class CreateTests(SimpleTestCase):
                 "altitude_m",
                 "captured_at",
                 "device_id",
+                "task_id",
+                "progress_pct",
             },
         )
         self.assertIsNone(parsed.fields["assignment_id"])
+        self.assertIsNone(parsed.fields["task_id"])
+        self.assertIsNone(parsed.fields["progress_pct"])
 
     def test_rejects_a_create_that_sends_base_version(self) -> None:
         parsed = parse_op("visit", "create", 3, _create_payload())
@@ -430,3 +435,77 @@ class TargetIdTests(SimpleTestCase):
         parsed = parse_op("visit", "create", None, {"id": str(visit_id)})
         assert isinstance(parsed, Rejection)
         self.assertEqual(parsed.entity_id, visit_id)
+
+
+class TaskProgressTests(SimpleTestCase):
+    """Costos, etapa 1: `task_id` y `progress_pct` (forma y par; sin BD)."""
+
+    TASK = str(uuid.uuid4())
+
+    def _reasons(self, parsed: object) -> set[tuple[str, str]]:
+        assert isinstance(parsed, Rejection)
+        details = parsed.details or {}
+        errors = details.get("errors", [details])
+        return {(e["field"], e["reason"]) for e in errors}
+
+    def test_accepts_task_and_progress_as_decimal(self) -> None:
+        parsed = parse_op(
+            "visit", "create", None, _create_payload(task_id=self.TASK, progress_pct=35.5)
+        )
+        assert isinstance(parsed, VisitWrite)
+        self.assertEqual(parsed.fields["task_id"], uuid.UUID(self.TASK))
+        self.assertEqual(parsed.fields["progress_pct"], Decimal("35.5"))
+
+    def test_integers_and_the_bounds_are_valid(self) -> None:
+        for pct in (0, 100, 99.99):
+            with self.subTest(pct=pct):
+                parsed = parse_op(
+                    "visit", "create", None, _create_payload(task_id=self.TASK, progress_pct=pct)
+                )
+                self.assertIsInstance(parsed, VisitWrite)
+
+    def test_rejects_out_of_range_and_too_many_decimals(self) -> None:
+        for pct in (-0.01, 100.01, 150, 33.333):
+            with self.subTest(pct=pct):
+                parsed = parse_op(
+                    "visit", "create", None, _create_payload(task_id=self.TASK, progress_pct=pct)
+                )
+                self.assertIn("progress_pct", {field for field, _ in self._reasons(parsed)})
+
+    def test_rejects_what_is_not_a_json_number(self) -> None:
+        for pct in (True, "35", float("nan"), float("inf")):
+            with self.subTest(pct=pct):
+                parsed = parse_op(
+                    "visit", "create", None, _create_payload(task_id=self.TASK, progress_pct=pct)
+                )
+                self.assertIn("progress_pct", {field for field, _ in self._reasons(parsed)})
+
+    def test_task_and_progress_travel_together_on_create(self) -> None:
+        only_task = parse_op("visit", "create", None, _create_payload(task_id=self.TASK))
+        self.assertEqual(self._reasons(only_task), {("progress_pct", "task_progress_pair")})
+        only_pct = parse_op("visit", "create", None, _create_payload(progress_pct=10))
+        self.assertEqual(self._reasons(only_pct), {("task_id", "task_progress_pair")})
+
+    def test_update_carries_both_or_neither(self) -> None:
+        visit_id = str(uuid.uuid4())
+        both = parse_op(
+            "visit", "update", 3, {"id": visit_id, "task_id": self.TASK, "progress_pct": 50}
+        )
+        assert isinstance(both, VisitWrite)
+        self.assertEqual(
+            both.fields, {"task_id": uuid.UUID(self.TASK), "progress_pct": Decimal("50")}
+        )
+
+        unlink = parse_op(
+            "visit", "update", 3, {"id": visit_id, "task_id": None, "progress_pct": None}
+        )
+        assert isinstance(unlink, VisitWrite)
+        self.assertEqual(unlink.fields, {"task_id": None, "progress_pct": None})
+
+        only_pct = parse_op("visit", "update", 3, {"id": visit_id, "progress_pct": 50})
+        self.assertEqual(self._reasons(only_pct), {("task_id", "task_progress_pair")})
+
+        half_null = parse_op(
+            "visit", "update", 3, {"id": visit_id, "task_id": self.TASK, "progress_pct": None}
+        )
+        self.assertEqual(self._reasons(half_null), {("progress_pct", "task_progress_pair")})

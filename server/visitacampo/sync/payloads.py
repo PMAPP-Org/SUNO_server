@@ -70,11 +70,13 @@ from __future__ import annotations
 import math
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     StrictInt,
@@ -240,6 +242,26 @@ AnswersJson = Annotated[dict[str, Any], AfterValidator(_json_safe)]
 Finite = Annotated[float, Field(allow_inf_nan=False)]
 
 
+def _json_number(value: Any) -> Any:
+    """`progress_pct` viaja como número JSON: ni `true`, ni texto, ni NaN/Infinity.
+
+    `Decimal(str(value))` y no `Decimal(value)`: `Decimal(35.1)` arrastraría la
+    representación binaria del float (35.1000000000000014…) y no cumpliría
+    `decimal_places=2`; el texto del float es lo que el cliente quiso decir.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError("must be a JSON number.")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("must be finite.")
+    return Decimal(str(value))
+
+
+#: % de avance acumulado de una tarea (costos, etapa 1): `numeric(5,2)` en 0..100.
+ProgressPct = Annotated[Decimal, BeforeValidator(_json_number)]
+
+
 def _text_safe(value: str) -> str:
     """Texto que una columna `varchar` de PostgreSQL puede guardar.
 
@@ -315,6 +337,11 @@ class _VisitCreatePayload(BaseModel):
     # (`core/timestamps.py`).
     captured_at: UtcDatetime
     device_id: uuid.UUID
+    # Costos, etapa 1. Opcionales: un cliente anterior no los envía.
+    task_id: uuid.UUID | None = None
+    progress_pct: ProgressPct | None = Field(
+        default=None, ge=0, le=100, max_digits=5, decimal_places=2
+    )
 
 
 class _VisitUpdatePayload(BaseModel):
@@ -332,6 +359,10 @@ class _VisitUpdatePayload(BaseModel):
     altitude_m: Finite | None = None
     captured_at: UtcDatetime | None = None
     device_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
+    progress_pct: ProgressPct | None = Field(
+        default=None, ge=0, le=100, max_digits=5, decimal_places=2
+    )
 
     @field_validator(*_NON_NULLABLE_ON_UPDATE)
     @classmethod
@@ -372,6 +403,8 @@ _UPDATABLE_FIELDS: tuple[str, ...] = (
     "altitude_m",
     "captured_at",
     "device_id",
+    "task_id",
+    "progress_pct",
 )
 
 
@@ -387,6 +420,28 @@ def _rejection(
         code=code,
         message=message,
         details={"field": field, "reason": reason},
+        entity_id=entity_id,
+    )
+
+
+def _task_pair_rejection(fields: dict[str, Any], entity_id: uuid.UUID) -> Rejection | None:
+    """`task_id` y `progress_pct` van juntos: los dos con valor o los dos `null`.
+
+    Lo exige también la BD (`visit_task_progress_pair`), pero allí sería un
+    `IntegrityError` que tumba el lote entero (ver el docstring del módulo). En
+    un `update` tienen que viajar los dos: aceptar uno solo obligaría a leer la
+    fila para saber si el par queda completo.
+    """
+    has_task, has_pct = "task_id" in fields, "progress_pct" in fields
+    if not has_task and not has_pct:
+        return None
+    task_id, pct = fields.get("task_id"), fields.get("progress_pct")
+    if has_task and has_pct and (task_id is None) == (pct is None):
+        return None
+    return _rejection(
+        "task_id and progress_pct must be sent together, both set or both null.",
+        field="progress_pct" if task_id is not None else "task_id",
+        reason="task_progress_pair",
         entity_id=entity_id,
     )
 
@@ -514,6 +569,10 @@ def parse_op(
             )
     else:
         fields = {}
+
+    pair = _task_pair_rejection(fields, validated.id)
+    if pair is not None:
+        return pair
 
     return VisitWrite(
         entity_id=validated.id,
