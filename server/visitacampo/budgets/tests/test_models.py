@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from decimal import Decimal
+from typing import Any
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -77,7 +78,7 @@ class BudgetModelTests(TestCase):
         version = self._version(1)
         item = BudgetItem.objects.create(org=self.org, budget=self.budget, code="1.1")
 
-        def row(kind: str, quantity: str | None, price: str | None) -> BudgetItemVersion:
+        def row(kind: Any, quantity: str | None, price: str | None) -> BudgetItemVersion:
             return BudgetItemVersion.objects.create(
                 org=self.org,
                 version=version,
