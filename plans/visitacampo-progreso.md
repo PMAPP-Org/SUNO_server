@@ -1,11 +1,25 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-10-31 (Fases A, B y primera parte de C integradas; C4–C6 en PR abierto; ver «Estado al 2026-10-29» abajo. Anterior: 2026-10-17, línea base de seguridad y plan de demo completado)
+**Última actualización**: 2026-11-01 (módulo de costos, etapa 1 completa: servidor v0.11.0 y app v0.11.0. Anterior: 2026-10-31; ver «Estado al 2026-10-29» abajo)
+
+## Módulo de costos — Etapa 1 (Cronograma) — cerrada el 2026-11-01
+
+Las dos partes de la etapa 1 están integradas y publicadas: cronograma desde MS Project ([SUNO_server#45](https://github.com/PMAPP-Org/SUNO_server/pull/45), v0.10.0) y avance desde campo ([SUNO_server#46](https://github.com/PMAPP-Org/SUNO_server/pull/46) + [SUNO_client#46](https://github.com/PMAPP-Org/SUNO_client/pull/46), v0.11.0 en ambos repos). Siguiente pieza del módulo: presupuesto (pieza 3), luego homologación y llaves contextualizadoras (pieza 4) y control con valor ganado (pieza 5).
+
+**Pendientes conocidos**: prueba manual en navegador y en emulador de lo que la E2E no cubre (aviso "menor que el último validado", quitar un responsable, editar el % después de sincronizar); la lista de proyectos recalcula el cronograma de cada proyecto por petición (O(proyectos × tareas)).
+
+## Módulo de costos — Etapa 1, avance desde campo — app — 2026-11-01
+
+**PR**: [SUNO_client#46](https://github.com/PMAPP-Org/SUNO_client/pull/46) (merge `2a95096`), release v0.11.0. Plan: [2026-10-31-costos-etapa1-campo-plan.md](2026-10-31-costos-etapa1-campo-plan.md), Parte B.
+
+**Qué entra (Tasks B0–B9)**: `contract/` fijado al merge del servidor (`694aa99`); Drift v9 (tareas, su versión y `Visits.taskId`/`progressPct`; reinicia el cursor del pull); `ScheduleTaskSync` descarga la lista del agente en cada ciclo y la borra al cambiar de usuario u organización; la captura de visita gana "Tarea del cronograma" (búsqueda por EDT o nombre) y "% avance acumulado" con el último validado como referencia; "Para revisar" explica los rechazos por la tarea, ofrece "Quitar la tarea y reenviar" (también limpia ediciones pendientes posteriores) y, si la visita ya fue validada, solo deja descartar; "Enviar lo mío" solo manda la tarea si el agente la editó.
+
+**Verificación (números reales)**: `flutter test --concurrency=1` 494 tests: 493 pasan y 1 falla por entorno en un worktree (`visit_export_test` escribe en `.git`). Cobertura sin código generado 86,5 % (mínimo 75). `dart analyze` y lints limpios. E2E real en emulador: la visita llega al servidor vinculada a la tarea 1.1 con 35 %.
 
 ## Módulo de costos — Etapa 1 (Cronograma), avance desde campo — servidor — 2026-10-31
 
-**PR**: (PR pendiente). Rama `feat/costos-etapa1-campo`. Plan: [2026-10-31-costos-etapa1-campo-plan.md](2026-10-31-costos-etapa1-campo-plan.md).
+**PR**: [SUNO_server#46](https://github.com/PMAPP-Org/SUNO_server/pull/46) (merge `694aa99`), release v0.11.0. Plan: [2026-10-31-costos-etapa1-campo-plan.md](2026-10-31-costos-etapa1-campo-plan.md).
 
 **Qué entra (Tasks A1–A12, más una corrección de revisión)**: `Visit.task` y `Visit.progress_pct` (migración `0012`, `CHECK` de par, índice) y su viaje por el contrato de sync (campos opcionales: los clientes anteriores no cambian); responsable efectivo por rama del número de esquema (`projects/access.py`); validación de la tarea en el push (organización, vigente, de detalle, responsable, 0–100); `projects/field_progress.py` (último % validado por tarea y "menor que el último validado", calculado al leer); el % SUNO del cronograma, lista, Gantt y Excel sale de las visitas validadas; `GET /v1/projects/tasks` (lista completa con `version`, `changed: false` si no cambió); ficha de tarea con "Avance de campo"; Admin de visitas con columna, filtro y aviso de retroceso; aviso en la vista previa de importación de tareas retiradas con avance de campo; `bootstrap_demo --with-schedule` para la E2E. Corrección de revisión: la importación rechaza un XML cuya tarea no trae su tarea superior (p. ej. "1.2.3" sin "1.2"), para que la responsabilidad por esquema y la herencia por `parent` nunca discrepen.
 
@@ -15,11 +29,11 @@
 
 **Decisiones que cambian la spec**: (1) la descarga de tareas es un endpoint propio con lista completa y `version`, no el pull por `change_seq`; (4) solo se reporta avance en tareas de detalle; (7) quien vincula una tarea debe ser responsable efectivo (desvincular no lo exige); (8) "menor que el último validado" se calcula al leer, no se guarda; (13) la ruta es `/v1/projects/tasks` sin barra final; (15, decidida en revisión) una visita cuya última revisión es `approved` no puede cambiar su tarea ni su % por el push (`validation_error` / `visit_validated`), así el % validado no se altera sin una nueva revisión.
 
-**Pendiente: app (Parte B del mismo plan)**, que fija su `contract/` al commit de merge de este PR.
+**App (Parte B del mismo plan)**: integrada, ver la sección de arriba.
 
 ## Módulo de costos — Etapa 1 (Cronograma), servidor — 2026-10-31
 
-**PR**: (PR pendiente). Rama `feat/costos-etapa1-servidor`. Plan: [2026-10-31-costos-etapa1-servidor-plan.md](2026-10-31-costos-etapa1-servidor-plan.md).
+**PR**: [SUNO_server#45](https://github.com/PMAPP-Org/SUNO_server/pull/45), release v0.10.0. Plan: [2026-10-31-costos-etapa1-servidor-plan.md](2026-10-31-costos-etapa1-servidor-plan.md).
 
 **Qué entra (Tasks 1–14, más portada)**: modelos y migración (proyecto, importación, tarea, responsables); calendario laboral; lector MSPDI; cálculos de atraso y avance por fuente (SUNO / Project); permisos y visibilidad por rol; importación en dos pasos (vista previa y aplicar/descartar en una transacción bloqueada); armado del cronograma; páginas en `/plataforma/proyectos/` (lista, cronograma con filtros, ficha de tarea con responsables, importar, vista previa, historial y descarga del XML); Gantt SVG propio con línea base, ruta crítica, dependencias y fecha de corte; exportación a Excel auditada; la portada de la plataforma lista los proyectos visibles.
 
@@ -29,7 +43,7 @@
 
 **Mejoras pendientes**: la lista de proyectos recalcula el cronograma de cada proyecto en cada petición (O(proyectos × tareas)); cachear o guardar el rollup cuando llegue el avance de campo.
 
-**Pendiente**: avance desde campo (plan `2026-10-31-costos-etapa1-campo-plan.md`, por escribir).
+**Avance desde campo**: integrado en v0.11.0, ver las secciones de arriba.
 
 
 ## Estado al 2026-10-29
