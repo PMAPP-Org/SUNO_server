@@ -137,3 +137,30 @@ class ScheduleSunoPctTests(TestCase):
         row = self.row(build_schedule(w.ctx(), w.project, suno_pct={}), 3)
         assert row.indicators is not None
         self.assertEqual(row.indicators.suno.actual_pct, 0.0)
+
+
+@skip_without_db
+class TaskPageFieldProgressTests(TestCase):
+    def setUp(self) -> None:
+        self.world = make_field_world()
+        self.url = f"/plataforma/proyectos/{self.world.project.pk}/tareas/{self.world.task(3).pk}/"
+
+    def test_shows_linked_visits_with_status_and_regression(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "60", hours=1))
+        w.visit(3, "40", hours=2)
+        self.client.force_login(w.supervisor)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Avance de campo")
+        self.assertContains(
+            response, "% SUNO (última visita validada): <strong>60 %</strong>", html=False
+        )
+        self.assertContains(response, "Validada")
+        self.assertContains(response, "Sin revisar")
+        self.assertContains(response, "Menor que el último validado (60 %)")
+        self.assertContains(response, w.agent.username)
+
+    def test_without_visits(self) -> None:
+        self.client.force_login(self.world.supervisor)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Sin visitas vinculadas.")

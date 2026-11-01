@@ -41,4 +41,26 @@
   </form>
   {% endif %}
 </section>
+<section class="pj-panel">
+  <h2>Avance de campo</h2>
+  <p>% SUNO (última visita validada): <strong>{% if suno_pct is not None %}{{ suno_pct|floatformat:"-2" }} %{% else %}—{% endif %}</strong></p>
+  {% if field_visits %}
+  <table class="pj-table">
+    <thead><tr><th>Fecha</th><th>Autor</th><th>% acumulado</th><th>Revisión</th><th>Aviso</th></tr></thead>
+    <tbody>
+      {% for row in field_visits %}
+      <tr>
+        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.visit.progress_pct|floatformat:"-2" }} %</td>
+        <td>{% if request.user.is_staff %}<a href="{% url 'admin:core_visit_change' row.visit.pk %}">{{ row.status_label }}</a>{% else %}{{ row.status_label }}{% endif %}</td>
+        <td>{% if row.regression %}<span class="pj-late">Menor que el último validado ({{ row.previous_validated_pct|floatformat:"-2" }} %)</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="pj-muted">Sin visitas vinculadas.</p>
+  {% endif %}
+</section>
 {% endblock %}
