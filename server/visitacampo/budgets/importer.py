@@ -20,7 +20,9 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
+from django.db.models import Max
 from django.http import Http404
+from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
@@ -42,8 +44,8 @@ from .excel import (
     parse_budget,
     preview_sheet,
 )
-from .mapping import ColumnMapping
-from .totals import ChargeError, ChargeSpec, default_charges, validate_charges
+from .mapping import ColumnMapping, MappingError
+from .totals import ChargeError, ChargeSpec, compute_charges, default_charges, validate_charges
 
 BUSY = "Otra importación de este presupuesto está en curso; intenta de nuevo en unos segundos."
 
@@ -207,3 +209,112 @@ def discard_version(ctx: RequestContext, version_id: UUID) -> BudgetVersion:
         version.status = BudgetVersionStatus.DISCARDED
         version.save(update_fields=["status"])
         return version
+
+
+def _ensure_items(
+    ctx: RequestContext, budget: Budget, parsed: ParsedBudget
+) -> dict[str, BudgetItem]:
+    """Los `BudgetItem` de cada código: los existentes (aunque hayan sido
+    eliminados en versiones anteriores, así vuelven con la misma identidad) y
+    los nuevos."""
+    qs = scoped_qs(ctx, BudgetItem)
+    items = {item.code: item for item in qs.filter(budget=budget)}
+    new = [
+        BudgetItem(org_id=ctx.org_id, budget=budget, code=row.code)
+        for row in parsed.rows
+        if row.code not in items
+    ]
+    qs.bulk_create(new, batch_size=1000)
+    items.update({item.code: item for item in new})
+    return items
+
+
+def apply_version(ctx: RequestContext, version_id: UUID) -> BudgetVersion:
+    with transaction.atomic():
+        version, budget = _locked_pending(ctx, version_id, with_file=True)
+        summary = version.summary
+        if "mapping" not in summary:
+            raise ImportRejected("Falta confirmar el mapeo de columnas de esta versión.")
+        current = current_version(ctx, budget)
+        if (current.number if current else None) != summary.get("base_number"):
+            raise ImportRejected(
+                "Se aplicó otra versión de este presupuesto después de subir esta. "
+                "Vuelve a subir el archivo para ver los cambios actualizados."
+            )
+        try:
+            mapping = ColumnMapping.from_json(summary["mapping"])
+        except MappingError as exc:
+            raise ImportRejected(str(exc)) from exc
+        parsed = _parse(bytes(version.source_file), mapping)
+        items = _ensure_items(ctx, budget, parsed)
+        scoped_qs(ctx, BudgetItemVersion).bulk_create(
+            [
+                BudgetItemVersion(
+                    org_id=ctx.org_id,
+                    version=version,
+                    item=items[row.code],
+                    kind=row.kind,
+                    sort_order=row.sort_order,
+                    description=row.description,
+                    unit=row.unit,
+                    quantity=row.quantity,
+                    unit_price=row.unit_price,
+                    total=row.total,
+                    parent=items[row.parent_code] if row.parent_code else None,
+                )
+                for row in parsed.rows
+            ],
+            batch_size=1000,
+        )
+
+        charges = list(scoped_qs(ctx, BudgetCharge).filter(version=version).order_by("order"))
+        try:
+            result = compute_charges(
+                parsed.direct_cost,
+                [ChargeSpec(c.order, c.name, c.pct, c.base) for c in charges],
+            )
+        except ChargeError as exc:
+            raise ImportRejected(str(exc)) from exc
+        amounts = {line.order: line.amount for line in result.lines}
+        for charge in charges:
+            charge.amount = amounts[charge.order]
+        scoped_qs(ctx, BudgetCharge).bulk_update(charges, ["amount"])
+
+        applied = scoped_qs(ctx, BudgetVersion).filter(budget=budget)
+        version.number = (applied.aggregate(n=Max("number"))["n"] or 0) + 1
+        version.status = BudgetVersionStatus.APPLIED
+        version.applied_at = timezone.now()
+        version.direct_cost = result.direct_cost
+        version.total = result.total
+        version.save(update_fields=["number", "status", "applied_at", "direct_cost", "total"])
+        if budget.contractual_version_id is None:
+            budget.contractual_version = version
+            budget.save(update_fields=["contractual_version"])
+        return version
+
+
+def mark_contractual(
+    ctx: RequestContext, budget_id: UUID, version_id: UUID
+) -> tuple[int | None, BudgetVersion]:
+    """Hace contractual una versión aplicada. Devuelve el número de la anterior."""
+    with transaction.atomic():
+        budget = _locked_budget(ctx, budget_id)
+        try:
+            version = (
+                scoped_qs(ctx, BudgetVersion)
+                .defer("source_file")
+                .get(pk=version_id, budget=budget, status=BudgetVersionStatus.APPLIED)
+            )
+        except BudgetVersion.DoesNotExist as exc:
+            raise ImportRejected(
+                "Solo una versión aplicada de este presupuesto puede ser la contractual."
+            ) from exc
+        previous: int | None = (
+            scoped_qs(ctx, BudgetVersion)
+            .filter(pk=budget.contractual_version_id)
+            .values_list("number", flat=True)
+            .first()
+        )
+        budget.contractual_version = version
+        budget.save(update_fields=["contractual_version"])
+        return previous, version
