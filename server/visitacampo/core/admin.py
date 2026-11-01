@@ -22,13 +22,14 @@ Cubre lo que pide el back-office del MVP:
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import F, Max, Q, QuerySet
+from django.db.models import F, QuerySet
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -86,6 +87,12 @@ from visitacampo.core.policies import (
 from visitacampo.forms.definition import TemplateDefinitionError, validate_definition
 from visitacampo.forms.services import publish_version
 from visitacampo.layers.services import retire as retire_layer
+from visitacampo.projects.field_progress import (
+    is_regression,
+    review_status,
+    with_previous_validated_pct,
+    with_review,
+)
 
 # --- Organización, usuarios y membresías -------------------------------------
 
@@ -238,12 +245,30 @@ class ReviewStatusFilter(admin.SimpleListFilter):
 
 
 def _latest_review(visit: Visit) -> str | None:
-    """Decisión vigente: la más reciente. Sin subconsultas: dos `Max` anotados."""
-    last = getattr(visit, "last_review_at", None)
-    if last is None:
-        return None
-    approved = getattr(visit, "last_approved_at", None)
-    return str(VisitReviewStatus.APPROVED) if approved == last else str(VisitReviewStatus.REJECTED)
+    """Decisión vigente: la más reciente (`projects.field_progress.review_status`)."""
+    return review_status(visit)
+
+
+def _pct(value: Decimal) -> str:
+    """`Decimal('40.50')` → `40,5 %`."""
+    return f"{value.normalize():f}".replace(".", ",") + " %"
+
+
+class ProgressRegressionFilter(admin.SimpleListFilter):
+    """Costos, etapa 1: visitas vinculadas a una tarea y las que retroceden."""
+
+    title = "avance de cronograma"
+    parameter_name = "avance"
+
+    def lookups(self, request: Any, model_admin: Any) -> Any:
+        return (("tarea", "Vinculadas a una tarea"), ("menor", "Menor que el último validado"))
+
+    def queryset(self, request: Any, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
+        if self.value() == "tarea":
+            return queryset.filter(task__isnull=False)
+        if self.value() == "menor":
+            return queryset.filter(progress_pct__lt=F("previous_validated_pct"))
+        return queryset
 
 
 def _preview(request: Any, attachment: VisitAttachment) -> Any:
@@ -299,11 +324,16 @@ class VisitReviewInline(admin.TabularInline):
 
 @admin.register(Visit)
 class VisitAdmin(ReadOnlyAdmin):
-    list_display = ("captured_at", "template", "created_by", "review", "version")
-    list_filter = (ReviewStatusFilter, "captured_at", "template_version__template")
+    list_display = ("captured_at", "template", "created_by", "progress", "review", "version")
+    list_filter = (
+        ReviewStatusFilter,
+        ProgressRegressionFilter,
+        "captured_at",
+        "template_version__template",
+    )
     search_fields = ("created_by__username", "template_version__name")
     date_hierarchy = "captured_at"
-    list_select_related = ("template_version", "created_by")
+    list_select_related = ("template_version", "created_by", "task")
     fields = (
         "id",
         "template_version",
@@ -315,6 +345,8 @@ class VisitAdmin(ReadOnlyAdmin):
         "accuracy_m",
         "altitude_m",
         "answers_pretty",
+        "task",
+        "progress",
         "version",
         "change_seq",
         "deleted_at",
@@ -332,17 +364,18 @@ class VisitAdmin(ReadOnlyAdmin):
     )
 
     def get_queryset(self, request: Any) -> QuerySet[Visit]:
-        return (
-            super()
-            .get_queryset(request)
-            .annotate(
-                last_review_at=Max("reviews__created_at"),
-                last_approved_at=Max(
-                    "reviews__created_at",
-                    filter=Q(reviews__status=str(VisitReviewStatus.APPROVED)),
-                ),
-            )
-        )
+        base = super().get_queryset(request)
+        return with_previous_validated_pct(with_review(base), base)
+
+    @admin.display(description="avance de cronograma")
+    def progress(self, visit: Visit) -> str:
+        if visit.task_id is None or visit.progress_pct is None:
+            return "—"
+        text = f"{visit.task} · {_pct(visit.progress_pct)}"
+        previous = getattr(visit, "previous_validated_pct", None)
+        if previous is not None and is_regression(visit.progress_pct, previous):
+            text += f" ⚠ menor que el último validado ({_pct(previous)})"
+        return text
 
     @admin.display(description="plantilla")
     def template(self, visit: Visit) -> str:
