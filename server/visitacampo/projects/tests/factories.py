@@ -123,10 +123,10 @@ class FieldWorld:
         )
 
     def approve(self, visit: Visit) -> VisitReview:
-        return self.review(visit, VisitReviewStatus.APPROVED)
+        return self.review(visit, str(VisitReviewStatus.APPROVED))
 
     def reject(self, visit: Visit) -> VisitReview:
-        return self.review(visit, VisitReviewStatus.REJECTED)
+        return self.review(visit, str(VisitReviewStatus.REJECTED))
 
 
 def make_field_world(name: str = "Constructora") -> FieldWorld:
