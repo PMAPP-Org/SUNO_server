@@ -6,16 +6,18 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from django.http import Http404
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import AppUser, Project, Task, TaskResource
+from visitacampo.core.models import AppUser, Project, Task, TaskResource, Visit
 from visitacampo.core.scoping import scoped_qs
 
 from .access import effective_responsibles
+from .field_progress import validated_pct_by_task
 from .progress import TaskIndicators, TaskInput, compute_indicators, rollup
 from .workdays import WorkCalendar
 
@@ -42,12 +44,13 @@ def build_schedule(
     project: Project,
     *,
     cut: date | None = None,
-    suno_pct: Mapping[UUID, float] | None = None,
+    suno_pct: Mapping[UUID, float | Decimal] | None = None,
 ) -> Schedule:
     """Tareas vigentes en el orden del Project, con sus indicadores.
 
-    `suno_pct`: % SUNO por id de tarea (avance de campo validado). Lo
-    alimenta la parte de campo de la etapa 1; sin él, todo vale 0.
+    `suno_pct`: % SUNO por id de tarea. Sin él se calcula del avance de campo
+    validado (`field_progress.validated_pct_by_task`), así que lo reciben todas
+    las páginas que llaman aquí: lista, cronograma, Gantt y Excel.
     """
     if project.org_id != ctx.org_id:
         raise Http404("Proyecto no encontrado.")
@@ -78,7 +81,9 @@ def build_schedule(
         )
         for t in tasks
     ]
-    suno = {str(k): float(v) for k, v in (suno_pct or {}).items()}
+    if suno_pct is None:
+        suno_pct = validated_pct_by_task(scoped_qs(ctx, Visit), project_id=project.pk)
+    suno = {str(k): float(v) for k, v in suno_pct.items()}
     indicators = compute_indicators(inputs, suno, WorkCalendar.from_json(project.calendar), cut)
     rows = [
         ScheduleRow(

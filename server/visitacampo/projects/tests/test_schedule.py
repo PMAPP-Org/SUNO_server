@@ -68,7 +68,7 @@ class BuildScheduleTests(TestCase):
     def test_suno_progress_accepts_decimals(self) -> None:
         task = self.project.tasks.get(uid=3)
         pct = {task.pk: Decimal("100")}
-        schedule = build_schedule(self.ctx, self.project, suno_pct=pct)  # type: ignore[arg-type]
+        schedule = build_schedule(self.ctx, self.project, suno_pct=pct)
         row = next(r for r in schedule.rows if r.task.uid == 3)
         assert row.indicators is not None
         self.assertEqual(row.indicators.suno.actual_pct, 100.0)

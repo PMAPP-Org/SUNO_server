@@ -21,6 +21,7 @@ from visitacampo.projects.field_progress import (
     progress_visits,
     validated_pct_by_task,
 )
+from visitacampo.projects.schedule import Schedule, ScheduleRow, build_schedule
 
 from .factories import make_field_world, make_visit
 
@@ -112,3 +113,27 @@ class ValidatedPctTests(TestCase):
         self.assertFalse(is_regression(Decimal("60"), Decimal("60")))
         self.assertFalse(is_regression(Decimal("40"), None))
         self.assertFalse(is_regression(None, Decimal("60")))
+
+
+@skip_without_db
+class ScheduleSunoPctTests(TestCase):
+    def setUp(self) -> None:
+        self.world = make_field_world()
+
+    def row(self, schedule: Schedule, uid: int) -> ScheduleRow:
+        return next(r for r in schedule.rows if r.task.uid == uid)
+
+    def test_build_schedule_reads_validated_field_progress(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "50", hours=1))
+        w.visit(3, "90", hours=2)  # sin validar
+        row = self.row(build_schedule(w.ctx(), w.project), 3)
+        assert row.indicators is not None
+        self.assertEqual(row.indicators.suno.actual_pct, 50.0)
+
+    def test_an_explicit_map_still_wins(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "50", hours=1))
+        row = self.row(build_schedule(w.ctx(), w.project, suno_pct={}), 3)
+        assert row.indicators is not None
+        self.assertEqual(row.indicators.suno.actual_pct, 0.0)
