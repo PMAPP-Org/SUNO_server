@@ -10,6 +10,7 @@ al del propio doc 08:
 - `visit`    — `Visit`, `Blob`, `VisitAttachment`.
 - `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
 - `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
+- `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
 
 Todos los modelos se reexportan aquí para que `from visitacampo.core.models
 import Visit` funcione igual que con un `models.py` plano.
@@ -33,6 +34,15 @@ from .base import (
     SyncEntityType,
 )
 from .basemap import BasemapPackage, TileFormat
+from .budget import (
+    Budget,
+    BudgetCharge,
+    BudgetItem,
+    BudgetItemVersion,
+    BudgetRowKind,
+    BudgetVersion,
+    BudgetVersionStatus,
+)
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .layer import ReferenceLayer
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
@@ -62,6 +72,13 @@ __all__ = [
     "AppUser",
     "Assignment",
     "BasemapPackage",
+    "Budget",
+    "BudgetCharge",
+    "BudgetItem",
+    "BudgetItemVersion",
+    "BudgetRowKind",
+    "BudgetVersion",
+    "BudgetVersionStatus",
     "AttachmentRole",
     "AuditEvent",
     "Blob",
