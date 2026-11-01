@@ -204,3 +204,23 @@ class NumberReadingTests(unittest.TestCase):
         self.assertEqual(len(parsed.warnings), 1)
         self.assertIn("1 celda(s) de texto con un punto seguido de 3 dígitos", parsed.warnings[0])
         self.assertIn("fila 2 (1.234)", parsed.warnings[0])
+
+
+class NumericCodeTests(unittest.TestCase):
+    def test_fractional_numeric_codes_are_warned(self) -> None:
+        parsed = interpret([[1.2, "Preliminares", "u", 1, 1], ["2", "B", "u", 1, 1]])
+        self.assertEqual(len(parsed.warnings), 1)
+        self.assertIn("1 código(s) vienen como número en Excel (1.2 (fila 2))", parsed.warnings[0])
+        self.assertIn("formato de texto", parsed.warnings[0])
+
+    def test_integer_valued_numeric_codes_are_not_warned(self) -> None:
+        self.assertEqual(interpret([[1, "A", "u", 1, 1]]).warnings, ())
+
+    def test_duplicate_from_numeric_cells_gets_the_hint(self) -> None:
+        with self.assertRaises(ExcelRejected) as caught:
+            interpret([["1.1", "A", "u", 1, 1], [1.1, "B", "u", 1, 1]])
+        self.assertIn("El código 1.1 está repetido", str(caught.exception))
+        self.assertIn("formato de texto", str(caught.exception))
+        with self.assertRaises(ExcelRejected) as caught:
+            interpret([["1.1", "A", "u", 1, 1], ["1.1", "B", "u", 1, 1]])
+        self.assertNotIn("formato de texto", str(caught.exception))

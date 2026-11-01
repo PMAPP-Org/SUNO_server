@@ -17,7 +17,15 @@ from visitacampo.budgets.excel import (
 )
 from visitacampo.budgets.mapping import MAX_COLUMNS
 
-from .xlsx import HEADER, build_xlsx, with_cached_formula, with_extra_entry
+from .xlsx import (
+    HEADER,
+    build_xlsx,
+    rewrite_entry,
+    with_bad_crc,
+    with_cached_formula,
+    with_entry_bytes,
+    with_extra_entry,
+)
 
 ROWS: list[list[Any]] = [["1", "Preliminares"], ["1.1", "Localización", "m2", 100, 1500, 150000]]
 
@@ -109,3 +117,42 @@ class ReadRowsTests(unittest.TestCase):
     def test_formulas_are_read_as_their_calculated_value(self) -> None:
         data = with_cached_formula(build_xlsx(ROWS), "F3", "D3*E3", "150000")
         self.assertEqual(read_rows(data, "Presupuesto")[2][5], 150000)
+
+
+SHEET = "xl/worksheets/sheet1.xml"
+
+
+def corrupt_files() -> dict[str, bytes]:
+    data = build_xlsx(ROWS)
+    return {
+        "truncated": rewrite_entry(data, SHEET, lambda xml: xml[: len(xml) // 2]),
+        "garbage": with_entry_bytes(data, SHEET, b"esto no es xml <<<"),
+        "bad crc": with_bad_crc(data),
+    }
+
+
+class CorruptSheetTests(unittest.TestCase):
+    def test_corrupt_sheets_are_rejected_not_raised(self) -> None:
+        for name, data in corrupt_files().items():
+            with self.subTest(case=name, call="read_rows"), self.assertRaises(ExcelRejected):
+                read_rows(data, "Presupuesto")
+            with self.subTest(case=name, call="preview_sheet"), self.assertRaises(ExcelRejected):
+                preview_sheet(data)
+
+
+class MemoryCapsTests(unittest.TestCase):
+    def test_a_single_entry_over_the_cap_is_rejected(self) -> None:
+        with mock.patch.object(excel, "MAX_ENTRY_BYTES", 100):
+            with self.assertRaises(ExcelRejected) as caught:
+                read_rows(build_xlsx(ROWS), "Presupuesto")
+        self.assertIn("demasiado grande", str(caught.exception))
+
+    def test_reading_stops_after_a_long_gap_past_the_row_limit(self) -> None:
+        rows: list[list[Any]] = [["1.1", "A", "u", 1, 1]]
+        rows += [[] for _ in range(excel.EMPTY_GAP + 20)]
+        rows.append(["9.9", "Lejos", "u", 1, 1])
+        data = build_xlsx(rows)
+        self.assertEqual(len(read_rows(data, "Presupuesto", max_rows=5)), 5)
+        # Datos pegados al límite siguen rechazándose.
+        with self.assertRaises(ExcelRejected):
+            read_rows(build_xlsx([["x"]] * 8), "Presupuesto", max_rows=5)

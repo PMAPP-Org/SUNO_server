@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import unittest
 from decimal import Decimal
+from typing import Any
 from unittest import mock
 
-from django.db import connection, connections
+from django.db import OperationalError, connection, connections
 from django.http import Http404
 from django.test import TestCase, TransactionTestCase
 
@@ -43,6 +44,7 @@ from visitacampo.core.tests.dbsupport import (
 
 from .factories import apply_rows, make_budget, stage_rows
 from .samples import AIU, MAPPING, V1_ROWS, V2_ROWS, V3_ROWS, xlsx
+from .xlsx import rewrite_entry, with_bad_crc
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -273,3 +275,55 @@ class ConcurrentImportTests(TransactionTestCase):
             other.close()
         staged.refresh_from_db()
         self.assertEqual(staged.status, BudgetVersionStatus.PENDING)
+
+
+@skip_without_db
+class CorruptFileTests(ImporterTestCase):
+    SHEET = "xl/worksheets/sheet1.xml"
+
+    def _corrupt(self) -> dict[str, bytes]:
+        good = xlsx(V1_ROWS)
+        return {
+            "truncated": rewrite_entry(good, self.SHEET, lambda xml: xml[: len(xml) // 2]),
+            "bad crc": with_bad_crc(good),
+        }
+
+    def _raw_version(self, data: bytes, **extra: Any) -> BudgetVersion:
+        return BudgetVersion.objects.create(
+            org=self.org,
+            budget=self.budget,
+            file_name="x.xlsx",
+            source_file=data,
+            uploaded_by=self.admin,
+            **extra,
+        )
+
+    def test_upload_prepare_and_apply_reject_cleanly(self) -> None:
+        for name, data in self._corrupt().items():
+            with self.subTest(case=name, call="upload"):
+                # La subida solo lee la primera fila: puede aceptar un archivo roto más abajo
+                # (lo rechaza `prepare_version`), pero nunca lanza otra excepción.
+                try:
+                    create_upload(self.ctx, self.budget, file_name="x.xlsx", data=data)
+                except ImportRejected:
+                    pass
+            raw = self._raw_version(data)
+            with self.subTest(case=name, call="prepare"), self.assertRaises(ImportRejected):
+                prepare_version(self.ctx, raw.pk, MAPPING)
+            staged = self._raw_version(
+                data, summary={"mapping": MAPPING.to_json(), "base_number": None}
+            )
+            with self.subTest(case=name, call="apply"), self.assertRaises(ImportRejected):
+                apply_version(self.ctx, staged.pk)
+
+
+@skip_without_db
+class LockErrorTests(ImporterTestCase):
+    def test_other_database_errors_are_not_reported_as_busy(self) -> None:
+        with (
+            mock.patch.object(
+                importer, "scoped_qs", side_effect=OperationalError("conexión perdida")
+            ),
+            self.assertRaises(OperationalError),
+        ):
+            importer._locked_budget(self.ctx, self.budget.pk)

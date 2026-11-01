@@ -31,8 +31,11 @@ from __future__ import annotations
 
 import io
 import re
+import xml.etree.ElementTree as ET
 import zipfile
-from collections.abc import Collection, Sequence
+import zlib
+from collections.abc import Collection, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -46,6 +49,9 @@ from .totals import ZERO, item_total, money, parse_number_detail, quantity
 MAX_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 20_000
 MAX_EXPANDED_BYTES = 200 * 1024 * 1024
+MAX_ENTRY_BYTES = 50 * 1024 * 1024
+#: Filas vacías seguidas, pasado el límite de filas, a partir de las cuales se deja de leer.
+EMPTY_GAP = 1_000
 MAX_ENTRIES = 1_000
 PREVIEW_ROWS = 30
 MAX_CODE_LENGTH = 50
@@ -64,6 +70,11 @@ KIND_ITEM = "item"
 _TOTAL_LABEL = re.compile(r"(sub\s*-?\s*)?totale?s?\b")
 
 _NOT_XLSX = "El archivo no es un archivo .xlsx válido."
+
+_NUMERIC_CODE_HINT = (
+    "Si hay códigos como 1.10 y 1.1, dales formato de texto en Excel: "
+    "como número se pierde el cero."
+)
 
 
 class ExcelRejected(Exception):
@@ -84,6 +95,31 @@ def _thousands(value: int) -> str:
     return f"{value:,}".replace(",", ".")
 
 
+_CORRUPT = (
+    zipfile.BadZipFile,
+    zlib.error,
+    ET.ParseError,
+    InvalidFileException,
+    KeyError,
+    ValueError,
+    TypeError,
+    EOFError,
+    OSError,
+)
+
+
+@contextmanager
+def _guard() -> Iterator[None]:
+    """Un archivo corrupto (también el que falla al leer las filas, que openpyxl
+    parsea perezosamente) se rechaza con un mensaje, no con una excepción."""
+    try:
+        yield
+    except ExcelRejected:
+        raise
+    except _CORRUPT as exc:
+        raise ExcelRejected(_NOT_XLSX) from exc
+
+
 def _check_archive(data: bytes, max_bytes: int) -> None:
     if len(data) > max_bytes:
         raise ExcelRejected(f"El archivo supera {max_bytes // (1024 * 1024)} MB.")
@@ -92,7 +128,11 @@ def _check_archive(data: bytes, max_bytes: int) -> None:
             entries = archive.infolist()
     except zipfile.BadZipFile as exc:
         raise ExcelRejected(_NOT_XLSX) from exc
-    if len(entries) > MAX_ENTRIES or sum(e.file_size for e in entries) > MAX_EXPANDED_BYTES:
+    if (
+        len(entries) > MAX_ENTRIES
+        or sum(e.file_size for e in entries) > MAX_EXPANDED_BYTES
+        or any(e.file_size > MAX_ENTRY_BYTES for e in entries)
+    ):
         raise ExcelRejected("El libro es demasiado grande una vez descomprimido.")
     if any("vbaProject" in entry.filename for entry in entries):
         raise ExcelRejected("El libro contiene macros: guárdalo como .xlsx sin macros.")
@@ -100,10 +140,7 @@ def _check_archive(data: bytes, max_bytes: int) -> None:
 
 def _open(data: bytes, max_bytes: int) -> Any:
     _check_archive(data, max_bytes)
-    try:
-        return load_workbook(io.BytesIO(data), read_only=True, data_only=True, keep_links=False)
-    except (InvalidFileException, KeyError, ValueError, TypeError, OSError) as exc:
-        raise ExcelRejected(_NOT_XLSX) from exc
+    return load_workbook(io.BytesIO(data), read_only=True, data_only=True, keep_links=False)
 
 
 def _present(value: Any) -> bool:
@@ -125,23 +162,24 @@ def preview_sheet(
     max_bytes: int = MAX_BYTES,
 ) -> SheetPreview:
     """Las primeras `rows` filas de `sheet` (o de la primera hoja si no existe)."""
-    workbook = _open(data, max_bytes)
-    try:
-        names = tuple(workbook.sheetnames)
-        if not names:
-            raise ExcelRejected("El libro no tiene hojas.")
-        name: str = sheet if sheet is not None and sheet in names else names[0]
-        worksheet = workbook[name]
-        worksheet.reset_dimensions()
-        values = tuple(
-            tuple(row)
-            for row in worksheet.iter_rows(
-                min_row=1, max_row=rows, max_col=MAX_COLUMNS, values_only=True
+    with _guard():
+        workbook = _open(data, max_bytes)
+        try:
+            names = tuple(workbook.sheetnames)
+            if not names:
+                raise ExcelRejected("El libro no tiene hojas.")
+            name: str = sheet if sheet is not None and sheet in names else names[0]
+            worksheet = workbook[name]
+            worksheet.reset_dimensions()
+            values = tuple(
+                tuple(row)
+                for row in worksheet.iter_rows(
+                    min_row=1, max_row=rows, max_col=MAX_COLUMNS, values_only=True
+                )
             )
-        )
-        return SheetPreview(sheet_names=names, sheet=name, rows=values)
-    finally:
-        workbook.close()
+            return SheetPreview(sheet_names=names, sheet=name, rows=values)
+        finally:
+            workbook.close()
 
 
 def read_rows(
@@ -151,29 +189,38 @@ def read_rows(
     max_rows: int = MAX_ROWS,
     max_bytes: int = MAX_BYTES,
 ) -> list[tuple[Any, ...]]:
-    """Todas las filas de `sheet` (la 1 de Excel es la posición 0), de 60 columnas."""
-    workbook = _open(data, max_bytes)
-    try:
-        if sheet not in workbook.sheetnames:
-            raise ExcelRejected(
-                f"El libro no tiene la hoja «{sheet}». Cambia el mapeo de columnas."
-            )
-        worksheet = workbook[sheet]
-        worksheet.reset_dimensions()
-        rows: list[tuple[Any, ...]] = []
-        for number, row in enumerate(
-            worksheet.iter_rows(min_row=1, max_col=MAX_COLUMNS, values_only=True), start=1
-        ):
-            if number <= max_rows:
-                rows.append(tuple(row))
-            elif any(_present(value) for value in row):
+    """Todas las filas de `sheet` (la 1 de Excel es la posición 0), de 60 columnas.
+
+    Pasado `max_rows`, se rechaza si hay datos; y se deja de leer tras `EMPTY_GAP`
+    filas vacías seguidas (una hoja que declara millones de filas vacías).
+    """
+    with _guard():
+        workbook = _open(data, max_bytes)
+        try:
+            if sheet not in workbook.sheetnames:
                 raise ExcelRejected(
-                    f"La hoja tiene datos después de la fila {_thousands(max_rows)}: "
-                    f"el máximo es {_thousands(max_rows)} filas."
+                    f"El libro no tiene la hoja «{sheet}». Cambia el mapeo de columnas."
                 )
-        return rows
-    finally:
-        workbook.close()
+            worksheet = workbook[sheet]
+            worksheet.reset_dimensions()
+            rows: list[tuple[Any, ...]] = []
+            empty_run = 0
+            for number, row in enumerate(
+                worksheet.iter_rows(min_row=1, max_col=MAX_COLUMNS, values_only=True), start=1
+            ):
+                empty_run = 0 if any(_present(value) for value in row) else empty_run + 1
+                if number <= max_rows:
+                    rows.append(tuple(row))
+                elif empty_run == 0:
+                    raise ExcelRejected(
+                        f"La hoja tiene datos después de la fila {_thousands(max_rows)}: "
+                        f"el máximo es {_thousands(max_rows)} filas."
+                    )
+                elif empty_run >= EMPTY_GAP:
+                    break
+            return rows
+        finally:
+            workbook.close()
 
 
 @dataclass(frozen=True)
@@ -324,11 +371,14 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
     first_seen: dict[str, int] = {}
     ignored: list[int] = []
     guesses: list[str] = []
+    numeric_codes: dict[str, int] = {}
     for number in range(mapping.first_row, len(rows) + 1):
         row = rows[number - 1]
         if not any(_present(value) for value in row):
             continue
-        code = _code(_cell(row, col["code"]))
+        raw_code = _cell(row, col["code"])
+        code = _code(raw_code)
+        numeric = isinstance(raw_code, float) and not raw_code.is_integer()
         description = _text(_cell(row, col["description"]))
         if not code or _is_total_label(code) or _is_total_label(description):
             ignored.append(number)
@@ -359,10 +409,13 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
         else:
             kind = KIND_ITEM
         if code in first_seen:
+            hint = f" {_NUMERIC_CODE_HINT}" if numeric or code in numeric_codes else ""
             raise ExcelRejected(
-                f"El código {code} está repetido (filas {first_seen[code]} y {number})."
+                f"El código {code} está repetido (filas {first_seen[code]} y {number}).{hint}"
             )
         first_seen[code] = number
+        if numeric:
+            numeric_codes[code] = number
         found.append(
             _Found(
                 row=number,
@@ -396,6 +449,13 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
         warnings.append(
             f"{len(ignored)} fila(s) ignorada(s) por no tener código o ser de subtotal/total: "
             f"{_examples([str(n) for n in ignored])}."
+        )
+    if numeric_codes:
+        warnings.append(
+            f"{len(numeric_codes)} código(s) vienen como número en Excel "
+            f"({_examples([f'{c} (fila {r})' for c, r in numeric_codes.items()])}). "
+            "Si hay códigos como 1.10 y 1.1, dales formato de texto: como número "
+            "se pierde el cero final."
         )
     if guesses:
         warnings.append(

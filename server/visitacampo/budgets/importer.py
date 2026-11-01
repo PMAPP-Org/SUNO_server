@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from django.db import DatabaseError, transaction
+from django.db import OperationalError, transaction
 from django.db.models import Max
 from django.http import Http404
 from django.utils import timezone
@@ -47,6 +47,8 @@ from .excel import (
 from .mapping import ColumnMapping, MappingError
 from .totals import ChargeError, ChargeSpec, compute_charges, default_charges, validate_charges
 
+#: SQLSTATE de `FOR UPDATE NOWAIT` cuando la fila ya está bloqueada.
+_LOCK_NOT_AVAILABLE = "55P03"
 BUSY = "Otra importación de este presupuesto está en curso; intenta de nuevo en unos segundos."
 
 
@@ -121,8 +123,10 @@ def _locked_budget(ctx: RequestContext, budget_id: UUID) -> Budget:
         return scoped_qs(ctx, Budget).select_for_update(nowait=True).get(pk=budget_id)
     except Budget.DoesNotExist as exc:
         raise Http404("Presupuesto no encontrado.") from exc
-    except DatabaseError as exc:
-        raise ImportRejected(BUSY) from exc
+    except OperationalError as exc:
+        if getattr(exc.__cause__, "sqlstate", None) == _LOCK_NOT_AVAILABLE:
+            raise ImportRejected(BUSY) from exc
+        raise
 
 
 def _locked_pending(
@@ -167,7 +171,7 @@ def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMappin
     """Lee la versión pendiente con `mapping` y deja lista su vista previa."""
     with transaction.atomic():
         version, budget = _locked_pending(ctx, version_id, with_file=True)
-        parsed = _parse(bytes(version.source_file), mapping)
+        parsed = _parse(version.source_file, mapping)
         current = current_version(ctx, budget)
         known = set(scoped_qs(ctx, BudgetItem).filter(budget=budget).values_list("code", flat=True))
         summary = summarize_changes(_values_by_code(ctx, current), parsed, known)
@@ -245,7 +249,7 @@ def apply_version(ctx: RequestContext, version_id: UUID) -> BudgetVersion:
             mapping = ColumnMapping.from_json(summary["mapping"])
         except MappingError as exc:
             raise ImportRejected(str(exc)) from exc
-        parsed = _parse(bytes(version.source_file), mapping)
+        parsed = _parse(version.source_file, mapping)
         items = _ensure_items(ctx, budget, parsed)
         scoped_qs(ctx, BudgetItemVersion).bulk_create(
             [
@@ -280,8 +284,8 @@ def apply_version(ctx: RequestContext, version_id: UUID) -> BudgetVersion:
             charge.amount = amounts[charge.order]
         scoped_qs(ctx, BudgetCharge).bulk_update(charges, ["amount"])
 
-        applied = scoped_qs(ctx, BudgetVersion).filter(budget=budget)
-        version.number = (applied.aggregate(n=Max("number"))["n"] or 0) + 1
+        versions = scoped_qs(ctx, BudgetVersion).filter(budget=budget)
+        version.number = (versions.aggregate(n=Max("number"))["n"] or 0) + 1
         version.status = BudgetVersionStatus.APPLIED
         version.applied_at = timezone.now()
         version.direct_cost = result.direct_cost

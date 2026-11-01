@@ -82,3 +82,26 @@ def with_extra_entry(data: bytes, name: str, content: bytes = b"") -> bytes:
     with zipfile.ZipFile(buffer, "a") as archive:
         archive.writestr(name, content)
     return buffer.getvalue()
+
+
+def with_entry_bytes(data: bytes, name: str, content: bytes) -> bytes:
+    """El mismo ZIP con la entrada `name` reemplazada por `content` (p. ej. XML roto)."""
+    return rewrite_entry(data, name, lambda _old: content.decode("latin-1"))
+
+
+def with_bad_crc(data: bytes, name: str = "xl/worksheets/sheet1.xml") -> bytes:
+    """El mismo ZIP, sin comprimir, con un byte de `name` alterado (CRC inválido)."""
+    buffer = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(data)) as source,
+        zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as target,
+    ):
+        for info in source.infolist():
+            target.writestr(info.filename, source.read(info.filename))
+        payload = source.read(name)
+    raw = bytearray(buffer.getvalue())
+    at = raw.find(payload)
+    assert at >= 0
+    middle = at + len(payload) // 2
+    raw[middle] = ord("Z") if raw[middle] != ord("Z") else ord("Y")
+    return bytes(raw)
