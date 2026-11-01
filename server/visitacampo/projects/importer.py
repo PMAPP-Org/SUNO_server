@@ -12,7 +12,7 @@ vienen en el XML quedan `retired_in`; si vuelven, se reactivan.
 from __future__ import annotations
 
 import gzip
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 from uuid import UUID
 
@@ -31,6 +31,7 @@ from visitacampo.core.models import (
     TaskDependency,
     TaskResource,
     TaskResponsible,
+    Visit,
 )
 from visitacampo.core.scoping import scoped_qs
 
@@ -74,11 +75,13 @@ def summarize_changes(
     existing: Mapping[int, dict[str, Any]],
     parsed: ParsedSchedule,
     responsible_uids: set[int],
+    progress_uids: Collection[int] = frozenset(),
 ) -> dict[str, Any]:
     """Qué cambiaría al aplicar `parsed`.
 
     `existing` son las tareas del proyecto por `uid`: los `TASK_FIELDS` más
     `retired` (bool). `responsible_uids`: uids de tareas con responsables.
+    `progress_uids`: uids de tareas con visitas vinculadas (avance de campo).
     """
     examples: dict[str, list[str]] = {"added": [], "retired": [], "reactivated": [], "modified": []}
     counts = dict.fromkeys(examples, 0)
@@ -105,6 +108,7 @@ def summarize_changes(
             baseline_changed = True
 
     retired_with_responsibles: list[str] = []
+    retired_with_progress: list[str] = []
     for uid, current in existing.items():
         if uid in parsed_uids or current["retired"]:
             continue
@@ -112,6 +116,8 @@ def summarize_changes(
         note("retired", label)
         if uid in responsible_uids:
             retired_with_responsibles.append(label)
+        if uid in progress_uids:
+            retired_with_progress.append(label)
 
     warnings: list[str] = list(parsed.warnings)
     if parsed.tasks and not any(t.baseline_finish for t in parsed.tasks):
@@ -123,6 +129,12 @@ def summarize_changes(
         warnings.append(
             f"{len(retired_with_responsibles)} tarea(s) retirada(s) con responsables: "
             + ", ".join(retired_with_responsibles[:MAX_EXAMPLES])
+            + "."
+        )
+    if retired_with_progress:
+        warnings.append(
+            f"{len(retired_with_progress)} tarea(s) retirada(s) con avance de campo: "
+            + ", ".join(retired_with_progress[:MAX_EXAMPLES])
             + "."
         )
     return {
@@ -146,6 +158,27 @@ def _parse(data: bytes) -> ParsedSchedule:
         raise ImportRejected(str(exc)) from exc
 
 
+def _check_parent_outlines(parsed: ParsedSchedule) -> None:
+    """Cada tarea con padre ("1.2.3" → "1.2") debe traerlo en el archivo.
+
+    La jerarquía (`parent`) y la responsabilidad por rama (`access.covers`,
+    por prefijo del número de esquema) se derivan del mismo número: si faltara
+    un ancestro podrían discrepar. Un proyecto ya importado con un hueco así no se
+    puede volver a importar: la siguiente importación se rechaza hasta que el
+    archivo traiga el ancestro faltante.
+    """
+    outlines = {t.outline_number for t in parsed.tasks}
+    for task in parsed.tasks:
+        if "." not in task.outline_number:
+            continue
+        parent = task.outline_number.rsplit(".", 1)[0]
+        if parent not in outlines:
+            raise ImportRejected(
+                f"La tarea {task.outline_number} {task.name} no tiene su tarea superior "
+                f"{parent} en el archivo."
+            )
+
+
 def stage_import(
     ctx: RequestContext, project: Project, *, file_name: str, data: bytes
 ) -> ScheduleImport:
@@ -154,12 +187,18 @@ def stage_import(
     parsed = _parse(data)
     if not parsed.tasks:
         raise ImportRejected("El archivo no contiene tareas.")
+    _check_parent_outlines(parsed)
     responsible_uids = set(
         scoped_qs(ctx, TaskResponsible)
         .filter(task__project=project)
         .values_list("task__uid", flat=True)
     )
-    summary = summarize_changes(_existing(ctx, project), parsed, responsible_uids)
+    progress_uids = set(
+        scoped_qs(ctx, Visit)
+        .filter(task__project=project, deleted_at__isnull=True)
+        .values_list("task__uid", flat=True)
+    )
+    summary = summarize_changes(_existing(ctx, project), parsed, responsible_uids, progress_uids)
     # Versión sobre la que se calculó la vista previa; si cambia, hay que re-subir.
     summary["base_number"] = _current_number(ctx, project)
     return scoped_qs(ctx, ScheduleImport).create(

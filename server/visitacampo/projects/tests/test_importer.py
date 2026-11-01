@@ -90,6 +90,20 @@ class StageImportTests(TestCase):
         with self.assertRaises(Http404):
             stage_import(self.ctx, foreign, file_name="x.xml", data=v1())
 
+    def test_stage_rejects_a_task_whose_parent_outline_is_missing(self) -> None:
+        data = project_xml(
+            [
+                task_xml(1, "Etapa", "1", summary=True),
+                task_xml(2, "Detalle", "1.2.3", start="2026-03-09", finish="2026-03-10"),
+            ]
+        )
+        with self.assertRaises(ImportRejected) as caught:
+            stage_import(self.ctx, self.project, file_name="x.xml", data=data)
+        self.assertEqual(
+            str(caught.exception),
+            "La tarea 1.2.3 Detalle no tiene su tarea superior 1.2 en el archivo.",
+        )
+
     def test_stage_rejects_invalid_file(self) -> None:
         with self.assertRaises(ImportRejected) as caught:
             stage_import(self.ctx, self.project, file_name="x.xml", data=b"nada")

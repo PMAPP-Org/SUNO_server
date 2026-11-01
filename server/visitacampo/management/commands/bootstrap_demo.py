@@ -29,6 +29,8 @@ prueba"). `core/models/tenancy.py` ya dejaba anotado que este comando
    (`visitacampo/forms/definition.py`), y con su `change_seq` asignado bajo
    el mismo `pg_advisory_xact_lock` que exige `sync/changeseq.py` (es una
    entidad sincronizable: viaja por el pull).
+5. Con `--with-schedule`: un `Project` con la etapa 1 y la tarea 1.1, y la
+   responsabilidad del agente sobre la etapa (avance de campo, costos etapa 1).
 
 **Contraseña**: nunca hardcodeada en el código fuente. Se toma de
 `--password` o, si se omite, se genera con `secrets.choice` y se imprime una
@@ -64,7 +66,10 @@ from visitacampo.core.models import (
     FormTemplateVersion,
     Membership,
     Organization,
+    Project,
     Role,
+    Task,
+    TaskResponsible,
 )
 from visitacampo.forms.definition import DSL_VERSION, validate_definition
 from visitacampo.sync.changeseq import acquire_org_lock, highest_change_seq
@@ -154,6 +159,15 @@ class Command(BaseCommand):
                 "con la misma contraseña (prueba de carga del Paso 25)."
             ),
         )
+        parser.add_argument(
+            "--with-schedule",
+            action="store_true",
+            help=(
+                "Siembra además un proyecto con la etapa 1 'Preliminares' y la tarea "
+                "1.1 'Excavación'; el agente es responsable de la etapa (hereda la "
+                "tarea). Lo usa la E2E del avance de campo."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         org_name: str = options["org_name"]
@@ -234,6 +248,37 @@ class Command(BaseCommand):
                 change_seq=highest_change_seq(ctx) + 1,
                 published_at=timezone.now(),
             )
+            leaf = None
+            if options["with_schedule"]:
+                project = Project.objects.create(
+                    org=org, name=f"Obra E2E {org_name}"[:200], code="E2E", created_by=user
+                )
+                stage = Task.objects.create(
+                    org=org,
+                    project=project,
+                    uid=1,
+                    wbs="1",
+                    outline_number="1",
+                    outline_level=1,
+                    sort_order=1,
+                    name="Preliminares",
+                    is_summary=True,
+                )
+                stage.stage = stage
+                stage.save(update_fields=["stage"])
+                leaf = Task.objects.create(
+                    org=org,
+                    project=project,
+                    uid=2,
+                    wbs="1.1",
+                    outline_number="1.1",
+                    outline_level=2,
+                    sort_order=2,
+                    parent=stage,
+                    stage=stage,
+                    name="Excavación",
+                )
+                TaskResponsible.objects.create(org=org, task=stage, user=user, assigned_by=user)
 
         self.stdout.write(self.style.SUCCESS("Demo inicializado correctamente:"))
         self.stdout.write(f"  Organization id: {org.id}")
@@ -254,3 +299,5 @@ class Command(BaseCommand):
             f"  FormTemplateVersion id (UUID a pegar en 'ID de plantilla' de la app): "
             f"{template_version.id}"
         )
+        if leaf is not None:
+            self.stdout.write(f"  Tarea del cronograma (E2E): 1.1 Excavación ({leaf.id})")

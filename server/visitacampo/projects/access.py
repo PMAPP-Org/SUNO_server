@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Collection, Iterable
 from uuid import UUID
 
 from django.db.models import QuerySet
@@ -54,3 +55,32 @@ def effective_responsibles(ctx: RequestContext, project: Project) -> dict[UUID, 
         return memo[task_id]
 
     return {task_id: resolve(task_id) for task_id in parents}
+
+
+def covers(outlines: Iterable[str], outline: str) -> bool:
+    """¿Alguno de `outlines` es `outline` o un ancestro suyo en la EDT?
+
+    El número de esquema de MS Project ("1.2.3") es la ruta de la tarea en el
+    árbol: el importador deriva `parent` de él (`importer._apply_tasks`), así que
+    ser ancestro equivale a ser prefijo seguido de un punto ("1.1" no es
+    ancestro de "1.10"). Permite saber si alguien es responsable efectivo sin
+    recorrer la cadena de `parent` (una query por nivel).
+    """
+    return any(outline == o or outline.startswith(f"{o}.") for o in outlines)
+
+
+def responsible_outlines(
+    ctx: RequestContext, *, user_id: UUID, project_ids: Collection[UUID] | None = None
+) -> dict[UUID, list[str]]:
+    """Por proyecto, los números de esquema de las tareas **vigentes** de las que
+    `user_id` es responsable directo. Con `covers`, decide el responsable efectivo.
+    Una sola query."""
+    links = scoped_qs(ctx, TaskResponsible).filter(user_id=user_id, task__retired_in__isnull=True)
+    if project_ids is not None:
+        links = links.filter(task__project_id__in=list(project_ids))
+    out: dict[UUID, list[str]] = defaultdict(list)
+    for project_id, outline in links.order_by("task__sort_order").values_list(
+        "task__project_id", "task__outline_number"
+    ):
+        out[project_id].append(outline)
+    return dict(out)

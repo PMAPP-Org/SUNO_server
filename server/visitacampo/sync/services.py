@@ -58,6 +58,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from django.db import connection, transaction
@@ -69,6 +70,7 @@ from visitacampo.core.models import (
     Device,
     FormTemplateVersion,
     SyncOpLog,
+    Task,
     Visit,
     VisitAttachment,
 )
@@ -86,6 +88,8 @@ from visitacampo.forms.definition import (
     has_declared_schema,
     validate_definition,
 )
+from visitacampo.projects.access import covers, responsible_outlines
+from visitacampo.projects.field_progress import approved
 from visitacampo.sync import sql
 from visitacampo.sync.changeseq import ChangeSeqAllocator, acquire_org_lock
 from visitacampo.sync.payloads import (
@@ -223,6 +227,16 @@ def _existing_ids(ctx: RequestContext, model: Any, ids: set[uuid.UUID]) -> set[u
 
 
 @dataclass(frozen=True, slots=True)
+class _TaskRef:
+    """Lo que el push necesita saber de una tarea referenciada (costos, etapa 1)."""
+
+    retired: bool
+    is_summary: bool
+    #: Quien envía el lote es responsable efectivo (directo o por la rama).
+    covered: bool
+
+
+@dataclass(frozen=True, slots=True)
 class _References:
     """Qué referencias del lote existen **en esta organización**.
 
@@ -250,6 +264,10 @@ class _References:
     assignments: set[uuid.UUID]
     devices: set[uuid.UUID]
     visit_template_versions: dict[uuid.UUID, uuid.UUID]
+    tasks: dict[uuid.UUID, _TaskRef]
+    #: `visit_id → (task_id, progress_pct, version)` de las visitas validadas que el lote
+    #: cambia de tarea o %, o borra (ver `_validated_progress`).
+    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]
 
     def missing(self, fields: dict[str, Any]) -> str | None:
         """Nombre del primer campo con una referencia inexistente, o `None`."""
@@ -257,11 +275,103 @@ class _References:
             ("template_version_id", self.template_versions),
             ("assignment_id", self.assignments),
             ("device_id", self.devices),
+            ("task_id", self.tasks),
         ):
             value = fields.get(field)
             if value is not None and value not in known:
                 return field
         return None
+
+    def task_rejection(self, parsed: VisitWrite) -> Rejection | None:
+        """La tarea existe (lo comprobó `missing`); ¿se le puede reportar avance?
+
+        Solo cuando se **pone** una tarea: desvincular (`null`) no exige ser
+        responsable, basta con poder modificar la visita (ya comprobado).
+        """
+        task_id = parsed.fields.get("task_id")
+        if task_id is None:
+            return None
+        ref = self.tasks[task_id]
+        if ref.retired:
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="The task was retired from the schedule.",
+                details={"field": "task_id", "reason": "task_retired"},
+                entity_id=parsed.entity_id,
+            )
+        if ref.is_summary:
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="Progress is reported on detail tasks, not on summaries.",
+                details={"field": "task_id", "reason": "task_is_summary"},
+                entity_id=parsed.entity_id,
+            )
+        if not ref.covered:
+            return Rejection(
+                code=CODE_FORBIDDEN,
+                message="Only a responsible of the task can report its progress.",
+                details={"field": "task_id", "reason": "not_responsible"},
+                entity_id=parsed.entity_id,
+            )
+        return None
+
+    def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
+        """Una visita validada no cambia su tarea ni su % sin una nueva revisión,
+        y no se borra.
+
+        Una operación con `base_version` distinto al guardado no se rechaza aquí:
+        la deja pasar para que el CAS conteste `conflict` con la fila del servidor.
+        """
+        current = self.validated.get(parsed.entity_id)
+        if current is None or parsed.op_type == "create":
+            return None
+        task_id, pct, version = current
+        if parsed.base_version != version:
+            return None
+        if parsed.op_type == "delete":
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="The visit was validated: it cannot be deleted.",
+                details={"field": "id", "reason": "visit_validated"},
+                entity_id=parsed.entity_id,
+            )
+        for field, stored in (("task_id", task_id), ("progress_pct", pct)):
+            if field in parsed.fields and parsed.fields[field] != stored:
+                return Rejection(
+                    code=CODE_VALIDATION_ERROR,
+                    message="The visit was validated: its task and progress cannot change.",
+                    details={"field": field, "reason": "visit_validated"},
+                    entity_id=parsed.entity_id,
+                )
+        return None
+
+
+def _validated_progress(
+    ctx: RequestContext, writes: list[VisitWrite]
+) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]:
+    """Visitas validadas que el lote podría cambiar de tarea o %, o borrar.
+
+    Una query para todo el lote, y ninguna si ninguna operación lo intenta.
+    Las filas se **bloquean** (`select_for_update`, dentro de la transacción del
+    push): una revisión creada a la vez (el Admin usa `select_for_update` sobre
+    la visita al revisar) no puede colarse entre esta comprobación y el
+    `UPDATE`. Devuelve también `version` para que una operación obsoleta acabe
+    en `conflict` y no en un rechazo.
+    """
+    ids = {
+        w.entity_id
+        for w in writes
+        if w.op_type == "delete"
+        or (w.op_type == "update" and ("task_id" in w.fields or "progress_pct" in w.fields))
+    }
+    if not ids:
+        return {}
+    rows = (
+        approved(scoped_qs(ctx, Visit).filter(pk__in=ids))
+        .select_for_update()
+        .values_list("pk", "task_id", "progress_pct", "version")
+    )
+    return {pk: (task_id, pct, version) for pk, task_id, pct, version in rows}
 
 
 def _visit_template_versions(
@@ -290,6 +400,29 @@ def _visit_template_versions(
     return dict(rows)
 
 
+def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID, _TaskRef]:
+    """Tareas que el lote vincula: dos queries para todo el lote, cero si ninguna."""
+    ids = {w.fields["task_id"] for w in writes if w.fields.get("task_id") is not None}
+    if not ids:
+        return {}
+    rows = list(
+        scoped_qs(ctx, Task)
+        .filter(pk__in=ids)
+        .values_list("pk", "project_id", "outline_number", "retired_in_id", "is_summary")
+    )
+    outlines = responsible_outlines(
+        ctx, user_id=ctx.user_id, project_ids={project_id for _, project_id, *_ in rows}
+    )
+    return {
+        pk: _TaskRef(
+            retired=retired_in is not None,
+            is_summary=is_summary,
+            covered=covers(outlines.get(project_id, ()), outline),
+        )
+        for pk, project_id, outline, retired_in, is_summary in rows
+    }
+
+
 def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _References:
     wanted: dict[str, set[uuid.UUID]] = {
         "template_version_id": set(),
@@ -315,6 +448,8 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
         assignments=_existing_ids(ctx, Assignment, wanted["assignment_id"]),
         devices=_existing_ids(ctx, Device, wanted["device_id"]),
         visit_template_versions=visit_template_versions,
+        tasks=_task_refs(ctx, writes),
+        validated=_validated_progress(ctx, writes),
     )
 
 
@@ -705,6 +840,16 @@ def _process(
                 entity_id=parsed.entity_id,
             ),
         )
+
+    validated_problem = references.validated_rejection(parsed)
+    if validated_problem is not None:
+        return _rejected_result(op, validated_problem)
+
+    # Costos, etapa 1: tarea vigente, de detalle y de la que quien envía es
+    # responsable. Antes de tomar `change_seq`, como las respuestas.
+    task_problem = references.task_rejection(parsed)
+    if task_problem is not None:
+        return _rejected_result(op, task_problem)
 
     # `answers` contra el esquema de **su** versión de plantilla (Paso 20). Va
     # después de resolver referencias —hace falta saber que la plantilla existe

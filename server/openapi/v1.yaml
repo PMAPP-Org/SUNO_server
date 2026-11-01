@@ -82,6 +82,8 @@ tags:
     description: Paquetes de mapa base (MBTiles ráster) para trabajar sin red, por organización.
   - name: layers
     description: Capas de referencia GeoJSON (RFC 7946, WGS84) para ver sobre el mapa, por organización.
+  - name: projects
+    description: Cronograma de proyectos (costos, etapa 1) — avance desde campo.
 
 security:
   - bearerAuth: []
@@ -594,6 +596,43 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  # ------------------------------------------------------------ projects ----
+
+  /v1/projects/tasks:
+    get:
+      operationId: projectsTasksList
+      tags: [projects]
+      summary: Tareas del cronograma de las que quien llama es responsable
+      description: |
+        Tareas **de detalle vigentes** (ni resumen ni retiradas) de las que quien llama es
+        responsable, directamente o por una tarea superior de la EDT, con su último % validado (la
+        visita validada más reciente vinculada a la tarea). Es lo que la app ofrece para vincular
+        una visita a una tarea (`VisitPayload.task_id`).
+
+        Se entrega la lista **completa** y el cliente reemplaza la suya: una tarea retirada o una
+        responsabilidad quitada desaparecen sin tombstones. Para no repetir la descarga, el cliente
+        envía la `version` de la última lista; si nada cambió, la respuesta trae `changed: false`
+        e `items` vacío.
+      parameters:
+        - name: version
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: '`version` de la última lista descargada.'
+      responses:
+        '200':
+          description: Lista de tareas, o "sin cambios".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldTaskList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   # -------------------------------------------------------------- health ----
 
   /v1/healthz:
@@ -1090,6 +1129,8 @@ components:
         - captured_at
         - device_id
         - created_by
+        - task_id
+        - progress_pct
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -1135,6 +1176,18 @@ components:
           $ref: '#/components/schemas/Uuid'
         created_by:
           $ref: '#/components/schemas/Uuid'
+        task_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: |
+            Tarea del cronograma (costos, etapa 1) cuyo avance reporta la visita. Va siempre con
+            `progress_pct`: los dos con valor o los dos `null`.
+        progress_pct:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: '% de avance acumulado de `task_id` observado en campo, hasta dos decimales.'
 
     VisitAttachment:
       type: object
@@ -1569,6 +1622,26 @@ components:
           $ref: '#/components/schemas/Timestamp'
         device_id:
           $ref: '#/components/schemas/Uuid'
+        task_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: |
+            Opcional (un cliente anterior no lo envía). Tarea **vigente y de detalle** de la que quien
+            envía es responsable (directo o por una tarea superior). Viaja **siempre junto** con
+            `progress_pct`, también en `update`: los dos con valor, los dos `null` (desvincular) o
+            ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
+            (`task_retired`, `task_is_summary`, `task_progress_pair`, `visit_validated`: la visita ya fue
+            validada y no puede cambiar de tarea ni de %; también rechaza el `delete` de esa visita, con `field: id`),
+            `forbidden` (`not_responsible`). Una operación con `base_version` obsoleto contesta `conflict`,
+            no `visit_validated`.
+        progress_pct:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: |
+            % de avance acumulado de `task_id`, hasta dos decimales. Un valor menor que el último
+            validado se acepta y se marca para la supervisión.
 
     VisitAttachmentPayload:
       type: object
@@ -1997,6 +2070,50 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Layer'
+
+    FieldTask:
+      type: object
+      description: Una tarea del cronograma a la que la app puede vincular una visita.
+      required: [id, project_id, project_name, wbs, outline_number, name, last_validated_pct]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        project_id:
+          $ref: '#/components/schemas/Uuid'
+        project_name:
+          type: string
+          maxLength: 200
+        wbs:
+          type: string
+          maxLength: 100
+          description: EDT del Project; puede venir vacía (se muestra `outline_number`).
+        outline_number:
+          type: string
+          maxLength: 100
+        name:
+          type: string
+          maxLength: 500
+        last_validated_pct:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 100
+          description: '% de la visita validada más reciente de la tarea; `null` si no hay.'
+
+    FieldTaskList:
+      type: object
+      required: [version, changed, items]
+      properties:
+        version:
+          type: string
+          maxLength: 64
+          description: Huella de la lista. Se reenvía en `?version=` la próxima vez.
+        changed:
+          type: boolean
+          description: '`false` si la lista no cambió desde `?version=`; entonces `items` va vacío.'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldTask'
 
     HealthStatus:
       type: object

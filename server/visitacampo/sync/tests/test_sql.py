@@ -54,6 +54,8 @@ class ColumnMappingTests(SimpleTestCase):
         self.assertEqual(sql.column("device_id"), '"device_id"')
         self.assertEqual(sql.column("template_version_id"), '"template_version_id"')
         self.assertEqual(sql.column("org_id"), '"org_id"')
+        self.assertEqual(sql.column("task_id"), '"task_id"')
+        self.assertEqual(sql.column("progress_pct"), '"progress_pct"')
         self.assertEqual(sql.table(), '"visit"')
 
 
@@ -66,6 +68,11 @@ class InsertTests(SimpleTestCase):
             created_by=USER,
             fields=create_fields(),
         )
+
+    def test_task_progress_is_written_as_null_when_absent(self) -> None:
+        """Un alta sin tarea (cliente anterior) escribe NULL en las dos columnas."""
+        self.assertIn('"task_id"', self.statement.sql)
+        self.assertIn('"progress_pct"', self.statement.sql)
 
     def test_is_an_upsert_guarded_by_the_primary_key(self) -> None:
         self.assertIn('INSERT INTO "visit"', self.statement.sql)

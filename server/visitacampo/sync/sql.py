@@ -68,6 +68,8 @@ _MODEL_FIELD_BY_CONTRACT_NAME: dict[str, str] = {
     "captured_at": "captured_at",
     "device_id": "device",
     "created_by": "created_by",
+    "task_id": "task",
+    "progress_pct": "progress_pct",
 }
 
 #: Campos que el servidor escribe en un alta, en orden estable.
@@ -87,6 +89,8 @@ _INSERT_FIELDS: tuple[str, ...] = (
     "captured_at",
     "device_id",
     "created_by",
+    "task_id",
+    "progress_pct",
 )
 
 
@@ -149,6 +153,9 @@ def build_insert(
         "change_seq": change_seq,
         "deleted_at": None,
         "created_by": created_by,
+        # Costos, etapa 1: un alta sin tarea las escribe en NULL.
+        "task_id": None,
+        "progress_pct": None,
         **fields,
     }
     columns: list[str] = []

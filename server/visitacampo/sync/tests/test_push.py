@@ -283,6 +283,8 @@ class ConflictTests(TestCase):
                 "captured_at",
                 "device_id",
                 "created_by",
+                "task_id",
+                "progress_pct",
             },
         )
         visit = visit_of(self.visit_id)

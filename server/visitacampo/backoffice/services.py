@@ -58,6 +58,10 @@ def review_visit(
     if not can_review_visit(ctx, visit):
         raise PermissionDenied("Solo supervisión de la organización puede revisar visitas.")
     with transaction.atomic():
+        # Mismo candado de organización que el push: una revisión no puede
+        # colarse entre la comprobación de "visita validada" del push y su
+        # UPDATE (ni al revés).
+        acquire_org_lock(ctx.org_id)
         review = scoped_qs(ctx, VisitReview).create(
             org_id=ctx.org_id,
             visit=visit,

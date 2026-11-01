@@ -16,10 +16,16 @@ from visitacampo.core.tests.dbsupport import (
     teardown_test_database,
 )
 from visitacampo.projects.access import (
+    covers,
     effective_responsibles,
     get_visible_project,
+    responsible_outlines,
     visible_projects,
 )
+from visitacampo.projects.importer import apply_import, stage_import
+
+from .factories import make_field_world
+from .samples import v2
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -91,3 +97,53 @@ class VisibilityTests(TestCase):
         responsibles = effective_responsibles(ctx_for(self.admin), self.p1)
         self.assertEqual(responsibles[self.leaf.pk], [self.agent])
         self.assertEqual(responsibles[self.stage.pk], [self.agent])
+
+
+class CoversTests(unittest.TestCase):
+    """Pura: el número de esquema es la ruta de la tarea en la EDT."""
+
+    def test_a_task_covers_itself_and_its_branch(self) -> None:
+        self.assertTrue(covers(["1.2"], "1.2"))
+        self.assertTrue(covers(["1.2"], "1.2.3.4"))
+        self.assertTrue(covers(["3", "1"], "1.1"))
+
+    def test_a_prefix_without_dot_is_not_an_ancestor(self) -> None:
+        self.assertFalse(covers(["1.1"], "1.10"))
+        self.assertFalse(covers(["1.2"], "1"))
+        self.assertFalse(covers([], "1"))
+
+
+@skip_without_db
+class ResponsibleOutlinesTests(TestCase):
+    def setUp(self) -> None:
+        self.world = make_field_world()
+
+    def test_by_project_only_current_tasks(self) -> None:
+        self.world.responsible(1)
+        self.world.responsible(5)
+        ctx = self.world.ctx()
+        self.assertEqual(
+            responsible_outlines(ctx, user_id=self.world.agent.pk),
+            {self.world.project.pk: ["1", "2.1"]},
+        )
+        # v2 retira la 2.1: su responsabilidad deja de contar.
+        apply_import(ctx, stage_import(ctx, self.world.project, file_name="v2.xml", data=v2()).pk)
+        self.assertEqual(
+            responsible_outlines(ctx, user_id=self.world.agent.pk),
+            {self.world.project.pk: ["1"]},
+        )
+        self.assertEqual(responsible_outlines(ctx, user_id=self.world.agent.pk, project_ids=[]), {})
+
+    def test_matches_effective_responsibles(self) -> None:
+        """La cobertura por esquema y la herencia por `parent` dicen lo mismo."""
+        self.world.responsible(1)
+        self.world.responsible(6)
+        ctx = self.world.ctx()
+        outlines = responsible_outlines(ctx, user_id=self.world.agent.pk)[self.world.project.pk]
+        by_parent = effective_responsibles(ctx, self.world.project)
+        for task in Task.objects.filter(project=self.world.project):
+            with self.subTest(task=task.outline_number):
+                self.assertEqual(
+                    covers(outlines, task.outline_number),
+                    self.world.agent in by_parent[task.pk],
+                )
