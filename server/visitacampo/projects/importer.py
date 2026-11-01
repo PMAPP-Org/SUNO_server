@@ -158,6 +158,25 @@ def _parse(data: bytes) -> ParsedSchedule:
         raise ImportRejected(str(exc)) from exc
 
 
+def _check_parent_outlines(parsed: ParsedSchedule) -> None:
+    """Cada tarea con padre ("1.2.3" → "1.2") debe traerlo en el archivo.
+
+    La jerarquía (`parent`) y la responsabilidad por rama (`access.covers`,
+    por prefijo del número de esquema) se derivan del mismo número: si faltara
+    un ancestro podrían discrepar.
+    """
+    outlines = {t.outline_number for t in parsed.tasks}
+    for task in parsed.tasks:
+        if "." not in task.outline_number:
+            continue
+        parent = task.outline_number.rsplit(".", 1)[0]
+        if parent not in outlines:
+            raise ImportRejected(
+                f"La tarea {task.outline_number} {task.name} no tiene su tarea superior "
+                f"{parent} en el archivo."
+            )
+
+
 def stage_import(
     ctx: RequestContext, project: Project, *, file_name: str, data: bytes
 ) -> ScheduleImport:
@@ -166,6 +185,7 @@ def stage_import(
     parsed = _parse(data)
     if not parsed.tasks:
         raise ImportRejected("El archivo no contiene tareas.")
+    _check_parent_outlines(parsed)
     responsible_uids = set(
         scoped_qs(ctx, TaskResponsible)
         .filter(task__project=project)
