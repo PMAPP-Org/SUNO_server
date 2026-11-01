@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import unittest
+from decimal import Decimal
+from uuid import UUID
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
+from visitacampo.core.models import Visit
+from visitacampo.core.scoping import scoped_qs
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
+)
+from visitacampo.projects.field_progress import (
+    is_regression,
+    progress_visits,
+    validated_pct_by_task,
 )
 
 from .factories import make_field_world, make_visit
@@ -41,3 +50,65 @@ class VisitTaskProgressConstraintTests(TestCase):
         for pct in ("-0.01", "100.01"):
             with self.subTest(pct=pct), self.assertRaises(IntegrityError), transaction.atomic():
                 self.world.visit(3, pct)
+
+
+@skip_without_db
+class ValidatedPctTests(TestCase):
+    def setUp(self) -> None:
+        self.world = make_field_world()
+        self.ctx = self.world.ctx()
+
+    def pct(self, **kwargs: object) -> dict[UUID, Decimal]:
+        return validated_pct_by_task(scoped_qs(self.ctx, Visit), **kwargs)  # type: ignore[arg-type]
+
+    def test_latest_approved_by_capture_time_wins(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "30", hours=1))
+        w.approve(w.visit(3, "60", hours=2))
+        w.visit(3, "80", hours=3)  # sin revisar: no cuenta
+        w.approve(w.visit(2, "100", hours=1))
+        self.assertEqual(
+            self.pct(), {w.task(3).pk: Decimal("60.00"), w.task(2).pk: Decimal("100.00")}
+        )
+
+    def test_the_latest_decision_wins(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "30", hours=1))
+        later = w.visit(3, "60", hours=2)
+        w.approve(later)
+        w.reject(later)  # rechazada después de validarla: sale
+        self.assertEqual(self.pct(), {w.task(3).pk: Decimal("30.00")})
+
+    def test_deleted_visits_and_other_filters(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "30", hours=1))
+        w.approve(w.visit(3, "90", hours=2, deleted=True))
+        w.approve(w.visit(5, "10", hours=1))
+        self.assertEqual(self.pct(task_ids=[w.task(3).pk]), {w.task(3).pk: Decimal("30.00")})
+        self.assertEqual(self.pct(task_ids=[]), {})
+        self.assertEqual(len(self.pct(project_id=w.project.pk)), 2)
+
+    def test_previous_validated_and_regression(self) -> None:
+        w = self.world
+        first = w.visit(3, "60", hours=1)
+        w.approve(first)
+        lower = w.visit(3, "40", hours=2)
+        higher = w.visit(3, "70", hours=3)
+        rows = {row.visit.pk: row for row in progress_visits(self.ctx, w.task(3))}
+        self.assertIsNone(rows[first.pk].previous_validated_pct)
+        self.assertEqual(rows[lower.pk].previous_validated_pct, Decimal("60.00"))
+        self.assertTrue(rows[lower.pk].regression)
+        self.assertFalse(rows[higher.pk].regression)
+        self.assertEqual(rows[first.pk].status, "approved")
+        self.assertIsNone(rows[lower.pk].status)
+        # Más reciente primero.
+        self.assertEqual(
+            [r.visit.pk for r in progress_visits(self.ctx, w.task(3))],
+            [higher.pk, lower.pk, first.pk],
+        )
+
+    def test_is_regression_is_pure(self) -> None:
+        self.assertTrue(is_regression(Decimal("40"), Decimal("60")))
+        self.assertFalse(is_regression(Decimal("60"), Decimal("60")))
+        self.assertFalse(is_regression(Decimal("40"), None))
+        self.assertFalse(is_regression(None, Decimal("60")))
