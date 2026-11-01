@@ -162,7 +162,10 @@ Plantillas Django con el login de `/plataforma/`, filtradas por organización y 
 - Flutter: tabla Drift `tasks`; en el formulario de visita, selector opcional "Tarea del
   cronograma" con búsqueda por EDT o nombre y campo "% avance acumulado" con el último
   validado como referencia. Funciona sin conexión y sube con el outbox.
-- Validar la visita valida su %; rechazarla lo deja fuera.
+- Validar la visita valida su %; rechazarla lo deja fuera. *Decidido en revisión:* una visita
+  cuya última revisión es `approved` no puede cambiar su tarea ni su % por el push (se rechaza
+  con `validation_error` / `visit_validated`; reenviar los mismos valores sí se acepta). Una
+  visita rechazada o sin revisar se puede seguir corrigiendo.
 
 ## Pruebas
 

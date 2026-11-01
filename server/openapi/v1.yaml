@@ -1631,7 +1631,8 @@ components:
             envía es responsable (directo o por una tarea superior). Viaja **siempre junto** con
             `progress_pct`, también en `update`: los dos con valor, los dos `null` (desvincular) o
             ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
-            (`task_retired`, `task_is_summary`, `task_progress_pair`), `forbidden` (`not_responsible`).
+            (`task_retired`, `task_is_summary`, `task_progress_pair`, `visit_validated`: la visita ya fue
+            validada y no puede cambiar de tarea ni de %), `forbidden` (`not_responsible`).
         progress_pct:
           type: [number, 'null']
           minimum: 0

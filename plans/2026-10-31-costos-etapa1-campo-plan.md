@@ -40,6 +40,7 @@ Ninguno de estos puntos reabre las decisiones 1–7 del encargo; precisan cómo 
 12. **Superusuario en el Admin.** La subconsulta del "último validado" parte del queryset del propio Admin (todas las organizaciones para el operador) correlacionada por `task_id`; como una tarea pertenece a una sola organización, no mezcla datos.
 13. **Ruta.** `GET /v1/projects/tasks` sin barra final, como el resto de `/v1/*` (la spec decía `/v1/projects/tasks/`).
 14. **Fuera de alcance:** columnas de tarea/% en las exportaciones de visitas, mostrar la tarea en el detalle de visita del teléfono, FK compuesta `(task_id, org_id)` (el aislamiento lo da la validación del push con `scoped_qs`, igual que `assignment_id`).
+15. **Una visita validada no cambia su avance sin una nueva revisión (decisión tomada en revisión).** Un `update` que cambia `task_id` o `progress_pct` (valor distinto, vincular o desvincular) sobre una visita cuya última `VisitReview` es `approved` se rechaza con `validation_error` y `details = {"field": "task_id" | "progress_pct", "reason": "visit_validated"}`. Reenviar los valores guardados se acepta; una visita rechazada o sin revisión sí puede cambiar. Se resuelve en bloque con una query por lote (como `_task_refs`). Sin esto, el agente podía alterar un % ya validado y la supervisión no lo veía.
 
 ---
 

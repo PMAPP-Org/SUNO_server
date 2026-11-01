@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.core.context import Principal, resolve_request_context
-from visitacampo.core.models import Project, Role, Task, TaskResponsible
+from visitacampo.core.models import Project, Role, Task, TaskResponsible, VisitReview
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -179,3 +179,86 @@ class TaskProgressPushTests(TestCase):
             return len(captured.captured_queries)
 
         self.assertEqual(queries(200), queries(1) + 199)
+
+
+@skip_without_db
+class ValidatedProgressImmutableTests(TaskProgressPushTests):
+    """Una visita validada no cambia su tarea ni su % sin una nueva revisión."""
+
+    def validated_visit(self, status: str = "approved") -> uuid.UUID:
+        visit_id = uuid.uuid4()
+        self.push_one(self.linked(3, 20, visit_id))
+        VisitReview.objects.create(
+            org=self.scenario.org,
+            visit=visit_of(visit_id),
+            status=status,
+            reviewer=self.admin,
+        )
+        return visit_id
+
+    def update(self, visit_id: uuid.UUID, uid: int | None, pct: object) -> dict[str, Any]:
+        task_id = None if uid is None else str(self.task(uid).pk)
+        op = update_op(visit_id, visit_of(visit_id).version, task_id=task_id, progress_pct=pct)
+        return self.push_one(op)
+
+    def test_approved_progress_change_is_rejected(self) -> None:
+        visit_id = self.validated_visit()
+        self.assertRejected(
+            self.update(visit_id, 3, 50), "validation_error", "progress_pct", "visit_validated"
+        )
+        self.assertEqual(visit_of(visit_id).progress_pct, Decimal("20.00"))
+
+    def test_approved_task_change_is_rejected(self) -> None:
+        visit_id = self.validated_visit()
+        self.assertRejected(
+            self.update(visit_id, 2, 20), "validation_error", "task_id", "visit_validated"
+        )
+
+    def test_approved_unlinking_is_rejected(self) -> None:
+        visit_id = self.validated_visit()
+        self.assertRejected(
+            self.update(visit_id, None, None), "validation_error", "task_id", "visit_validated"
+        )
+
+    def test_approved_same_values_are_accepted(self) -> None:
+        visit_id = self.validated_visit()
+        self.assertEqual(self.update(visit_id, 3, 20)["status"], "applied")
+
+    def test_approved_update_without_the_pair_is_accepted(self) -> None:
+        visit_id = self.validated_visit()
+        op = update_op(visit_id, visit_of(visit_id).version, lat=5.0)
+        self.assertEqual(self.push_one(op)["status"], "applied")
+
+    def test_rejected_review_allows_the_change(self) -> None:
+        visit_id = self.validated_visit("rejected")
+        self.assertEqual(self.update(visit_id, 3, 50)["status"], "applied")
+
+    def test_a_later_rejection_allows_the_change(self) -> None:
+        visit_id = self.validated_visit()
+        VisitReview.objects.create(
+            org=self.scenario.org,
+            visit=visit_of(visit_id),
+            status="rejected",
+            reviewer=self.admin,
+        )
+        self.assertEqual(self.update(visit_id, 3, 50)["status"], "applied")
+
+    def test_no_review_allows_the_change(self) -> None:
+        visit_id = uuid.uuid4()
+        self.push_one(self.linked(3, 20, visit_id))
+        self.assertEqual(self.update(visit_id, 3, 50)["status"], "applied")
+
+    def test_validated_check_costs_one_query_for_the_batch(self) -> None:
+        ids = [self.validated_visit() for _ in range(5)]
+
+        def queries(targets: list[uuid.UUID]) -> int:
+            ops = [
+                update_op(v, visit_of(v).version, task_id=str(self.task(3).pk), progress_pct=20)
+                for v in targets
+            ]
+            with CaptureQueriesContext(connection) as captured:
+                response = push(self.scenario, ops)
+            self.assertEqual(response.status_code, 200, response.content)
+            return len(captured.captured_queries)
+
+        self.assertEqual(queries(ids), queries(ids[:1]) + 4)

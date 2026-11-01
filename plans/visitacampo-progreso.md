@@ -11,7 +11,7 @@
 
 **Verificación (números reales)**: suite completa 1053 tests: 1049 pasan y 4 fallan en `sync/tests/test_load_script.py` por entorno (el contenedor no monta `/infra/load/push_load.py`). Cobertura 93,39 % (suelo 90 %). `ruff check` y `mypy` limpios (228 archivos), `makemigrations --check` sin cambios, contrato `v1.yaml` válido. La prueba manual en navegador (Task A13 paso 2) queda pendiente.
 
-**Decisiones que cambian la spec**: (1) la descarga de tareas es un endpoint propio con lista completa y `version`, no el pull por `change_seq`; (4) solo se reporta avance en tareas de detalle; (7) quien vincula una tarea debe ser responsable efectivo (desvincular no lo exige); (8) "menor que el último validado" se calcula al leer, no se guarda; (13) la ruta es `/v1/projects/tasks` sin barra final.
+**Decisiones que cambian la spec**: (1) la descarga de tareas es un endpoint propio con lista completa y `version`, no el pull por `change_seq`; (4) solo se reporta avance en tareas de detalle; (7) quien vincula una tarea debe ser responsable efectivo (desvincular no lo exige); (8) "menor que el último validado" se calcula al leer, no se guarda; (13) la ruta es `/v1/projects/tasks` sin barra final; (15, decidida en revisión) una visita cuya última revisión es `approved` no puede cambiar su tarea ni su % por el push (`validation_error` / `visit_validated`), así el % validado no se altera sin una nueva revisión.
 
 **Pendiente: app (Parte B del mismo plan)**, que fija su `contract/` al commit de merge de este PR.
 

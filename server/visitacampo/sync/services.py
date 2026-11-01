@@ -58,6 +58,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from django.db import connection, transaction
@@ -88,6 +89,7 @@ from visitacampo.forms.definition import (
     validate_definition,
 )
 from visitacampo.projects.access import covers, responsible_outlines
+from visitacampo.projects.field_progress import approved
 from visitacampo.sync import sql
 from visitacampo.sync.changeseq import ChangeSeqAllocator, acquire_org_lock
 from visitacampo.sync.payloads import (
@@ -263,6 +265,9 @@ class _References:
     devices: set[uuid.UUID]
     visit_template_versions: dict[uuid.UUID, uuid.UUID]
     tasks: dict[uuid.UUID, _TaskRef]
+    #: `visit_id → (task_id, progress_pct)` de los `update` que tocan la tarea o el %
+    #: sobre una visita cuya última revisión es `approved`.
+    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None]]
 
     def missing(self, fields: dict[str, Any]) -> str | None:
         """Nombre del primer campo con una referencia inexistente, o `None`."""
@@ -309,6 +314,42 @@ class _References:
                 entity_id=parsed.entity_id,
             )
         return None
+
+    def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
+        """Una visita validada no cambia su tarea ni su % sin una nueva revisión."""
+        current = self.validated.get(parsed.entity_id)
+        if current is None or parsed.op_type != "update":
+            return None
+        task_id, pct = current
+        for field, stored in (("task_id", task_id), ("progress_pct", pct)):
+            if field in parsed.fields and parsed.fields[field] != stored:
+                return Rejection(
+                    code=CODE_VALIDATION_ERROR,
+                    message="The visit was validated: its task and progress cannot change.",
+                    details={"field": field, "reason": "visit_validated"},
+                    entity_id=parsed.entity_id,
+                )
+        return None
+
+
+def _validated_progress(
+    ctx: RequestContext, writes: list[VisitWrite]
+) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None]]:
+    """Visitas validadas que un `update` del lote podría cambiar de tarea o %.
+
+    Una query para todo el lote, y ninguna si ningún `update` trae esos campos.
+    """
+    ids = {
+        w.entity_id
+        for w in writes
+        if w.op_type == "update" and ("task_id" in w.fields or "progress_pct" in w.fields)
+    }
+    if not ids:
+        return {}
+    rows = approved(scoped_qs(ctx, Visit).filter(pk__in=ids)).values_list(
+        "pk", "task_id", "progress_pct"
+    )
+    return {pk: (task_id, pct) for pk, task_id, pct in rows}
 
 
 def _visit_template_versions(
@@ -386,6 +427,7 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
         devices=_existing_ids(ctx, Device, wanted["device_id"]),
         visit_template_versions=visit_template_versions,
         tasks=_task_refs(ctx, writes),
+        validated=_validated_progress(ctx, writes),
     )
 
 
@@ -776,6 +818,10 @@ def _process(
                 entity_id=parsed.entity_id,
             ),
         )
+
+    validated_problem = references.validated_rejection(parsed)
+    if validated_problem is not None:
+        return _rejected_result(op, validated_problem)
 
     # Costos, etapa 1: tarea vigente, de detalle y de la que quien envía es
     # responsable. Antes de tomar `change_seq`, como las respuestas.
