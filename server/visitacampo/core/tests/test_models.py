@@ -288,6 +288,9 @@ class VisitSchemaTests(SimpleTestCase):
             "captured_at",
             "device_id",
             "created_by_id",
+            # Costos, etapa 1: avance de campo vinculado a una tarea.
+            "task_id",
+            "progress_pct",
         }
         self.assertEqual(columns, expected)
 
