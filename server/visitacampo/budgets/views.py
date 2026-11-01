@@ -538,7 +538,7 @@ def version_detail(
     ctx = _ctx(request)
     project = get_budget_project(ctx, project_id)
     budget = get_budget(ctx, project, budget_id)
-    version = _get_version(ctx, budget, version_id, status=BudgetVersionStatus.APPLIED)
+    version = _get_version(ctx, budget, version_id, status=str(BudgetVersionStatus.APPLIED))
     charges = list(scoped_qs(ctx, BudgetCharge).filter(version=version).order_by("order"))
     names = {c.order: c.name for c in charges}
     return _render(
@@ -572,7 +572,7 @@ def version_source(
     if not can_export_budgets(ctx, ctx.org_id):
         raise PermissionDenied
     version = _get_version(
-        ctx, budget, version_id, status=BudgetVersionStatus.APPLIED, with_file=True
+        ctx, budget, version_id, status=str(BudgetVersionStatus.APPLIED), with_file=True
     )
     with transaction.atomic():
         audit.record(
