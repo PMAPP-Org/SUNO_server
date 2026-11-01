@@ -10,6 +10,7 @@ rol responde 403.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any
@@ -28,13 +29,19 @@ from openpyxl.utils import get_column_letter
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Budget, BudgetVersion, BudgetVersionStatus, Project
+from visitacampo.core.models import (
+    Budget,
+    BudgetCharge,
+    BudgetVersion,
+    BudgetVersionStatus,
+    Project,
+)
 from visitacampo.core.policies import can_export_budgets, can_manage_budgets
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.projects.views import _ctx, _parse_uuid, _project_context, _render
 
 from .access import get_budget, get_budget_project
-from .comparison import budget_summaries, build_comparison, filter_rows
+from .comparison import budget_summaries, build_comparison, filter_rows, version_rows
 from .excel import MAX_BYTES, ExcelRejected, preview_sheet
 from .importer import (
     ImportRejected,
@@ -42,6 +49,7 @@ from .importer import (
     charges_of,
     create_upload,
     discard_version,
+    mark_contractual,
     prepare_version,
     update_pending,
 )
@@ -62,6 +70,7 @@ from .totals import (
     ChargeSpec,
     base_line_order,
     compute_charges,
+    describe_base,
     line_base,
     parse_number,
     pct_text,
@@ -70,6 +79,7 @@ from .totals import (
 
 DUPLICATE_NAME = "Ya existe un presupuesto con ese nombre en este proyecto."
 MIN_PREVIEW_COLUMNS = 6
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class BudgetForm(forms.Form):
@@ -466,3 +476,113 @@ def import_preview(
             "charge_rows": _charge_form_rows(charges, amounts),
         },
     )
+
+
+def _safe_name(budget: Budget) -> str:
+    """Código (o nombre) del presupuesto apto para nombres de archivo."""
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", budget.code or budget.name)[:60] or "presupuesto"
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def history(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_budget_project(ctx, project_id)
+    budget = get_budget(ctx, project, budget_id)
+    if request.method == "POST":
+        _require_manage(ctx)
+        version_id = _parse_uuid(request.POST.get("version"))
+        if request.POST.get("action") == "contractual" and version_id is not None:
+            try:
+                with transaction.atomic():
+                    previous, version = mark_contractual(ctx, budget.pk, version_id)
+                    audit.record(
+                        ctx,
+                        action=AuditAction.BUDGET_CONTRACTUAL_CHANGED,
+                        target=f"budget:{budget.pk}",
+                        metadata={"from": previous, "to": version.number},
+                    )
+            except ImportRejected as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(request, f"La versión {version.number} es ahora la contractual.")
+        return redirect("budgets:history", project.pk, budget.pk)
+
+    versions = scoped_qs(ctx, BudgetVersion).defer("source_file").select_related("uploaded_by")
+    can_manage = can_manage_budgets(ctx, ctx.org_id)
+    return _render(
+        request,
+        ctx,
+        "suno/budgets/history.html",
+        {
+            **_budget_context(ctx, project, budget),
+            "versions": versions.filter(budget=budget, status=BudgetVersionStatus.APPLIED).order_by(
+                "-number"
+            ),
+            "pending": (
+                versions.filter(budget=budget, status=BudgetVersionStatus.PENDING).order_by(
+                    "-uploaded_at"
+                )
+                if can_manage
+                else []
+            ),
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+def version_detail(
+    request: HttpRequest, project_id: UUID, budget_id: UUID, version_id: UUID
+) -> HttpResponse:
+    """El contenido de una versión aplicada, con sus cargos."""
+    ctx = _ctx(request)
+    project = get_budget_project(ctx, project_id)
+    budget = get_budget(ctx, project, budget_id)
+    version = _get_version(ctx, budget, version_id, status=BudgetVersionStatus.APPLIED)
+    charges = list(scoped_qs(ctx, BudgetCharge).filter(version=version).order_by("order"))
+    names = {c.order: c.name for c in charges}
+    return _render(
+        request,
+        ctx,
+        "suno/budgets/version.html",
+        {
+            **_budget_context(ctx, project, budget),
+            "version": version,
+            "is_contractual": version.pk == budget.contractual_version_id,
+            "rows": version_rows(ctx, version),
+            "charges": [
+                {
+                    "charge": c,
+                    "note": f"{pct_text(c.pct)} % sobre {describe_base(c.base, names)}",
+                }
+                for c in charges
+            ],
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+def version_source(
+    request: HttpRequest, project_id: UUID, budget_id: UUID, version_id: UUID
+) -> HttpResponse:
+    """Descarga del Excel original de una versión aplicada (auditada)."""
+    ctx = _ctx(request)
+    project = get_budget_project(ctx, project_id)
+    budget = get_budget(ctx, project, budget_id)
+    if not can_export_budgets(ctx, ctx.org_id):
+        raise PermissionDenied
+    version = _get_version(
+        ctx, budget, version_id, status=BudgetVersionStatus.APPLIED, with_file=True
+    )
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.BUDGET_SOURCE_DOWNLOADED,
+            target=f"budget:{budget.pk}",
+            metadata={"version": version.number},
+        )
+    response = HttpResponse(bytes(version.source_file), content_type=XLSX_TYPE)
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_safe_name(budget)}-v{version.number}.xlsx"'
+    )
+    return response

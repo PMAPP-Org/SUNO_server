@@ -20,4 +20,15 @@ urlpatterns = [
         views.import_mapping,
         name="import_mapping",
     ),
+    path("<uuid:budget_id>/historial/", views.history, name="history"),
+    path(
+        "<uuid:budget_id>/versiones/<uuid:version_id>/",
+        views.version_detail,
+        name="version",
+    ),
+    path(
+        "<uuid:budget_id>/versiones/<uuid:version_id>/excel",
+        views.version_source,
+        name="version_source",
+    ),
 ]

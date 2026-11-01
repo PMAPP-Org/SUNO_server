@@ -76,6 +76,9 @@ class BudgetViewTestCase(TestCase):
             f"{self.base}{budget.pk}/importar/",
             f"{self.base}{budget.pk}/importar/{some}/",
             f"{self.base}{budget.pk}/importar/{some}/mapeo/",
+            f"{self.base}{budget.pk}/historial/",
+            f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/",
+            f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/excel",
         ]
 
     def make_agent_see_the_project(self) -> None:
@@ -383,3 +386,73 @@ class ImportPagesTests(BudgetViewTestCase):
         self.as_user(self.supervisor)
         self.assertEqual(self.client.get(self.url).status_code, 403)
         self.assertEqual(self.upload(V1_ROWS).status_code, 403)
+
+
+@skip_without_db
+class HistoryAndVersionTests(BudgetViewTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.budget = self.budget_v1_v2()
+        self.v1 = BudgetVersion.objects.get(budget=self.budget, number=1)
+        self.v2 = BudgetVersion.objects.get(budget=self.budget, number=2)
+        self.history = f"{self.base}{self.budget.pk}/historial/"
+
+    def version_url(self, version: BudgetVersion, suffix: str = "") -> str:
+        return f"{self.base}{self.budget.pk}/versiones/{version.pk}/{suffix}"
+
+    def test_history_lists_versions_and_marks_the_contractual(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.history)
+        for text in ("Otrosí 1", "contractual", "11.042.735,00", "10.510.555,00"):
+            with self.subTest(text=text):
+                self.assertContains(response, text)
+        self.assertContains(response, self.version_url(self.v1, "excel"))
+        self.assertNotContains(response, "Marcar como contractual")
+
+    def test_admin_marks_another_version_as_contractual(self) -> None:
+        self.as_user(self.admin)
+        self.assertContains(self.client.get(self.history), "Marcar como contractual", count=1)
+        response = self.client.post(
+            self.history, {"action": "contractual", "version": str(self.v2.pk)}
+        )
+        self.assertRedirects(response, self.history)
+        self.budget.refresh_from_db()
+        self.assertEqual(self.budget.contractual_version_id, self.v2.pk)
+        event = AuditEvent.objects.get(action="budgets.contractual_changed")
+        self.assertEqual(event.metadata, {"from": 1, "to": 2})
+
+    def test_supervisor_cannot_mark_contractual(self) -> None:
+        self.as_user(self.supervisor)
+        response = self.client.post(
+            self.history, {"action": "contractual", "version": str(self.v2.pk)}
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_version_page_shows_its_content_and_charges(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.version_url(self.v1))
+        for text in ("Cerramiento provisional", "Administración", "913.000,00", "11.042.735,00"):
+            with self.subTest(text=text):
+                self.assertContains(response, text)
+        self.assertNotContains(response, "Formaleta")
+
+    def test_pending_or_foreign_versions_are_404(self) -> None:
+        pending = stage_rows(self.ctx, self.budget, V1_ROWS)
+        other = make_budget(self.project, self.admin, name="Interventoría")
+        foreign = apply_rows(self.ctx, other, V1_ROWS)
+        self.as_user(self.admin)
+        for version in (pending, foreign):
+            for suffix in ("", "excel"):
+                with self.subTest(version=version.pk, suffix=suffix):
+                    url = self.version_url(version, suffix)
+                    self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_viewer_downloads_the_original_excel_and_it_is_audited(self) -> None:
+        self.as_user(self.viewer)
+        response = self.client.get(self.version_url(self.v1, "excel"))
+        self.assertEqual(response.status_code, 200)
+        stored = BudgetVersion.objects.get(pk=self.v1.pk).source_file
+        self.assertEqual(response.content, bytes(stored))
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="C-01-v1.xlsx"')
+        event = AuditEvent.objects.get(action="budgets.source_downloaded")
+        self.assertEqual(event.metadata, {"version": 1})
