@@ -11,8 +11,8 @@ a tareas del cronograma.
 
 Las funciones reciben el queryset base de visitas en vez de un contexto: la
 plataforma les pasa `scoped_qs(ctx, Visit)` y el Admin su propio queryset (el
-superusuario ve todas las organizaciones). La decisión vigente se calcula con
-dos `Max` sobre la relación `reviews`, como el filtro de revisión del Admin.
+superusuario ve todas las organizaciones). La decisión vigente es una subconsulta
+sobre `reviews` (la más reciente).
 """
 
 from __future__ import annotations
@@ -22,10 +22,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
-from django.db.models import F, Max, OuterRef, Q, QuerySet, Subquery
+from django.db.models import OuterRef, QuerySet, Subquery
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Task, Visit, VisitReviewStatus
+from visitacampo.core.models import Task, Visit, VisitReview, VisitReviewStatus
 from visitacampo.core.scoping import scoped_qs
 
 APPROVED = str(VisitReviewStatus.APPROVED)
@@ -35,52 +35,60 @@ REVIEW_LABELS = {APPROVED: "Validada", REJECTED: "Rechazada", None: "Sin revisar
 
 
 def with_review(visits: QuerySet[Visit]) -> QuerySet[Visit]:
-    """Anota `last_review_at` y `last_approved_at` (sin subconsultas)."""
-    return visits.annotate(
-        last_review_at=Max("reviews__created_at"),
-        last_approved_at=Max("reviews__created_at", filter=Q(reviews__status=APPROVED)),
+    """Anota `last_review_status`: la decisión vigente, o `None` sin revisión.
+
+    La vigente es la fila más reciente de `VisitReview` (`-created_at, -id`: el
+    id desempata si dos decisiones comparten instante). La subconsulta se
+    correlaciona por visita, así que sirve igual con el queryset de una
+    organización que con el del Admin.
+    """
+    latest = (
+        QuerySet(model=VisitReview)
+        .filter(visit=OuterRef("pk"))
+        .order_by("-created_at", "-id")
+        .values("status")[:1]
     )
+    return visits.annotate(last_review_status=Subquery(latest))
 
 
 def review_status(visit: Visit) -> str | None:
     """Decisión vigente de una visita anotada con `with_review`, o `None`."""
-    last = getattr(visit, "last_review_at", None)
-    if last is None:
-        return None
-    return APPROVED if getattr(visit, "last_approved_at", None) == last else REJECTED
+    status: str | None = getattr(visit, "last_review_status", None)
+    return status
 
 
 def approved(visits: QuerySet[Visit]) -> QuerySet[Visit]:
     """Las visitas cuya revisión vigente es `approved`."""
-    return with_review(visits).filter(
-        last_review_at__isnull=False, last_approved_at=F("last_review_at")
-    )
+    return with_review(visits).filter(last_review_status=APPROVED)
 
 
 def validated_pct_by_task(
     visits: QuerySet[Visit],
     *,
     task_ids: Iterable[UUID] | None = None,
-    project_id: UUID | None = None,
+    project_ids: Iterable[UUID] | None = None,
 ) -> dict[UUID, Decimal]:
-    """% SUNO por tarea: el de su visita validada más reciente. Una query."""
+    """% SUNO por tarea: el de su visita validada más reciente. Una query.
+
+    Sin `task_ids` ni `project_ids`, todas las tareas del queryset."""
     linked = visits.filter(task__isnull=False, deleted_at__isnull=True)
     if task_ids is not None:
         ids = list(task_ids)
         if not ids:
             return {}
         linked = linked.filter(task_id__in=ids)
-    if project_id is not None:
-        linked = linked.filter(task__project_id=project_id)
+    if project_ids is not None:
+        projects = list(project_ids)
+        if not projects:
+            return {}
+        linked = linked.filter(task__project_id__in=projects)
     rows = (
         approved(linked)
         .order_by("task_id", "-captured_at", "-change_seq")
+        .distinct("task_id")
         .values_list("task_id", "progress_pct")
     )
-    result: dict[UUID, Decimal] = {}
-    for task_id, pct in rows:
-        result.setdefault(task_id, pct)
-    return result
+    return dict(rows)
 
 
 def with_previous_validated_pct(visits: QuerySet[Visit], base: QuerySet[Visit]) -> QuerySet[Visit]:

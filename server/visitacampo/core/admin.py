@@ -232,15 +232,9 @@ class ReviewStatusFilter(admin.SimpleListFilter):
     def queryset(self, request: Any, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
         value = self.value()
         if value == "pending":
-            return queryset.filter(last_review_at__isnull=True)
-        if value == VisitReviewStatus.APPROVED:
-            return queryset.filter(
-                last_review_at__isnull=False, last_approved_at=F("last_review_at")
-            )
-        if value == VisitReviewStatus.REJECTED:
-            return queryset.filter(last_review_at__isnull=False).exclude(
-                last_approved_at=F("last_review_at")
-            )
+            return queryset.filter(last_review_status__isnull=True)
+        if value in (VisitReviewStatus.APPROVED, VisitReviewStatus.REJECTED):
+            return queryset.filter(last_review_status=value)
         return queryset
 
 

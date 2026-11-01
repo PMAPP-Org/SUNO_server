@@ -82,7 +82,7 @@ def build_schedule(
         for t in tasks
     ]
     if suno_pct is None:
-        suno_pct = validated_pct_by_task(scoped_qs(ctx, Visit), project_id=project.pk)
+        suno_pct = validated_pct_by_task(scoped_qs(ctx, Visit), project_ids=[project.pk])
     suno = {str(k): float(v) for k, v in suno_pct.items()}
     indicators = compute_indicators(inputs, suno, WorkCalendar.from_json(project.calendar), cut)
     rows = [

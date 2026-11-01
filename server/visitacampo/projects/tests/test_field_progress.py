@@ -6,10 +6,11 @@ import unittest
 from decimal import Decimal
 from uuid import UUID
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
-from visitacampo.core.models import Visit
+from visitacampo.core.models import Project, Visit, VisitReview
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
@@ -19,7 +20,9 @@ from visitacampo.core.tests.dbsupport import (
 from visitacampo.projects.field_progress import (
     is_regression,
     progress_visits,
+    review_status,
     validated_pct_by_task,
+    with_review,
 )
 from visitacampo.projects.importer import stage_import, summarize_changes
 from visitacampo.projects.mspdi import parse_mspdi
@@ -90,7 +93,7 @@ class ValidatedPctTests(TestCase):
         w.approve(w.visit(5, "10", hours=1))
         self.assertEqual(self.pct(task_ids=[w.task(3).pk]), {w.task(3).pk: Decimal("30.00")})
         self.assertEqual(self.pct(task_ids=[]), {})
-        self.assertEqual(len(self.pct(project_id=w.project.pk)), 2)
+        self.assertEqual(len(self.pct(project_ids=[w.project.pk])), 2)
 
     def test_previous_validated_and_regression(self) -> None:
         w = self.world
@@ -182,3 +185,43 @@ class ImportPreviewFieldProgressTests(TestCase):
     def test_summarize_changes_keeps_its_old_signature(self) -> None:
         summary = summarize_changes({}, parse_mspdi(v2()), set())
         self.assertNotIn("avance de campo", " ".join(summary["warnings"]))
+
+
+@skip_without_db
+class LatestReviewTieTests(TestCase):
+    """Con la misma `created_at`, la revisión vigente es la de mayor id."""
+
+    def decide(self, first: str, second: str) -> str | None:
+        w = make_field_world()
+        visit = w.visit(3, "50", hours=1)
+        moment = visit.captured_at
+        for n, status in enumerate((first, second), start=1):
+            VisitReview.objects.create(
+                id=UUID(int=n), org=w.org, visit=visit, status=status, reviewer=w.supervisor
+            )
+        VisitReview.objects.filter(visit=visit).update(created_at=moment)
+        annotated = with_review(scoped_qs(w.ctx(), Visit).filter(pk=visit.pk)).get()
+        return review_status(annotated)
+
+    def test_the_higher_id_wins_a_tie(self) -> None:
+        self.assertEqual(self.decide("approved", "rejected"), "rejected")
+
+    def test_the_higher_id_wins_the_reverse_tie(self) -> None:
+        self.assertEqual(self.decide("rejected", "approved"), "approved")
+
+
+@skip_without_db
+class ProjectListQueriesTests(TestCase):
+    def count(self, projects: int) -> int:
+        w = make_field_world(f"Obra de prueba {projects}")
+        for n in range(projects - 1):
+            Project.objects.create(org=w.org, name=f"Otra {n}", created_by=w.admin)
+        self.client.force_login(w.supervisor)
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get("/plataforma/proyectos/")
+        self.assertEqual(response.status_code, 200)
+        n = sum("visit_review" in q["sql"] for q in captured.captured_queries)
+        return n
+
+    def test_validated_progress_is_read_once_for_all_projects(self) -> None:
+        self.assertEqual(self.count(1), self.count(3))

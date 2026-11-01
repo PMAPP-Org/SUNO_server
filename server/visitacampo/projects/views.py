@@ -113,13 +113,18 @@ def project_list(request: HttpRequest) -> HttpResponse:
         .annotate(n=Max("number"))
         .values_list("project_id", "n")
     )
+    projects = list(visible_projects(ctx).order_by("name"))
+    # Un solo cálculo del % SUNO para todos los proyectos de la página.
+    suno_pct = validated_pct_by_task(
+        scoped_qs(ctx, Visit), project_ids=[project.pk for project in projects]
+    )
     items = [
         {
             "project": project,
-            "total": build_schedule(ctx, project).total,
+            "total": build_schedule(ctx, project, suno_pct=suno_pct).total,
             "version": versions.get(project.pk),
         }
-        for project in visible_projects(ctx).order_by("name")
+        for project in projects
     ]
     return _render(
         request,
