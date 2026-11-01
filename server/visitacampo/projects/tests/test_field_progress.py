@@ -21,9 +21,12 @@ from visitacampo.projects.field_progress import (
     progress_visits,
     validated_pct_by_task,
 )
+from visitacampo.projects.importer import stage_import, summarize_changes
+from visitacampo.projects.mspdi import parse_mspdi
 from visitacampo.projects.schedule import Schedule, ScheduleRow, build_schedule
 
 from .factories import make_field_world, make_visit
+from .samples import v2
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -164,3 +167,18 @@ class TaskPageFieldProgressTests(TestCase):
         self.client.force_login(self.world.supervisor)
         response = self.client.get(self.url)
         self.assertContains(response, "Sin visitas vinculadas.")
+
+
+@skip_without_db
+class ImportPreviewFieldProgressTests(TestCase):
+    def test_warns_about_retired_tasks_with_field_progress(self) -> None:
+        w = make_field_world()
+        w.visit(5, "10", hours=1)
+        staged = stage_import(w.ctx(), w.project, file_name="v2.xml", data=v2())
+        self.assertIn(
+            "1 tarea(s) retirada(s) con avance de campo: 2.1 Columnas.", staged.summary["warnings"]
+        )
+
+    def test_summarize_changes_keeps_its_old_signature(self) -> None:
+        summary = summarize_changes({}, parse_mspdi(v2()), set())
+        self.assertNotIn("avance de campo", " ".join(summary["warnings"]))
