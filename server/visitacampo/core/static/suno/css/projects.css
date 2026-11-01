@@ -65,3 +65,29 @@ button.text-link:hover { color: var(--suno-red); }
    columnas fijas tapen por completo lo que pasa por debajo. */
 .pj-scroll { overflow-x: auto; }
 .pj-panel:has(> .pj-scroll) { overflow-x: visible; }
+
+/* Presupuestos (costos, pieza 3). */
+.bg-head { margin: 24px 0 0; }
+.bg-head h2 { margin: 0 0 4px; font-size: 22px; }
+.bg-compare thead th:nth-child(-n+2), .bg-compare tbody td:nth-child(-n+2) { position: sticky; z-index: 1; background: var(--suno-white); }
+.bg-compare thead th:nth-child(-n+2) { z-index: 2; background: var(--suno-paper); }
+.bg-compare tbody tr.pj-stage td:nth-child(-n+2) { background: var(--suno-paper); }
+.bg-compare thead th:nth-child(1), .bg-compare tbody td:nth-child(1) { left: 0; width: 72px; min-width: 72px; }
+.bg-compare thead th:nth-child(2), .bg-compare tbody td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--suno-line); }
+.bg-compare td.pj-name { min-width: 240px; max-width: 360px; }
+@media (max-width: 767px) { .bg-compare td.pj-name { min-width: 160px; max-width: 220px; } }
+.bg-compare tfoot td { background: var(--suno-paper); font-weight: 600; }
+.pj-table tr.bg-total td { font-weight: 700; border-top: 2px solid var(--suno-ink); }
+.bg-removed td:nth-child(2) { color: var(--suno-muted); text-decoration: line-through; }
+.bg-up { color: var(--suno-red); }
+.bg-down { color: var(--suno-green); }
+.bg-label { display: inline-block; margin: 0 4px 2px 0; padding: 1px 6px; border-radius: var(--suno-radius); background: var(--suno-muted); color: var(--suno-white); font-size: 11px; }
+.bg-label-more { background: var(--suno-amber); color: var(--suno-ink); }
+.bg-label-less { background: var(--suno-topography); color: var(--suno-ink); }
+.bg-label-price { background: var(--suno-ink); }
+.bg-label-new { background: var(--suno-green); }
+.bg-label-removed { background: var(--suno-red); }
+.bg-label-contractual { background: var(--suno-ink); }
+.bg-sheet td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.bg-charges { max-width: 760px; }
+.bg-charges input[type="text"] { width: 100%; }

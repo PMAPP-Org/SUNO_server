@@ -15,6 +15,10 @@ urlpatterns = [
     path("plataforma/ingresar/", platform_login, name="platform_login"),
     path("plataforma/salir/", platform_logout, name="platform_logout"),
     path("plataforma/proyectos/", include("visitacampo.projects.urls")),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/presupuestos/",
+        include("visitacampo.budgets.urls"),
+    ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),
 ]

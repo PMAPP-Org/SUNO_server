@@ -45,6 +45,7 @@ from visitacampo.core.policies import (
     can_assign_task_responsibles,
     can_export_schedule,
     can_manage_projects,
+    can_view_budgets,
 )
 from visitacampo.core.scoping import get_organization, scoped_qs
 
@@ -158,6 +159,8 @@ def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]
         "project": project,
         "can_manage": can_manage_projects(ctx, ctx.org_id),
         "can_export": can_export_schedule(ctx, ctx.org_id),
+        # Pestaña "Presupuestos" de la cabecera (costos, pieza 3).
+        "can_view_budgets": can_view_budgets(ctx, ctx.org_id),
     }
 
 
