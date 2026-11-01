@@ -294,6 +294,31 @@ class BackofficePoliciesTests(SimpleTestCase):
                 self.assertFalse(policies.can_manage_personal_data(ctx(role), ORG))
 
 
+class BudgetPoliciesTests(SimpleTestCase):
+    """Costos, pieza 3: el agente de campo no ve presupuestos."""
+
+    def test_everyone_but_the_field_agent_views_and_exports(self) -> None:
+        for policy in (policies.can_view_budgets, policies.can_export_budgets):
+            for role in (Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.VIEWER):
+                with self.subTest(policy=policy.__name__, role=role):
+                    self.assertTrue(policy(ctx(role), ORG))
+            with self.subTest(policy=policy.__name__, role=Role.FIELD_AGENT):
+                self.assertFalse(policy(ctx(Role.FIELD_AGENT), ORG))
+
+    def test_only_administration_manages(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_manage_budgets(ctx(role), ORG))
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(policies.can_manage_budgets(ctx(role), ORG))
+
+    def test_another_organization_gets_404(self) -> None:
+        with self.assertRaises(HttpError) as raised:
+            policies.check_view_budgets(ctx(Role.ADMIN, org_id=OTHER_ORG), ORG)
+        self.assertEqual(raised.exception.status_code, 404)
+
+
 # --- Deny-by-default, para toda política presente y futura ------------------
 
 
@@ -343,6 +368,11 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_export_schedule": ORG,
             # Avance de campo: cualquier miembro pide sus tareas.
             "can_read_field_tasks": ORG,
+            # Presupuestos (costos, pieza 3): todos menos el agente de campo
+            # ven y exportan; administración gestiona.
+            "can_view_budgets": ORG,
+            "can_manage_budgets": ORG,
+            "can_export_budgets": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:

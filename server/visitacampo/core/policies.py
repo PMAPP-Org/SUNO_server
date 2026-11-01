@@ -39,6 +39,7 @@ from visitacampo.core.models import Role
 
 __all__ = [
     "ADMIN_ROLES",
+    "BUDGET_READ_ROLES",
     "DEVICE_OWNER_ROLES",
     "MEMBER_ROLES",
     "PROJECT_READ_ALL_ROLES",
@@ -47,9 +48,11 @@ __all__ = [
     "PolicyDenied",
     "can_assign_task_responsibles",
     "can_assign_work",
+    "can_export_budgets",
     "can_export_schedule",
     "can_export_visits",
     "can_manage_basemaps",
+    "can_manage_budgets",
     "can_manage_device",
     "can_manage_personal_data",
     "can_manage_projects",
@@ -63,12 +66,15 @@ __all__ = [
     "can_record_consent",
     "can_review_visit",
     "can_upload_attachment",
+    "can_view_budgets",
     "can_write_visit",
     "check_assign_task_responsibles",
     "check_assign_work",
+    "check_export_budgets",
     "check_export_schedule",
     "check_export_visits",
     "check_manage_basemaps",
+    "check_manage_budgets",
     "check_manage_device",
     "check_manage_personal_data",
     "check_manage_projects",
@@ -82,6 +88,7 @@ __all__ = [
     "check_record_consent",
     "check_review_visit",
     "check_upload_attachment",
+    "check_view_budgets",
     "check_write_visit",
     "user_has_organization_roles",
 ]
@@ -112,6 +119,12 @@ SUPERVISION_ROLES: frozenset[RoleValue] = frozenset({Role.OWNER, Role.ADMIN, Rol
 #: de la organización. Un `FIELD_AGENT` solo ve aquellos donde es responsable
 #: de alguna tarea (`projects.access.visible_projects`).
 PROJECT_READ_ALL_ROLES: frozenset[RoleValue] = frozenset(
+    {Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.VIEWER}
+)
+
+#: Presupuestos (costos, pieza 3): quién los ve y exporta. El `FIELD_AGENT` no:
+#: los valores del contrato no son información de campo.
+BUDGET_READ_ROLES: frozenset[RoleValue] = frozenset(
     {Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.VIEWER}
 )
 
@@ -387,6 +400,25 @@ def can_read_field_tasks(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
 
 
+def can_view_budgets(ctx: RequestContext, org_id: UUID) -> bool:
+    """Ver los presupuestos de los proyectos: todos los roles menos el agente de campo."""
+    return user_has_organization_roles(ctx, org_id, BUDGET_READ_ROLES)
+
+
+def can_manage_budgets(ctx: RequestContext, org_id: UUID) -> bool:
+    """Crear presupuestos, importar versiones, editar cargos y marcar la contractual."""
+    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+
+
+def can_export_budgets(ctx: RequestContext, org_id: UUID) -> bool:
+    """Exportar la comparación y descargar el Excel original (queda en la auditoría).
+
+    A diferencia del cronograma, el Observador sí exporta: la spec de la pieza 3
+    da a Supervisor y Observador "ver y exportar".
+    """
+    return user_has_organization_roles(ctx, org_id, BUDGET_READ_ROLES)
+
+
 def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
     """Ver y descargar los mapas base y las capas de referencia (Fase B/C).
 
@@ -510,4 +542,19 @@ def check_export_schedule(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_read_field_tasks(ctx: RequestContext, org_id: UUID) -> None:
     if not can_read_field_tasks(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_view_budgets(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_view_budgets(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_budgets(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_budgets(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_export_budgets(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_export_budgets(ctx, org_id):
         raise _denial(ctx, org_id)
