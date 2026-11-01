@@ -28,6 +28,7 @@ from visitacampo.health.api import router as health_router
 from visitacampo.jobs.api import router as jobs_router
 from visitacampo.layers.api import router as layers_router
 from visitacampo.privacy.api import router as privacy_router
+from visitacampo.projects.api import router as projects_router
 from visitacampo.serverinfo.api import router as server_info_router
 from visitacampo.sync.api import router as sync_router
 
@@ -52,3 +53,4 @@ api.add_router("", jobs_router)
 api.add_router("", privacy_router)
 api.add_router("", basemaps_router)
 api.add_router("", layers_router)
+api.add_router("", projects_router)

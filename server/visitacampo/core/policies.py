@@ -56,6 +56,7 @@ __all__ = [
     "can_modify_visit",
     "can_publish_form_template",
     "can_read_basemaps",
+    "can_read_field_tasks",
     "can_read_job_output",
     "can_read_members",
     "can_read_visit",
@@ -74,6 +75,7 @@ __all__ = [
     "check_modify_visit",
     "check_publish_form_template",
     "check_read_basemaps",
+    "check_read_field_tasks",
     "check_read_job_output",
     "check_read_members",
     "check_read_visit",
@@ -376,6 +378,15 @@ def can_export_schedule(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
 
 
+def can_read_field_tasks(ctx: RequestContext, org_id: UUID) -> bool:
+    """Pedir las tareas del cronograma propias (avance de campo, costos etapa 1).
+
+    Cualquier miembro: la lista ya se limita a las tareas de las que quien
+    llama es responsable, y el push vuelve a comprobarlo al vincular.
+    """
+    return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
+
+
 def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
     """Ver y descargar los mapas base y las capas de referencia (Fase B/C).
 
@@ -494,4 +505,9 @@ def check_assign_task_responsibles(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_export_schedule(ctx: RequestContext, org_id: UUID) -> None:
     if not can_export_schedule(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_read_field_tasks(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_read_field_tasks(ctx, org_id):
         raise _denial(ctx, org_id)

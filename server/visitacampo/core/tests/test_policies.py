@@ -341,6 +341,8 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_manage_projects": ORG,
             "can_assign_task_responsibles": ORG,
             "can_export_schedule": ORG,
+            # Avance de campo: cualquier miembro pide sus tareas.
+            "can_read_field_tasks": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
