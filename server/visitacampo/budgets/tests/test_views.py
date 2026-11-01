@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import unittest
+import zipfile
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -79,6 +81,7 @@ class BudgetViewTestCase(TestCase):
             f"{self.base}{budget.pk}/historial/",
             f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/",
             f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/excel",
+            f"{self.base}{budget.pk}/exportar.xlsx",
         ]
 
     def make_agent_see_the_project(self) -> None:
@@ -456,3 +459,35 @@ class HistoryAndVersionTests(BudgetViewTestCase):
         self.assertEqual(response["Content-Disposition"], 'attachment; filename="C-01-v1.xlsx"')
         event = AuditEvent.objects.get(action="budgets.source_downloaded")
         self.assertEqual(event.metadata, {"version": 1})
+
+
+@skip_without_db
+class ExportTests(BudgetViewTestCase):
+    def test_viewer_exports_the_full_comparison_and_it_is_audited(self) -> None:
+        budget = self.budget_v1_v2()
+        self.as_user(self.viewer)
+        page = self.client.get(f"{self.base}{budget.pk}/")
+        self.assertContains(page, "exportar.xlsx")
+        response = self.client.get(f"{self.base}{budget.pk}/exportar.xlsx", {"cambios": "1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("spreadsheetml", response["Content-Type"])
+        self.assertEqual(
+            response["Content-Disposition"], 'attachment; filename="C-01-comparacion.xlsx"'
+        )
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            sheet = book.read("xl/worksheets/sheet1.xml").decode()
+        for text in (
+            "codigo",
+            "total_vigente",
+            "Formaleta",
+            "Curado",  # sin filtros: la exportación es completa
+            "No previsto",
+            "Mayor cantidad",
+            "IVA sobre utilidad",
+            "11042735.0",
+            "10510555.0",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(text, sheet)
+        event = AuditEvent.objects.get(action="budgets.exported")
+        self.assertEqual(event.metadata, {"rows": 8})

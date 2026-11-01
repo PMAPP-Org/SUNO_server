@@ -19,6 +19,7 @@
     <label>Buscar <input type="search" name="q" value="{{ filters.q }}" placeholder="Código o descripción"></label>
     <label><span><input type="checkbox" name="cambios" value="1" {% if filters.cambios %}checked{% endif %}> Solo con cambios</span></label>
     <button class="button" type="submit">Aplicar</button>
+    {% if can_export_budgets %}<a class="text-link" href="{% url 'budgets:export' project.pk budget.pk %}">Exportar la comparación completa (Excel)</a>{% endif %}
   </form>
 </section>
 

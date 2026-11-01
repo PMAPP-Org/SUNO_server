@@ -26,6 +26,7 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_http_methods
 from openpyxl.utils import get_column_letter
 
+from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import RequestContext
@@ -41,8 +42,14 @@ from visitacampo.core.scoping import scoped_qs
 from visitacampo.projects.views import _ctx, _parse_uuid, _project_context, _render
 
 from .access import get_budget, get_budget_project
-from .comparison import budget_summaries, build_comparison, filter_rows, version_rows
-from .excel import MAX_BYTES, ExcelRejected, preview_sheet
+from .comparison import (
+    ComparisonRow,
+    budget_summaries,
+    build_comparison,
+    filter_rows,
+    version_rows,
+)
+from .excel import KIND_CHAPTER, MAX_BYTES, ExcelRejected, preview_sheet
 from .importer import (
     ImportRejected,
     apply_version,
@@ -80,6 +87,12 @@ from .totals import (
 DUPLICATE_NAME = "Ya existe un presupuesto con ese nombre en este proyecto."
 MIN_PREVIEW_COLUMNS = 6
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+EXPORT_HEADER = [
+    "codigo", "descripcion", "unidad", "tipo", "estado",
+    "cant_contractual", "vr_unitario_contractual", "total_contractual",
+    "cant_vigente", "vr_unitario_vigente", "total_vigente",
+    "diferencia", "diferencia_pct",
+]  # fmt: skip
 
 
 class BudgetForm(forms.Form):
@@ -584,5 +597,72 @@ def version_source(
     response = HttpResponse(bytes(version.source_file), content_type=XLSX_TYPE)
     response["Content-Disposition"] = (
         f'attachment; filename="{_safe_name(budget)}-v{version.number}.xlsx"'
+    )
+    return response
+
+
+def _num(value: Decimal | None) -> float | None:
+    """`to_xlsx` solo conoce int y float: los montos van como float (2 decimales)."""
+    return None if value is None else float(value)
+
+
+@login_required(login_url="platform_login")
+def export_comparison(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResponse:
+    """La comparación completa (sin filtros) con cargos y totales, en Excel (auditada)."""
+    ctx = _ctx(request)
+    project = get_budget_project(ctx, project_id)
+    budget = get_budget(ctx, project, budget_id)
+    if not can_export_budgets(ctx, ctx.org_id):
+        raise PermissionDenied
+    data = build_comparison(ctx, budget)
+
+    def row_values(r: ComparisonRow) -> list[object]:
+        c, v = r.contractual, r.current
+        return [
+            safe_cell(value)
+            for value in (
+                r.code, r.description, r.unit,
+                "capítulo" if r.kind == KIND_CHAPTER else "ítem",
+                ", ".join(r.labels),
+                _num(c.quantity) if c else None, _num(c.unit_price) if c else None,
+                _num(c.total) if c else None,
+                _num(v.quantity) if v else None, _num(v.unit_price) if v else None,
+                _num(v.total) if v else None,
+                _num(r.diff), _num(r.diff_pct),
+            )
+        ]  # fmt: skip
+
+    footer = [
+        [
+            safe_cell(value)
+            for value in (
+                "",
+                f"{f.label} ({f.note})" if f.note else f.label,
+                "",
+                "",
+                "",
+                "",
+                "",
+                _num(f.contractual),
+                "",
+                "",
+                _num(f.current),
+                _num(f.diff),
+                _num(f.diff_pct),
+            )
+        ]  # fmt: skip
+        for f in data.footer
+    ]
+    content = to_xlsx(EXPORT_HEADER, [*(row_values(r) for r in data.rows), *footer])
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.BUDGET_EXPORTED,
+            target=f"budget:{budget.pk}",
+            metadata={"rows": len(data.rows)},
+        )
+    response = HttpResponse(content, content_type=XLSX_TYPE)
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_safe_name(budget)}-comparacion.xlsx"'
     )
     return response

@@ -31,4 +31,5 @@ urlpatterns = [
         views.version_source,
         name="version_source",
     ),
+    path("<uuid:budget_id>/exportar.xlsx", views.export_comparison, name="export"),
 ]
