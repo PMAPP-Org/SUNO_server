@@ -17,7 +17,15 @@ import unittest
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 
-from visitacampo.core.models import FormTemplateVersion, Membership, Organization, Role
+from visitacampo.core.models import (
+    FormTemplateVersion,
+    Membership,
+    Organization,
+    Project,
+    Role,
+    Task,
+    TaskResponsible,
+)
 from visitacampo.forms.definition import validate_definition
 
 from .dbsupport import SKIP_REASON, setup_test_database, teardown_test_database
@@ -86,6 +94,38 @@ class BootstrapDemoTests(unittest.TestCase):
         )
         self.assertTrue(all(a.check_password("una-contraseña-de-prueba-larga-42") for a in agents))
         self.assertEqual(Membership.objects.filter(org=org, role=Role.FIELD_AGENT).count(), 4)
+
+    def test_with_schedule_seeds_a_task_the_agent_can_report(self) -> None:
+        out = io.StringIO()
+        call_command(
+            "bootstrap_demo",
+            "--org-name=Org cronograma test",
+            "--username=agente-cronograma",
+            "--password=una-contraseña-de-prueba-larga-42",
+            "--with-schedule",
+            stdout=out,
+        )
+        org = Organization.objects.get(name="Org cronograma test")
+        user = get_user_model().objects.get(username="agente-cronograma")
+        project = Project.objects.get(org=org)
+        leaf = Task.objects.get(project=project, uid=2)
+        self.assertEqual((leaf.wbs, leaf.name, leaf.is_summary), ("1.1", "Excavación", False))
+        assert leaf.parent is not None
+        self.assertEqual(leaf.parent.uid, 1)
+        self.assertTrue(
+            TaskResponsible.objects.filter(task__uid=1, task__project=project, user=user).exists()
+        )
+        self.assertIn(str(leaf.id), out.getvalue())
+
+    def test_without_the_flag_there_is_no_project(self) -> None:
+        call_command(
+            "bootstrap_demo",
+            "--org-name=Org sin cronograma",
+            "--username=agente-sin-cronograma",
+            "--password=una-contraseña-de-prueba-larga-42",
+            stdout=io.StringIO(),
+        )
+        self.assertFalse(Project.objects.filter(org__name="Org sin cronograma").exists())
 
     def test_generates_and_prints_a_password_when_none_is_given(self) -> None:
         out = io.StringIO()

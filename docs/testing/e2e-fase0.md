@@ -37,15 +37,18 @@ locales y certificados aprobados.
 2. Levanta `db`, `api` y `caddy` en el proyecto de compose `suno-e2e`.
    Caddy firma `10.0.2.2` con su CA interna y lo sirve también sin SNI
    (`default_sni`).
-3. Siembra una organización y un usuario únicos (`bootstrap_demo`).
+3. Siembra una organización y un usuario únicos (`bootstrap_demo --with-schedule`): además de
+   la plantilla, un proyecto con la etapa 1 "Preliminares" (el agente es su responsable) y la
+   tarea de detalle 1.1 "Excavación", que hereda la responsabilidad.
 4. Lanza `integration_test/e2e_fase0_test.dart` con `flutter drive --no-dds`
    (con `flutter test`, el DDS no llega a conectarse al emulador API 36), que:
    acepta el aviso de privacidad, hace login, **acepta el certificado
    (TOFU)**, sincroniza, espera a que el script active el modo avión,
-   captura una visita con una marca única, comprueba que queda *Pendiente*,
+   captura una visita con una marca única, la vincula a la tarea 1.1 con 35 % de avance
+   acumulado, comprueba que queda *Pendiente*,
    y tras reconectar espera a *Sincronizada*.
 5. Verifica en el servidor que la visita existe en su organización con
-   `version` y `change_seq` asignados.
+   `version` y `change_seq` asignados, vinculada a la tarea 1.1 con `progress_pct` 35.
 6. Siempre, también si falla: desactiva el modo avión, hace `down -v` y borra
    `infra/.env.e2e`.
 
