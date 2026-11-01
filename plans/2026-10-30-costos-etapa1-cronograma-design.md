@@ -147,12 +147,18 @@ Plantillas Django con el login de `/plataforma/`, filtradas por organización y 
 
 ## 5. App móvil y API
 
-- `GET /v1/projects/tasks/`: tareas vigentes donde el usuario es responsable (directo o
-  por rama), con EDT, nombre, proyecto y último % validado. Sincronización incremental con
-  `change_seq`, como capas y formularios.
-- El push de visitas acepta `task_id` y `progress_pct`. El servidor valida organización,
-  que el usuario sea responsable de la tarea y el rango 0–100. Un % menor que el último
-  validado se acepta y se marca para el supervisor.
+- `GET /v1/projects/tasks`: tareas vigentes **de detalle** donde el usuario es responsable
+  (directo o por rama), con EDT, nombre, proyecto y último % validado. *Decidido al planear
+  (`plans/2026-10-31-costos-etapa1-campo-plan.md`):* lista completa con una huella `version`
+  (si no cambió, `changed: false` sin ítems), como las capas de referencia, en vez de una
+  entidad del pull por `change_seq`: la visibilidad es por usuario y derivada de la rama, y el
+  último % validado sale de `VisitReview`, que no tiene `change_seq`. Lo que deja de venir se
+  borra del teléfono.
+- El push de visitas acepta `task_id` y `progress_pct` (los dos o ninguno, también en
+  `update`). El servidor valida organización, que la tarea esté vigente y no sea resumen, que
+  el usuario sea responsable de ella y el rango 0–100. Un % menor que el último validado se
+  acepta; se marca al leer (Admin de visitas y ficha de la tarea), comparando con la visita
+  validada más reciente de la misma tarea capturada antes.
 - Flutter: tabla Drift `tasks`; en el formulario de visita, selector opcional "Tarea del
   cronograma" con búsqueda por EDT o nombre y campo "% avance acumulado" con el último
   validado como referencia. Funciona sin conexión y sube con el outbox.
