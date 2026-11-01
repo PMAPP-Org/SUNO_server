@@ -265,9 +265,9 @@ class _References:
     devices: set[uuid.UUID]
     visit_template_versions: dict[uuid.UUID, uuid.UUID]
     tasks: dict[uuid.UUID, _TaskRef]
-    #: `visit_id → (task_id, progress_pct)` de los `update` que tocan la tarea o el %
-    #: sobre una visita cuya última revisión es `approved`.
-    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None]]
+    #: `visit_id → (task_id, progress_pct, version)` de las visitas validadas que el lote
+    #: cambia de tarea o %, o borra (ver `_validated_progress`).
+    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]
 
     def missing(self, fields: dict[str, Any]) -> str | None:
         """Nombre del primer campo con una referencia inexistente, o `None`."""
@@ -316,11 +316,25 @@ class _References:
         return None
 
     def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
-        """Una visita validada no cambia su tarea ni su % sin una nueva revisión."""
+        """Una visita validada no cambia su tarea ni su % sin una nueva revisión,
+        y no se borra.
+
+        Una operación con `base_version` distinto al guardado no se rechaza aquí:
+        la deja pasar para que el CAS conteste `conflict` con la fila del servidor.
+        """
         current = self.validated.get(parsed.entity_id)
-        if current is None or parsed.op_type != "update":
+        if current is None or parsed.op_type == "create":
             return None
-        task_id, pct = current
+        task_id, pct, version = current
+        if parsed.base_version != version:
+            return None
+        if parsed.op_type == "delete":
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="The visit was validated: it cannot be deleted.",
+                details={"field": "id", "reason": "visit_validated"},
+                entity_id=parsed.entity_id,
+            )
         for field, stored in (("task_id", task_id), ("progress_pct", pct)):
             if field in parsed.fields and parsed.fields[field] != stored:
                 return Rejection(
@@ -334,22 +348,30 @@ class _References:
 
 def _validated_progress(
     ctx: RequestContext, writes: list[VisitWrite]
-) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None]]:
-    """Visitas validadas que un `update` del lote podría cambiar de tarea o %.
+) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]:
+    """Visitas validadas que el lote podría cambiar de tarea o %, o borrar.
 
-    Una query para todo el lote, y ninguna si ningún `update` trae esos campos.
+    Una query para todo el lote, y ninguna si ninguna operación lo intenta.
+    Las filas se **bloquean** (`select_for_update`, dentro de la transacción del
+    push): una revisión creada a la vez (el Admin usa `select_for_update` sobre
+    la visita al revisar) no puede colarse entre esta comprobación y el
+    `UPDATE`. Devuelve también `version` para que una operación obsoleta acabe
+    en `conflict` y no en un rechazo.
     """
     ids = {
         w.entity_id
         for w in writes
-        if w.op_type == "update" and ("task_id" in w.fields or "progress_pct" in w.fields)
+        if w.op_type == "delete"
+        or (w.op_type == "update" and ("task_id" in w.fields or "progress_pct" in w.fields))
     }
     if not ids:
         return {}
-    rows = approved(scoped_qs(ctx, Visit).filter(pk__in=ids)).values_list(
-        "pk", "task_id", "progress_pct"
+    rows = (
+        approved(scoped_qs(ctx, Visit).filter(pk__in=ids))
+        .select_for_update()
+        .values_list("pk", "task_id", "progress_pct", "version")
     )
-    return {pk: (task_id, pct) for pk, task_id, pct in rows}
+    return {pk: (task_id, pct, version) for pk, task_id, pct, version in rows}
 
 
 def _visit_template_versions(

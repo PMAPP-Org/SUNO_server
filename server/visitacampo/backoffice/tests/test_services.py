@@ -82,6 +82,12 @@ class ReviewTests(TestCase):
         self.assertEqual(review.comment, "falta la foto")
         self.assertTrue(audited(AuditAction.VISIT_REVIEWED))
 
+    def test_a_review_takes_the_organization_push_lock(self) -> None:
+        visit = self.a.visit()
+        with CaptureQueriesContext(connection) as captured:
+            review_visit(self.a.ctx(), visit, status="approved")
+        self.assertTrue(any("pg_advisory_xact_lock" in q["sql"] for q in captured.captured_queries))
+
     def test_each_decision_is_a_new_row(self) -> None:
         visit = self.a.visit()
         review_visit(self.a.ctx(), visit, status="rejected")

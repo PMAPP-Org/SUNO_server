@@ -24,7 +24,7 @@ from visitacampo.projects.importer import apply_import, stage_import
 from visitacampo.projects.tests.samples import v1, v2
 from visitacampo.sync.cursor import CURSOR_ZERO
 
-from .factories import build_scenario, create_op, pull, push, update_op, visit_of
+from .factories import build_scenario, create_op, delete_op, pull, push, update_op, visit_of
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -262,3 +262,53 @@ class ValidatedProgressImmutableTests(TaskProgressPushTests):
             return len(captured.captured_queries)
 
         self.assertEqual(queries(ids), queries(ids[:1]) + 4)
+
+    def test_a_stale_update_conflicts_instead_of_being_rejected(self) -> None:
+        visit_id = self.validated_visit()
+        old_version = visit_of(visit_id).version
+        self.push_one(update_op(visit_id, old_version, lat=5.0))
+        stale = update_op(visit_id, old_version, task_id=str(self.task(3).pk), progress_pct=50)
+        result = self.push_one(stale)
+        self.assertEqual(result["status"], "conflict", result)
+        self.assertIsNotNone(result["server_row"])
+
+    def test_approved_visit_cannot_be_deleted(self) -> None:
+        visit_id = self.validated_visit()
+        result = self.push_one(delete_op(visit_id, visit_of(visit_id).version))
+        self.assertRejected(result, "validation_error", "id", "visit_validated")
+        self.assertIsNone(visit_of(visit_id).deleted_at)
+
+    def test_stale_delete_of_an_approved_visit_conflicts(self) -> None:
+        visit_id = self.validated_visit()
+        old_version = visit_of(visit_id).version
+        self.push_one(update_op(visit_id, old_version, lat=5.0))
+        self.assertEqual(self.push_one(delete_op(visit_id, old_version))["status"], "conflict")
+
+    def test_rejected_or_unreviewed_visits_can_be_deleted(self) -> None:
+        rejected = self.validated_visit("rejected")
+        self.assertEqual(
+            self.push_one(delete_op(rejected, visit_of(rejected).version))["status"], "applied"
+        )
+        plain = uuid.uuid4()
+        self.push_one(self.linked(3, 20, plain))
+        self.assertEqual(
+            self.push_one(delete_op(plain, visit_of(plain).version))["status"], "applied"
+        )
+
+    def test_the_validated_rows_are_locked(self) -> None:
+        visit_id = self.validated_visit()
+        op = update_op(
+            visit_id,
+            visit_of(visit_id).version,
+            lat=5.0,
+            progress_pct=20,
+            task_id=str(self.task(3).pk),
+        )
+        with CaptureQueriesContext(connection) as captured:
+            push(self.scenario, [op])
+        self.assertTrue(
+            any(
+                "FOR UPDATE" in q["sql"] and "visit_review" in q["sql"]
+                for q in captured.captured_queries
+            )
+        )

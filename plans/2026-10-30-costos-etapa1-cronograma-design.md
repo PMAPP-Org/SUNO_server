@@ -164,7 +164,8 @@ Plantillas Django con el login de `/plataforma/`, filtradas por organización y 
   validado como referencia. Funciona sin conexión y sube con el outbox.
 - Validar la visita valida su %; rechazarla lo deja fuera. *Decidido en revisión:* una visita
   cuya última revisión es `approved` no puede cambiar su tarea ni su % por el push (se rechaza
-  con `validation_error` / `visit_validated`; reenviar los mismos valores sí se acepta). Una
+  con `validation_error` / `visit_validated`, y tampoco se puede borrar; reenviar los mismos
+  valores sí se acepta; una operación con `base_version` obsoleto contesta `conflict`). Una
   visita rechazada o sin revisar se puede seguir corrigiendo.
 
 ## Pruebas
