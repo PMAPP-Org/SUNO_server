@@ -78,6 +78,28 @@ class Visit(SyncedModel):
         related_name="visits",
         verbose_name="creada por",
     )
+    #: Costos, etapa 1: la tarea del cronograma cuyo avance reporta la visita y
+    #: el % acumulado observado en campo. Los dos o ninguno
+    #: (`visit_task_progress_pair`). Cuenta para el % SUNO de la tarea cuando
+    #: la revisión vigente de la visita es `approved` (`projects.field_progress`).
+    #: `PROTECT`: las tareas nunca se borran (se retiran), y así sigue siendo.
+    task = models.ForeignKey(
+        "core.Task",
+        on_delete=models.PROTECT,
+        related_name="field_visits",
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name="tarea del cronograma",
+    )
+    progress_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name="% avance acumulado",
+    )
 
     class Meta:
         db_table = "visit"
@@ -118,12 +140,28 @@ class Visit(SyncedModel):
             # referenciadas. Es también la invariante que impide que una
             # visita "cambie de organización" sin cambiar de identidad.
             models.UniqueConstraint(fields=["id", "org"], name="visit_id_org_uq"),
+            # Costos, etapa 1: la tarea y su % van juntos, y el % en 0..100.
+            # `payloads.py` lo rechaza antes con detalle; esto es la red.
+            models.CheckConstraint(
+                condition=(models.Q(task__isnull=True) & models.Q(progress_pct__isnull=True))
+                | (
+                    models.Q(task__isnull=False)
+                    # `NULL >= 0` es NULL y un CHECK acepta NULL: sin esto, una
+                    # tarea sin % pasaría.
+                    & models.Q(progress_pct__isnull=False)
+                    & models.Q(progress_pct__gte=0)
+                    & models.Q(progress_pct__lte=100)
+                ),
+                name="visit_task_progress_pair",
+            ),
         ]
         indexes = [
             # Bounding box (ADR-005).
             models.Index(fields=["org", "lat", "lon"], name="visit_org_lat_lon_idx"),
             # Escaneo ordenado del cursor de pull (doc 08 §4.4).
             models.Index(fields=["org", "change_seq"], name="visit_org_change_seq_idx"),
+            # % SUNO: la visita más reciente de cada tarea (`field_progress`).
+            models.Index(fields=["task", "captured_at"], name="visit_task_captured_idx"),
         ]
 
     def __str__(self) -> str:
