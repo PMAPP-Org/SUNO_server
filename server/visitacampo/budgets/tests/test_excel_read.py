@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import Any
 from unittest import mock
 
 from visitacampo.budgets import excel
@@ -18,7 +19,7 @@ from visitacampo.budgets.mapping import MAX_COLUMNS
 
 from .xlsx import HEADER, build_xlsx, with_cached_formula, with_extra_entry
 
-ROWS = [["1", "Preliminares"], ["1.1", "Localización", "m2", 100, 1500, 150000]]
+ROWS: list[list[Any]] = [["1", "Preliminares"], ["1.1", "Localización", "m2", 100, 1500, 150000]]
 
 
 class FileNameTests(unittest.TestCase):

@@ -117,3 +117,10 @@ class BudgetModelTests(TestCase):
         charge(1, "10")
         with self.assertRaises(IntegrityError), transaction.atomic():
             charge(1, "5")
+
+
+class RowKindValuesTests(unittest.TestCase):
+    def test_reader_and_model_use_the_same_values(self) -> None:
+        from visitacampo.budgets.excel import KIND_CHAPTER, KIND_ITEM
+
+        self.assertEqual((KIND_CHAPTER, KIND_ITEM), (BudgetRowKind.CHAPTER, BudgetRowKind.ITEM))
