@@ -22,7 +22,6 @@ Cubre lo que pide el back-office del MVP:
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from typing import Any
 
 from django import forms
@@ -88,6 +87,7 @@ from visitacampo.forms.definition import TemplateDefinitionError, validate_defin
 from visitacampo.forms.services import publish_version
 from visitacampo.layers.services import retire as retire_layer
 from visitacampo.projects.field_progress import (
+    format_pct,
     is_regression,
     review_status,
     with_previous_validated_pct,
@@ -243,11 +243,6 @@ def _latest_review(visit: Visit) -> str | None:
     return review_status(visit)
 
 
-def _pct(value: Decimal) -> str:
-    """`Decimal('40.50')` → `40,5 %`."""
-    return f"{value.normalize():f}".replace(".", ",") + " %"
-
-
 class ProgressRegressionFilter(admin.SimpleListFilter):
     """Costos, etapa 1: visitas vinculadas a una tarea y las que retroceden."""
 
@@ -359,16 +354,21 @@ class VisitAdmin(ReadOnlyAdmin):
 
     def get_queryset(self, request: Any) -> QuerySet[Visit]:
         base = super().get_queryset(request)
-        return with_previous_validated_pct(with_review(base), base)
+        linked = base
+        if request.GET.get(ProgressRegressionFilter.parameter_name) in ("tarea", "menor"):
+            # Solo las vinculadas: la subconsulta del "último validado" no se
+            # calcula para las demás visitas.
+            linked = base.filter(task__isnull=False)
+        return with_previous_validated_pct(with_review(linked), base)
 
     @admin.display(description="avance de cronograma")
     def progress(self, visit: Visit) -> str:
         if visit.task_id is None or visit.progress_pct is None:
             return "—"
-        text = f"{visit.task} · {_pct(visit.progress_pct)}"
+        text = f"{visit.task} · {format_pct(visit.progress_pct)}"
         previous = getattr(visit, "previous_validated_pct", None)
         if previous is not None and is_regression(visit.progress_pct, previous):
-            text += f" ⚠ menor que el último validado ({_pct(previous)})"
+            text += f" ⚠ menor que el último validado ({format_pct(previous)})"
         return text
 
     @admin.display(description="plantilla")

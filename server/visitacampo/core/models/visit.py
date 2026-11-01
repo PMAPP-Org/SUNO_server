@@ -87,6 +87,7 @@ class Visit(SyncedModel):
         "core.Task",
         on_delete=models.PROTECT,
         related_name="field_visits",
+        db_index=False,  # lo cubre `visit_task_captured_idx` (task, captured_at)
         null=True,
         blank=True,
         default=None,

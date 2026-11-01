@@ -110,6 +110,11 @@ def with_previous_validated_pct(visits: QuerySet[Visit], base: QuerySet[Visit]) 
     return visits.annotate(previous_validated_pct=Subquery(previous))
 
 
+def format_pct(value: Decimal) -> str:
+    """`Decimal('40.50')` -> `40,5 %`: hasta dos decimales, sin ceros finales."""
+    return f"{value.normalize():f}".replace(".", ",") + " %"
+
+
 def is_regression(pct: Decimal | None, previous: Decimal | None) -> bool:
     return pct is not None and previous is not None and pct < previous
 
@@ -125,6 +130,16 @@ class ProgressVisit:
     @property
     def regression(self) -> bool:
         return is_regression(self.visit.progress_pct, self.previous_validated_pct)
+
+    @property
+    def pct_text(self) -> str:
+        pct = self.visit.progress_pct
+        return format_pct(pct) if pct is not None else "—"
+
+    @property
+    def previous_text(self) -> str:
+        previous = self.previous_validated_pct
+        return format_pct(previous) if previous is not None else "—"
 
     @property
     def status_label(self) -> str:

@@ -163,7 +163,9 @@ def _check_parent_outlines(parsed: ParsedSchedule) -> None:
 
     La jerarquía (`parent`) y la responsabilidad por rama (`access.covers`,
     por prefijo del número de esquema) se derivan del mismo número: si faltara
-    un ancestro podrían discrepar.
+    un ancestro podrían discrepar. Un proyecto ya importado con un hueco así no se
+    puede volver a importar: la siguiente importación se rechaza hasta que el
+    archivo traiga el ancestro faltante.
     """
     outlines = {t.outline_number for t in parsed.tasks}
     for task in parsed.tasks:

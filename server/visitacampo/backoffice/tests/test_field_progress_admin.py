@@ -50,3 +50,8 @@ class VisitAdminFieldProgressTests(TestCase):
     def test_detail_shows_the_warning(self) -> None:
         content = self.client_.get(f"{URL}{self.low.pk}/change/").content.decode()
         self.assertIn("menor que el último validado (60 %)", content)
+
+    def test_percentages_use_up_to_two_decimals(self) -> None:
+        self.world.visit(3, "35.5", hours=3)
+        content = self.client_.get(URL).content.decode()
+        self.assertIn("1.2 Descapote · 35,5 %", content)

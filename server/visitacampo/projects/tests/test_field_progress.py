@@ -18,6 +18,7 @@ from visitacampo.core.tests.dbsupport import (
     teardown_test_database,
 )
 from visitacampo.projects.field_progress import (
+    format_pct,
     is_regression,
     progress_visits,
     review_status,
@@ -225,3 +226,53 @@ class ProjectListQueriesTests(TestCase):
 
     def test_validated_progress_is_read_once_for_all_projects(self) -> None:
         self.assertEqual(self.count(1), self.count(3))
+
+
+class FormatPctTests(unittest.TestCase):
+    def test_up_to_two_decimals_without_trailing_zeros(self) -> None:
+        for value, text in (
+            ("40.50", "40,5 %"),
+            ("60.00", "60 %"),
+            ("0.00", "0 %"),
+            ("100", "100 %"),
+            ("33.33", "33,33 %"),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(format_pct(Decimal(value)), text)
+
+
+@skip_without_db
+class TaskPagePctFormatTests(TestCase):
+    def test_task_page_uses_the_same_format_as_the_admin(self) -> None:
+        w = make_field_world()
+        w.approve(w.visit(3, "60.50", hours=1))
+        w.visit(3, "40.25", hours=2)
+        self.client.force_login(w.supervisor)
+        url = f"/plataforma/proyectos/{w.project.pk}/tareas/{w.task(3).pk}/"
+        response = self.client.get(url)
+        self.assertContains(response, "<strong>60,5 %</strong>")
+        self.assertContains(response, "40,25 %")
+        self.assertContains(response, "Menor que el último validado (60,5 %)")
+
+
+@skip_without_db
+class TaskPageAdminLinkTests(TestCase):
+    def link_shown(self, *, staff: bool) -> bool:
+        from django.contrib.auth.models import Permission
+
+        w = make_field_world()
+        w.visit(3, "20", hours=1)
+        user = w.supervisor
+        if staff:
+            user.is_staff = True
+            user.save()
+            user.user_permissions.set(Permission.objects.filter(codename="view_visit"))
+        self.client.force_login(user)
+        url = f"/plataforma/proyectos/{w.project.pk}/tareas/{w.task(3).pk}/"
+        return "/admin/core/visit/" in self.client.get(url).content.decode()
+
+    def test_link_needs_the_view_permission(self) -> None:
+        self.assertFalse(self.link_shown(staff=False))
+
+    def test_link_shown_with_the_view_permission(self) -> None:
+        self.assertTrue(self.link_shown(staff=True))

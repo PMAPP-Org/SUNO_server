@@ -49,7 +49,7 @@ from visitacampo.core.policies import (
 from visitacampo.core.scoping import get_organization, scoped_qs
 
 from .access import effective_responsibles, get_visible_project, visible_projects
-from .field_progress import progress_visits, validated_pct_by_task
+from .field_progress import format_pct, progress_visits, validated_pct_by_task
 from .importer import ImportRejected, apply_import, discard_import, stage_import
 from .mspdi import MAX_BYTES
 from .schedule import ScheduleRow, build_schedule, filter_rows
@@ -264,6 +264,8 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
         if can_assign and not retired
         else []
     )
+    suno = validated_pct_by_task(scoped_qs(ctx, Visit), task_ids=[task.pk]).get(task.pk)
+    suno_text = format_pct(suno) if suno is not None else "—"
     return _render(
         request,
         ctx,
@@ -286,9 +288,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "predecessors": scoped_qs(ctx, TaskDependency)
             .filter(successor=task)
             .select_related("predecessor"),
-            "suno_pct": validated_pct_by_task(scoped_qs(ctx, Visit), task_ids=[task.pk]).get(
-                task.pk
-            ),
+            "suno_pct_text": suno_text,
             "field_visits": progress_visits(ctx, task),
         },
     )
