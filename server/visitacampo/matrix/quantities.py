@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
@@ -132,7 +132,7 @@ def suno_pct_by_task(
     *,
     task_ids: Iterable[UUID] | None = None,
     project_ids: Iterable[UUID] | None = None,
-    measured: dict[UUID, QuantityProgress] | None = None,
+    measured: Mapping[UUID, QuantityProgress] | None = None,
 ) -> dict[UUID, Decimal]:
     """% SUNO: por cantidades en las tareas con plan; el último % validado en el resto.
 

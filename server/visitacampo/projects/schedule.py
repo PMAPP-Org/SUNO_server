@@ -15,6 +15,7 @@ from django.utils import timezone
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import AppUser, Project, Task, TaskResource
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.matrix.progress import QuantityProgress
 from visitacampo.matrix.quantities import measured_progress, suno_pct_by_task
 
 from .access import effective_responsibles
@@ -45,6 +46,7 @@ def build_schedule(
     *,
     cut: date | None = None,
     suno_pct: Mapping[UUID, float | Decimal] | None = None,
+    measured: Mapping[UUID, QuantityProgress] | None = None,
 ) -> Schedule:
     """Tareas vigentes en el orden del Project, con sus indicadores.
 
@@ -52,6 +54,8 @@ def build_schedule(
     validado, por cantidades donde hay plan
     (`matrix.quantities.suno_pct_by_task`), así que lo reciben todas
     las páginas que llaman aquí: lista, cronograma, Gantt y Excel.
+    `measured`: el avance por cantidades ya calculado (lo recibe la lista de proyectos para
+    no repetir las queries por proyecto).
     """
     if project.org_id != ctx.org_id:
         raise Http404("Proyecto no encontrado.")
@@ -69,7 +73,8 @@ def build_schedule(
         executors[task_id].append(name)
     responsibles = effective_responsibles(ctx, project)
 
-    measured = measured_progress(ctx, project_ids=[project.pk])
+    if measured is None:
+        measured = measured_progress(ctx, project_ids=[project.pk])
     inputs = [
         TaskInput(
             key=str(t.pk),

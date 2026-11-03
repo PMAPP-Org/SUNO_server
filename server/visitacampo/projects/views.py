@@ -116,11 +116,13 @@ def project_list(request: HttpRequest) -> HttpResponse:
     )
     projects = list(visible_projects(ctx).order_by("name"))
     # Un solo cálculo del % SUNO para todos los proyectos de la página.
-    suno_pct = suno_pct_by_task(ctx, project_ids=[project.pk for project in projects])
+    ids = [project.pk for project in projects]
+    measured = measured_progress(ctx, project_ids=ids)
+    suno_pct = suno_pct_by_task(ctx, project_ids=ids, measured=measured)
     items = [
         {
             "project": project,
-            "total": build_schedule(ctx, project, suno_pct=suno_pct).total,
+            "total": build_schedule(ctx, project, suno_pct=suno_pct, measured=measured).total,
             "version": versions.get(project.pk),
         }
         for project in projects

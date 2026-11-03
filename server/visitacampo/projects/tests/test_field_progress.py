@@ -19,6 +19,7 @@ from visitacampo.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from visitacampo.matrix.tests.factories import budget_world, item, plan
 from visitacampo.projects.field_progress import (
     format_pct,
     is_regression,
@@ -237,17 +238,18 @@ class LatestReviewTieTests(TestCase):
 @skip_without_db
 class ProjectListQueriesTests(TestCase):
     def count(self, projects: int) -> int:
-        w = make_field_world(f"Obra de prueba {projects}")
+        w, budget = budget_world(f"Obra de prueba {projects}")
+        plan(w, 5, item(budget, "2.1"), "10")
         for n in range(projects - 1):
             Project.objects.create(org=w.org, name=f"Otra {n}", created_by=w.admin)
         self.client.force_login(w.supervisor)
         with CaptureQueriesContext(connection) as captured:
             response = self.client.get("/plataforma/proyectos/")
         self.assertEqual(response.status_code, 200)
-        n = sum("visit_review" in q["sql"] for q in captured.captured_queries)
-        return n
+        tables = ("visit_review", "quantity_plan")
+        return sum(any(t in q["sql"] for t in tables) for q in captured.captured_queries)
 
-    def test_validated_progress_is_read_once_for_all_projects(self) -> None:
+    def test_progress_is_read_once_for_all_projects(self) -> None:
         self.assertEqual(self.count(1), self.count(3))
 
 

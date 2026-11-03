@@ -145,6 +145,14 @@ class RollupByValueTests(SimpleTestCase):
         self.assertEqual(total.value, 1000.0)
         self.assertEqual(total.weight, 20)
 
+    def test_milestone_without_value_does_not_block_value_weighting(self) -> None:
+        total = rollup(
+            [self._child(0.0, 10, 900.0), self._child(100.0, 10, 100.0), self._child(0.0, 0, None)]
+        )
+        assert total is not None
+        self.assertEqual(total.suno.actual_pct, 10.0)
+        self.assertEqual(total.value, 1000.0)
+
     def test_falls_back_to_days_if_a_child_has_no_value(self) -> None:
         total = rollup([self._child(0.0, 10, 900.0), self._child(100.0, 30, None)])
         assert total is not None

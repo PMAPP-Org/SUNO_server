@@ -40,6 +40,15 @@ class TaskProgressTests(SimpleTestCase):
         self.assertEqual(result[T1].pct, Decimal("75.00"))
         self.assertEqual(result[T1].value, Decimal("0.00"))
 
+    def test_overrun_on_one_item_offsets_the_other_only_in_value(self) -> None:
+        result = task_progress([line(T1, A, "10", "15", "1"), line(T1, B, "10", "0", "1")])
+        self.assertEqual(result[T1].pct, Decimal("75.00"))
+
+    def test_unpriced_item_contributes_nothing_when_another_has_price(self) -> None:
+        result = task_progress([line(T1, A, "10", "10", "5"), line(T1, B, "10", "0", None)])
+        self.assertEqual(result[T1].pct, Decimal("100.00"))
+        self.assertEqual(result[T1].value, Decimal("50.00"))
+
     def test_zero_planned_lines_do_not_measure_the_task(self) -> None:
         result = task_progress([line(T1, A, "0", "5", "100")])
         self.assertNotIn(T1, result)

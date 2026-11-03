@@ -13,9 +13,17 @@ from visitacampo.core.tests.dbsupport import (
 from visitacampo.matrix.locations import load_tree
 from visitacampo.projects.importer import apply_import, stage_import
 from visitacampo.projects.tests.factories import make_field_world
-from visitacampo.projects.tests.samples import TEXT1, project_xml, task_xml
+from visitacampo.projects.tests.samples import TEXT1, TEXT2, project_xml, task_xml
 
-from .factories import import_schedule, located_xml, plan, project_levels_from_xml, suno_levels
+from .factories import (
+    budget_world,
+    import_schedule,
+    item,
+    located_xml,
+    plan,
+    project_levels_from_xml,
+    suno_levels,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -81,8 +89,6 @@ class ScheduleLocationTests(TestCase):
         self.assertEqual(self._label(5), "")
 
     def test_retired_task_with_plan_is_warned(self) -> None:
-        from .factories import budget_world, item
-
         world, budget = budget_world("Con plan")
         plan(world, 5, item(budget, "2.1"), "10")
         data = project_xml([task_xml(3, "Descapote", "1")])
@@ -92,3 +98,30 @@ class ScheduleLocationTests(TestCase):
             " ".join(staged.summary["warnings"]),
         )
         self.assertEqual(ScheduleImport.objects.filter(project=world.project).count(), 2)
+
+    def test_preview_ignores_case_only_differences(self) -> None:
+        project_levels_from_xml(self.world)
+        import_schedule(self.world, located_xml())
+        data = located_xml(tramo_3="tramo 1")
+        staged = stage_import(self.ctx, self.world.project, file_name="c.xml", data=data)
+        self.assertNotIn("cambian de ubicación", " ".join(staged.summary["warnings"]))
+        apply_import(self.ctx, staged.pk)
+        self.assertEqual(self._label(3), "Tramo 1")
+
+    def test_task_that_becomes_a_summary_loses_its_location(self) -> None:
+        project_levels_from_xml(self.world)
+        import_schedule(self.world, located_xml())
+        base = ("2026-03-02", "2026-03-13", 80)
+        data = project_xml(
+            [
+                task_xml(1, "Preliminares", "1", summary=True, baseline=base),
+                task_xml(
+                    3, "Descapote", "1.2", summary=True, baseline=base, custom=((TEXT1, "Tramo 1"),)
+                ),
+                task_xml(7, "Corte", "1.2.1", baseline=base, custom=((TEXT1, "Tramo 1"),)),
+            ],
+            custom_fields=((TEXT1, "Text1", "Tramo"), (TEXT2, "Text2", "PR")),
+        )
+        import_schedule(self.world, data)
+        self.assertIsNone(self.world.task(3).location_id)
+        self.assertEqual(self._label(7), "Tramo 1")

@@ -285,3 +285,37 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
 - La plantilla identifica el ítem por (presupuesto, código); con un solo presupuesto la
   columna Presupuesto puede ir vacía. Una fila con ítem y sin cantidad elimina el par.
 - El % por cantidades usa el precio de la última versión aplicada que contiene el ítem.
+
+    def task_rejection(self, parsed: VisitWrite) -> Rejection | None:
+        """La tarea existe (lo comprobó `missing`); ¿se le puede reportar avance?
+
+        Solo cuando se **pone** una tarea: desvincular (`null`) no exige ser
+        responsable, basta con poder modificar la visita (ya comprobado).
+        """
+        task_id = parsed.fields.get("task_id")
+        if task_id is None:
+            return None
+        ref = self.tasks[task_id]
+        if ref.retired:
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="The task was retired from the schedule.",
+                details={"field": "task_id", "reason": "task_retired"},
+                entity_id=parsed.entity_id,
+            )
+        if ref.is_summary:
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message="Progress is reported on detail tasks, not on summaries.",
+                details={"field": "task_id", "reason": "task_is_summary"},
+                entity_id=parsed.entity_id,
+            )
+        if not ref.covered:
+            return Rejection(
+                code=CODE_FORBIDDEN,
+                message="Only a responsible of the task can report its progress.",
+                details={"field": "task_id", "reason": "not_responsible"},
+                entity_id=parsed.entity_id,
+            )
+        return None
+- Consolidación por valor: los hitos y tareas de peso 0 sin plan no cuentan; si un hijo con plan tiene valor 0 (ítems sin precio), el grupo se pondera por días, para que su avance no desaparezca.

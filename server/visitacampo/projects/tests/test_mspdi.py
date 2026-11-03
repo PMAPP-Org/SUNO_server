@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 
 from visitacampo.projects.mspdi import MspdiError, _duration_days, parse_mspdi
 
-from .samples import project_xml, task_xml, v1
+from .samples import TEXT1, TEXT2, project_xml, task_xml, v1
 
 
 class ParseV1Tests(SimpleTestCase):
@@ -206,8 +206,6 @@ class DurationTests(SimpleTestCase):
 
 class CustomFieldsTests(SimpleTestCase):
     def test_reads_definitions_and_task_values(self) -> None:
-        from .samples import TEXT1, TEXT2, project_xml, task_xml
-
         data = project_xml(
             [
                 task_xml(1, "Tramo 2", "1", summary=True),
@@ -225,8 +223,6 @@ class CustomFieldsTests(SimpleTestCase):
         self.assertEqual(next(t for t in parsed.tasks if t.uid == 1).custom_values, ())
 
     def test_ignores_values_without_field_or_value(self) -> None:
-        from .samples import project_xml
-
         task = (
             "<Task><UID>2</UID><ID>2</ID><Name>X</Name><OutlineNumber>1</OutlineNumber>"
             "<OutlineLevel>1</OutlineLevel>"

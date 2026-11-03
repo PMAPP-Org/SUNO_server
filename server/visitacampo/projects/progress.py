@@ -86,9 +86,12 @@ def rollup(children: Sequence[TaskIndicators]) -> TaskIndicators | None:
     más que 0), si no por días hábiles de línea base."""
     if not children:
         return None
-    values = [c.value for c in children]
-    by_value = all(v is not None and v > 0 for v in values)
-    weights = [float(v or 0) for v in values] if by_value else [float(c.weight) for c in children]
+    # Un hito o una tarea de peso 0 sin plan no cuentan: no impiden ponderar por valor.
+    relevant = [c for c in children if not (c.value is None and c.weight == 0)]
+    by_value = bool(relevant) and all(c.value is not None and c.value > 0 for c in relevant)
+    weights = (
+        [float(c.value or 0) for c in children] if by_value else [float(c.weight) for c in children]
+    )
     total = sum(weights)
 
     def avg(items: list[float]) -> float:

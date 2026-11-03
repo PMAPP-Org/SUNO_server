@@ -37,8 +37,8 @@ from visitacampo.core.models import (
 )
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.matrix.locations import (
+    MAX_NAME,
     PathValues,
-    Tree,
     from_project,
     load_tree,
     path_values,
@@ -202,7 +202,8 @@ def location_warnings(ctx: RequestContext, project: Project, parsed: ParsedSched
         truncated += path.truncated
         before = tree.label(current.get(uid))
         after = " / ".join(path.names)
-        if before != after:
+        target = tree.find(path.names) if path.names else None
+        if target != current.get(uid) or (path.names and target is None):
             was, now = before or "sin ubicación", after or "sin ubicación"
             changes.append(f"{names[uid]}: {was} → {now}")
     warnings: list[str] = []
@@ -219,19 +220,23 @@ def location_warnings(ctx: RequestContext, project: Project, parsed: ParsedSched
         )
     if truncated:
         warnings.append(
-            f"{truncated} nombre(s) de ubicación pasan de 120 caracteres y se recortan."
+            f"{truncated} nombre(s) de ubicación pasan de {MAX_NAME} caracteres y se recortan."
         )
     return warnings
 
 
-def _apply_locations(
-    ctx: RequestContext, project: Project, parsed: ParsedSchedule, tree: Tree
-) -> None:
+def _apply_locations(ctx: RequestContext, project: Project, parsed: ParsedSchedule) -> None:
     levels = project_levels(ctx, project)
     if not from_project(levels) or _missing_fields(parsed, levels):
         return
+    tree = load_tree(ctx, project)
     by_uid = {t.uid: t for t in scoped_qs(ctx, Task).filter(project=project)}
     changed: list[Task] = []
+    for p in parsed.tasks:
+        task = by_uid[p.uid]
+        if p.is_summary and task.location_id is not None:
+            task.location_id = None  # solo las hojas tienen ubicación
+            changed.append(task)
     for uid, path in _leaf_paths(parsed, levels).items():
         node_id = tree.ensure(ctx, levels, path.names)[0].pk if path.names else None
         task = by_uid[uid]
@@ -356,7 +361,7 @@ def apply_import(ctx: RequestContext, import_id: UUID) -> ScheduleImport:
         parsed = _parse(gzip.decompress(bytes(imp.source_xml)))
         _apply_tasks(ctx, project, imp, parsed)
         _apply_links(ctx, project, parsed)
-        _apply_locations(ctx, project, parsed, load_tree(ctx, project))
+        _apply_locations(ctx, project, parsed)
 
         imp.number = (imports.aggregate(n=Max("number"))["n"] or 0) + 1
         imp.status = ScheduleImportStatus.APPLIED
