@@ -19,6 +19,9 @@ from xml.sax.saxutils import escape
 
 NS = "http://schemas.microsoft.com/project"
 
+#: `FieldID` de los campos de texto personalizados de tarea de MS Project.
+TEXT1, TEXT2, TEXT3 = "188743731", "188743734", "188743737"
+
 
 def _el(tag: str, value: object) -> str:
     return f"<{tag}>{escape(str(value))}</{tag}>"
@@ -43,6 +46,7 @@ def task_xml(
     free_slack: int = 0,
     preds: tuple[tuple[int, int], ...] = (),
     sort_id: int | None = None,
+    custom: tuple[tuple[str, str], ...] = (),
 ) -> str:
     level = 0 if outline == "0" else outline.count(".") + 1
     parts = [
@@ -86,6 +90,12 @@ def task_xml(
             f"{_el('Finish', f'{b_finish}T17:00:00')}{_el('Duration', f'PT{b_hours}H0M0S')}"
             "</Baseline>"
         )
+    for field_id, value in custom:
+        parts.append(
+            "<ExtendedAttribute>"
+            f"{_el('FieldID', field_id)}{_el('Value', value)}"
+            "</ExtendedAttribute>"
+        )
     return "<Task>" + "".join(parts) + "</Task>"
 
 
@@ -117,11 +127,23 @@ def project_xml(
     resources: tuple[tuple[int, str], ...] = (),
     assignments: tuple[tuple[int, int], ...] = (),
     namespace: bool = True,
+    custom_fields: tuple[tuple[str, str, str], ...] = (),
 ) -> bytes:
     head = f'<Project xmlns="{NS}">' if namespace else "<Project>"
     body = [_el("Name", "Obra demo"), _el("MinutesPerDay", 480), _el("CalendarUID", 1)]
     if status_date:
         body.append(_el("StatusDate", f"{status_date}T17:00:00"))
+    if custom_fields:
+        body.append(
+            "<ExtendedAttributes>"
+            + "".join(
+                "<ExtendedAttribute>"
+                f"{_el('FieldID', fid)}{_el('FieldName', fname)}{_el('Alias', alias)}"
+                "</ExtendedAttribute>"
+                for fid, fname, alias in custom_fields
+            )
+            + "</ExtendedAttributes>"
+        )
     if with_calendar:
         body.append(_calendar_xml(holidays))
     summary_task = task_xml(0, "Obra demo", "0", summary=True)
