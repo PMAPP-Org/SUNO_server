@@ -143,7 +143,7 @@ def _unescape(value: Any) -> Any:
 
 def exact_key(name: object) -> str:
     """Llave exacta de un presupuesto: espacios colapsados y sin distinguir mayúsculas."""
-    return clean_name(name).casefold()
+    return clean_name(name).lower()
 
 
 def _present(value: Any) -> bool:
@@ -300,7 +300,7 @@ def parse_plan(
         if ref.kind == "retired" and (task.id, ref.id) not in current_pairs:
             errors.append(
                 f"Fila {number}: el ítem {code} fue retirado del presupuesto vigente: "
-                "solo se puede mantener o quitar donde ya estaba."
+                "solo se puede usar en las tareas donde ya estaba."
             )
             continue
         try:

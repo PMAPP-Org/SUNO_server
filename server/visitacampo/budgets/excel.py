@@ -77,9 +77,6 @@ NUMERIC_CODE_HINT = (
 )
 
 
-_NUMERIC_CODE_HINT = NUMERIC_CODE_HINT  # alias anterior
-
-
 class ExcelRejected(Exception):
     """El archivo no se puede usar; el mensaje es para el usuario."""
 

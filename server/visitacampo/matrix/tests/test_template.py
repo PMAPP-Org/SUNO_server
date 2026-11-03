@@ -250,7 +250,10 @@ class ReviewFixTests(SimpleTestCase):
         self.assertEqual(run([row], {(T3, gone)}).pairs, {(T3, gone): Decimal("4.0000")})
         with self.assertRaises(TemplateRejected) as caught:
             run([row], set())
-        self.assertIn("fue retirado del presupuesto vigente", caught.exception.errors[0])
+        self.assertIn(
+            "fue retirado del presupuesto vigente: solo se puede usar en las tareas donde",
+            caught.exception.errors[0],
+        )
         removed = run([[*row[:9], None]], set())
         self.assertEqual(removed.pairs, {})
         self.assertIn("sin cantidad", removed.warnings[0])
