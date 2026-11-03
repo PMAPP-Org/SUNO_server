@@ -1,0 +1,10 @@
+<section class="bg-head">
+  <h2>{{ budget.name }}{% if budget.code %} <small class="pj-muted">{{ budget.code }}</small>{% endif %}</h2>
+  {% if budget.description %}<p class="pj-muted">{{ budget.description }}</p>{% endif %}
+  <nav class="pj-tabs" aria-label="Secciones del presupuesto">
+    <a href="{% url 'budgets:list' project.pk %}">← Presupuestos</a>
+    <a href="{% url 'budgets:detail' project.pk budget.pk %}" {% if sub == "compare" %}aria-current="page"{% endif %}>Comparación</a>
+    <a href="{% url 'budgets:history' project.pk budget.pk %}" {% if sub == "history" %}aria-current="page"{% endif %}>Historial</a>
+    {% if can_manage_budgets %}<a href="{% url 'budgets:import' project.pk budget.pk %}" {% if sub == "import" %}aria-current="page"{% endif %}>Importar Excel</a>{% endif %}
+  </nav>
+</section>

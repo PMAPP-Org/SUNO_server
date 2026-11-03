@@ -1,0 +1,21 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Importar · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Importar una versión del presupuesto</h2>
+  <p>Sube el Excel del presupuesto tal como lo tienes: <strong>.xlsx</strong>, máximo 20 MB y 20.000 filas. Antes de aplicar verás qué cambia frente a la versión vigente.</p>
+  <p class="pj-muted">Consejo: formatea la columna de códigos como texto, para que "1.10" no se lea como "1.1".</p>
+  <form method="post" enctype="multipart/form-data" class="pj-form">
+    {% csrf_token %}
+    <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
+    {% if saved_mapping %}
+    <p class="pj-muted">Se usará el mapeo guardado: hoja «{{ saved_mapping.sheet }}», datos desde la fila {{ saved_mapping.first_row }}.</p>
+    <label><span><input type="checkbox" name="cambiar_mapeo" value="1"> Cambiar el mapeo de columnas</span></label>
+    {% endif %}
+    {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+    <button class="button" type="submit">Continuar</button>
+  </form>
+</section>
+{% endblock %}

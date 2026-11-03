@@ -9,7 +9,6 @@ rol responde 403.
 from __future__ import annotations
 
 import gzip
-import re
 from datetime import date
 from decimal import Decimal
 from typing import cast
@@ -29,6 +28,7 @@ from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
+from visitacampo.core.download import ascii_filename
 from visitacampo.core.models import (
     AppUser,
     Membership,
@@ -45,6 +45,7 @@ from visitacampo.core.policies import (
     can_assign_task_responsibles,
     can_export_schedule,
     can_manage_projects,
+    can_view_budgets,
 )
 from visitacampo.core.scoping import get_organization, scoped_qs
 
@@ -150,7 +151,7 @@ def _parse_uuid(value: str | None) -> UUID | None:
 
 def _safe_code(project: Project) -> str:
     """Código del proyecto apto para nombres de archivo."""
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", project.code or "proyecto")
+    return ascii_filename(project.code or "proyecto", "proyecto")
 
 
 def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]:
@@ -158,6 +159,8 @@ def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]
         "project": project,
         "can_manage": can_manage_projects(ctx, ctx.org_id),
         "can_export": can_export_schedule(ctx, ctx.org_id),
+        # Pestaña "Presupuestos" de la cabecera (costos, pieza 3).
+        "can_view_budgets": can_view_budgets(ctx, ctx.org_id),
     }
 
 

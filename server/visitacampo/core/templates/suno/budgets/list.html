@@ -1,0 +1,47 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Presupuestos · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+
+<section class="pj-panel">
+  <h2>Presupuestos del proyecto</h2>
+  <table class="pj-table">
+  <caption class="sr-only">Presupuestos del proyecto con sus totales</caption>
+    <thead><tr><th scope="col">Presupuesto</th><th scope="col" class="num">Total contractual</th><th scope="col" class="num">Total vigente</th><th scope="col" class="num">Diferencia</th><th scope="col" class="num">Dif. %</th><th scope="col" class="num">Versión vigente</th></tr></thead>
+    <tbody>
+    {% for s in summaries %}
+      <tr>
+        <td class="pj-name"><a href="{% url 'budgets:detail' project.pk s.budget.pk %}"><strong>{{ s.budget.name }}</strong></a>{% if s.budget.code %} <small class="pj-muted">{{ s.budget.code }}</small>{% endif %}</td>
+        <td class="num">{{ s.contractual_total|floatformat:"2g"|default:"—" }}</td>
+        <td class="num">{{ s.current_total|floatformat:"2g"|default:"—" }}</td>
+        <td class="num">{% if s.diff is not None %}{{ s.diff|floatformat:"2g" }}{% else %}—{% endif %}</td>
+        <td class="num">{% if s.diff_pct is not None %}{{ s.diff_pct|floatformat:2 }} %{% else %}—{% endif %}</td>
+        <td class="num">{% if s.current_number %}v{{ s.current_number }}{% else %}—{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="pj-empty">Este proyecto todavía no tiene presupuestos.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if summaries %}
+    <tfoot>
+      <tr class="bg-total"><td>Total del proyecto</td><td class="num">{{ totals.contractual|floatformat:"2g" }}</td><td class="num">{{ totals.current|floatformat:"2g" }}</td><td class="num">{{ totals.diff|floatformat:"2g" }}</td><td class="num">{% if totals.diff_pct is not None %}{{ totals.diff_pct|floatformat:2 }} %{% else %}—{% endif %}</td><td></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</section>
+
+{% if can_manage_budgets %}
+<section class="pj-panel">
+  <h2>Nuevo presupuesto</h2>
+  <p class="pj-muted">Un proyecto puede tener varios (p. ej. por contrato o fuente de financiación); cada uno con su versión contractual y su vigente.</p>
+  <form method="post" class="pj-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label>Nombre {{ form.name }}</label>{{ form.name.errors }}
+    <label>Código {{ form.code }}</label>
+    <label>Descripción {{ form.description }}</label>
+    <button class="button" type="submit">Crear presupuesto</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

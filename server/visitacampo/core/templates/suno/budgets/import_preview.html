@@ -1,0 +1,59 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Vista previa · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Cambios de {{ version.file_name }}</h2>
+  <p>{{ s.item_count }} ítems en {{ s.chapter_count }} capítulos · hoja «{{ s.mapping.sheet }}» desde la fila {{ s.mapping.first_row }}{% if pending %} · <a href="{% url 'budgets:import_mapping' project.pk budget.pk version.pk %}">Cambiar el mapeo</a>{% endif %}</p>
+  <ul>
+    <li><strong>{{ s.added }} no previsto{{ s.added|pluralize }}</strong> (ítems nuevos){% if s.examples.added %}: {{ s.examples.added|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.removed }} eliminado{{ s.removed|pluralize }}</strong>{% if s.examples.removed %}: {{ s.examples.removed|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.reappeared }} {{ s.reappeared|pluralize:"vuelve,vuelven" }}</strong> (estaban en versiones anteriores){% if s.examples.reappeared %}: {{ s.examples.reappeared|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.more_quantity }} con mayor cantidad</strong>{% if s.examples.more_quantity %}: {{ s.examples.more_quantity|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.less_quantity }} con menor cantidad</strong>{% if s.examples.less_quantity %}: {{ s.examples.less_quantity|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.price_changed }} con cambio de precio</strong>{% if s.examples.price_changed %}: {{ s.examples.price_changed|join:", " }}{% endif %}</li>
+  </ul>
+  {% for warning in s.warnings %}<p class="pj-warning">{{ warning }}</p>{% endfor %}
+</section>
+
+<section class="metrics-strip" aria-label="Totales de la versión">
+  <article class="bg-money"><span>Costo directo</span><strong>{{ s.direct_cost|floatformat:"2g" }}</strong><small>Vigente: {{ s.previous_direct_cost|floatformat:"2g"|default:"—" }}</small></article>
+  <article class="bg-money"><span>Total con cargos</span><strong>{% if result %}{{ result.total|floatformat:"2g" }}{% else %}—{% endif %}</strong><small>Vigente: {{ s.previous_total|floatformat:"2g"|default:"—" }}</small></article>
+</section>
+
+{% if pending %}
+<section class="pj-panel">
+  <h2>Etiqueta y cargos</h2>
+  <form method="post" class="bg-charges">
+    {% csrf_token %}
+    <p class="pj-form"><label>Etiqueta de la versión <input type="text" name="label" maxlength="200" value="{{ label }}" placeholder="p. ej. Otrosí 2"></label></p>
+    {% if charge_error %}<p class="pj-late" role="alert">{{ charge_error }}</p>{% endif %}
+    <input type="hidden" name="charge_count" value="{{ charge_rows|length }}">
+    <table class="pj-table">
+  <caption class="sr-only">Cargos de la versión: nombre, porcentaje, base y valor</caption>
+      <thead><tr><th scope="col">#</th><th scope="col">Cargo</th><th scope="col" class="num">%</th><th scope="col">Base</th><th scope="col" class="num">Valor</th></tr></thead>
+      <tbody>
+      {% for row in charge_rows %}
+        <tr>
+          <td>{{ row.index }}</td>
+          <td><input type="text" name="charge_{{ row.index }}_name" value="{{ row.name }}" maxlength="100" aria-label="Nombre del cargo {{ row.index }}"></td>
+          <td class="num"><input type="text" inputmode="decimal" name="charge_{{ row.index }}_pct" value="{{ row.pct }}" size="8" aria-label="Porcentaje del cargo {{ row.index }}"></td>
+          <td><select name="charge_{{ row.index }}_base" aria-label="Base del cargo {{ row.index }}">{% for value, text in row.options %}<option value="{{ value }}" {% if value == row.base %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></td>
+          <td class="num">{{ row.amount|floatformat:"2g" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="pj-muted">Deja el nombre vacío para quitar una línea. Los valores se recalculan al guardar.</p>
+    <p class="pj-filters">
+      <button class="button" type="submit" name="action" value="confirm">Aplicar esta versión</button>
+      <button class="text-link" type="submit" name="action" value="save">Guardar etiqueta y cargos</button>
+      <button class="text-link" type="submit" name="action" value="discard">Descartar</button>
+    </p>
+  </form>
+</section>
+{% else %}
+<p class="pj-muted">Esta versión está {{ version.get_status_display|lower }}.</p>
+{% endif %}
+{% endblock %}

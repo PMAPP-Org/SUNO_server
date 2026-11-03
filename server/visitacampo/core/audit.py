@@ -93,6 +93,14 @@ class AuditAction:
     SCHEDULE_EXPORTED = "projects.schedule_exported"
     SCHEDULE_SOURCE_DOWNLOADED = "projects.schedule_source_downloaded"
 
+    # Presupuestos (costos, pieza 3).
+    BUDGET_CREATED = "budgets.created"
+    BUDGET_VERSION_APPLIED = "budgets.version_applied"
+    BUDGET_VERSION_DISCARDED = "budgets.version_discarded"
+    BUDGET_CONTRACTUAL_CHANGED = "budgets.contractual_changed"
+    BUDGET_EXPORTED = "budgets.exported"
+    BUDGET_SOURCE_DOWNLOADED = "budgets.source_downloaded"
+
 
 def hash_ip(ip: str | None) -> str | None:
     """HMAC-SHA256 (hex, 64 caracteres) de la IP, o `None` si no se conoce."""

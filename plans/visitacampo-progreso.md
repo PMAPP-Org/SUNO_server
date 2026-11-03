@@ -3,6 +3,18 @@
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
 **Última actualización**: 2026-11-01 (módulo de costos, etapa 1 completa: servidor v0.11.0 y app v0.11.0. Anterior: 2026-10-31; ver «Estado al 2026-10-29» abajo)
 
+## Módulo de costos — Pieza 3 (Presupuesto), servidor — 2026-11-01
+
+**PR**: (PR pendiente). Plan: [2026-11-01-costos-pieza3-presupuesto-plan.md](2026-11-01-costos-pieza3-presupuesto-plan.md). Rama `feat/costos-presupuesto`.
+
+**Qué entra (Tasks 0–15)**: modelos y migración `0013_add_budgets` (`Budget`, `BudgetVersion`, `BudgetCharge`, `BudgetItem`, `BudgetItemVersion`); políticas `can_view/manage/export_budgets` y códigos de auditoría `budgets.*`; paquete `visitacampo/budgets/` con aritmética (`totals`), mapeo de columnas (`mapping`), lector seguro de `.xlsx` (`excel`), etiquetas y resumen de cambios (`diff`), importación en dos pasos con bloqueo y vista previa obsoleta (`importer`), comparación contractual contra vigente en consultas fijas (`comparison`) y las páginas web (lista, comparación, subir, mapear, vista previa con cargos AIU + IVA, historial, versión, Excel original, "Marcar como contractual", exportación a Excel). El agente de campo recibe 404 en todas las URL y no ve la pestaña. Además, `config/formats/es/formats.py` fija el punto como separador de miles (Django 5 usa NBSP en `es`).
+
+**Verificación real**: `pytest` completo **1227 passed** (+1463 subtests), 4 fallos conocidos del entorno en `sync/tests/test_load_script.py`; `ruff` y `mypy` limpios (256 archivos); `makemigrations --check` sin cambios; cobertura **93,77 %** (suelo 90 %). Incluye las correcciones de revisión: la subida no se pierde si el mapeo guardado no sirve, la etiqueta y los cargos se conservan si aplicar falla o si hay un cargo inválido (se vuelve a mostrar lo escrito), confirmación para "Marcar como contractual", nombres de descarga con `filename*` (RFC 5987), vistas de solo lectura limitadas a GET y mejoras de accesibilidad.
+
+**Para el uso**: la columna opcional "capítulo" no se implementa (el capítulo se reconoce por la fila); un código numérico en Excel (`1.10`) llega como `1.1`, hay que formatear la columna como texto; las fórmulas sin valor calculado se leen vacías; límites: 20 MB, 20.000 filas, 60 columnas, sin macros.
+
+**Siguiente**: pieza 4 (homologación con el cronograma).
+
 ## Módulo de costos — Etapa 1 (Cronograma) — cerrada el 2026-11-01
 
 Las dos partes de la etapa 1 están integradas y publicadas: cronograma desde MS Project ([SUNO_server#45](https://github.com/PMAPP-Org/SUNO_server/pull/45), v0.10.0) y avance desde campo ([SUNO_server#46](https://github.com/PMAPP-Org/SUNO_server/pull/46) + [SUNO_client#46](https://github.com/PMAPP-Org/SUNO_client/pull/46), v0.11.0 en ambos repos). Siguiente pieza del módulo: presupuesto (pieza 3), luego homologación y llaves contextualizadoras (pieza 4) y control con valor ganado (pieza 5).

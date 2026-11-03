@@ -1,0 +1,19 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Marcar como contractual · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="history" %}
+<section class="pj-panel">
+  <h2>Marcar la versión {{ version.number }} como contractual</h2>
+  <p>La comparación de «{{ budget.name }}» se medirá contra la versión {{ version.number }}{% if version.label %} ({{ version.label }}){% endif %} en lugar de la actual. Las versiones no se modifican y el cambio queda en el registro de auditoría.</p>
+  <form method="post" class="pj-form">
+    {% csrf_token %}
+    <label><span><input type="checkbox" name="confirm" value="1" required> Entiendo que la comparación se medirá contra esta versión</span></label>
+    {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+    <p class="pj-filters">
+      <button class="button" type="submit">Marcar como contractual</button>
+      <a class="text-link" href="{% url 'budgets:history' project.pk budget.pk %}">Cancelar</a>
+    </p>
+  </form>
+</section>
+{% endblock %}

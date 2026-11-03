@@ -1,0 +1,37 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Historial · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="history" %}
+<section class="pj-panel">
+  <h2>Versiones aplicadas</h2>
+  <table class="pj-table">
+  <caption class="sr-only">Versiones aplicadas del presupuesto</caption>
+    <thead><tr><th scope="col">Versión</th><th scope="col">Etiqueta</th><th scope="col">Archivo</th><th scope="col">Subida por</th><th scope="col">Aplicada</th><th scope="col" class="num">Total</th><th scope="col">Cambios frente a la anterior</th><th scope="col"></th></tr></thead>
+    <tbody>
+    {% for v in versions %}
+      <tr>
+        <td><a href="{% url 'budgets:version' project.pk budget.pk v.pk %}">v{{ v.number }}</a>{% if v.pk == budget.contractual_version_id %} <span class="bg-label bg-label-contractual">contractual</span>{% endif %}</td>
+        <td>{{ v.label|default:"—" }}</td>
+        <td class="pj-wrap">{{ v.file_name }}{% if can_export_budgets %} · <a href="{% url 'budgets:version_source' project.pk budget.pk v.pk %}">Excel</a>{% endif %}</td>
+        <td>{{ v.uploaded_by.display_name|default:v.uploaded_by.username }}</td>
+        <td>{{ v.applied_at|date:"d/m/Y H:i" }}</td>
+        <td class="num">{{ v.total|floatformat:"2g" }}</td>
+        <td class="pj-wrap">{{ v.summary.added }} no previsto{{ v.summary.added|pluralize }} · {{ v.summary.removed }} eliminado{{ v.summary.removed|pluralize }} · {{ v.summary.more_quantity }} mayor cant. · {{ v.summary.less_quantity }} menor cant. · {{ v.summary.price_changed }} cambio de precio</td>
+        <td>{% if can_manage_budgets and v.pk != budget.contractual_version_id %}<a class="text-link" href="{% url 'budgets:contractual_confirm' project.pk budget.pk v.pk %}">Marcar como contractual</a>{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="pj-empty">Sin versiones aplicadas.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% if pending %}
+<section class="pj-panel">
+  <h2>Cargas pendientes de confirmar</h2>
+  <ul>
+    {% for v in pending %}<li><a href="{% url 'budgets:import_preview' project.pk budget.pk v.pk %}">{{ v.file_name }}</a> · subida el {{ v.uploaded_at|date:"d/m/Y H:i" }} por {{ v.uploaded_by.display_name|default:v.uploaded_by.username }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

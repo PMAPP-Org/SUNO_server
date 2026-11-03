@@ -1,0 +1,35 @@
+{% extends "suno/projects/base.html" %}
+{% load static %}
+{% block title %}Versión {{ version.number }} · {{ budget.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="history" %}
+<section class="pj-panel">
+  <h2>Versión {{ version.number }}{% if version.label %} · {{ version.label }}{% endif %}{% if is_contractual %} <span class="bg-label bg-label-contractual">contractual</span>{% endif %}</h2>
+  <p class="pj-muted">{{ version.file_name }} · aplicada el {{ version.applied_at|date:"d/m/Y H:i" }}{% if can_export_budgets %} · <a href="{% url 'budgets:version_source' project.pk budget.pk version.pk %}">Descargar el Excel original</a>{% endif %}</p>
+  <p class="pj-tree-actions"><button type="button" class="text-link" data-expand-all>Expandir todo</button> · <button type="button" class="text-link" data-collapse-all>Contraer todo</button></p>
+  <div class="pj-scroll">
+  <table class="pj-table bg-compare" data-wbs>
+  <caption class="sr-only">Contenido de la versión del presupuesto, por capítulo e ítem</caption>
+    <thead><tr><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col">Und</th><th scope="col" class="num">Cantidad</th><th scope="col" class="num">Vr. unitario</th><th scope="col" class="num">Total</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr data-id="{{ r.item_id }}"{% if r.parent_id %} data-parent="{{ r.parent_id }}"{% endif %} class="{% if r.kind == 'chapter' %}{% if r.depth == 0 %}pj-stage{% else %}pj-summary{% endif %}{% endif %}">
+        <td>{{ r.code }}</td>
+        <td class="pj-name" style="padding-left: {{ r.depth|add:1 }}em">{% if r.kind == "chapter" %}<button type="button" class="pj-toggle" data-toggle aria-expanded="true" aria-label="{{ r.description }}">▾</button> {% endif %}{{ r.description|default:"—" }}</td>
+        <td>{{ r.unit }}</td>
+        <td class="num">{{ r.quantity|floatformat:"-4g" }}</td>
+        <td class="num">{{ r.unit_price|floatformat:"2g" }}</td>
+        <td class="num">{{ r.total|floatformat:"2g" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr><td colspan="5">Costo directo</td><td class="num">{{ version.direct_cost|floatformat:"2g" }}</td></tr>
+      {% for line in charges %}<tr><td colspan="5">{{ line.charge.name }} <small class="pj-muted">{{ line.note }}</small></td><td class="num">{{ line.charge.amount|floatformat:"2g" }}</td></tr>{% endfor %}
+      <tr class="bg-total"><td colspan="5">Total</td><td class="num">{{ version.total|floatformat:"2g" }}</td></tr>
+    </tfoot>
+  </table>
+  </div>
+</section>
+{% endblock %}

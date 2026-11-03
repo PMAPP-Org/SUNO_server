@@ -1,0 +1,81 @@
+{% extends "suno/projects/base.html" %}
+{% load static %}
+{% block title %}{{ budget.name }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="budgets" %}
+{% include "suno/budgets/_nav.html" with sub="compare" %}
+
+{% if data.current %}
+<section class="metrics-strip" aria-label="Totales del presupuesto">
+  <article class="bg-money"><span>Total contractual</span><strong>{{ data.total.contractual|floatformat:"2g" }}</strong><small>Versión {{ data.contractual.number }}{% if data.contractual.label %} · {{ data.contractual.label }}{% endif %}</small></article>
+  <article class="bg-money"><span>Total vigente</span><strong>{{ data.total.current|floatformat:"2g" }}</strong><small>Versión {{ data.current.number }}{% if data.current.label %} · {{ data.current.label }}{% endif %}</small></article>
+  <article class="bg-money"><span>Diferencia</span><strong>{{ data.total.diff|floatformat:"2g" }}</strong><small>{% if data.total.diff_pct is not None %}{{ data.total.diff_pct|floatformat:2 }} % sobre el contractual{% else %}—{% endif %}</small></article>
+  <article><span>Ítems con cambios</span><strong>{{ data.changed_count }}</strong><small>de {{ data.item_count }} ítems</small></article>
+</section>
+
+<section class="pj-panel">
+  <form method="get" class="pj-filters">
+    <label>Capítulo <select name="capitulo"><option value="">Todos</option>{% for chapter in data.chapters %}<option value="{{ chapter.item_id }}" {% if filters.capitulo == chapter.item_id|stringformat:"s" %}selected{% endif %}>{{ chapter.code }} {{ chapter.description }}</option>{% endfor %}</select></label>
+    <label>Buscar <input type="search" name="q" value="{{ filters.q }}" placeholder="Código o descripción"></label>
+    <label><span><input type="checkbox" name="cambios" value="1" {% if filters.cambios %}checked{% endif %}> Solo con cambios</span></label>
+    <button class="button" type="submit">Aplicar</button>
+    {% if can_export_budgets %}<a class="text-link" href="{% url 'budgets:export' project.pk budget.pk %}">Exportar la comparación completa (Excel)</a>{% endif %}
+  </form>
+</section>
+
+<section class="pj-panel">
+  <p class="pj-tree-actions"><button type="button" class="text-link" data-expand-all>Expandir todo</button> · <button type="button" class="text-link" data-collapse-all>Contraer todo</button></p>
+  <div class="pj-scroll">
+  <table class="pj-table bg-compare" data-wbs>
+  <caption class="sr-only">Comparación del presupuesto contractual contra el vigente, por capítulo e ítem</caption>
+    <thead>
+      <tr>
+        <th scope="col">Código</th><th scope="col">Descripción</th><th scope="col">Und</th>
+        <th scope="col" class="num">Cantidad<br><small>contractual</small></th><th scope="col" class="num">Vr. unitario<br><small>contractual</small></th><th scope="col" class="num">Total<br><small>contractual</small></th>
+        <th scope="col" class="num">Cantidad<br><small>vigente</small></th><th scope="col" class="num">Vr. unitario<br><small>vigente</small></th><th scope="col" class="num">Total<br><small>vigente</small></th>
+        <th scope="col" class="num">Diferencia</th><th scope="col" class="num">Dif. %</th><th scope="col">Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr data-id="{{ r.item_id }}"{% if r.parent_id %} data-parent="{{ r.parent_id }}"{% endif %} class="{% if r.kind == 'chapter' %}{% if r.depth == 0 %}pj-stage{% else %}pj-summary{% endif %}{% endif %}{% if r.current is None %} bg-removed{% endif %}">
+        <td>{{ r.code }}</td>
+        <td class="pj-name" style="padding-left: {{ r.depth|add:1 }}em">{% if r.kind == "chapter" %}<button type="button" class="pj-toggle" data-toggle aria-expanded="true" aria-label="{{ r.description }}">▾</button> {% endif %}{{ r.description|default:"—" }}</td>
+        <td>{{ r.unit }}</td>
+        {% with c=r.contractual v=r.current %}
+        <td class="num">{% if c %}{{ c.quantity|floatformat:"-4g" }}{% endif %}</td>
+        <td class="num">{% if c %}{{ c.unit_price|floatformat:"2g" }}{% endif %}</td>
+        <td class="num">{% if c %}{{ c.total|floatformat:"2g" }}{% endif %}</td>
+        <td class="num">{% if v %}{{ v.quantity|floatformat:"-4g" }}{% elif r.kind == "item" %}{{ 0|floatformat:"-4g" }}{% endif %}</td>
+        <td class="num">{% if v %}{{ v.unit_price|floatformat:"2g" }}{% endif %}</td>
+        <td class="num">{% if v %}{{ v.total|floatformat:"2g" }}{% else %}{{ 0|floatformat:"2g" }}{% endif %}</td>
+        {% endwith %}
+        <td class="num{% if r.diff > 0 %} bg-up{% elif r.diff < 0 %} bg-down{% endif %}">{{ r.diff|floatformat:"2g" }}</td>
+        <td class="num">{% if r.diff_pct is not None %}{{ r.diff_pct|floatformat:2 }} %{% else %}—{% endif %}</td>
+        <td class="pj-wrap">{% for label, css in r.badges %}<span class="bg-label bg-label-{{ css }}">{{ label }}</span>{% endfor %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="12" class="pj-empty">Ninguna fila coincide con los filtros.</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+    {% for f in data.footer %}
+      <tr{% if f.strong %} class="bg-total"{% endif %}>
+        <td colspan="5">{{ f.label }}{% if f.note %} <small class="pj-muted">{{ f.note }}</small>{% endif %}</td>
+        <td class="num">{{ f.contractual|floatformat:"2g"|default:"—" }}</td>
+        <td colspan="2"></td>
+        <td class="num">{{ f.current|floatformat:"2g"|default:"—" }}</td>
+        <td class="num">{{ f.diff|floatformat:"2g" }}</td>
+        <td class="num">{% if f.diff_pct is not None %}{{ f.diff_pct|floatformat:2 }} %{% else %}—{% endif %}</td>
+        <td></td>
+      </tr>
+    {% endfor %}
+    </tfoot>
+  </table>
+  </div>
+</section>
+{% else %}
+<section class="pj-panel"><p class="pj-empty">Todavía no hay versiones aplicadas de este presupuesto.{% if can_manage_budgets %} <a href="{% url 'budgets:import' project.pk budget.pk %}">Importa su Excel</a>.{% endif %}</p></section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'suno/js/schedule.js' %}" defer></script>{% endblock %}

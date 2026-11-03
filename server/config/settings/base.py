@@ -462,6 +462,8 @@ LOGGING = {
 
 # --- Internacionalización ---------------------------------------------------
 LANGUAGE_CODE = "es"
+# Punto como separador de miles (ver config/formats/es/formats.py).
+FORMAT_MODULE_PATH = ["config.formats"]
 TIME_ZONE = "America/Bogota"
 USE_I18N = True
 USE_TZ = True
