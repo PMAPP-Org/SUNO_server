@@ -101,6 +101,13 @@ class Visit(SyncedModel):
         default=None,
         verbose_name="% avance acumulado",
     )
+    #: Costos, pieza 4: cantidades ejecutadas en esta visita, por ítem del
+    #: presupuesto. Lista de `{item_id, location_id, quantity, note}`, con la
+    #: cantidad como texto decimal de 4 decimales (`sync/payloads.py`). Cuentan
+    #: para el avance cuando la visita está validada (`matrix/quantities.py`).
+    quantities = models.JSONField(
+        default=list, db_default=[], blank=True, verbose_name="cantidades"
+    )
 
     class Meta:
         db_table = "visit"
@@ -141,17 +148,27 @@ class Visit(SyncedModel):
             # referenciadas. Es también la invariante que impide que una
             # visita "cambie de organización" sin cambiar de identidad.
             models.UniqueConstraint(fields=["id", "org"], name="visit_id_org_uq"),
-            # Costos, etapa 1: la tarea y su % van juntos, y el % en 0..100.
+            # Costos, etapa 1 y pieza 4: sin tarea, ni % ni cantidades; con
+            # tarea, un % en 0..100 o al menos una cantidad (o ambos).
             # `payloads.py` lo rechaza antes con detalle; esto es la red.
             models.CheckConstraint(
-                condition=(models.Q(task__isnull=True) & models.Q(progress_pct__isnull=True))
+                condition=(
+                    models.Q(task__isnull=True)
+                    & models.Q(progress_pct__isnull=True)
+                    & models.Q(quantities=[])
+                )
                 | (
                     models.Q(task__isnull=False)
-                    # `NULL >= 0` es NULL y un CHECK acepta NULL: sin esto, una
-                    # tarea sin % pasaría.
-                    & models.Q(progress_pct__isnull=False)
-                    & models.Q(progress_pct__gte=0)
-                    & models.Q(progress_pct__lte=100)
+                    & (
+                        # `NULL >= 0` es NULL y un CHECK acepta NULL: por eso el
+                        # `isnull=False` explícito.
+                        models.Q(
+                            progress_pct__isnull=False,
+                            progress_pct__gte=0,
+                            progress_pct__lte=100,
+                        )
+                        | (models.Q(progress_pct__isnull=True) & ~models.Q(quantities=[]))
+                    )
                 ),
                 name="visit_task_progress_pair",
             ),
