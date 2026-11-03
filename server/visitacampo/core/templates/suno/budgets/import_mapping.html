@@ -21,10 +21,7 @@
     {% endfor %}
     {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
     <button class="button" type="submit">Ver cambios</button>
-  </form>
-  <form method="post" action="{% url 'budgets:import_preview' project.pk budget.pk version.pk %}">
-    {% csrf_token %}
-    <button class="text-link" type="submit" name="action" value="discard">Descartar esta carga</button>
+    <button class="text-link" type="submit" formaction="{% url 'budgets:import_preview' project.pk budget.pk version.pk %}" name="action" value="discard" formnovalidate>Descartar esta carga</button>
   </form>
 </section>
 <section class="pj-panel">
@@ -34,7 +31,7 @@
     <thead><tr><th>Fila</th>{% for letter in letters %}<th>{{ letter }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for number, cells in preview_rows %}
-      <tr><th scope="row">{{ number }}</th>{% for value in cells %}<td>{{ value }}</td>{% endfor %}</tr>
+      <tr><th scope="row">{{ number }}</th>{% for shown, full in cells %}<td{% if shown != full %} title="{{ full }}"{% endif %}>{{ shown }}</td>{% endfor %}</tr>
     {% endfor %}
     </tbody>
   </table>

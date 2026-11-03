@@ -7,9 +7,9 @@
   <h2>Cambios de {{ version.file_name }}</h2>
   <p>{{ s.item_count }} ítems en {{ s.chapter_count }} capítulos · hoja «{{ s.mapping.sheet }}» desde la fila {{ s.mapping.first_row }}{% if pending %} · <a href="{% url 'budgets:import_mapping' project.pk budget.pk version.pk %}">Cambiar el mapeo</a>{% endif %}</p>
   <ul>
-    <li><strong>{{ s.added }} no previstos</strong> (ítems nuevos){% if s.examples.added %}: {{ s.examples.added|join:", " }}{% endif %}</li>
-    <li><strong>{{ s.removed }} eliminados</strong>{% if s.examples.removed %}: {{ s.examples.removed|join:", " }}{% endif %}</li>
-    <li><strong>{{ s.reappeared }} vuelven</strong> (estaban en versiones anteriores){% if s.examples.reappeared %}: {{ s.examples.reappeared|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.added }} no previsto{{ s.added|pluralize }}</strong> (ítems nuevos){% if s.examples.added %}: {{ s.examples.added|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.removed }} eliminado{{ s.removed|pluralize }}</strong>{% if s.examples.removed %}: {{ s.examples.removed|join:", " }}{% endif %}</li>
+    <li><strong>{{ s.reappeared }} {{ s.reappeared|pluralize:"vuelve,vuelven" }}</strong> (estaban en versiones anteriores){% if s.examples.reappeared %}: {{ s.examples.reappeared|join:", " }}{% endif %}</li>
     <li><strong>{{ s.more_quantity }} con mayor cantidad</strong>{% if s.examples.more_quantity %}: {{ s.examples.more_quantity|join:", " }}{% endif %}</li>
     <li><strong>{{ s.less_quantity }} con menor cantidad</strong>{% if s.examples.less_quantity %}: {{ s.examples.less_quantity|join:", " }}{% endif %}</li>
     <li><strong>{{ s.price_changed }} con cambio de precio</strong>{% if s.examples.price_changed %}: {{ s.examples.price_changed|join:", " }}{% endif %}</li>
@@ -18,8 +18,8 @@
 </section>
 
 <section class="metrics-strip" aria-label="Totales de la versión">
-  <article><span>Costo directo</span><strong>{{ s.direct_cost|floatformat:"2g" }}</strong><small>Vigente: {{ s.previous_direct_cost|floatformat:"2g"|default:"—" }}</small></article>
-  <article><span>Total con cargos</span><strong>{% if result %}{{ result.total|floatformat:"2g" }}{% else %}—{% endif %}</strong><small>Vigente: {{ s.previous_total|floatformat:"2g"|default:"—" }}</small></article>
+  <article class="bg-money"><span>Costo directo</span><strong>{{ s.direct_cost|floatformat:"2g" }}</strong><small>Vigente: {{ s.previous_direct_cost|floatformat:"2g"|default:"—" }}</small></article>
+  <article class="bg-money"><span>Total con cargos</span><strong>{% if result %}{{ result.total|floatformat:"2g" }}{% else %}—{% endif %}</strong><small>Vigente: {{ s.previous_total|floatformat:"2g"|default:"—" }}</small></article>
 </section>
 
 {% if pending %}

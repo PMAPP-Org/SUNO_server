@@ -19,7 +19,7 @@
 .pj-form input, .pj-form textarea, .pj-form select { padding: 8px; border: 1px solid var(--suno-line); font: inherit; }
 .pj-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; font-size: 13px; }
 .pj-filters label { display: grid; gap: 4px; }
-.pj-tabs { display: flex; gap: 16px; margin: 8px 0 0; font-size: 13px; }
+.pj-tabs { display: flex; flex-wrap: wrap; gap: 16px; row-gap: 6px; margin: 8px 0 0; font-size: 13px; }
 .pj-tabs a[aria-current="page"] { font-weight: 700; color: var(--suno-red); }
 .pj-messages { list-style: none; padding: 0; }
 .pj-message { padding: 10px 14px; margin-bottom: 8px; border-left: 3px solid var(--suno-green); background: var(--suno-white); }
@@ -74,8 +74,6 @@ button.text-link:hover { color: var(--suno-red); }
 .bg-compare tbody tr.pj-stage td:nth-child(-n+2) { background: var(--suno-paper); }
 .bg-compare thead th:nth-child(1), .bg-compare tbody td:nth-child(1) { left: 0; width: 72px; min-width: 72px; }
 .bg-compare thead th:nth-child(2), .bg-compare tbody td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--suno-line); }
-.bg-compare td.pj-name { min-width: 240px; max-width: 360px; }
-@media (max-width: 767px) { .bg-compare td.pj-name { min-width: 160px; max-width: 220px; } }
 .bg-compare tfoot td { background: var(--suno-paper); font-weight: 600; }
 .pj-table tr.bg-total td { font-weight: 700; border-top: 2px solid var(--suno-ink); }
 .bg-removed td:nth-child(2) { color: var(--suno-muted); text-decoration: line-through; }
@@ -91,3 +89,10 @@ button.text-link:hover { color: var(--suno-red); }
 .bg-sheet td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .bg-charges { max-width: 760px; }
 .bg-charges input[type="text"] { width: 100%; }
+.bg-compare { width: max-content; min-width: 100%; }
+.bg-compare td.pj-name { min-width: 280px; max-width: 420px; }
+.bg-compare td.pj-wrap { white-space: nowrap; max-width: none; }
+@media (max-width: 767px) { .bg-compare td.pj-name { min-width: 180px; max-width: 220px; } }
+/* Montos grandes: sin el tracking negativo de .metrics-strip (se comía los puntos de miles). */
+.metrics-strip strong.bg-money, .metrics-strip .bg-money strong { letter-spacing: 0; font-variant-numeric: tabular-nums; font-size: clamp(20px, 2.4vw, 30px); overflow-wrap: anywhere; }
+@media (max-width: 767px) { .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { font-size: 22px; } }

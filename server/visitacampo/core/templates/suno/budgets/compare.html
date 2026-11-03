@@ -7,9 +7,9 @@
 
 {% if data.current %}
 <section class="metrics-strip" aria-label="Totales del presupuesto">
-  <article><span>Total contractual</span><strong>{{ data.total.contractual|floatformat:"2g" }}</strong><small>Versión {{ data.contractual.number }}{% if data.contractual.label %} · {{ data.contractual.label }}{% endif %}</small></article>
-  <article><span>Total vigente</span><strong>{{ data.total.current|floatformat:"2g" }}</strong><small>Versión {{ data.current.number }}{% if data.current.label %} · {{ data.current.label }}{% endif %}</small></article>
-  <article><span>Diferencia</span><strong>{{ data.total.diff|floatformat:"2g" }}</strong><small>{% if data.total.diff_pct is not None %}{{ data.total.diff_pct|floatformat:2 }} % sobre el contractual{% else %}—{% endif %}</small></article>
+  <article class="bg-money"><span>Total contractual</span><strong>{{ data.total.contractual|floatformat:"2g" }}</strong><small>Versión {{ data.contractual.number }}{% if data.contractual.label %} · {{ data.contractual.label }}{% endif %}</small></article>
+  <article class="bg-money"><span>Total vigente</span><strong>{{ data.total.current|floatformat:"2g" }}</strong><small>Versión {{ data.current.number }}{% if data.current.label %} · {{ data.current.label }}{% endif %}</small></article>
+  <article class="bg-money"><span>Diferencia</span><strong>{{ data.total.diff|floatformat:"2g" }}</strong><small>{% if data.total.diff_pct is not None %}{{ data.total.diff_pct|floatformat:2 }} % sobre el contractual{% else %}—{% endif %}</small></article>
   <article><span>Ítems con cambios</span><strong>{{ data.changed_count }}</strong><small>de {{ data.item_count }} ítems</small></article>
 </section>
 

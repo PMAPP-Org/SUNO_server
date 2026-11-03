@@ -34,7 +34,7 @@ from visitacampo.projects.importer import apply_import, stage_import
 from visitacampo.projects.tests.samples import v1 as schedule_v1
 
 from .factories import apply_rows, make_budget, stage_rows
-from .samples import AIU, V1_ROWS, V2_ROWS, xlsx
+from .samples import AIU, V1_ROWS, V2_ROWS, V3_ROWS, xlsx
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -297,7 +297,7 @@ class ImportPagesTests(BudgetViewTestCase):
         preview_url = f"{self.url}{version.pk}/"
         self.assertRedirects(self.client.post(mapping_url, self.mapping_post()), preview_url)
         preview = self.client.get(preview_url)
-        self.assertContains(preview, "5 no previstos")
+        self.assertContains(preview, "<strong>5 no previstos</strong>")
         self.assertContains(preview, "9.130.000,00")
         self.assertContains(preview, 'name="charge_4_base"')
 
@@ -320,8 +320,8 @@ class ImportPagesTests(BudgetViewTestCase):
         self.assertRedirects(response, f"{self.url}{version.pk}/")
         preview = self.client.get(f"{self.url}{version.pk}/")
         for text in (
-            "1 no previstos",
-            "1 eliminados",
+            "<strong>1 no previsto</strong>",
+            "<strong>1 eliminado</strong>",
             "1 con mayor cantidad",
             "1 con menor cantidad",
             "1 con cambio de precio",
@@ -329,6 +329,36 @@ class ImportPagesTests(BudgetViewTestCase):
         ):
             with self.subTest(text=text):
                 self.assertContains(preview, text)
+
+    def test_reappeared_item_uses_the_singular(self) -> None:
+        apply_rows(self.ctx, self.budget, V1_ROWS, charges=AIU)
+        apply_rows(self.ctx, self.budget, V2_ROWS)
+        self.as_user(self.admin)
+        self.upload(V3_ROWS, name="v3.xlsx")
+        preview = self.client.get(f"{self.url}{self.pending().pk}/")
+        self.assertContains(preview, "<strong>1 vuelve</strong>")
+
+    def test_long_cells_in_the_mapping_page_get_an_ellipsis_and_a_title(self) -> None:
+        long_text = "Suministro e instalación de " + "x" * 80
+        self.as_user(self.admin)
+        self.upload([["1", long_text, "m2", 1, 100, 100]])
+        page = self.client.get(f"{self.url}{self.pending().pk}/mapeo/")
+        self.assertContains(page, f'title="{long_text}"')
+        self.assertContains(page, "…</td>")
+        self.assertNotContains(page, f">{long_text}<")
+
+    def test_discard_button_sits_in_the_mapping_form(self) -> None:
+        self.as_user(self.admin)
+        self.upload(V1_ROWS)
+        version = self.pending()
+        page = self.client.get(f"{self.url}{version.pk}/mapeo/")
+        self.assertContains(page, f'formaction="{self.url}{version.pk}/"')
+        response = self.client.post(
+            f"{self.url}{version.pk}/", {**self.mapping_post(), "action": "discard"}
+        )
+        self.assertRedirects(response, f"{self.base}{self.budget.pk}/")
+        version.refresh_from_db()
+        self.assertEqual(version.status, "discarded")
 
     def test_asking_to_change_the_mapping(self) -> None:
         apply_rows(self.ctx, self.budget, V1_ROWS)

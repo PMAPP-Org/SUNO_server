@@ -16,7 +16,7 @@
         <td>{{ v.uploaded_by.display_name|default:v.uploaded_by.username }}</td>
         <td>{{ v.applied_at|date:"d/m/Y H:i" }}</td>
         <td class="num">{{ v.total|floatformat:"2g" }}</td>
-        <td class="pj-wrap">{{ v.summary.added }} no previstos · {{ v.summary.removed }} eliminados · {{ v.summary.more_quantity }} mayor cant. · {{ v.summary.less_quantity }} menor cant. · {{ v.summary.price_changed }} cambio de precio</td>
+        <td class="pj-wrap">{{ v.summary.added }} no previsto{{ v.summary.added|pluralize }} · {{ v.summary.removed }} eliminado{{ v.summary.removed|pluralize }} · {{ v.summary.more_quantity }} mayor cant. · {{ v.summary.less_quantity }} menor cant. · {{ v.summary.price_changed }} cambio de precio</td>
         <td>{% if can_manage_budgets and v.pk != budget.contractual_version_id %}<form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ v.pk }}"><button class="text-link" type="submit" name="action" value="contractual">Marcar como contractual</button></form>{% endif %}</td>
       </tr>
     {% empty %}

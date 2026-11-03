@@ -86,6 +86,7 @@ from .totals import (
 
 DUPLICATE_NAME = "Ya existe un presupuesto con ese nombre en este proyecto."
 MIN_PREVIEW_COLUMNS = 6
+CELL_LIMIT = 60
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXPORT_HEADER = [
     "codigo", "descripcion", "unidad", "tipo", "estado",
@@ -222,13 +223,18 @@ def _get_version(
         raise Http404 from exc
 
 
-def _display(value: Any) -> str:
-    """Una celda de la hoja, para la tabla de la página de mapeo."""
+def _text_of(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, float) and value.is_integer():
         value = int(value)
-    return str(value)[:60]
+    return str(value)
+
+
+def _display(value: Any) -> str:
+    """Una celda de la hoja, para la tabla de la página de mapeo (con «…» si se corta)."""
+    text = _text_of(value)
+    return text if len(text) <= CELL_LIMIT else text[: CELL_LIMIT - 1] + "…"
 
 
 def _last_column(row: Sequence[Any]) -> int:
@@ -396,7 +402,7 @@ def import_mapping(
             "sheet": preview.sheet,
             "letters": [get_column_letter(i) for i in range(1, width + 1)],
             "preview_rows": [
-                (number, [_display(value) for value in row[:width]])
+                (number, [(_display(value), _text_of(value)[:500]) for value in row[:width]])
                 for number, row in enumerate(preview.rows, start=1)
             ],
             "fields": [
