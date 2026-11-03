@@ -23,7 +23,9 @@ from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
+    LocationLevel,
     Project,
+    QuantityPlan,
     Resource,
     ScheduleImport,
     ScheduleImportStatus,
@@ -34,6 +36,14 @@ from visitacampo.core.models import (
     Visit,
 )
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.matrix.locations import (
+    PathValues,
+    Tree,
+    from_project,
+    load_tree,
+    path_values,
+    project_levels,
+)
 
 from .mspdi import MspdiError, ParsedSchedule, parse_mspdi
 
@@ -76,6 +86,7 @@ def summarize_changes(
     parsed: ParsedSchedule,
     responsible_uids: set[int],
     progress_uids: Collection[int] = frozenset(),
+    plan_uids: Collection[int] = frozenset(),
 ) -> dict[str, Any]:
     """Qué cambiaría al aplicar `parsed`.
 
@@ -109,6 +120,7 @@ def summarize_changes(
 
     retired_with_responsibles: list[str] = []
     retired_with_progress: list[str] = []
+    retired_with_plan: list[str] = []
     for uid, current in existing.items():
         if uid in parsed_uids or current["retired"]:
             continue
@@ -118,6 +130,8 @@ def summarize_changes(
             retired_with_responsibles.append(label)
         if uid in progress_uids:
             retired_with_progress.append(label)
+        if uid in plan_uids:
+            retired_with_plan.append(label)
 
     warnings: list[str] = list(parsed.warnings)
     if parsed.tasks and not any(t.baseline_finish for t in parsed.tasks):
@@ -137,6 +151,12 @@ def summarize_changes(
             + ", ".join(retired_with_progress[:MAX_EXAMPLES])
             + "."
         )
+    if retired_with_plan:
+        warnings.append(
+            f"{len(retired_with_plan)} tarea(s) retirada(s) con cantidades planeadas: "
+            + ", ".join(retired_with_plan[:MAX_EXAMPLES])
+            + "."
+        )
     return {
         "task_count": len(parsed.tasks),
         **counts,
@@ -144,6 +164,81 @@ def summarize_changes(
         "examples": examples,
         "warnings": warnings,
     }
+
+
+def _leaf_paths(parsed: ParsedSchedule, levels: list[LocationLevel]) -> dict[int, PathValues]:
+    """Ruta de cada tarea hoja según los campos de Project de cada nivel."""
+    return {
+        task.uid: path_values([dict(task.custom_values).get(lvl.source_field) for lvl in levels])
+        for task in parsed.tasks
+        if not task.is_summary
+    }
+
+
+def _missing_fields(parsed: ParsedSchedule, levels: list[LocationLevel]) -> list[str]:
+    defined = {f.field_id for f in parsed.custom_fields}
+    used = {fid for task in parsed.tasks for fid, _ in task.custom_values}
+    return [lvl.name for lvl in levels if lvl.source_field not in defined | used]
+
+
+def location_warnings(ctx: RequestContext, project: Project, parsed: ParsedSchedule) -> list[str]:
+    """Avisos de ubicación para la vista previa (solo si la ubicación sale de Project)."""
+    levels = project_levels(ctx, project)
+    if not from_project(levels):
+        return []
+    missing = _missing_fields(parsed, levels)
+    if missing:
+        return [
+            f"El archivo no trae los campos de ubicación {', '.join(missing)}: "
+            "se conserva la ubicación actual de las tareas."
+        ]
+    tree = load_tree(ctx, project)
+    current = dict(scoped_qs(ctx, Task).filter(project=project).values_list("uid", "location_id"))
+    names = {t.uid: _label(t.outline_number, t.name) for t in parsed.tasks}
+    changes: list[str] = []
+    incomplete = truncated = 0
+    for uid, path in _leaf_paths(parsed, levels).items():
+        incomplete += path.incomplete
+        truncated += path.truncated
+        before = tree.label(current.get(uid))
+        after = " / ".join(path.names)
+        if before != after:
+            was, now = before or "sin ubicación", after or "sin ubicación"
+            changes.append(f"{names[uid]}: {was} → {now}")
+    warnings: list[str] = []
+    if changes:
+        warnings.append(
+            f"{len(changes)} tarea(s) cambian de ubicación: "
+            + "; ".join(changes[:MAX_EXAMPLES])
+            + "."
+        )
+    if incomplete:
+        warnings.append(
+            f"{incomplete} tarea(s) con la ubicación incompleta (un nivel vacío antes de otro "
+            "con valor): quedan en el último nivel con valor."
+        )
+    if truncated:
+        warnings.append(
+            f"{truncated} nombre(s) de ubicación pasan de 120 caracteres y se recortan."
+        )
+    return warnings
+
+
+def _apply_locations(
+    ctx: RequestContext, project: Project, parsed: ParsedSchedule, tree: Tree
+) -> None:
+    levels = project_levels(ctx, project)
+    if not from_project(levels) or _missing_fields(parsed, levels):
+        return
+    by_uid = {t.uid: t for t in scoped_qs(ctx, Task).filter(project=project)}
+    changed: list[Task] = []
+    for uid, path in _leaf_paths(parsed, levels).items():
+        node_id = tree.ensure(ctx, levels, path.names)[0].pk if path.names else None
+        task = by_uid[uid]
+        if task.location_id != node_id:
+            task.location_id = node_id
+            changed.append(task)
+    scoped_qs(ctx, Task).bulk_update(changed, ["location"], batch_size=500)
 
 
 def _existing(ctx: RequestContext, project: Project) -> dict[int, dict[str, Any]]:
@@ -198,7 +293,18 @@ def stage_import(
         .filter(task__project=project, deleted_at__isnull=True)
         .values_list("task__uid", flat=True)
     )
-    summary = summarize_changes(_existing(ctx, project), parsed, responsible_uids, progress_uids)
+    plan_uids = set(
+        scoped_qs(ctx, QuantityPlan)
+        .filter(task__project=project)
+        .values_list("task__uid", flat=True)
+    )
+    summary = summarize_changes(
+        _existing(ctx, project), parsed, responsible_uids, progress_uids, plan_uids
+    )
+    summary["warnings"].extend(location_warnings(ctx, project, parsed))
+    summary["custom_fields"] = [
+        {"field_id": f.field_id, "label": f.label} for f in parsed.custom_fields
+    ]
     # Versión sobre la que se calculó la vista previa; si cambia, hay que re-subir.
     summary["base_number"] = _current_number(ctx, project)
     return scoped_qs(ctx, ScheduleImport).create(
@@ -250,6 +356,7 @@ def apply_import(ctx: RequestContext, import_id: UUID) -> ScheduleImport:
         parsed = _parse(gzip.decompress(bytes(imp.source_xml)))
         _apply_tasks(ctx, project, imp, parsed)
         _apply_links(ctx, project, parsed)
+        _apply_locations(ctx, project, parsed, load_tree(ctx, project))
 
         imp.number = (imports.aggregate(n=Max("number"))["n"] or 0) + 1
         imp.status = ScheduleImportStatus.APPLIED
