@@ -8,7 +8,7 @@ sirve para su ubicación.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -17,6 +17,7 @@ from uuid import UUID
 from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.budgets.excel import (
     MAX_QUANTITY,
+    NUMERIC_CODE_HINT,
     ExcelRejected,
     check_file_name,
     preview_sheet,
@@ -133,6 +134,18 @@ class ParsedPlan:
     warnings: tuple[str, ...] = ()
 
 
+def _unescape(value: Any) -> Any:
+    """Deshace el apóstrofo que `safe_cell` antepone a textos que empiezan con = + - @."""
+    if isinstance(value, str) and value[:1] == "'" and value[1:2] in ("=", "+", "-", "@"):
+        return value[1:]
+    return value
+
+
+def exact_key(name: object) -> str:
+    """Llave exacta de un presupuesto: espacios colapsados y sin distinguir mayúsculas."""
+    return clean_name(name).casefold()
+
+
 def _present(value: Any) -> bool:
     return value is not None and not (isinstance(value, str) and not value.strip())
 
@@ -149,7 +162,7 @@ def _uid(value: Any) -> int | None:
     return None
 
 
-def _columns(first: Sequence[Any], level_names: Sequence[str]) -> dict[str, int]:
+def _columns(first: Sequence[Any], level_names: Sequence[str], *, editable: bool) -> dict[str, int]:
     found: dict[str, int] = {}
     for index, cell in enumerate(first):
         if _present(cell):
@@ -166,6 +179,9 @@ def _columns(first: Sequence[Any], level_names: Sequence[str]) -> dict[str, int]
         if normalize_header(name) in found
     }
     missing = [wanted[key] for key in ("uid", "code", "quantity") if key not in columns]
+    level_keys = [f"level:{i}" for i in range(len(level_names))]
+    if editable and any(key in columns for key in level_keys):
+        missing += [wanted[key] for key in level_keys if key not in columns]
     if missing:
         raise TemplateRejected([f"Falta la columna «{name}» en la fila 1." for name in missing])
     return columns
@@ -179,13 +195,20 @@ def parse_plan(
     tasks: Mapping[int, TaskRef],
     items: Mapping[tuple[str, str], ItemRef],
     budget_names: Sequence[str],
+    current_pairs: Collection[tuple[UUID, UUID]] = (),
 ) -> ParsedPlan:
-    """Interpreta la plantilla. `items` va por (`node_key` del presupuesto, código)."""
+    """Interpreta la plantilla. `items` va por (`exact_key` del presupuesto, código).
+
+    Un ítem retirado (`kind == "retired"`) solo se acepta donde ya estaba en el plan
+    (`current_pairs`): mantenerlo o quitarlo."""
     if not rows:
         raise TemplateRejected(["La hoja está vacía."])
-    columns = _columns(rows[0], level_names)
+    columns = _columns(rows[0], level_names, editable=editable_locations)
     level_columns = [columns.get(f"level:{i}") for i in range(len(level_names))]
-    single = node_key(budget_names[0]) if len(budget_names) == 1 else None
+    if not any(index is not None for index in level_columns):
+        editable_locations = False
+    exact_names = {exact_key(name) for name in budget_names}
+    single = exact_key(budget_names[0]) if len(budget_names) == 1 else None
 
     def cell(row: Sequence[Any], key: str | int | None) -> Any:
         index = columns.get(key) if isinstance(key, str) else key
@@ -217,7 +240,7 @@ def parse_plan(
             )
             continue
         if editable_locations:
-            path = path_values([cell(row, index) for index in level_columns])
+            path = path_values([_unescape(cell(row, index)) for index in level_columns])
             if path.incomplete:
                 errors.append(
                     f"Fila {number}: la ubicación tiene un nivel vacío antes de otro con valor."
@@ -235,14 +258,26 @@ def parse_plan(
                 continue
             locations.setdefault(task.id, path.names)
 
-        code = clean_name(cell(row, "code"))
+        raw_code = cell(row, "code")
+        code = clean_name(_unescape(raw_code))
         raw_quantity = cell(row, "quantity")
         if not code:
             if _present(raw_quantity):
                 errors.append(f"Fila {number}: hay cantidad pero falta el código del ítem.")
             continue
-        budget_name = clean_name(cell(row, "budget"))
-        budget_key = node_key(budget_name) if budget_name else single
+        budget_name = clean_name(_unescape(cell(row, "budget")))
+        budget_key = single
+        if budget_name:
+            budget_key = exact_key(budget_name)
+            if budget_key not in exact_names:
+                folded = [e for e in sorted(exact_names) if node_key(e) == node_key(budget_name)]
+                if len(folded) > 1:
+                    errors.append(
+                        f"Fila {number}: el presupuesto «{budget_name}» es ambiguo: "
+                        "escríbelo exactamente."
+                    )
+                    continue
+                budget_key = folded[0] if folded else budget_key
         if budget_key is None:
             errors.append(
                 f"Fila {number}: falta el presupuesto (el proyecto tiene varios presupuestos)."
@@ -251,15 +286,22 @@ def parse_plan(
         ref = items.get((budget_key, code))
         if ref is None:
             where = f"«{budget_name}»" if budget_name else "del proyecto"
+            hint = f" {NUMERIC_CODE_HINT}" if isinstance(raw_code, float) else ""
             errors.append(
-                f"Fila {number}: el ítem {code} no existe en el presupuesto vigente {where}."
+                f"Fila {number}: el ítem {code} no existe en el presupuesto vigente {where}.{hint}"
             )
             continue
-        if ref.kind != "item":
+        if ref.kind not in ("item", "retired"):
             errors.append(f"Fila {number}: {code} es un capítulo; la matriz va en ítems.")
             continue
         if not _present(raw_quantity):
             dropped += 1
+            continue
+        if ref.kind == "retired" and (task.id, ref.id) not in current_pairs:
+            errors.append(
+                f"Fila {number}: el ítem {code} fue retirado del presupuesto vigente: "
+                "solo se puede mantener o quitar donde ya estaba."
+            )
             continue
         try:
             value, dot = parse_number_detail(raw_quantity)
@@ -271,14 +313,15 @@ def parse_plan(
         if value < 0:
             errors.append(f"Fila {number}: la cantidad no puede ser negativa.")
             continue
-        if value >= MAX_QUANTITY:
+        rounded = quantity(value)
+        if rounded >= MAX_QUANTITY:
             errors.append(f"Fila {number}: la cantidad es demasiado grande.")
             continue
         pair = (task.id, ref.id)
         if pair in pairs:
             errors.append(f"Fila {number}: el par {task.label} × {code} está repetido.")
             continue
-        pairs[pair] = quantity(value)
+        pairs[pair] = rounded
         dot_rows += dot
 
     if errors:

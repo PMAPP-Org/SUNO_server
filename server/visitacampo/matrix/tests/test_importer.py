@@ -157,3 +157,39 @@ class ImporterTests(TestCase):
         apply_plan(world.ctx(), staged.pk)
         tree = load_tree(world.ctx(), world.project)
         self.assertEqual(tree.label(world.task(3).location_id), "Tramo 1")
+
+
+@skip_without_db
+class ReviewFixImporterTests(TestCase):
+    def setUp(self) -> None:
+        self.world, self.budget = budget_world()
+        self.ctx = self.world.ctx()
+        suno_levels(self.world)
+
+    def test_retired_item_round_trip_and_status(self) -> None:
+        plan(self.world, 3, item(self.budget, "1.2"), "7")
+        apply_rows(self.ctx, self.budget, V2_ROWS)
+        data = template_bytes(self.ctx, self.world.project)
+        rows = read_template(data)
+        row = next(r for r in rows[1:] if r[6] == "1.2")
+        self.assertEqual(row[5], self.budget.name)
+        staged = stage_plan(self.ctx, self.world.project, file_name="m.xlsx", data=data)
+        self.assertEqual(
+            (staged.summary["added"], staged.summary["changed"], staged.summary["removed"]),
+            (0, 0, 0),
+        )
+        self.assertEqual(staged.summary["item_counts"]["retired"], 1)
+        self.assertTrue(any(i["status"] == "retired" for i in staged.summary["items"]))
+
+    def test_location_preview_compares_by_key(self) -> None:
+        from .factories import locate
+
+        locate(self.world, 3, "Tramo 1")
+        staged = stage_plan(
+            self.ctx,
+            self.world.project,
+            file_name="m.xlsx",
+            data=sheet([3, "", "", "TRAMO 1", "", "", "1.1", "", "", 1]),
+        )
+        self.assertEqual(staged.summary["location_changes"], 0)
+        self.assertEqual(staged.summary["new_nodes"], 0)

@@ -26,6 +26,7 @@ from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
     Budget,
+    BudgetItem,
     BudgetItemVersion,
     BudgetVersion,
     BudgetVersionStatus,
@@ -51,6 +52,7 @@ from .template import (
     TemplateRow,
     build_template,
     check_file_name,
+    exact_key,
     parse_plan,
     read_template,
 )
@@ -82,6 +84,8 @@ class _Context:
     #: Ítems de las versiones vigentes: id → (presupuesto, datos).
     budgeted: dict[UUID, tuple[Budget, BudgetedItem]]
     item_refs: dict[tuple[str, str], ItemRef]
+    #: Ítems con plan que ya no están en su versión vigente: id → nombre de su presupuesto.
+    retired_budgets: dict[UUID, str]
     current: dict[Pair, QuantityPlan]
 
 
@@ -109,12 +113,25 @@ def _load(ctx: RequestContext, project: Project) -> _Context:
         )
     ):
         budget = budgets[row["version__budget_id"]]
-        refs[(node_key(budget.name), row["item__code"])] = ItemRef(row["item_id"], row["kind"])
+        refs[(exact_key(budget.name), row["item__code"])] = ItemRef(row["item_id"], row["kind"])
         if row["kind"] == "item":
             budgeted[row["item_id"]] = (
                 budget,
                 BudgetedItem(row["item__code"], row["description"], row["unit"], row["quantity"]),
             )
+    current = {
+        (p.task_id, p.item_id): p for p in scoped_qs(ctx, QuantityPlan).filter(project=project)
+    }
+    retired_budgets: dict[UUID, str] = {}
+    retired_ids = {item_id for _, item_id in current if item_id not in budgeted}
+    if retired_ids:
+        for item_id, code, budget_id in (
+            scoped_qs(ctx, BudgetItem)
+            .filter(pk__in=retired_ids, budget__in=budgets)
+            .values_list("pk", "code", "budget_id")
+        ):
+            retired_budgets[item_id] = budgets[budget_id].name
+            refs.setdefault((exact_key(budgets[budget_id].name), code), ItemRef(item_id, "retired"))
     return _Context(
         levels=levels,
         editable=bool(levels) and not from_project(levels),
@@ -123,9 +140,8 @@ def _load(ctx: RequestContext, project: Project) -> _Context:
         budgets=list(budgets.values()),
         budgeted=budgeted,
         item_refs=refs,
-        current={
-            (p.task_id, p.item_id): p for p in scoped_qs(ctx, QuantityPlan).filter(project=project)
-        },
+        retired_budgets=retired_budgets,
+        current=current,
     )
 
 
@@ -147,6 +163,7 @@ def _parse(data: bytes, context: _Context) -> ParsedPlan:
             tasks=task_refs,
             items=context.item_refs,
             budget_names=[b.name for b in context.budgets],
+            current_pairs=set(context.current),
         )
     except TemplateRejected as exc:
         raise PlanRejected(exc.errors) from exc
@@ -168,7 +185,11 @@ def _base(ctx: RequestContext, project: Project) -> dict[str, Any]:
 
 
 def _summary(
-    ctx: RequestContext, project: Project, parsed: ParsedPlan, context: _Context
+    ctx: RequestContext,
+    project: Project,
+    parsed: ParsedPlan,
+    context: _Context,
+    base: dict[str, Any],
 ) -> dict[str, Any]:
     executed = set(executed_by_pair(ctx, project_ids=[project.pk]))
     by_id = {t.pk: t for t in context.tasks.values()}
@@ -197,9 +218,15 @@ def _summary(
     new_paths: set[tuple[str, ...]] = set()
     if context.editable:
         for task_id, names in parsed.locations.items():
-            before = context.tree.label(by_id[task_id].location_id)
+            location_id = by_id[task_id].location_id
+            before = context.tree.label(location_id)
             after = " / ".join(names)
-            if before != after:
+            before_keys = (
+                [node_key(n) for n in context.tree.names(location_id)]
+                if location_id in context.tree.nodes
+                else []
+            )
+            if before_keys != [node_key(n) for n in names]:
                 task = by_id[task_id]
                 location_changes.append(
                     f"{task.outline_number} {task.name}: {before or 'sin ubicación'} → "
@@ -218,7 +245,7 @@ def _summary(
         "new_nodes": len(new_paths),
         "warnings": list(parsed.warnings),
         "pairs": len(parsed.pairs),
-        "base": _base(ctx, project),
+        "base": base,
     }
 
 
@@ -229,9 +256,10 @@ def stage_plan(
         check_file_name(file_name)
     except ExcelRejected as exc:
         raise PlanRejected([str(exc)]) from exc
+    base = _base(ctx, project)
     context = _load(ctx, project)
     parsed = _parse(data, context)
-    summary = _summary(ctx, project, parsed, context)
+    summary = _summary(ctx, project, parsed, context, base)
     with transaction.atomic():
         scoped_qs(ctx, QuantityPlanImport).filter(
             project=project, status=QuantityPlanImportStatus.PENDING
@@ -362,6 +390,7 @@ def template_bytes(ctx: RequestContext, project: Project) -> bytes:
     context = _load(ctx, project)
     facts = item_facts(ctx, {item_id for _, item_id in context.current})
     budget_names = {item_id: budget.name for item_id, (budget, _) in context.budgeted.items()}
+    budget_names.update(context.retired_budgets)
     by_task: dict[UUID, list[QuantityPlan]] = defaultdict(list)
     for (task_id, _), plan in context.current.items():
         by_task[task_id].append(plan)
