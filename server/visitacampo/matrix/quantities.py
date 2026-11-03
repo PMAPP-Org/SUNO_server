@@ -1,0 +1,146 @@
+"""Lecturas de la matriz con BD: lo ejecutado validado, los datos de cada ítem y el
+% SUNO combinado (por cantidades donde hay plan, % manual en el resto)."""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
+from decimal import Decimal
+from uuid import UUID
+
+from django.db.models import QuerySet
+
+from visitacampo.core.context import RequestContext
+from visitacampo.core.models import (
+    BudgetItemVersion,
+    BudgetVersionStatus,
+    QuantityPlan,
+    Visit,
+)
+from visitacampo.core.scoping import scoped_qs
+from visitacampo.projects.field_progress import approved, validated_pct_by_task
+
+from .progress import PlanLine, QuantityProgress, task_progress
+
+Pair = tuple[UUID, UUID]
+
+
+def _ids(values: Iterable[UUID] | None) -> list[UUID] | None:
+    return None if values is None else list(values)
+
+
+def _by_scope(
+    qs: QuerySet, task_ids: list[UUID] | None, project_ids: list[UUID] | None, *, task: str
+) -> QuerySet:
+    if task_ids is not None:
+        qs = qs.filter(**{f"{task}_id__in": task_ids})
+    if project_ids is not None:
+        qs = qs.filter(**{f"{task}__project_id__in": project_ids})
+    return qs
+
+
+def executed_by_pair(
+    ctx: RequestContext,
+    *,
+    task_ids: Iterable[UUID] | None = None,
+    project_ids: Iterable[UUID] | None = None,
+) -> dict[Pair, Decimal]:
+    """(tarea, ítem) → suma de las cantidades de sus visitas validadas. Una query."""
+    tasks, projects = _ids(task_ids), _ids(project_ids)
+    if tasks == [] or projects == []:
+        return {}
+    visits = (
+        scoped_qs(ctx, Visit)
+        .filter(task__isnull=False, deleted_at__isnull=True)
+        .exclude(quantities=[])
+    )
+    visits = _by_scope(visits, tasks, projects, task="task")
+    totals: dict[Pair, Decimal] = defaultdict(Decimal)
+    for task_id, rows in approved(visits).values_list("task_id", "quantities"):
+        for row in rows:
+            totals[(task_id, UUID(row["item_id"]))] += Decimal(row["quantity"])
+    return dict(totals)
+
+
+@dataclass(frozen=True)
+class ItemFacts:
+    code: str
+    kind: str
+    description: str
+    unit: str
+    unit_price: Decimal | None
+
+
+def item_facts(ctx: RequestContext, item_ids: Iterable[UUID]) -> dict[UUID, ItemFacts]:
+    """Datos de cada ítem en la última versión aplicada que lo contiene. Una query."""
+    ids = list(set(item_ids))
+    if not ids:
+        return {}
+    rows = (
+        scoped_qs(ctx, BudgetItemVersion)
+        .filter(item_id__in=ids, version__status=BudgetVersionStatus.APPLIED)
+        .order_by("item_id", "-version__number")
+        .distinct("item_id")
+        .values_list("item_id", "item__code", "kind", "description", "unit", "unit_price")
+    )
+    return {
+        item_id: ItemFacts(code, kind, description, unit, price)
+        for item_id, code, kind, description, unit, price in rows
+    }
+
+
+def plan_lines(
+    ctx: RequestContext,
+    *,
+    task_ids: Iterable[UUID] | None = None,
+    project_ids: Iterable[UUID] | None = None,
+) -> list[PlanLine]:
+    """Las filas del plan con lo ejecutado validado y el precio. Tres queries."""
+    tasks, projects = _ids(task_ids), _ids(project_ids)
+    if tasks == [] or projects == []:
+        return []
+    plans = _by_scope(scoped_qs(ctx, QuantityPlan), tasks, projects, task="task")
+    rows = list(plans.values_list("task_id", "item_id", "planned_quantity"))
+    if not rows:
+        return []
+    executed = executed_by_pair(ctx, task_ids=tasks, project_ids=projects)
+    facts = item_facts(ctx, (item_id for _, item_id, _ in rows))
+    return [
+        PlanLine(
+            task_id=task_id,
+            item_id=item_id,
+            planned=planned,
+            executed=executed.get((task_id, item_id), Decimal(0)),
+            unit_price=facts[item_id].unit_price if item_id in facts else None,
+        )
+        for task_id, item_id, planned in rows
+    ]
+
+
+def measured_progress(
+    ctx: RequestContext,
+    *,
+    task_ids: Iterable[UUID] | None = None,
+    project_ids: Iterable[UUID] | None = None,
+) -> dict[UUID, QuantityProgress]:
+    return task_progress(plan_lines(ctx, task_ids=task_ids, project_ids=project_ids))
+
+
+def suno_pct_by_task(
+    ctx: RequestContext,
+    *,
+    task_ids: Iterable[UUID] | None = None,
+    project_ids: Iterable[UUID] | None = None,
+    measured: dict[UUID, QuantityProgress] | None = None,
+) -> dict[UUID, Decimal]:
+    """% SUNO: por cantidades en las tareas con plan; el último % validado en el resto.
+
+    `measured`: el avance por cantidades ya calculado (para no repetir las queries)."""
+    tasks, projects = _ids(task_ids), _ids(project_ids)
+    if tasks == [] or projects == []:
+        return {}
+    manual = validated_pct_by_task(scoped_qs(ctx, Visit), task_ids=tasks, project_ids=projects)
+    if measured is None:
+        measured = measured_progress(ctx, task_ids=tasks, project_ids=projects)
+    return {**manual, **{task_id: p.pct for task_id, p in measured.items()}}

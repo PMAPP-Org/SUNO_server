@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.utils import timezone
 
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
 from visitacampo.budgets.tests.samples import V1_ROWS
-from visitacampo.core.models import Budget, BudgetItem, QuantityPlan, Task
+from visitacampo.core.models import Budget, BudgetItem, QuantityPlan, Task, Visit
 from visitacampo.matrix.locations import LevelSpec, load_tree, project_levels, save_levels
 from visitacampo.projects.importer import apply_import, stage_import
-from visitacampo.projects.tests.factories import FieldWorld, make_field_world
+from visitacampo.projects.tests.factories import T0, FieldWorld, make_field_world, make_visit
 from visitacampo.projects.tests.samples import TEXT1, TEXT2, project_xml, task_xml
 
 
@@ -95,3 +96,21 @@ def quantity_row(
         "quantity": str(Decimal(quantity).quantize(Decimal("0.0001"))),
         "note": note,
     }
+
+
+def quantity_visit(
+    world: FieldWorld,
+    uid: int,
+    *rows: dict[str, object],
+    pct: str | None = None,
+    hours: int = 0,
+) -> Visit:
+    """Visita del agente a la tarea `uid` con las cantidades `rows` (y opcionalmente un %)."""
+    return make_visit(
+        world.org,
+        world.agent,
+        task=world.task(uid),
+        pct=pct,
+        at=T0 + timedelta(hours=hours),
+        quantities=list(rows),
+    )

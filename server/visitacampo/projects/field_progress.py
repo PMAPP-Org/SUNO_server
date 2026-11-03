@@ -71,7 +71,7 @@ def validated_pct_by_task(
     """% SUNO por tarea: el de su visita validada más reciente. Una query.
 
     Sin `task_ids` ni `project_ids`, todas las tareas del queryset."""
-    linked = visits.filter(task__isnull=False, deleted_at__isnull=True)
+    linked = visits.filter(task__isnull=False, progress_pct__isnull=False, deleted_at__isnull=True)
     if task_ids is not None:
         ids = list(task_ids)
         if not ids:
@@ -101,6 +101,7 @@ def with_previous_validated_pct(visits: QuerySet[Visit], base: QuerySet[Visit]) 
             base.filter(
                 task=OuterRef("task"),
                 captured_at__lt=OuterRef("captured_at"),
+                progress_pct__isnull=False,
                 deleted_at__isnull=True,
             )
         )

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import uuid
+from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -29,7 +31,7 @@ from visitacampo.projects.importer import stage_import, summarize_changes
 from visitacampo.projects.mspdi import parse_mspdi
 from visitacampo.projects.schedule import Schedule, ScheduleRow, build_schedule
 
-from .factories import make_field_world, make_visit
+from .factories import T0, make_field_world, make_visit
 from .samples import v2
 
 setUpModule = setup_test_database
@@ -95,6 +97,27 @@ class ValidatedPctTests(TestCase):
         self.assertEqual(self.pct(task_ids=[w.task(3).pk]), {w.task(3).pk: Decimal("30.00")})
         self.assertEqual(self.pct(task_ids=[]), {})
         self.assertEqual(len(self.pct(project_ids=[w.project.pk])), 2)
+
+    def test_a_visit_with_only_quantities_does_not_replace_the_manual_pct(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "30", hours=1))
+        only_quantities = make_visit(
+            w.org,
+            w.agent,
+            task=w.task(3),
+            pct=None,
+            at=T0 + timedelta(hours=2),
+            quantities=[
+                {
+                    "item_id": str(uuid.uuid4()),
+                    "location_id": None,
+                    "quantity": "1.0000",
+                    "note": "",
+                }
+            ],
+        )
+        w.approve(only_quantities)
+        self.assertEqual(self.pct(), {w.task(3).pk: Decimal("30.00")})
 
     def test_previous_validated_and_regression(self) -> None:
         w = self.world
