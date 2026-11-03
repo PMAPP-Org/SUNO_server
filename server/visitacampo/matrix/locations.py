@@ -44,7 +44,7 @@ def clean_name(value: object) -> str:
 
 
 def node_key(name: str) -> str:
-    return " ".join(fold(name).split())
+    return " ".join(fold(name).split())[:MAX_NAME]
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ def _validate(specs: Sequence[LevelSpec]) -> list[LevelSpec]:
             raise LevelError(f"El nivel «{name}» está repetido.")
         seen.add(key)
         source = spec.source_field.strip()
-        if source and not (source.isdigit() and len(source) <= 20):
+        if source and not (source.isascii() and source.isdigit() and len(source) <= 20):
             raise LevelError(f"El campo de Project del nivel «{name}» no es válido.")
         cleaned.append(LevelSpec(name, source))
     sourced = [bool(spec.source_field) for spec in cleaned]
@@ -195,6 +195,7 @@ class Tree:
         created: list[LocationNode] = []
         parent: LocationNode | None = None
         for level, name in zip(levels, names, strict=False):
+            name = clean_name(name)[:MAX_NAME]
             key = node_key(name)
             found = self._children.get((parent.pk if parent else None, key))
             if found is not None:
@@ -210,8 +211,8 @@ class Tree:
                     project=self.project,
                     level=level,
                     parent=parent,
-                    name=name[:MAX_NAME],
-                    key=key[:MAX_NAME],
+                    name=name,
+                    key=key,
                     path=f"{parent.path if parent else '/'}{node_id.hex}/",
                 )
                 self._add(node)

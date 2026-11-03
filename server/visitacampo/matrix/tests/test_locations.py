@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from visitacampo.core.models import AuditEvent, LocationLevel, LocationNode
 from visitacampo.core.tests.dbsupport import (
@@ -91,6 +92,17 @@ class LevelsTests(TestCase):
         with self.assertRaisesMessage(LevelError, "6"):
             save_levels(self.ctx, self.world.project, [LevelSpec(f"N{i}") for i in range(7)])
 
+    def test_removes_an_unused_trailing_level(self) -> None:
+        save_levels(self.ctx, self.world.project, [LevelSpec("Tramo"), LevelSpec("PR")])
+        save_levels(self.ctx, self.world.project, [LevelSpec("Tramo")])
+        names = [lvl.name for lvl in project_levels(self.ctx, self.world.project)]
+        self.assertEqual(names, ["Tramo"])
+
+    def test_rejects_invalid_project_field_id(self) -> None:
+        for bad in ("12a", "²"):
+            with self.assertRaisesMessage(LevelError, "no es válido"):
+                save_levels(self.ctx, self.world.project, [LevelSpec("Tramo", bad)])
+
     def test_cannot_remove_a_level_in_use(self) -> None:
         save_levels(self.ctx, self.world.project, [LevelSpec("Tramo"), LevelSpec("PR")])
         levels = project_levels(self.ctx, self.world.project)
@@ -119,6 +131,16 @@ class TreeTests(TestCase):
         self.assertEqual(node.parent_id, parent.pk)
         self.assertEqual(node.path, f"/{parent.pk.hex}/{node.pk.hex}/")
         self.assertEqual(node.level.depth, 2)
+
+    def test_ensure_reuses_a_retired_node_and_clears_retired_at(self) -> None:
+        tree = load_tree(self.ctx, self.world.project)
+        node, _ = tree.ensure(self.ctx, self.levels, ("Tramo 2",))
+        LocationNode.objects.filter(pk=node.pk).update(retired_at=timezone.now())
+        fresh = load_tree(self.ctx, self.world.project)
+        again, created = fresh.ensure(self.ctx, self.levels, ("tramo 2",))
+        self.assertEqual(again.pk, node.pk)
+        self.assertEqual(created, [])
+        self.assertIsNone(LocationNode.objects.get(pk=node.pk).retired_at)
 
     def test_find_and_descendants(self) -> None:
         tree = load_tree(self.ctx, self.world.project)
