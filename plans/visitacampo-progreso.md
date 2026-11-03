@@ -5,7 +5,7 @@
 
 ## Módulo de costos — Pieza 3 (Presupuesto), servidor — 2026-11-01
 
-**PR**: (PR pendiente). Plan: [2026-11-01-costos-pieza3-presupuesto-plan.md](2026-11-01-costos-pieza3-presupuesto-plan.md). Rama `feat/costos-presupuesto`.
+**PR**: [#53](https://github.com/PMAPP-Org/SUNO_server/pull/53), publicado en v0.12.0. Plan: [2026-11-01-costos-pieza3-presupuesto-plan.md](2026-11-01-costos-pieza3-presupuesto-plan.md). Rama `feat/costos-presupuesto`.
 
 **Qué entra (Tasks 0–15)**: modelos y migración `0013_add_budgets` (`Budget`, `BudgetVersion`, `BudgetCharge`, `BudgetItem`, `BudgetItemVersion`); políticas `can_view/manage/export_budgets` y códigos de auditoría `budgets.*`; paquete `visitacampo/budgets/` con aritmética (`totals`), mapeo de columnas (`mapping`), lector seguro de `.xlsx` (`excel`), etiquetas y resumen de cambios (`diff`), importación en dos pasos con bloqueo y vista previa obsoleta (`importer`), comparación contractual contra vigente en consultas fijas (`comparison`) y las páginas web (lista, comparación, subir, mapear, vista previa con cargos AIU + IVA, historial, versión, Excel original, "Marcar como contractual", exportación a Excel). El agente de campo recibe 404 en todas las URL y no ve la pestaña. Además, `config/formats/es/formats.py` fija el punto como separador de miles (Django 5 usa NBSP en `es`).
 
