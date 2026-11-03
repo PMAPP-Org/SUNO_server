@@ -97,3 +97,15 @@ button.text-link:hover { color: var(--suno-red); }
 .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { letter-spacing: 0; font-variant-numeric: tabular-nums; font-size: clamp(18px, 1.8vw, 26px); white-space: nowrap; }
 .metrics-strip article:has(.bg-money), .metrics-strip .bg-money { min-width: 0; }
 @media (max-width: 767px) { .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { font-size: 16px; } }
+/* Matriz de homologación (costos, pieza 4). */
+.mx-nav { margin: 16px 0 0; }
+.mx-items td.pj-name { min-width: 260px; max-width: 420px; }
+.bg-label.mx-over { background: var(--suno-amber); color: var(--suno-ink); }
+.bg-label.mx-under { background: var(--suno-topography); color: var(--suno-ink); }
+.bg-label.mx-ok { background: var(--suno-green); }
+.bg-label.mx-retired { background: var(--suno-red); }
+.mx-depth-2 { padding-left: 24px !important; }
+.mx-depth-3 { padding-left: 40px !important; }
+.mx-depth-4, .mx-depth-5, .mx-depth-6 { padding-left: 56px !important; }
+.mx-level { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); border: 1px solid var(--suno-line); padding: 12px; }
+@media (max-width: 767px) { .mx-items td.pj-name { min-width: 180px; max-width: 240px; } }

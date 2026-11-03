@@ -1,0 +1,47 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Vista previa de la matriz · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Cambios de {{ imp.file_name }}</h2>
+  <p>{{ s.pairs }} par{{ s.pairs|pluralize:"es" }} tarea × ítem en el archivo.</p>
+  <ul>
+    <li><strong>{{ s.added }} nuevo{{ s.added|pluralize }}</strong>{% if s.examples.added %}: {{ s.examples.added|join:"; " }}{% endif %}</li>
+    <li><strong>{{ s.changed }} con otra cantidad</strong>{% if s.examples.changed %}: {{ s.examples.changed|join:"; " }}{% endif %}</li>
+    <li><strong>{{ s.removed }} se quita{{ s.removed|pluralize:"n" }}</strong>{% if s.examples.removed %}: {{ s.examples.removed|join:"; " }}{% endif %}</li>
+    <li><strong>{{ s.kept_zero }} queda{{ s.kept_zero|pluralize:"n" }} en 0</strong> (no vienen en el archivo pero ya tienen ejecución){% if s.examples.kept_zero %}: {{ s.examples.kept_zero|join:"; " }}{% endif %}</li>
+    {% if s.location_changes %}<li><strong>{{ s.location_changes }} tarea{{ s.location_changes|pluralize }} cambia{{ s.location_changes|pluralize:"n" }} de ubicación</strong>: {{ s.location_examples|join:"; " }}</li>{% endif %}
+    {% if s.new_nodes %}<li><strong>{{ s.new_nodes }} ubicaci{{ s.new_nodes|pluralize:"ón nueva,ones nuevas" }}</strong></li>{% endif %}
+  </ul>
+  {% for warning in s.warnings %}<p class="pj-warning">{{ warning }}</p>{% endfor %}
+  {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if pending %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <button class="button" type="submit" name="action" value="apply">Aplicar</button>
+    <button class="text-link" type="submit" name="action" value="discard">Descartar</button>
+  </form>
+  {% else %}<p class="pj-muted">Esta importación ya fue {{ imp.get_status_display|lower }}.</p>{% endif %}
+</section>
+<section class="pj-panel">
+  <h2>Ítems frente al presupuesto</h2>
+  <p>{{ s.item_counts.ok }} cuadra{{ s.item_counts.ok|pluralize:"n" }} · {{ s.item_counts.over }} con exceso · {{ s.item_counts.under }} sin asignar completo ({{ s.item_counts.unassigned }} sin ninguna tarea) · {{ s.item_counts.retired }} retirado{{ s.item_counts.retired|pluralize }} del presupuesto</p>
+  {% if s.items %}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Presupuestado</th><th class="num">Planeado</th><th class="num">Diferencia</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for row in s.items %}
+      <tr><td>{{ row.code }}</td><td class="pj-name">{{ row.description }}</td><td>{{ row.unit }}</td>
+        <td class="num">{{ row.budgeted|floatformat:"-4g"|default:"—" }}</td>
+        <td class="num">{{ row.planned|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.diff|floatformat:"-4g"|default:"—" }}</td>
+        <td><span class="bg-label mx-{{ row.status }}">{% if row.status == "over" %}Con exceso{% elif row.status == "under" %}Sin asignar completo{% else %}Retirado{% endif %}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

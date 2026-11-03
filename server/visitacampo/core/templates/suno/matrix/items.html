@@ -1,0 +1,49 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Matriz · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="items" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters">
+    <label>Presupuesto <select name="presupuesto"><option value="">Todos</option>{% for b in budgets %}<option value="{{ b.pk }}" {% if filters.presupuesto == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></label>
+    <label>Capítulo <select name="capitulo"><option value="">Todos</option>{% for pk, label in chapters %}<option value="{{ pk }}" {% if filters.capitulo == pk|stringformat:"s" %}selected{% endif %}>{{ label|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <label>Ubicación <select name="ubicacion"><option value="">Todas</option>{% for pk, label in nodes %}<option value="{{ pk }}" {% if filters.ubicacion == pk|stringformat:"s" %}selected{% endif %}>{{ label|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado"><option value="">Todos</option>{% for key, label in status_labels.items %}<option value="{{ key }}" {% if filters.estado == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Filtrar</button>
+  </form>
+</section>
+<section class="pj-panel">
+  <div class="pj-scroll">
+  <table class="pj-table mx-items">
+    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Presupuestado</th><th class="num">Planeado</th><th class="num">Ejecutado</th><th class="num">% ejec.</th><th class="num">Sin asignar</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr class="pj-stage">
+        <td>{{ row.code }}</td>
+        <td class="pj-name">{{ row.description }}{% if row.budget and budgets|length > 1 %} <small class="pj-muted">{{ row.budget.name }}</small>{% endif %}</td>
+        <td>{{ row.unit }}</td>
+        <td class="num">{{ row.budgeted|floatformat:"-4g"|default:"—" }}</td>
+        <td class="num">{{ row.planned|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.executed|floatformat:"-4g" }}</td>
+        <td class="num">{% if row.pct_executed is not None %}{{ row.pct_executed|floatformat:"-2" }} %{% else %}—{% endif %}</td>
+        <td class="num">{{ row.unassigned|floatformat:"-4g"|default:"—" }}</td>
+        <td><span class="bg-label mx-{{ row.status }}">{{ row.status_label }}</span></td>
+      </tr>
+      {% for t in row.tasks %}
+      <tr>
+        <td></td>
+        <td class="pj-name"><a href="{% url 'projects:task' project.pk t.task.pk %}">{{ t.task.outline_number }} {{ t.task.name }}</a>{% if t.location %} <small class="pj-muted">· {{ t.location }}</small>{% endif %}</td>
+        <td></td><td></td>
+        <td class="num">{{ t.planned|floatformat:"-4g" }}</td>
+        <td class="num">{{ t.executed|floatformat:"-4g" }}</td>
+        <td></td><td></td><td></td>
+      </tr>
+      {% endfor %}
+    {% empty %}
+      <tr><td colspan="9" class="pj-empty">No hay ítems con esos filtros. Carga un presupuesto y la plantilla de la matriz.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
