@@ -13,11 +13,11 @@ from django.http import Http404
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import AppUser, Project, Task, TaskResource, Visit
+from visitacampo.core.models import AppUser, Project, Task, TaskResource
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.matrix.quantities import measured_progress, suno_pct_by_task
 
 from .access import effective_responsibles
-from .field_progress import validated_pct_by_task
 from .progress import TaskIndicators, TaskInput, compute_indicators, rollup
 from .workdays import WorkCalendar
 
@@ -49,7 +49,8 @@ def build_schedule(
     """Tareas vigentes en el orden del Project, con sus indicadores.
 
     `suno_pct`: % SUNO por id de tarea. Sin él se calcula del avance de campo
-    validado (`field_progress.validated_pct_by_task`), así que lo reciben todas
+    validado, por cantidades donde hay plan
+    (`matrix.quantities.suno_pct_by_task`), así que lo reciben todas
     las páginas que llaman aquí: lista, cronograma, Gantt y Excel.
     """
     if project.org_id != ctx.org_id:
@@ -68,6 +69,7 @@ def build_schedule(
         executors[task_id].append(name)
     responsibles = effective_responsibles(ctx, project)
 
+    measured = measured_progress(ctx, project_ids=[project.pk])
     inputs = [
         TaskInput(
             key=str(t.pk),
@@ -78,11 +80,12 @@ def build_schedule(
             finish=t.finish,
             actual_finish=t.actual_finish,
             project_pct=float(t.project_pct) if t.project_pct is not None else None,
+            value=float(measured[t.pk].value) if t.pk in measured else None,
         )
         for t in tasks
     ]
     if suno_pct is None:
-        suno_pct = validated_pct_by_task(scoped_qs(ctx, Visit), project_ids=[project.pk])
+        suno_pct = suno_pct_by_task(ctx, project_ids=[project.pk], measured=measured)
     suno = {str(k): float(v) for k, v in suno_pct.items()}
     indicators = compute_indicators(inputs, suno, WorkCalendar.from_json(project.calendar), cut)
     rows = [

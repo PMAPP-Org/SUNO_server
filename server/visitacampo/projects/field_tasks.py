@@ -16,12 +16,12 @@ from typing import Any
 from django.db.models import Q
 
 from visitacampo.core.context import RequestContext
-from visitacampo.core.models import Task, Visit
+from visitacampo.core.models import Task
 from visitacampo.core.policies import check_read_field_tasks
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.matrix.quantities import suno_pct_by_task
 
 from .access import responsible_outlines
-from .field_progress import validated_pct_by_task
 
 
 def field_tasks(ctx: RequestContext) -> list[dict[str, Any]]:
@@ -42,7 +42,7 @@ def field_tasks(ctx: RequestContext) -> list[dict[str, Any]]:
         .select_related("project")
         .order_by("project__name", "project_id", "sort_order")
     )
-    pct = validated_pct_by_task(scoped_qs(ctx, Visit), task_ids=[t.pk for t in tasks])
+    pct = suno_pct_by_task(ctx, task_ids=[t.pk for t in tasks])
     return [
         {
             "id": str(t.pk),

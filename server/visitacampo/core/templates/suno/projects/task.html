@@ -43,7 +43,7 @@
 </section>
 <section class="pj-panel">
   <h2>Avance de campo</h2>
-  <p>% SUNO (última visita validada): <strong>{{ suno_pct_text }}</strong></p>
+  <p>% SUNO ({% if measured_by_quantities %}por cantidades{% else %}última visita validada{% endif %}): <strong>{{ suno_pct_text }}</strong></p>
   {% if field_visits %}
   <table class="pj-table">
     <thead><tr><th>Fecha</th><th>Autor</th><th>% acumulado</th><th>Revisión</th><th>Aviso</th></tr></thead>

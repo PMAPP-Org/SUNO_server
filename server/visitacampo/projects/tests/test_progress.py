@@ -8,6 +8,7 @@ from django.test import SimpleTestCase
 
 from visitacampo.projects.mspdi import parse_mspdi
 from visitacampo.projects.progress import (
+    SourceIndicators,
     TaskIndicators,
     TaskInput,
     compute_indicators,
@@ -128,3 +129,24 @@ class NoBaselineTests(SimpleTestCase):
             project_pct=50.0,
         )
         self.assertIsNone(compute_indicators([task], {}, WorkCalendar(), CUT)["1"])
+
+
+class RollupByValueTests(SimpleTestCase):
+    def _child(self, actual: float, weight: int, value: float | None) -> TaskIndicators:
+        source = SourceIndicators(actual_pct=actual, delay_pct=0.0, delay_days=None)
+        return TaskIndicators(
+            planned_pct=50.0, weight=weight, suno=source, project=source, value=value
+        )
+
+    def test_weights_by_value_when_every_child_has_it(self) -> None:
+        total = rollup([self._child(0.0, 10, 900.0), self._child(100.0, 10, 100.0)])
+        assert total is not None
+        self.assertEqual(total.suno.actual_pct, 10.0)
+        self.assertEqual(total.value, 1000.0)
+        self.assertEqual(total.weight, 20)
+
+    def test_falls_back_to_days_if_a_child_has_no_value(self) -> None:
+        total = rollup([self._child(0.0, 10, 900.0), self._child(100.0, 30, None)])
+        assert total is not None
+        self.assertEqual(total.suno.actual_pct, 75.0)
+        self.assertIsNone(total.value)
