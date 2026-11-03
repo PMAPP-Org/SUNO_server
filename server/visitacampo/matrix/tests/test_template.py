@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from decimal import Decimal
 
 from django.test import SimpleTestCase
@@ -8,6 +9,7 @@ from django.test import SimpleTestCase
 from visitacampo.budgets.tests.xlsx import build_xlsx
 from visitacampo.matrix.template import (
     ItemRef,
+    ParsedPlan,
     TaskRef,
     TemplateRejected,
     TemplateRow,
@@ -32,7 +34,9 @@ ITEMS = {
 HEADER = header(["Tramo", "PR"])
 
 
-def parse(rows: list[list[object]], *, editable: bool = True, budgets: int = 1) -> object:
+def parse(
+    rows: Sequence[Sequence[object]], *, editable: bool = True, budgets: int = 1
+) -> ParsedPlan:
     names = ["Contrato de obra"] + ["Otro"] * (budgets - 1)
     data = build_xlsx(rows, header=HEADER, sheet="Matriz")
     return parse_plan(
@@ -104,7 +108,7 @@ class TemplateTests(SimpleTestCase):
             )
 
     def test_row_errors_are_listed(self) -> None:
-        rows = [
+        rows: list[list[object]] = [
             [None, "", "", "", "", "", "1.1", "", "", 1],
             [99, "", "", "", "", "", "1.1", "", "", 1],
             [4, "", "", "", "", "", "1.1", "", "", 1],
@@ -130,7 +134,7 @@ class TemplateTests(SimpleTestCase):
         self.assertIn("Fila 10: la ubicación tiene un nivel vacío", errors[8])
 
     def test_duplicates_and_conflicting_locations(self) -> None:
-        rows = [
+        rows: list[list[object]] = [
             [3, "", "", "Tramo 1", "", "", "1.1", "", "", 1],
             [3, "", "", "Tramo 2", "", "", "2.1", "", "", 1],
             [3, "", "", "tramo 1", "", "", "1.1", "", "", 2],
