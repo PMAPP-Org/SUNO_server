@@ -134,7 +134,7 @@ Modelos nuevos en `core/models/location.py` y `core/models/quantity.py`, todos
   ubicación (editable solo en los niveles sin campo de Project); Presupuesto, Código de
   ítem, Descripción y Unidad (Descripción y Unidad de referencia); Cantidad planeada.
 - Al subirla se valida:
-  - la tarea existe (por UniqueID, con EDT como respaldo) y es hoja, no retirada;
+  - la tarea existe (por UniqueID; la EDT es solo de referencia) y es hoja, no retirada;
   - el ítem existe en la versión vigente del presupuesto indicado y es de tipo `item`;
   - la cantidad es ≥ 0, con el parser de números colombiano de `budgets/totals.py`;
   - no hay pares repetidos;
