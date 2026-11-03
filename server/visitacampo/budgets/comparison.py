@@ -264,8 +264,7 @@ def build_comparison(ctx: RequestContext, budget: Budget) -> Comparison:
     rows: list[ComparisonRow] = []
     for item_id in ordered:
         before, after = con.get(item_id), cur.get(item_id)
-        base = after or before
-        assert base is not None
+        base = after or con[item_id]
         old = before["total"] if before else ZERO
         new = after["total"] if after else ZERO
         rows.append(

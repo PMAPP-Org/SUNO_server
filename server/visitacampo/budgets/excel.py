@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import io
 import re
-import xml.etree.ElementTree as ET
 import zipfile
 import zlib
 from collections.abc import Collection, Iterator, Sequence
@@ -40,6 +39,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from defusedxml.ElementTree import ParseError as XMLParseError
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
@@ -98,7 +98,7 @@ def _thousands(value: int) -> str:
 _CORRUPT = (
     zipfile.BadZipFile,
     zlib.error,
-    ET.ParseError,
+    XMLParseError,
     InvalidFileException,
     KeyError,
     ValueError,
