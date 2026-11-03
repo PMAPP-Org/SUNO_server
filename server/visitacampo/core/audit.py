@@ -100,6 +100,11 @@ class AuditAction:
     BUDGET_CONTRACTUAL_CHANGED = "budgets.contractual_changed"
     BUDGET_EXPORTED = "budgets.exported"
     BUDGET_SOURCE_DOWNLOADED = "budgets.source_downloaded"
+    MATRIX_LEVELS_CHANGED = "matrix.levels_changed"
+    MATRIX_IMPORT_APPLIED = "matrix.import_applied"
+    MATRIX_IMPORT_DISCARDED = "matrix.import_discarded"
+    MATRIX_PLAN_CHANGED = "matrix.plan_changed"
+    MATRIX_TASK_LOCATION_CHANGED = "matrix.task_location_changed"
 
 
 def hash_ip(ip: str | None) -> str | None:

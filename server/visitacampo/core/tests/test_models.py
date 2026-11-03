@@ -291,6 +291,8 @@ class VisitSchemaTests(SimpleTestCase):
             # Costos, etapa 1: avance de campo vinculado a una tarea.
             "task_id",
             "progress_pct",
+            # Costos, pieza 4: cantidades ejecutadas (JSONB).
+            "quantities",
         }
         self.assertEqual(columns, expected)
 
