@@ -18,6 +18,7 @@ from visitacampo.core.models import (
     AppUser,
     AuditEvent,
     Budget,
+    BudgetCharge,
     BudgetItem,
     BudgetVersion,
     Project,
@@ -82,6 +83,7 @@ class BudgetViewTestCase(TestCase):
             f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/",
             f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/excel",
             f"{self.base}{budget.pk}/exportar.xlsx",
+            f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/contractual/",
         ]
 
     def make_agent_see_the_project(self) -> None:
@@ -415,6 +417,57 @@ class ImportPagesTests(BudgetViewTestCase):
         old.refresh_from_db()
         self.assertEqual(old.status, "pending")
 
+    def test_saved_mapping_that_no_longer_fits_keeps_the_upload(self) -> None:
+        apply_rows(self.ctx, self.budget, V1_ROWS, charges=AIU)
+        self.as_user(self.admin)
+        half_row = [["1.1", "Ítem sin valor unitario", "m2", 5]]
+        response = self.upload(half_row, name="otro.xlsx")
+        version = self.pending()
+        mapping_url = f"{self.url}{version.pk}/mapeo/"
+        self.assertRedirects(response, mapping_url, fetch_redirect_response=False)
+        page = self.client.get(mapping_url)
+        self.assertEqual([m.level_tag for m in page.context["messages"]], ["error"])
+
+    def test_failed_apply_still_saves_the_label_and_charges(self) -> None:
+        old = stage_rows(self.ctx, self.budget, V1_ROWS)
+        apply_rows(self.ctx, self.budget, V2_ROWS)
+        self.as_user(self.admin)
+        response = self.client.post(
+            f"{self.url}{old.pk}/", self.charges_post(label="Mi etiqueta"), follow=True
+        )
+        self.assertContains(response, "Vuelve a subir el archivo")
+        old.refresh_from_db()
+        self.assertEqual((old.status, old.label), ("pending", "Mi etiqueta"))
+        pct = BudgetCharge.objects.get(version=old, name="Utilidad").pct
+        self.assertEqual(pct, D("5"))
+
+    def test_invalid_charges_are_shown_again_with_what_was_typed(self) -> None:
+        self.as_user(self.admin)
+        self.upload(V1_ROWS)
+        version = self.pending()
+        self.client.post(f"{self.url}{version.pk}/mapeo/", self.mapping_post())
+        preview_url = f"{self.url}{version.pk}/"
+        for action in ("save", "confirm"):
+            with self.subTest(action=action):
+                data = self.charges_post(action=action, label="Etiqueta X")
+                data["charge_1_name"] = ""  # se quita: las demás se renumeran
+                data["charge_2_pct"] = "10.000"  # 10.000 = diez mil: fuera de rango
+                response = self.client.post(preview_url, data)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Línea 1: el porcentaje")
+                self.assertContains(response, 'value="Etiqueta X"')
+                self.assertContains(response, 'name="charge_1_pct"')
+                self.assertContains(response, 'value="10.000"')
+                version.refresh_from_db()
+                self.assertEqual(version.status, "pending")
+
+    def test_unknown_sheet_is_reported_on_the_mapping_page(self) -> None:
+        self.as_user(self.admin)
+        self.upload(V1_ROWS)
+        response = self.client.get(f"{self.url}{self.pending().pk}/mapeo/", {"hoja": "NoExiste"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "La hoja «NoExiste» no existe")
+
     def test_supervisor_cannot_import(self) -> None:
         self.as_user(self.supervisor)
         self.assertEqual(self.client.get(self.url).status_code, 403)
@@ -442,23 +495,35 @@ class HistoryAndVersionTests(BudgetViewTestCase):
         self.assertContains(response, self.version_url(self.v1, "excel"))
         self.assertNotContains(response, "Marcar como contractual")
 
-    def test_admin_marks_another_version_as_contractual(self) -> None:
+    def confirm_url(self, version: BudgetVersion) -> str:
+        return self.version_url(version, "contractual/")
+
+    def test_admin_marks_another_version_as_contractual_after_confirming(self) -> None:
         self.as_user(self.admin)
-        self.assertContains(self.client.get(self.history), "Marcar como contractual", count=1)
-        response = self.client.post(
-            self.history, {"action": "contractual", "version": str(self.v2.pk)}
-        )
+        history = self.client.get(self.history)
+        self.assertContains(history, "Marcar como contractual", count=1)
+        self.assertContains(history, self.confirm_url(self.v2))
+        page = self.client.get(self.confirm_url(self.v2))
+        self.assertContains(page, "Entiendo que la comparación se medirá contra esta versión")
+        response = self.client.post(self.confirm_url(self.v2), {"confirm": "1"})
         self.assertRedirects(response, self.history)
         self.budget.refresh_from_db()
         self.assertEqual(self.budget.contractual_version_id, self.v2.pk)
         event = AuditEvent.objects.get(action="budgets.contractual_changed")
         self.assertEqual(event.metadata, {"from": 1, "to": 2})
 
+    def test_contractual_change_without_the_checkbox_does_nothing(self) -> None:
+        self.as_user(self.admin)
+        response = self.client.post(self.confirm_url(self.v2), {})
+        self.assertContains(response, "Marca la casilla para confirmar")
+        self.budget.refresh_from_db()
+        self.assertEqual(self.budget.contractual_version_id, self.v1.pk)
+        self.assertFalse(AuditEvent.objects.filter(action="budgets.contractual_changed"))
+
     def test_supervisor_cannot_mark_contractual(self) -> None:
         self.as_user(self.supervisor)
-        response = self.client.post(
-            self.history, {"action": "contractual", "version": str(self.v2.pk)}
-        )
+        self.assertEqual(self.client.get(self.confirm_url(self.v2)).status_code, 403)
+        response = self.client.post(self.confirm_url(self.v2), {"confirm": "1"})
         self.assertEqual(response.status_code, 403)
 
     def test_version_page_shows_its_content_and_charges(self) -> None:
@@ -521,3 +586,70 @@ class ExportTests(BudgetViewTestCase):
                 self.assertIn(text, sheet)
         event = AuditEvent.objects.get(action="budgets.exported")
         self.assertEqual(event.metadata, {"rows": 8})
+
+
+@skip_without_db
+class HardeningTests(BudgetViewTestCase):
+    def test_thousand_separator_setting_stays_off(self) -> None:
+        # Con USE_THOUSAND_SEPARATOR el análisis de formularios trataría "." como miles
+        # ("10.5" → 105) y los porcentajes de los cargos se leerían mal.
+        from django.conf import settings
+
+        self.assertFalse(settings.USE_THOUSAND_SEPARATOR)
+
+    def test_html_in_a_description_is_escaped(self) -> None:
+        rows = [["1.1", "<script>alert(1)</script>", "m2", 1, 100, 100]]
+        budget = make_budget(self.project, self.admin)
+        apply_rows(self.ctx, budget, rows)
+        self.as_user(self.viewer)
+        page = self.client.get(f"{self.base}{budget.pk}/")
+        self.assertNotContains(page, "<script>alert(1)</script>")
+        self.assertContains(page, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_export_writes_formula_like_text_as_text(self) -> None:
+        rows = [["@1", "+HYPERLINK(1)", "m2", 1, 100, 100]]
+        budget = make_budget(self.project, self.admin)
+        apply_rows(self.ctx, budget, rows)
+        self.as_user(self.viewer)
+        response = self.client.get(f"{self.base}{budget.pk}/exportar.xlsx")
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            sheet = book.read("xl/worksheets/sheet1.xml").decode()
+            strings = (
+                book.read("xl/sharedStrings.xml").decode()
+                if "xl/sharedStrings.xml" in book.namelist()
+                else ""
+            )
+        text = sheet + strings
+        self.assertIn("'@1", text)
+        self.assertIn("'+HYPERLINK(1)", text)
+        self.assertNotIn("<f>", sheet)
+
+    def test_non_ascii_names_survive_in_the_download_header(self) -> None:
+        budget = make_budget(self.project, self.admin, name="Interventoría", code="")
+        apply_rows(self.ctx, budget, V1_ROWS)
+        self.as_user(self.viewer)
+        response = self.client.get(f"{self.base}{budget.pk}/exportar.xlsx")
+        self.assertEqual(
+            response["Content-Disposition"],
+            'attachment; filename="Interventoria-comparacion.xlsx"; '
+            "filename*=UTF-8''Interventor%C3%ADa-comparacion.xlsx",
+        )
+
+    def test_read_only_pages_reject_post(self) -> None:
+        budget = self.budget_v1_v2()
+        self.as_user(self.admin)
+        for url in (
+            f"{self.base}{budget.pk}/",
+            f"{self.base}{budget.pk}/exportar.xlsx",
+            f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/",
+            f"{self.base}{budget.pk}/versiones/{budget.contractual_version_id}/excel",
+            f"{self.base}{budget.pk}/historial/",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.post(url).status_code, 405)
+
+    def test_removed_rows_show_zero_with_the_locale_format(self) -> None:
+        budget = self.budget_v1_v2()
+        self.as_user(self.viewer)
+        page = self.client.get(f"{self.base}{budget.pk}/")
+        self.assertContains(page, '<td class="num">0,00</td>')

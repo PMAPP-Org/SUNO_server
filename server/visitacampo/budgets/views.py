@@ -10,7 +10,6 @@ rol responde 403.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any
@@ -30,6 +29,7 @@ from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import RequestContext
+from visitacampo.core.download import content_disposition
 from visitacampo.core.models import (
     Budget,
     BudgetCharge,
@@ -51,6 +51,7 @@ from .comparison import (
 )
 from .excel import KIND_CHAPTER, MAX_BYTES, ExcelRejected, preview_sheet
 from .importer import (
+    BUSY,
     ImportRejected,
     apply_version,
     charges_of,
@@ -164,6 +165,7 @@ def budget_list(request: HttpRequest, project_id: UUID) -> HttpResponse:
 
 
 @login_required(login_url="platform_login")
+@require_http_methods(["GET"])
 def budget_detail(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResponse:
     """Comparación contractual contra vigente (la página principal del presupuesto)."""
     ctx = _ctx(request)
@@ -244,48 +246,62 @@ def _last_column(row: Sequence[Any]) -> int:
     return 0
 
 
-def _charges_from_post(data: QueryDict) -> list[ChargeSpec]:
-    """Los cargos del formulario de la vista previa, renumerados 1..n.
+def _charges_from_post(data: QueryDict) -> tuple[list[ChargeSpec], list[dict[str, str]], str]:
+    """Los cargos del formulario de la vista previa: (cargos válidos, lo escrito, error).
 
-    Una línea sin nombre se quita. Una base `line:k` se traduce al nuevo número
-    de la línea k; si esa línea se quitó o no es anterior, queda inválida y
-    `validate_charges` lo dice.
+    Una línea sin nombre se quita y las demás se renumeran 1..n: esa numeración
+    es la de los mensajes de error y la de las filas que se vuelven a mostrar.
+    Una base `line:k` se traduce al nuevo número de la línea k; si esa línea se
+    quitó o no es anterior, queda inválida y `validate_charges` lo dice. `lo escrito`
+    conserva el texto del porcentaje tal cual, para volver a mostrarlo si hay error.
     """
     count = min(_int(data.get("charge_count")), MAX_CHARGES + 1)
+    entries: list[dict[str, str]] = []
     specs: list[ChargeSpec] = []
     renumber: dict[int, int] = {}
+    error = ""
     for index in range(1, count + 1):
         name = (data.get(f"charge_{index}_name") or "").strip()
         if not name:
             continue
-        try:
-            pct = parse_number(data.get(f"charge_{index}_pct")) or Decimal(0)
-        except ValueError:
-            raise ImportRejected(f"Línea {index}: el porcentaje no es un número.") from None
-        order = len(specs) + 1
+        order = len(entries) + 1
+        raw_pct = (data.get(f"charge_{index}_pct") or "").strip()
         base = data.get(f"charge_{index}_base") or BASE_DIRECT
         ref = base_line_order(base)
         if ref is not None:
             base = line_base(renumber.get(ref, order))
         renumber[index] = order
-        specs.append(ChargeSpec(order=order, name=name, pct=pct, base=base))
-    try:
-        validate_charges(specs)
-    except ChargeError as exc:
-        raise ImportRejected(str(exc)) from exc
-    return specs
+        entries.append({"name": name, "pct": raw_pct, "base": base})
+        if error:
+            continue
+        try:
+            pct = parse_number(raw_pct) or Decimal(0)
+        except ValueError:
+            error = f"Línea {order}: el porcentaje no es un número."
+        else:
+            specs.append(ChargeSpec(order=order, name=name, pct=pct, base=base))
+    if not error:
+        try:
+            validate_charges(specs)
+        except ChargeError as exc:
+            error = str(exc)
+    return specs, entries, error
+
+
+def _entries_of(charges: Sequence[ChargeSpec]) -> list[dict[str, str]]:
+    return [{"name": c.name, "pct": pct_text(c.pct), "base": c.base} for c in charges]
 
 
 def _charge_form_rows(
-    charges: Sequence[ChargeSpec], amounts: Mapping[int, Decimal]
+    entries: Sequence[Mapping[str, str]], amounts: Mapping[int, Decimal]
 ) -> list[dict[str, Any]]:
-    """Filas del formulario de cargos: las existentes y una vacía para añadir."""
-    names = {c.order: c.name for c in charges}
-    specs: list[ChargeSpec | None] = [*charges]
-    if len(specs) < MAX_CHARGES:
-        specs.append(None)
+    """Filas del formulario de cargos: las dadas y una vacía para añadir."""
+    names = {index: entry["name"] for index, entry in enumerate(entries, start=1)}
+    slots: list[Mapping[str, str] | None] = [*entries]
+    if len(slots) < MAX_CHARGES:
+        slots.append(None)
     rows = []
-    for index, spec in enumerate(specs, start=1):
+    for index, entry in enumerate(slots, start=1):
         options = [
             (BASE_DIRECT, "Costo directo"),
             (BASE_SUBTOTAL, "Subtotal (costo directo + líneas anteriores)"),
@@ -297,9 +313,9 @@ def _charge_form_rows(
         rows.append(
             {
                 "index": index,
-                "name": spec.name if spec else "",
-                "pct": pct_text(spec.pct) if spec else "",
-                "base": spec.base if spec else BASE_DIRECT,
+                "name": entry["name"] if entry else "",
+                "pct": entry["pct"] if entry else "",
+                "base": entry["base"] if entry else BASE_DIRECT,
                 "options": options,
                 "amount": amounts.get(index),
             }
@@ -326,19 +342,36 @@ def import_upload(request: HttpRequest, project_id: UUID, budget_id: UUID) -> Ht
             # Con mapeo guardado (y sin pedir cambiarlo) se va directo a la vista previa.
             mapping = None if request.POST.get("cambiar_mapeo") == "1" else saved
             try:
-                with transaction.atomic():
-                    version = create_upload(
-                        ctx,
-                        budget,
-                        file_name=upload.name or "presupuesto.xlsx",
-                        data=upload.read(),
-                    )
-                    if mapping is not None:
-                        prepare_version(ctx, version.pk, mapping)
+                version = create_upload(
+                    ctx,
+                    budget,
+                    file_name=upload.name or "presupuesto.xlsx",
+                    data=upload.read(),
+                )
             except ImportRejected as exc:
                 error = str(exc)
             else:
-                target = "budgets:import_preview" if mapping else "budgets:import_mapping"
+                # La versión ya existe: si el mapeo guardado no sirve para este archivo,
+                # no se pierde la subida; se pasa a la página de mapeo.
+                target = "budgets:import_mapping"
+                if mapping is not None:
+                    try:
+                        prepare_version(ctx, version.pk, mapping)
+                    except ImportRejected as exc:
+                        if str(exc) == BUSY:
+                            return _render(
+                                request,
+                                ctx,
+                                "suno/budgets/import.html",
+                                {
+                                    **_budget_context(ctx, project, budget),
+                                    "saved_mapping": saved,
+                                    "error": BUSY,
+                                },
+                            )
+                        messages.error(request, str(exc))
+                    else:
+                        target = "budgets:import_preview"
                 return redirect(target, project.pk, budget.pk, version.pk)
     return _render(
         request,
@@ -370,12 +403,15 @@ def import_mapping(
     except ExcelRejected as exc:
         messages.error(request, str(exc))
         return redirect("budgets:import", project.pk, budget.pk)
+    error = ""
+    asked = request.POST.get("sheet") or request.GET.get("hoja")
+    if asked and asked not in preview.sheet_names:
+        error = f"La hoja «{asked[:60]}» no existe en el archivo; se muestra «{preview.sheet}»."
     if saved is not None and saved.sheet == preview.sheet:
         first_row, columns = saved.first_row, dict(saved.columns)
     else:
         suggestion = suggest_mapping(preview.rows)
         first_row, columns = suggestion.first_row, suggestion.columns
-    error = ""
     if request.method == "POST":
         first_row = _int(request.POST.get("first_row"))
         columns = {field: request.POST.get(f"col_{field}") or None for field in FIELDS}
@@ -420,6 +456,44 @@ def import_mapping(
     )
 
 
+def _render_preview(
+    request: HttpRequest,
+    ctx: RequestContext,
+    project: Project,
+    budget: Budget,
+    version: BudgetVersion,
+    *,
+    entries: Sequence[Mapping[str, str]],
+    label: str,
+    charge_error: str = "",
+    direct_cost: Decimal | None = None,
+    charges: Sequence[ChargeSpec] | None = None,
+) -> HttpResponse:
+    """La vista previa. Con `charge_error` muestra lo escrito sin recalcular valores."""
+    result = None
+    if charges is not None and not charge_error:
+        try:
+            result = compute_charges(direct_cost or Decimal(0), charges)
+        except ChargeError:
+            result = None
+    amounts = {line.order: line.amount for line in result.lines} if result else {}
+    return _render(
+        request,
+        ctx,
+        "suno/budgets/import_preview.html",
+        {
+            **_budget_context(ctx, project, budget),
+            "version": version,
+            "s": version.summary,
+            "pending": version.status == BudgetVersionStatus.PENDING,
+            "result": result,
+            "label": label,
+            "charge_error": charge_error,
+            "charge_rows": _charge_form_rows(entries, amounts),
+        },
+    )
+
+
 @login_required(login_url="platform_login")
 @require_http_methods(["GET", "POST"])
 def import_preview(
@@ -449,10 +523,24 @@ def import_preview(
                 messages.info(request, "Versión descartada.")
                 return redirect("budgets:detail", project.pk, budget.pk)
             label = request.POST.get("label") or ""
-            charges = _charges_from_post(request.POST)
+            charges, entries, charge_error = _charges_from_post(request.POST)
+            if charge_error:
+                # Se vuelve a mostrar lo escrito, con el error, sin perder la edición.
+                return _render_preview(
+                    request,
+                    ctx,
+                    project,
+                    budget,
+                    version,
+                    entries=entries,
+                    label=label,
+                    charge_error=charge_error,
+                )
+            # La etiqueta y los cargos se guardan aparte de aplicar: si aplicar falla
+            # (vista previa obsoleta, otra importación en curso), la edición se conserva.
+            update_pending(ctx, version.pk, label=label, charges=charges)
             if action == "confirm":
                 with transaction.atomic():
-                    update_pending(ctx, version.pk, label=label, charges=charges)
                     applied = apply_version(ctx, version.pk)
                     audit.record(
                         ctx,
@@ -467,65 +555,38 @@ def import_preview(
                     )
                 messages.success(request, f"Versión {applied.number} aplicada.")
                 return redirect("budgets:detail", project.pk, budget.pk)
-            update_pending(ctx, version.pk, label=label, charges=charges)
             messages.success(request, "Etiqueta y cargos guardados.")
         except ImportRejected as exc:
             messages.error(request, str(exc))
         return redirect("budgets:import_preview", project.pk, budget.pk, version.pk)
 
-    summary = version.summary
-    if pending and "mapping" not in summary:
+    if pending and "mapping" not in version.summary:
         return redirect("budgets:import_mapping", project.pk, budget.pk, version.pk)
     charges = charges_of(ctx, version)
-    try:
-        result = compute_charges(Decimal(summary.get("direct_cost") or "0"), charges)
-    except ChargeError:
-        result = None
-    amounts = {line.order: line.amount for line in result.lines} if result else {}
-    return _render(
+    return _render_preview(
         request,
         ctx,
-        "suno/budgets/import_preview.html",
-        {
-            **_budget_context(ctx, project, budget),
-            "version": version,
-            "s": summary,
-            "pending": pending,
-            "result": result,
-            "charge_rows": _charge_form_rows(charges, amounts),
-        },
+        project,
+        budget,
+        version,
+        entries=_entries_of(charges),
+        label=version.label,
+        direct_cost=Decimal(version.summary.get("direct_cost") or "0"),
+        charges=charges,
     )
 
 
-def _safe_name(budget: Budget) -> str:
-    """Código (o nombre) del presupuesto apto para nombres de archivo."""
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", budget.code or budget.name)[:60] or "presupuesto"
+def _download_name(budget: Budget, suffix: str) -> str:
+    """`Content-Disposition` con el código (o nombre) del presupuesto como base."""
+    return content_disposition(budget.code or budget.name, suffix, fallback="presupuesto")
 
 
 @login_required(login_url="platform_login")
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET"])
 def history(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_budget_project(ctx, project_id)
     budget = get_budget(ctx, project, budget_id)
-    if request.method == "POST":
-        _require_manage(ctx)
-        version_id = _parse_uuid(request.POST.get("version"))
-        if request.POST.get("action") == "contractual" and version_id is not None:
-            try:
-                with transaction.atomic():
-                    previous, version = mark_contractual(ctx, budget.pk, version_id)
-                    audit.record(
-                        ctx,
-                        action=AuditAction.BUDGET_CONTRACTUAL_CHANGED,
-                        target=f"budget:{budget.pk}",
-                        metadata={"from": previous, "to": version.number},
-                    )
-            except ImportRejected as exc:
-                messages.error(request, str(exc))
-            else:
-                messages.success(request, f"La versión {version.number} es ahora la contractual.")
-        return redirect("budgets:history", project.pk, budget.pk)
 
     versions = scoped_qs(ctx, BudgetVersion).defer("source_file").select_related("uploaded_by")
     can_manage = can_manage_budgets(ctx, ctx.org_id)
@@ -550,6 +611,48 @@ def history(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResp
 
 
 @login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def contractual_confirm(
+    request: HttpRequest, project_id: UUID, budget_id: UUID, version_id: UUID
+) -> HttpResponse:
+    """Confirmación de "Marcar como contractual": cambia contra qué se mide la comparación."""
+    ctx = _ctx(request)
+    project = get_budget_project(ctx, project_id)
+    budget = get_budget(ctx, project, budget_id)
+    _require_manage(ctx)
+    version = _get_version(ctx, budget, version_id, status=str(BudgetVersionStatus.APPLIED))
+    if version.pk == budget.contractual_version_id:
+        messages.info(request, f"La versión {version.number} ya es la contractual.")
+        return redirect("budgets:history", project.pk, budget.pk)
+    error = ""
+    if request.method == "POST":
+        if request.POST.get("confirm") != "1":
+            error = "Marca la casilla para confirmar el cambio."
+        else:
+            try:
+                with transaction.atomic():
+                    previous, marked = mark_contractual(ctx, budget.pk, version.pk)
+                    audit.record(
+                        ctx,
+                        action=AuditAction.BUDGET_CONTRACTUAL_CHANGED,
+                        target=f"budget:{budget.pk}",
+                        metadata={"from": previous, "to": marked.number},
+                    )
+            except ImportRejected as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(request, f"La versión {marked.number} es ahora la contractual.")
+            return redirect("budgets:history", project.pk, budget.pk)
+    return _render(
+        request,
+        ctx,
+        "suno/budgets/contractual_confirm.html",
+        {**_budget_context(ctx, project, budget), "version": version, "error": error},
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET"])
 def version_detail(
     request: HttpRequest, project_id: UUID, budget_id: UUID, version_id: UUID
 ) -> HttpResponse:
@@ -581,6 +684,7 @@ def version_detail(
 
 
 @login_required(login_url="platform_login")
+@require_http_methods(["GET"])
 def version_source(
     request: HttpRequest, project_id: UUID, budget_id: UUID, version_id: UUID
 ) -> HttpResponse:
@@ -601,18 +705,18 @@ def version_source(
             metadata={"version": version.number},
         )
     response = HttpResponse(bytes(version.source_file), content_type=XLSX_TYPE)
-    response["Content-Disposition"] = (
-        f'attachment; filename="{_safe_name(budget)}-v{version.number}.xlsx"'
-    )
+    response["Content-Disposition"] = _download_name(budget, f"-v{version.number}.xlsx")
     return response
 
 
 def _num(value: Decimal | None) -> float | None:
-    """`to_xlsx` solo conoce int y float: los montos van como float (2 decimales)."""
+    """`to_xlsx` solo conoce int y float: los montos van como float (montos a 2 decimales,
+    cantidades hasta 4)."""
     return None if value is None else float(value)
 
 
 @login_required(login_url="platform_login")
+@require_http_methods(["GET"])
 def export_comparison(request: HttpRequest, project_id: UUID, budget_id: UUID) -> HttpResponse:
     """La comparación completa (sin filtros) con cargos y totales, en Excel (auditada)."""
     ctx = _ctx(request)
@@ -668,7 +772,5 @@ def export_comparison(request: HttpRequest, project_id: UUID, budget_id: UUID) -
             metadata={"rows": len(data.rows)},
         )
     response = HttpResponse(content, content_type=XLSX_TYPE)
-    response["Content-Disposition"] = (
-        f'attachment; filename="{_safe_name(budget)}-comparacion.xlsx"'
-    )
+    response["Content-Disposition"] = _download_name(budget, "-comparacion.xlsx")
     return response

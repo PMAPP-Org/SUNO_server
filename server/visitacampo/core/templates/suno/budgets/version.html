@@ -10,12 +10,13 @@
   <p class="pj-tree-actions"><button type="button" class="text-link" data-expand-all>Expandir todo</button> · <button type="button" class="text-link" data-collapse-all>Contraer todo</button></p>
   <div class="pj-scroll">
   <table class="pj-table bg-compare" data-wbs>
-    <thead><tr><th>Código</th><th>Descripción</th><th>Und</th><th class="num">Cantidad</th><th class="num">Vr. unitario</th><th class="num">Total</th></tr></thead>
+  <caption class="sr-only">Contenido de la versión del presupuesto, por capítulo e ítem</caption>
+    <thead><tr><th scope="col">Código</th><th scope="col">Descripción</th><th scope="col">Und</th><th scope="col" class="num">Cantidad</th><th scope="col" class="num">Vr. unitario</th><th scope="col" class="num">Total</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr data-id="{{ r.item_id }}"{% if r.parent_id %} data-parent="{{ r.parent_id }}"{% endif %} class="{% if r.kind == 'chapter' %}{% if r.depth == 0 %}pj-stage{% else %}pj-summary{% endif %}{% endif %}">
         <td>{{ r.code }}</td>
-        <td class="pj-name" style="padding-left: {{ r.depth|add:1 }}em">{% if r.kind == "chapter" %}<button type="button" class="pj-toggle" data-toggle aria-expanded="true" aria-label="Plegar {{ r.description }}">▾</button> {% endif %}{{ r.description|default:"—" }}</td>
+        <td class="pj-name" style="padding-left: {{ r.depth|add:1 }}em">{% if r.kind == "chapter" %}<button type="button" class="pj-toggle" data-toggle aria-expanded="true" aria-label="{{ r.description }}">▾</button> {% endif %}{{ r.description|default:"—" }}</td>
         <td>{{ r.unit }}</td>
         <td class="num">{{ r.quantity|floatformat:"-4g" }}</td>
         <td class="num">{{ r.unit_price|floatformat:"2g" }}</td>

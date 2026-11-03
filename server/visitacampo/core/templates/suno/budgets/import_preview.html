@@ -27,10 +27,12 @@
   <h2>Etiqueta y cargos</h2>
   <form method="post" class="bg-charges">
     {% csrf_token %}
-    <p class="pj-form"><label>Etiqueta de la versión <input type="text" name="label" maxlength="200" value="{{ version.label }}" placeholder="p. ej. Otrosí 2"></label></p>
+    <p class="pj-form"><label>Etiqueta de la versión <input type="text" name="label" maxlength="200" value="{{ label }}" placeholder="p. ej. Otrosí 2"></label></p>
+    {% if charge_error %}<p class="pj-late" role="alert">{{ charge_error }}</p>{% endif %}
     <input type="hidden" name="charge_count" value="{{ charge_rows|length }}">
     <table class="pj-table">
-      <thead><tr><th>#</th><th>Cargo</th><th class="num">%</th><th>Base</th><th class="num">Valor</th></tr></thead>
+  <caption class="sr-only">Cargos de la versión: nombre, porcentaje, base y valor</caption>
+      <thead><tr><th scope="col">#</th><th scope="col">Cargo</th><th scope="col" class="num">%</th><th scope="col">Base</th><th scope="col" class="num">Valor</th></tr></thead>
       <tbody>
       {% for row in charge_rows %}
         <tr>

@@ -6,7 +6,8 @@
 <section class="pj-panel">
   <h2>Presupuestos del proyecto</h2>
   <table class="pj-table">
-    <thead><tr><th>Presupuesto</th><th class="num">Total contractual</th><th class="num">Total vigente</th><th class="num">Diferencia</th><th class="num">Dif. %</th><th class="num">Versión vigente</th></tr></thead>
+  <caption class="sr-only">Presupuestos del proyecto con sus totales</caption>
+    <thead><tr><th scope="col">Presupuesto</th><th scope="col" class="num">Total contractual</th><th scope="col" class="num">Total vigente</th><th scope="col" class="num">Diferencia</th><th scope="col" class="num">Dif. %</th><th scope="col" class="num">Versión vigente</th></tr></thead>
     <tbody>
     {% for s in summaries %}
       <tr>

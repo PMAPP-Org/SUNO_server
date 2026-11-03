@@ -6,7 +6,8 @@
 <section class="pj-panel">
   <h2>Versiones aplicadas</h2>
   <table class="pj-table">
-    <thead><tr><th>Versión</th><th>Etiqueta</th><th>Archivo</th><th>Subida por</th><th>Aplicada</th><th class="num">Total</th><th>Cambios frente a la anterior</th><th></th></tr></thead>
+  <caption class="sr-only">Versiones aplicadas del presupuesto</caption>
+    <thead><tr><th scope="col">Versión</th><th scope="col">Etiqueta</th><th scope="col">Archivo</th><th scope="col">Subida por</th><th scope="col">Aplicada</th><th scope="col" class="num">Total</th><th scope="col">Cambios frente a la anterior</th><th scope="col"></th></tr></thead>
     <tbody>
     {% for v in versions %}
       <tr>
@@ -17,7 +18,7 @@
         <td>{{ v.applied_at|date:"d/m/Y H:i" }}</td>
         <td class="num">{{ v.total|floatformat:"2g" }}</td>
         <td class="pj-wrap">{{ v.summary.added }} no previsto{{ v.summary.added|pluralize }} · {{ v.summary.removed }} eliminado{{ v.summary.removed|pluralize }} · {{ v.summary.more_quantity }} mayor cant. · {{ v.summary.less_quantity }} menor cant. · {{ v.summary.price_changed }} cambio de precio</td>
-        <td>{% if can_manage_budgets and v.pk != budget.contractual_version_id %}<form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ v.pk }}"><button class="text-link" type="submit" name="action" value="contractual">Marcar como contractual</button></form>{% endif %}</td>
+        <td>{% if can_manage_budgets and v.pk != budget.contractual_version_id %}<a class="text-link" href="{% url 'budgets:contractual_confirm' project.pk budget.pk v.pk %}">Marcar como contractual</a>{% endif %}</td>
       </tr>
     {% empty %}
       <tr><td colspan="8" class="pj-empty">Sin versiones aplicadas.</td></tr>

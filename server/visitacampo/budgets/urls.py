@@ -32,4 +32,9 @@ urlpatterns = [
         name="version_source",
     ),
     path("<uuid:budget_id>/exportar.xlsx", views.export_comparison, name="export"),
+    path(
+        "<uuid:budget_id>/versiones/<uuid:version_id>/contractual/",
+        views.contractual_confirm,
+        name="contractual_confirm",
+    ),
 ]

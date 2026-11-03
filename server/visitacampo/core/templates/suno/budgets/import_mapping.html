@@ -28,7 +28,8 @@
   <h2>Primeras filas de «{{ sheet }}»</h2>
   <div class="pj-scroll">
   <table class="pj-table bg-sheet">
-    <thead><tr><th>Fila</th>{% for letter in letters %}<th>{{ letter }}</th>{% endfor %}</tr></thead>
+  <caption class="sr-only">Primeras filas de la hoja, con la letra de cada columna</caption>
+    <thead><tr><th scope="col">Fila</th>{% for letter in letters %}<th scope="col">{{ letter }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for number, cells in preview_rows %}
       <tr><th scope="row">{{ number }}</th>{% for shown, full in cells %}<td{% if shown != full %} title="{{ full }}"{% endif %}>{{ shown }}</td>{% endfor %}</tr>
