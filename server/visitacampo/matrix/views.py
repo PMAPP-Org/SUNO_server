@@ -182,6 +182,7 @@ def import_upload(request: HttpRequest, project_id: UUID) -> HttpResponse:
     project = get_matrix_project(ctx, project_id)
     require_manage(ctx)
     errors: list[str] = []
+    levels = project_levels(ctx, project)
     if request.method == "POST":
         upload = request.FILES.get("file")
         if upload is None:
@@ -204,8 +205,8 @@ def import_upload(request: HttpRequest, project_id: UUID) -> HttpResponse:
         {
             **_context(ctx, project),
             "errors": errors,
-            "levels": project_levels(ctx, project),
-            "from_project": from_project(project_levels(ctx, project)),
+            "levels": levels,
+            "from_project": from_project(levels),
         },
     )
 

@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from visitacampo.budgets.excel import MAX_QUANTITY
 from visitacampo.budgets.importer import current_version
-from visitacampo.budgets.totals import parse_number
+from visitacampo.budgets.totals import parse_number_detail
 from visitacampo.budgets.totals import quantity as quantity_of
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
@@ -37,8 +37,10 @@ def _check_leaf(task: Task) -> None:
 
 def set_plan(
     ctx: RequestContext, task: Task, *, budget_id: UUID, code: str, quantity: str
-) -> QuantityPlan:
-    """Crea o cambia la cantidad planeada de un ítem en la tarea."""
+) -> tuple[QuantityPlan, bool]:
+    """Crea o cambia la cantidad planeada de un ítem en la tarea. El segundo valor
+    dice si la cantidad se leyó con la regla "punto + 3 dígitos" ("1.234" = 1234),
+    para avisarle al usuario."""
     _check_leaf(task)
     budget = scoped_qs(ctx, Budget).filter(pk=budget_id, project_id=task.project_id).first()
     version = current_version(ctx, budget) if budget is not None else None
@@ -55,17 +57,21 @@ def set_plan(
     if row["kind"] != "item":
         raise EditRejected(f"{code} es un capítulo; la matriz va en ítems.")
     try:
-        value = parse_number(quantity)
+        parsed, guessed = parse_number_detail(quantity)
     except ValueError:
-        value = None
-    if value is None:
+        parsed, guessed = None, False
+    if parsed is None:
         raise EditRejected("La cantidad no es un número.")
-    if value < 0:
+    if parsed < 0:
         raise EditRejected("La cantidad no puede ser negativa.")
+    # Después de redondear: 99999999999999,99999 sube a 1e14 y no cabe en la columna.
+    value = quantity_of(parsed)
     if value >= MAX_QUANTITY:
         raise EditRejected("La cantidad es demasiado grande.")
-    value = quantity_of(value)
     with transaction.atomic():
+        # El mismo bloqueo que la importación de la matriz: evita carreras con ella y
+        # entre dos altas del mismo par.
+        scoped_qs(ctx, Project).select_for_update().get(pk=task.project_id)
         plan = (
             scoped_qs(ctx, QuantityPlan)
             .select_for_update()
@@ -96,13 +102,14 @@ def set_plan(
             target=f"task:{task.pk}",
             metadata={"item": str(row["item_id"]), "before": before, "after": str(value)},
         )
-        return plan
+        return plan, guessed
 
 
 def remove_plan(ctx: RequestContext, task: Task, item_id: UUID) -> bool:
     """Quita el ítem del plan de la tarea. Si ya tiene ejecución, lo deja en 0 y
     devuelve False (la ejecución no se pierde de vista)."""
     with transaction.atomic():
+        scoped_qs(ctx, Project).select_for_update().get(pk=task.project_id)
         plan = (
             scoped_qs(ctx, QuantityPlan)
             .select_for_update()
@@ -139,20 +146,24 @@ def set_task_location(ctx: RequestContext, task: Task, path_text: str) -> None:
     """Ubica la tarea en la ruta "Tramo 2 / PR 12+300" (creando los nodos que falten);
     vacío la deja sin ubicación. Solo si la ubicación se asigna en SUNO."""
     _check_leaf(task)
-    levels = project_levels(ctx, task.project)
-    if not levels:
-        raise EditRejected("El proyecto no tiene niveles de ubicación.")
-    if from_project(levels):
-        raise EditRejected("La ubicación de este proyecto se lee de MS Project.")
     parts = path_text.split("/")
-    if path_text.strip() and len(parts) > len(levels):
-        raise EditRejected(f"La ruta tiene {len(parts)} niveles y el proyecto tiene {len(levels)}.")
-    path = path_values(parts if path_text.strip() else [])
-    if path.incomplete:
-        raise EditRejected("La ruta tiene un nivel vacío.")
     with transaction.atomic():
-        # El mismo bloqueo que la importación: evita carreras al crear nodos.
+        # El mismo bloqueo que la importación: evita carreras al crear nodos. Los
+        # niveles y la ubicación actual se leen ya con el bloqueo, para no usar datos viejos.
         project = scoped_qs(ctx, Project).select_for_update().get(pk=task.project_id)
+        levels = project_levels(ctx, project)
+        if not levels:
+            raise EditRejected("El proyecto no tiene niveles de ubicación.")
+        if from_project(levels):
+            raise EditRejected("La ubicación de este proyecto se lee de MS Project.")
+        if path_text.strip() and len(parts) > len(levels):
+            raise EditRejected(
+                f"La ruta tiene {len(parts)} niveles y el proyecto tiene {len(levels)}."
+            )
+        path = path_values(parts if path_text.strip() else [])
+        if path.incomplete:
+            raise EditRejected("La ruta tiene un nivel vacío.")
+        task.refresh_from_db(fields=["location"])
         before = task.location_id
         try:
             node_id = (

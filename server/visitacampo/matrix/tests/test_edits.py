@@ -3,7 +3,9 @@ from __future__ import annotations
 import unittest
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from visitacampo.core.models import AuditEvent, QuantityPlan
 from visitacampo.core.tests.dbsupport import (
@@ -59,6 +61,42 @@ class EditsTests(TestCase):
             set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="x")
         with self.assertRaisesMessage(EditRejected, "negativa"):
             set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="-1")
+        # Redondeada a 4 decimales llega a 1e14 y no cabe en la columna.
+        with self.assertRaisesMessage(EditRejected, "demasiado grande"):
+            set_plan(
+                self.ctx,
+                task,
+                budget_id=self.budget.pk,
+                code="2.1",
+                quantity="99999999999999,99999",
+            )
+        self.assertFalse(QuantityPlan.objects.exists())
+
+    def test_set_plan_reports_thousands_guess(self) -> None:
+        task = self.world.task(3)
+        _, guessed = set_plan(
+            self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="1.234"
+        )
+        self.assertTrue(guessed)
+        self.assertEqual(QuantityPlan.objects.get().planned_quantity, Decimal("1234"))
+        _, guessed = set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="1,5")
+        self.assertFalse(guessed)
+
+    def test_plan_edits_lock_the_project_row(self) -> None:
+        task = self.world.task(3)
+
+        def locks_project(queries: CaptureQueriesContext) -> bool:
+            return any(
+                'FROM "project"' in q["sql"] and "FOR UPDATE" in q["sql"]
+                for q in queries.captured_queries
+            )
+
+        with CaptureQueriesContext(connection) as queries:
+            set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4")
+        self.assertTrue(locks_project(queries))
+        with CaptureQueriesContext(connection) as queries:
+            remove_plan(self.ctx, task, item(self.budget, "2.1").pk)
+        self.assertTrue(locks_project(queries))
 
     def test_remove_keeps_executed_at_zero(self) -> None:
         concrete = item(self.budget, "2.1")
@@ -83,6 +121,15 @@ class EditsTests(TestCase):
         self.assertIsNone(task.location_id)
         with self.assertRaisesMessage(EditRejected, "3 niveles"):
             set_task_location(self.ctx, task, "a / b / c")
+
+    def test_task_location_reads_current_value_under_lock(self) -> None:
+        suno_levels(self.world)
+        stale = self.world.task(3)
+        set_task_location(self.ctx, self.world.task(3), "Tramo 2")
+        # La instancia vieja no sabe del cambio: igual no hay nada que cambiar.
+        set_task_location(self.ctx, stale, "Tramo 2")
+        events = AuditEvent.objects.filter(action="matrix.task_location_changed")
+        self.assertEqual(events.count(), 1)
 
     def test_task_location_blocked_in_project_mode(self) -> None:
         project_levels_from_xml(self.world)

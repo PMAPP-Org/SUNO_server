@@ -282,6 +282,9 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
 - Hasta 6 niveles. Los códigos de esquema de Project con tabla de valores no se leen.
 - Ver la matriz y editarla usan las políticas de presupuestos (`can_view_budgets`,
   `can_manage_budgets`): son los mismos roles.
+- Descargar la plantilla y ver el historial de cargas lo puede hacer cualquiera que vea
+  presupuestos (`can_view_budgets`): muestran los mismos datos que la página de ítems.
+  Solo importar, aplicar y editar piden `can_manage_budgets`.
 - La plantilla identifica el ítem por (presupuesto, código); con un solo presupuesto la
   columna Presupuesto puede ir vacía. Una fila con ítem y sin cantidad elimina el par.
 - El % por cantidades usa el precio de la última versión aplicada que contiene el ítem.

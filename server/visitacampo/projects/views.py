@@ -51,6 +51,7 @@ from visitacampo.core.policies import (
     can_view_budgets,
 )
 from visitacampo.core.scoping import get_organization, scoped_qs
+from visitacampo.matrix.diff import code_key
 from visitacampo.matrix.edits import EditRejected, remove_plan, set_plan, set_task_location
 from visitacampo.matrix.locations import from_project, load_tree, project_levels
 from visitacampo.matrix.quantities import (
@@ -228,6 +229,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     retired = task.retired_in_id is not None
     error = ""
     plan_error = ""
+    plan_input: dict[str, str] = {}
     action = request.POST.get("action") if request.method == "POST" else None
     matrix_action = action in ("plan_set", "plan_remove", "location_set")
     if matrix_action:
@@ -238,13 +240,20 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
                 budget_id = _parse_uuid(request.POST.get("budget"))
                 if budget_id is None:
                     raise EditRejected("Elige un presupuesto.")
-                set_plan(
+                quantity_text = request.POST.get("quantity", "")
+                plan, guessed = set_plan(
                     ctx,
                     task,
                     budget_id=budget_id,
                     code=request.POST.get("code", ""),
-                    quantity=request.POST.get("quantity", ""),
+                    quantity=quantity_text,
                 )
+                if guessed:
+                    messages.info(
+                        request,
+                        f"La cantidad «{quantity_text.strip()}» se leyó como miles "
+                        f"({plan.planned_quantity.normalize():f}); revisa que sea correcto.",
+                    )
             elif action == "plan_remove":
                 item_id = _parse_uuid(request.POST.get("item"))
                 if item_id is not None and not remove_plan(ctx, task, item_id):
@@ -253,6 +262,11 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
                 set_task_location(ctx, task, request.POST.get("location", ""))
         except EditRejected as exc:
             plan_error = str(exc)
+            if action == "plan_set":
+                # Para volver a mostrar lo que se escribió en "Agregar ítem".
+                plan_input = {
+                    key: request.POST.get(key, "") for key in ("budget", "code", "quantity")
+                }
         else:
             return redirect("projects:task", project.pk, task.pk)
     if request.method == "POST" and not matrix_action:
@@ -332,7 +346,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             }
             for p in plans
         ),
-        key=lambda row: str(row["code"]),
+        key=lambda row: code_key(str(row["code"])),
     )
     # Ítems con cantidades validadas que no están en el plan de la tarea: no suman al %.
     unplanned = item_facts(ctx, {item_id for (_, item_id) in executed} - {p.item_id for p in plans})
@@ -367,6 +381,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "show_amounts": show_amounts,
             "can_edit_plan": can_manage_budgets(ctx, ctx.org_id) and not task.is_summary,
             "plan_error": plan_error,
+            "plan_input": plan_input,
             "location_label": tree.label(task.location_id),
             "location_editable": bool(levels) and not from_project(levels),
             "location_hint": " / ".join(level.name for level in levels),

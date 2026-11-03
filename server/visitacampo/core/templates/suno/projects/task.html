@@ -67,7 +67,7 @@
 <section class="pj-panel">
   <h2>Cantidades planeadas</h2>
   <p>Ubicación: <strong>{{ location_label|default:"sin ubicación" }}</strong>
-  {% if can_edit_plan and location_editable %}
+  {% if can_edit_plan and location_editable and not retired %}
   </p>
   <form method="post" class="pj-filters">
     {% csrf_token %}
@@ -101,9 +101,9 @@
   <form method="post" class="pj-filters">
     {% csrf_token %}
     <input type="hidden" name="action" value="plan_set">
-    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select></label>
-    <label>Código <input type="text" name="code" maxlength="50" size="10" required></label>
-    <label>Cantidad <input type="text" name="quantity" inputmode="decimal" size="10" required></label>
+    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}"{% if plan_input.budget == b.pk|stringformat:"s" %} selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></label>
+    <label>Código <input type="text" name="code" value="{{ plan_input.code }}" maxlength="50" size="10" required></label>
+    <label>Cantidad <input type="text" name="quantity" value="{{ plan_input.quantity }}" inputmode="decimal" size="10" required></label>
     <button class="button" type="submit">Agregar ítem</button>
     <small class="pj-muted">Si el ítem ya está, se cambia su cantidad.</small>
   </form>

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import unittest
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from visitacampo.budgets.tests.xlsx import build_xlsx
-from visitacampo.core.models import LocationLevel, QuantityPlan, QuantityPlanImport
+from visitacampo.core.models import LocationLevel, Project, QuantityPlan, QuantityPlanImport
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -76,8 +77,6 @@ class MatrixViewsTests(TestCase):
             header=header(["Tramo", "PR"]),
             sheet="Matriz",
         )
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
         upload = SimpleUploadedFile("m.xlsx", data)
         response = self.client.post(self.base + "importar/", {"file": upload})
         staged = QuantityPlanImport.objects.get()
@@ -94,9 +93,39 @@ class MatrixViewsTests(TestCase):
             header=header(["Tramo", "PR"]),
             sheet="Matriz",
         )
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
         response = self.client.post(
             self.base + "importar/", {"file": SimpleUploadedFile("m.xlsx", data)}
         )
         self.assertContains(response, "UniqueID 99")
+
+    def _stage(self) -> QuantityPlanImport:
+        data = build_xlsx(
+            [[3, "", "", "Tramo 1", "", "", "2.1", "", "", 6]],
+            header=header(["Tramo", "PR"]),
+            sheet="Matriz",
+        )
+        self.client.post(self.base + "importar/", {"file": SimpleUploadedFile("m.xlsx", data)})
+        return QuantityPlanImport.objects.get()
+
+    def test_import_of_other_project_is_404(self) -> None:
+        other = Project.objects.create(
+            org=self.world.org, name="Otra obra", created_by=self.world.admin
+        )
+        foreign = QuantityPlanImport.objects.create(
+            org=self.world.org,
+            project=other,
+            file_name="m.xlsx",
+            source_file=b"",
+            uploaded_by=self.world.admin,
+        )
+        response = self.client.get(f"{self.base}importar/{foreign.pk}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_supervisor_cannot_apply(self) -> None:
+        staged = self._stage()
+        self.client.force_login(self.world.supervisor)
+        response = self.client.post(f"{self.base}importar/{staged.pk}/", {"action": "apply"})
+        self.assertEqual(response.status_code, 403)
+        staged.refresh_from_db()
+        self.assertEqual(staged.status, "pending")
+        self.assertEqual(str(QuantityPlan.objects.get().planned_quantity), "4.0000")
