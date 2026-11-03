@@ -94,5 +94,6 @@ button.text-link:hover { color: var(--suno-red); }
 .bg-compare td.pj-wrap { white-space: nowrap; max-width: none; }
 @media (max-width: 767px) { .bg-compare td.pj-name { min-width: 180px; max-width: 220px; } }
 /* Montos grandes: sin el tracking negativo de .metrics-strip (se comía los puntos de miles). */
-.metrics-strip strong.bg-money, .metrics-strip .bg-money strong { letter-spacing: 0; font-variant-numeric: tabular-nums; font-size: clamp(20px, 2.4vw, 30px); overflow-wrap: anywhere; }
-@media (max-width: 767px) { .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { font-size: 22px; } }
+.metrics-strip strong.bg-money, .metrics-strip .bg-money strong { letter-spacing: 0; font-variant-numeric: tabular-nums; font-size: clamp(18px, 1.8vw, 26px); white-space: nowrap; }
+.metrics-strip article:has(.bg-money), .metrics-strip .bg-money { min-width: 0; }
+@media (max-width: 767px) { .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { font-size: 16px; } }
