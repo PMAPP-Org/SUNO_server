@@ -268,3 +268,20 @@ Modelos nuevos en `core/models/location.py` y `core/models/quantity.py`, todos
 - **Pieza 5**: usa `QuantityPlan` (valor planeado por tarea, repartido en las fechas de
   la tarea) y `VisitQuantity` validadas con su fecha (valor ganado en el tiempo).
 - **Etiquetas transversales**: tabla aparte (nodo o tarea × etiqueta) sin tocar el árbol.
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo aprobado.
+
+- Las cantidades de campo viajan dentro de la visita (`Visit.quantities`, JSONB) en vez de
+  una tabla sincronizable aparte: el sync ya resuelve la visita, y así heredan la regla
+  "una visita validada no cambia". Cuentan solo con la visita validada; antes se pueden
+  corregir como cualquier dato de la visita.
+- La ubicación sale toda de Project o toda de SUNO: si un nivel tiene campo de Project,
+  todos deben tenerlo.
+- Hasta 6 niveles. Los códigos de esquema de Project con tabla de valores no se leen.
+- Ver la matriz y editarla usan las políticas de presupuestos (`can_view_budgets`,
+  `can_manage_budgets`): son los mismos roles.
+- La plantilla identifica el ítem por (presupuesto, código); con un solo presupuesto la
+  columna Presupuesto puede ir vacía. Una fila con ítem y sin cantidad elimina el par.
+- El % por cantidades usa el precio de la última versión aplicada que contiene el ítem.
