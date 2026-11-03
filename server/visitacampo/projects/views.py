@@ -25,14 +25,17 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from visitacampo.backoffice.export import safe_cell, to_xlsx
+from visitacampo.budgets.totals import money
 from visitacampo.core import audit
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.download import ascii_filename
 from visitacampo.core.models import (
     AppUser,
+    Budget,
     Membership,
     Project,
+    QuantityPlan,
     ScheduleImport,
     ScheduleImportStatus,
     Task,
@@ -43,11 +46,19 @@ from visitacampo.core.models import (
 from visitacampo.core.policies import (
     can_assign_task_responsibles,
     can_export_schedule,
+    can_manage_budgets,
     can_manage_projects,
     can_view_budgets,
 )
 from visitacampo.core.scoping import get_organization, scoped_qs
-from visitacampo.matrix.quantities import measured_progress, suno_pct_by_task
+from visitacampo.matrix.edits import EditRejected, remove_plan, set_plan, set_task_location
+from visitacampo.matrix.locations import from_project, load_tree, project_levels
+from visitacampo.matrix.quantities import (
+    executed_by_pair,
+    item_facts,
+    measured_progress,
+    suno_pct_by_task,
+)
 
 from .access import effective_responsibles, get_visible_project, visible_projects
 from .field_progress import format_pct, progress_visits
@@ -216,7 +227,35 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     can_assign = can_assign_task_responsibles(ctx, ctx.org_id)
     retired = task.retired_in_id is not None
     error = ""
-    if request.method == "POST":
+    plan_error = ""
+    action = request.POST.get("action") if request.method == "POST" else None
+    matrix_action = action in ("plan_set", "plan_remove", "location_set")
+    if matrix_action:
+        if not can_manage_budgets(ctx, ctx.org_id):
+            raise PermissionDenied
+        try:
+            if action == "plan_set":
+                budget_id = _parse_uuid(request.POST.get("budget"))
+                if budget_id is None:
+                    raise EditRejected("Elige un presupuesto.")
+                set_plan(
+                    ctx,
+                    task,
+                    budget_id=budget_id,
+                    code=request.POST.get("code", ""),
+                    quantity=request.POST.get("quantity", ""),
+                )
+            elif action == "plan_remove":
+                item_id = _parse_uuid(request.POST.get("item"))
+                if item_id is not None and not remove_plan(ctx, task, item_id):
+                    messages.info(request, "El ítem ya tiene cantidades ejecutadas: quedó en 0.")
+            else:
+                set_task_location(ctx, task, request.POST.get("location", ""))
+        except EditRejected as exc:
+            plan_error = str(exc)
+        else:
+            return redirect("projects:task", project.pk, task.pk)
+    if request.method == "POST" and not matrix_action:
         if not can_assign:
             raise PermissionDenied
         user_id = _parse_uuid(request.POST.get("user"))
@@ -270,6 +309,34 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     measured = measured_progress(ctx, task_ids=[task.pk])
     suno = suno_pct_by_task(ctx, task_ids=[task.pk], measured=measured).get(task.pk)
     suno_text = format_pct(suno) if suno is not None else "—"
+    levels = project_levels(ctx, project)
+    tree = load_tree(ctx, project)
+    plans = list(scoped_qs(ctx, QuantityPlan).filter(task=task))
+    executed = executed_by_pair(ctx, task_ids=[task.pk])
+    facts = item_facts(ctx, [p.item_id for p in plans])
+    show_amounts = can_view_budgets(ctx, ctx.org_id)
+    plan_rows = sorted(
+        (
+            {
+                "item_id": p.item_id,
+                "code": facts[p.item_id].code if p.item_id in facts else "?",
+                "description": facts[p.item_id].description if p.item_id in facts else "",
+                "unit": facts[p.item_id].unit if p.item_id in facts else "",
+                "planned": p.planned_quantity,
+                "executed": executed.get((task.pk, p.item_id), Decimal(0)),
+                "value": (
+                    money(p.planned_quantity * (facts[p.item_id].unit_price or 0))
+                    if show_amounts and p.item_id in facts
+                    else None
+                ),
+            }
+            for p in plans
+        ),
+        key=lambda row: str(row["code"]),
+    )
+    # Ítems con cantidades validadas que no están en el plan de la tarea: no suman al %.
+    unplanned = item_facts(ctx, {item_id for (_, item_id) in executed} - {p.item_id for p in plans})
+    unplanned_executed = sorted(unplanned.values(), key=lambda f: f.code)
     return _render(
         request,
         ctx,
@@ -295,6 +362,16 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "suno_pct_text": suno_text,
             "measured_by_quantities": task.pk in measured,
             "field_visits": progress_visits(ctx, task),
+            "plan_rows": plan_rows,
+            "unplanned_executed": unplanned_executed,
+            "show_amounts": show_amounts,
+            "can_edit_plan": can_manage_budgets(ctx, ctx.org_id) and not task.is_summary,
+            "plan_error": plan_error,
+            "location_label": tree.label(task.location_id),
+            "location_editable": bool(levels) and not from_project(levels),
+            "location_hint": " / ".join(level.name for level in levels),
+            "location_choices": sorted(tree.label(pk) for pk in tree.nodes),
+            "budget_choices": scoped_qs(ctx, Budget).filter(project=project).order_by("name"),
         },
     )
 

@@ -63,4 +63,51 @@
   <p class="pj-muted">Sin visitas vinculadas.</p>
   {% endif %}
 </section>
+{% if not task.is_summary %}
+<section class="pj-panel">
+  <h2>Cantidades planeadas</h2>
+  <p>Ubicación: <strong>{{ location_label|default:"sin ubicación" }}</strong>
+  {% if can_edit_plan and location_editable %}
+  </p>
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="location_set">
+    <label>Ruta ({{ location_hint }}) <input type="text" name="location" value="{{ location_label }}" list="mx-locations" size="40"></label>
+    <datalist id="mx-locations">{% for label in location_choices %}<option value="{{ label }}">{% endfor %}</datalist>
+    <button class="button" type="submit">Cambiar ubicación</button>
+  </form>
+  {% else %}</p>{% endif %}
+  {% if plan_rows %}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th>{% if show_amounts %}<th class="num">Valor planeado</th>{% endif %}{% if can_edit_plan %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for row in plan_rows %}
+      <tr>
+        <td>{{ row.code }}</td><td class="pj-name">{{ row.description }}</td><td>{{ row.unit }}</td>
+        <td class="num">{{ row.planned|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.executed|floatformat:"-4g" }}</td>
+        {% if show_amounts %}<td class="num">{{ row.value|floatformat:"2g"|default:"—" }}</td>{% endif %}
+        {% if can_edit_plan %}<td><form method="post">{% csrf_token %}<input type="hidden" name="action" value="plan_remove"><input type="hidden" name="item" value="{{ row.item_id }}"><button class="text-link" type="submit" aria-label="Quitar {{ row.code }}">Quitar</button></form></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de las visitas.</p>{% endif %}
+  {% if unplanned_executed %}<p class="pj-warning">Cantidades registradas en ítems fuera del plan (no suman al %): {% for f in unplanned_executed %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  {% if plan_error %}<p class="pj-late" role="alert">{{ plan_error }}</p>{% endif %}
+  {% if can_edit_plan and not retired %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="plan_set">
+    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}</select></label>
+    <label>Código <input type="text" name="code" maxlength="50" size="10" required></label>
+    <label>Cantidad <input type="text" name="quantity" inputmode="decimal" size="10" required></label>
+    <button class="button" type="submit">Agregar ítem</button>
+    <small class="pj-muted">Si el ítem ya está, se cambia su cantidad.</small>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}
