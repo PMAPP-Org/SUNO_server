@@ -16,7 +16,7 @@ importaciones simultáneas no se esperan, la segunda se rechaza con un mensaje.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from django.db import OperationalError, transaction
@@ -32,6 +32,7 @@ from visitacampo.core.models import (
     BudgetItemVersion,
     BudgetVersion,
     BudgetVersionStatus,
+    QuantityPlan,
 )
 from visitacampo.core.scoping import scoped_qs
 
@@ -167,6 +168,36 @@ def _replace_charges(
     )
 
 
+def _matrix_warning(
+    ctx: RequestContext, budget: Budget, current: Mapping[str, Values], parsed: ParsedBudget
+) -> str | None:
+    """Ítems de la versión vigente que la nueva quita y que están en la matriz o tienen
+    cantidades validadas en campo (costos, pieza 4)."""
+    # Import local: `matrix.quantities` importa `budgets` (vía `matrix.progress`); un
+    # import de módulo cerraría el ciclo `budgets.importer` → `matrix` → `budgets`.
+    from visitacampo.matrix.quantities import executed_by_pair
+
+    new_codes = {row.code for row in parsed.rows}
+    gone = {code for code, values in current.items() if values.kind == "item"} - new_codes
+    if not gone:
+        return None
+    ids = dict(
+        scoped_qs(ctx, BudgetItem).filter(budget=budget, code__in=gone).values_list("pk", "code")
+    )
+    used = set(
+        scoped_qs(ctx, QuantityPlan).filter(item_id__in=ids).values_list("item_id", flat=True)
+    )
+    executed = {item_id for (_, item_id) in executed_by_pair(ctx, project_ids=[budget.project_id])}
+    codes = sorted(code for pk, code in ids.items() if pk in used or pk in executed)
+    if not codes:
+        return None
+    return (
+        f"{len(codes)} ítem(s) eliminado(s) están en la matriz o tienen cantidades ejecutadas: "
+        + ", ".join(codes[:20])
+        + ". Sus filas de la matriz se conservan marcadas como retiradas del presupuesto."
+    )
+
+
 def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMapping) -> BudgetVersion:
     """Lee la versión pendiente con `mapping` y deja lista su vista previa."""
     with transaction.atomic():
@@ -174,7 +205,11 @@ def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMappin
         parsed = _parse(version.source_file, mapping)
         current = current_version(ctx, budget)
         known = set(scoped_qs(ctx, BudgetItem).filter(budget=budget).values_list("code", flat=True))
-        summary = summarize_changes(_values_by_code(ctx, current), parsed, known)
+        values = _values_by_code(ctx, current)
+        summary = summarize_changes(values, parsed, known)
+        warning = _matrix_warning(ctx, budget, values, parsed)
+        if warning is not None:
+            summary.setdefault("warnings", []).append(warning)
         summary["mapping"] = mapping.to_json()
         # Versión sobre la que se calculó la vista previa; si cambia, hay que re-subir.
         summary["base_number"] = current.number if current else None
