@@ -199,8 +199,10 @@ def parse_plan(
 ) -> ParsedPlan:
     """Interpreta la plantilla. `items` va por (`exact_key` del presupuesto, código).
 
-    Un ítem retirado (`kind == "retired"`) solo se acepta donde ya estaba en el plan
-    (`current_pairs`): mantenerlo o quitarlo."""
+    Un ítem retirado (`kind == "retired"`) o que una reimportación volvió capítulo
+    (`kind == "chapter"`) solo se acepta donde ya estaba en el plan (`current_pairs`):
+    mantenerlo o quitarlo. La plantilla descargada conserva esas filas, y volver a
+    subirla sin cambios no debe fallar."""
     if not rows:
         raise TemplateRejected(["La hoja está vacía."])
     columns = _columns(rows[0], level_names, editable=editable_locations)
@@ -291,7 +293,7 @@ def parse_plan(
                 f"Fila {number}: el ítem {code} no existe en el presupuesto vigente {where}.{hint}"
             )
             continue
-        if ref.kind not in ("item", "retired"):
+        if ref.kind not in ("item", "retired") and (task.id, ref.id) not in current_pairs:
             errors.append(f"Fila {number}: {code} es un capítulo; la matriz va en ítems.")
             continue
         if not _present(raw_quantity):

@@ -4,12 +4,14 @@
    y guarda una `QuantityPlanImport` pendiente (vista previa). Descarta la
    pendiente anterior del proyecto.
 2. `apply_plan`: con el proyecto bloqueado, vuelve a leer el archivo guardado y
-   reemplaza la matriz. Un par ausente se borra, salvo que tenga ejecución: ese
-   queda con planeado 0. `discard_plan` la descarta.
+   reemplaza la matriz. Un par ausente se borra, salvo que tenga ejecución
+   (validada o pendiente de revisión): ese queda con planeado 0. Los pares de las
+   tareas retiradas no se tocan (la plantilla las omite). `discard_plan` la descarta.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
@@ -17,7 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from django.db import DatabaseError, transaction
-from django.db.models import Max
+from django.db.models import Count, Max
 from django.utils import timezone
 
 from visitacampo.budgets.excel import ExcelRejected
@@ -41,7 +43,7 @@ from visitacampo.core.models import (
 )
 from visitacampo.core.scoping import scoped_qs
 
-from .diff import BudgetedItem, item_totals, summarize_plan
+from .diff import BudgetedItem, code_key, item_totals, summarize_plan
 from .locations import Tree, from_project, load_tree, node_key, project_levels
 from .quantities import executed_by_pair, item_facts
 from .template import (
@@ -86,6 +88,7 @@ class _Context:
     item_refs: dict[tuple[str, str], ItemRef]
     #: Ítems con plan que ya no están en su versión vigente: id → nombre de su presupuesto.
     retired_budgets: dict[UUID, str]
+    #: El plan de las tareas vigentes (las retiradas no se tocan).
     current: dict[Pair, QuantityPlan]
 
 
@@ -119,8 +122,11 @@ def _load(ctx: RequestContext, project: Project) -> _Context:
                 budget,
                 BudgetedItem(row["item__code"], row["description"], row["unit"], row["quantity"]),
             )
+    # Sin las filas de las tareas retiradas: la plantilla las omite (no se pueden editar),
+    # así que no estar en el archivo no significa quitarlas. Quedan como están.
     current = {
-        (p.task_id, p.item_id): p for p in scoped_qs(ctx, QuantityPlan).filter(project=project)
+        (p.task_id, p.item_id): p
+        for p in scoped_qs(ctx, QuantityPlan).filter(project=project, task__retired_in__isnull=True)
     }
     retired_budgets: dict[UUID, str] = {}
     retired_ids = {item_id for _, item_id in current if item_id not in budgeted}
@@ -170,17 +176,37 @@ def _parse(data: bytes, context: _Context) -> ParsedPlan:
 
 
 def _base(ctx: RequestContext, project: Project) -> dict[str, Any]:
-    """Lo vigente al preparar la vista previa; si cambia, hay que volver a subir."""
+    """Lo vigente al preparar la vista previa; si cambia, hay que volver a subir.
+
+    Incluye las ediciones desde la web: cuántas filas tiene el plan y la última que
+    cambió (una alta o un cambio mueve la fecha; una baja, la cuenta), y una huella de
+    la ubicación de las tareas."""
     schedule = scoped_qs(ctx, ScheduleImport).filter(
         project=project, status=ScheduleImportStatus.APPLIED
     )
     matrix = scoped_qs(ctx, QuantityPlanImport).filter(
         project=project, status=QuantityPlanImportStatus.APPLIED
     )
+    plans = (
+        scoped_qs(ctx, QuantityPlan)
+        .filter(project=project)
+        .aggregate(n=Count("pk"), last=Max("updated_at"))
+    )
+    locations = hashlib.sha256()
+    for task_id, location_id in (
+        scoped_qs(ctx, Task)
+        .filter(project=project, location__isnull=False)
+        .order_by("pk")
+        .values_list("pk", "location_id")
+    ):
+        locations.update(f"{task_id}:{location_id};".encode())
     return {
         "schedule": schedule.aggregate(n=Max("number"))["n"],
         "matrix": matrix.aggregate(n=Max("number"))["n"],
         "budgets": {str(v.budget_id): v.number for v in current_versions(ctx, project)},
+        "plan_rows": plans["n"],
+        "plan_updated": plans["last"].isoformat() if plans["last"] else None,
+        "locations": locations.hexdigest(),
     }
 
 
@@ -191,7 +217,7 @@ def _summary(
     context: _Context,
     base: dict[str, Any],
 ) -> dict[str, Any]:
-    executed = set(executed_by_pair(ctx, project_ids=[project.pk]))
+    executed = set(executed_by_pair(ctx, project_ids=[project.pk], include_pending=True))
     by_id = {t.pk: t for t in context.tasks.values()}
     codes = {item_id: info.code for item_id, (_, info) in context.budgeted.items()}
     missing_codes = {i for _, i in [*parsed.pairs, *context.current] if i not in codes}
@@ -295,7 +321,8 @@ def apply_plan(ctx: RequestContext, import_id: UUID) -> QuantityPlanImport:
             raise PlanRejected([STALE])
         context = _load(ctx, project)
         parsed = _parse(bytes(imp.source_file), context)
-        executed = set(executed_by_pair(ctx, project_ids=[project.pk]))
+        # Ejecución validada o pendiente de revisión: una visita pendiente puede validarse.
+        executed = set(executed_by_pair(ctx, project_ids=[project.pk], include_pending=True))
         now = timezone.now()
         plans = scoped_qs(ctx, QuantityPlan)
 
@@ -403,7 +430,7 @@ def template_bytes(ctx: RequestContext, project: Project) -> bytes:
     for task in leaves:
         names = context.tree.names(task.location_id) if task.location_id else []
         location = tuple([*names, *[""] * width][:width])
-        own = sorted(by_task.get(task.pk, []), key=lambda p: facts[p.item_id].code)
+        own = sorted(by_task.get(task.pk, []), key=lambda p: code_key(facts[p.item_id].code))
         if not own:
             rows.append(TemplateRow(task.uid, task.wbs, task.name, location, "", "", "", "", None))
         for plan in own:

@@ -6,19 +6,21 @@ from decimal import Decimal
 from django.test import TestCase
 
 from visitacampo.budgets.tests.factories import apply_rows
-from visitacampo.budgets.tests.samples import V2_ROWS
+from visitacampo.budgets.tests.samples import SPLIT_ROWS, V1_ROWS, V2_ROWS
 from visitacampo.budgets.tests.xlsx import build_xlsx
 from visitacampo.core.models import (
     AuditEvent,
     QuantityPlan,
     QuantityPlanImport,
     QuantityPlanImportStatus,
+    ScheduleImport,
 )
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
+from visitacampo.matrix.edits import remove_plan, set_plan, set_task_location
 from visitacampo.matrix.importer import (
     PlanRejected,
     apply_plan,
@@ -180,6 +182,118 @@ class ReviewFixImporterTests(TestCase):
         )
         self.assertEqual(staged.summary["item_counts"]["retired"], 1)
         self.assertTrue(any(i["status"] == "retired" for i in staged.summary["items"]))
+
+    def _round_trip(self) -> QuantityPlanImport:
+        data = template_bytes(self.ctx, self.world.project)
+        staged = stage_plan(self.ctx, self.world.project, file_name="m.xlsx", data=data)
+        self.assertEqual(
+            (
+                staged.summary["added"],
+                staged.summary["changed"],
+                staged.summary["removed"],
+                staged.summary["kept_zero"],
+            ),
+            (0, 0, 0, 0),
+        )
+        return apply_plan(self.ctx, staged.pk)
+
+    def test_chapter_row_round_trip(self) -> None:
+        """El 2.1 planeado se partió en un capítulo: la plantilla conserva su fila y
+        volver a subirla sin cambios no da errores ni cambios."""
+        plan(self.world, 3, item(self.budget, "2.1"), "4")
+        apply_rows(self.ctx, self.budget, SPLIT_ROWS)
+        before = list(QuantityPlan.objects.values_list("task_id", "item_id", "planned_quantity"))
+        self._round_trip()
+        self.assertEqual(
+            list(QuantityPlan.objects.values_list("task_id", "item_id", "planned_quantity")),
+            before,
+        )
+
+    def test_chapter_row_is_rejected_where_it_was_not_planned(self) -> None:
+        apply_rows(self.ctx, self.budget, SPLIT_ROWS)
+        with self.assertRaises(PlanRejected) as caught:
+            stage_plan(
+                self.ctx,
+                self.world.project,
+                file_name="m.xlsx",
+                data=sheet([3, "", "", "", "", "", "2.1", "", "", 1]),
+            )
+        self.assertIn("es un capítulo", caught.exception.errors[0])
+
+    def test_retired_task_pairs_are_left_untouched(self) -> None:
+        """La plantilla omite las tareas retiradas: su ausencia no borra su plan."""
+        concrete = item(self.budget, "2.1")
+        plan(self.world, 3, concrete, "4")
+        plan(self.world, 2, concrete, "2")
+        task = self.world.task(3)
+        task.retired_in = ScheduleImport.objects.get(project=self.world.project, number=1)
+        task.save(update_fields=["retired_in"])
+        self._round_trip()
+        self.assertEqual(QuantityPlan.objects.get(task=task).planned_quantity, Decimal("4.0000"))
+        # Una plantilla sin la tarea 1.1 sí quita su par; el de la retirada sigue.
+        staged = stage_plan(
+            self.ctx,
+            self.world.project,
+            file_name="m.xlsx",
+            data=sheet([5, "", "", "", "", "", "1.1", "", "", 1]),
+        )
+        self.assertEqual(staged.summary["removed"], 1)
+        apply_plan(self.ctx, staged.pk)
+        self.assertEqual(
+            set(QuantityPlan.objects.values_list("task__uid", "item__code")),
+            {(3, "2.1"), (5, "1.1")},
+        )
+
+    def test_template_sorts_items_by_code(self) -> None:
+        rows = [
+            *V1_ROWS,
+            ["2.9", "Juntas", "ml", 5, 100, 500],
+            ["2.10", "Sellos", "ml", 5, 100, 500],
+        ]
+        apply_rows(self.ctx, self.budget, rows)
+        for code in ("2.10", "2.9", "2.2"):
+            plan(self.world, 3, item(self.budget, code), "1")
+        data = template_bytes(self.ctx, self.world.project)
+        codes = [r[6] for r in read_template(data)[1:] if r[0] == 3]
+        self.assertEqual(codes, ["2.2", "2.9", "2.10"])
+
+    def test_web_edits_make_the_preview_stale(self) -> None:
+        task = self.world.task(3)
+        edits = (
+            lambda: set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4"),
+            lambda: set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="5"),
+            lambda: remove_plan(self.ctx, task, item(self.budget, "2.1").pk),
+            lambda: set_task_location(self.ctx, task, "Tramo 9"),
+        )
+        for edit in edits:
+            staged = stage_plan(
+                self.ctx,
+                self.world.project,
+                file_name="m.xlsx",
+                data=sheet([2, "", "", "", "", "", "1.1", "", "", 1]),
+            )
+            edit()
+            with self.assertRaisesMessage(PlanRejected, "Vuelve a subir"):
+                apply_plan(self.ctx, staged.pk)
+
+    def test_pending_execution_keeps_the_pair_at_zero(self) -> None:
+        concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
+        plan(self.world, 3, concrete, "10")
+        plan(self.world, 3, steel, "10")
+        quantity_visit(self.world, 3, quantity_row(concrete, "2"))
+        self.world.reject(quantity_visit(self.world, 3, quantity_row(steel, "2"), hours=1))
+        staged = stage_plan(
+            self.ctx,
+            self.world.project,
+            file_name="m.xlsx",
+            data=sheet([3, "", "", "", "", "", "1.1", "", "", 1]),
+        )
+        self.assertEqual((staged.summary["removed"], staged.summary["kept_zero"]), (1, 1))
+        apply_plan(self.ctx, staged.pk)
+        self.assertEqual(
+            dict(QuantityPlan.objects.values_list("item__code", "planned_quantity")),
+            {"1.1": Decimal("1.0000"), "2.1": Decimal("0.0000")},
+        )
 
     def test_location_preview_compares_by_key(self) -> None:
         from .factories import locate

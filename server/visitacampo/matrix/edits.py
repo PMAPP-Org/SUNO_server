@@ -106,8 +106,8 @@ def set_plan(
 
 
 def remove_plan(ctx: RequestContext, task: Task, item_id: UUID) -> bool:
-    """Quita el ítem del plan de la tarea. Si ya tiene ejecución, lo deja en 0 y
-    devuelve False (la ejecución no se pierde de vista)."""
+    """Quita el ítem del plan de la tarea. Si ya tiene ejecución (validada o pendiente
+    de revisión), lo deja en 0 y devuelve False (la ejecución no se pierde de vista)."""
     with transaction.atomic():
         scoped_qs(ctx, Project).select_for_update().get(pk=task.project_id)
         plan = (
@@ -119,7 +119,10 @@ def remove_plan(ctx: RequestContext, task: Task, item_id: UUID) -> bool:
         if plan is None:
             return True
         before = str(plan.planned_quantity)
-        executed = (task.pk, item_id) in executed_by_pair(ctx, task_ids=[task.pk])
+        # Con visitas validadas o pendientes de revisión: una pendiente puede validarse.
+        executed = (task.pk, item_id) in executed_by_pair(
+            ctx, task_ids=[task.pk], include_pending=True
+        )
         if executed:
             plan.planned_quantity, plan.updated_by_id, plan.updated_at = (
                 quantity_of(Decimal(0)),

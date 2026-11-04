@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
-from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Task, Visit, VisitReview, VisitReviewStatus
@@ -60,6 +60,13 @@ def review_status(visit: Visit) -> str | None:
 def approved(visits: QuerySet[Visit]) -> QuerySet[Visit]:
     """Las visitas cuya revisión vigente es `approved`."""
     return with_review(visits).filter(last_review_status=APPROVED)
+
+
+def not_rejected(visits: QuerySet[Visit]) -> QuerySet[Visit]:
+    """Las visitas validadas o aún sin revisar (su revisión vigente no es `rejected`)."""
+    return with_review(visits).filter(
+        Q(last_review_status__isnull=True) | Q(last_review_status=APPROVED)
+    )
 
 
 def validated_pct_by_task(

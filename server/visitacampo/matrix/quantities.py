@@ -20,7 +20,7 @@ from visitacampo.core.models import (
     Visit,
 )
 from visitacampo.core.scoping import scoped_qs
-from visitacampo.projects.field_progress import approved, validated_pct_by_task
+from visitacampo.projects.field_progress import approved, not_rejected, validated_pct_by_task
 
 from .progress import PlanLine, QuantityProgress, task_progress
 
@@ -46,8 +46,13 @@ def executed_by_pair(
     *,
     task_ids: Iterable[UUID] | None = None,
     project_ids: Iterable[UUID] | None = None,
+    include_pending: bool = False,
 ) -> dict[Pair, Decimal]:
-    """(tarea, ítem) → suma de las cantidades de sus visitas validadas. Una query."""
+    """(tarea, ítem) → suma de las cantidades de sus visitas validadas. Una query.
+
+    `include_pending`: también las visitas aún sin revisar (no las rechazadas). Lo usa
+    quien decide si un par "tiene ejecución" para no borrarlo del plan: una visita
+    pendiente puede validarse después."""
     tasks, projects = _ids(task_ids), _ids(project_ids)
     if tasks == [] or projects == []:
         return {}
@@ -57,8 +62,9 @@ def executed_by_pair(
         .exclude(quantities=[])
     )
     visits = _by_scope(visits, tasks, projects, task="task")
+    counted = not_rejected(visits) if include_pending else approved(visits)
     totals: dict[Pair, Decimal] = defaultdict(Decimal)
-    for task_id, rows in approved(visits).values_list("task_id", "quantities"):
+    for task_id, rows in counted.values_list("task_id", "quantities"):
         for row in rows:
             totals[(task_id, UUID(row["item_id"]))] += Decimal(row["quantity"])
     return dict(totals)

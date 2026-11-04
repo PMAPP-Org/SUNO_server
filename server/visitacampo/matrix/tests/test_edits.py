@@ -109,6 +109,23 @@ class EditsTests(TestCase):
         self.assertTrue(remove_plan(self.ctx, task, item(self.budget, "2.2").pk))
         self.assertEqual(QuantityPlan.objects.count(), 1)
 
+    def test_remove_keeps_pending_execution_at_zero(self) -> None:
+        """Una visita aún sin revisar puede validarse después: su par no se borra. Una
+        rechazada o borrada no cuenta."""
+        concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
+        task = self.world.task(3)
+        set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4")
+        set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.2", quantity="4")
+        quantity_visit(self.world, 3, quantity_row(concrete, "1"))
+        self.world.reject(quantity_visit(self.world, 3, quantity_row(steel, "1"), hours=1))
+        deleted = quantity_visit(self.world, 3, quantity_row(steel, "1"), hours=2)
+        deleted.deleted_at = deleted.captured_at
+        deleted.save(update_fields=["deleted_at"])
+        self.assertFalse(remove_plan(self.ctx, task, concrete.pk))
+        self.assertEqual(QuantityPlan.objects.get(item=concrete).planned_quantity, Decimal("0"))
+        self.assertTrue(remove_plan(self.ctx, task, steel.pk))
+        self.assertFalse(QuantityPlan.objects.filter(item=steel).exists())
+
     def test_task_location_in_suno_mode(self) -> None:
         suno_levels(self.world)
         task = self.world.task(3)
