@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import uuid
+import zipfile
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -80,6 +82,12 @@ class TemplateTests(SimpleTestCase):
         )
         self.assertEqual(parsed.pairs, {(T3, I11): Decimal("12.5000")})
         self.assertEqual(parsed.locations, {T3: ("Tramo 1",), T5: ("Tramo 2", "PR 1")})
+
+    def test_sheet_is_named_matriz(self) -> None:
+        data = build_template(["Tramo"], [])
+        with zipfile.ZipFile(io.BytesIO(data)) as book:
+            workbook = book.read("xl/workbook.xml").decode()
+        self.assertIn('<sheet name="Matriz"', workbook)
 
     def test_columns_found_by_header_text(self) -> None:
         reordered = ["cantidad planeada", "CÓDIGO DE ÍTEM", "uniqueid"]

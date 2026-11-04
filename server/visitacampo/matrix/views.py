@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from django.contrib import messages
@@ -117,7 +118,7 @@ def levels(request: HttpRequest, project_id: UUID) -> HttpResponse:
     require_manage(ctx)
     error = ""
     current = project_levels(ctx, project)
-    rows = [
+    rows: list[dict[str, Any]] = [
         {
             "depth": depth,
             "name": current[depth - 1].name if depth <= len(current) else "",
@@ -147,6 +148,12 @@ def levels(request: HttpRequest, project_id: UUID) -> HttpResponse:
         else:
             messages.success(request, "Niveles de ubicación guardados.")
             return redirect("matrix:levels", project.pk)
+    fields = _custom_fields(ctx, project)
+    known = {f["field_id"] for f in fields}
+    # Un campo guardado que el último XML ya no trae se sigue ofreciendo (y seleccionado):
+    # si no, guardar el formulario lo cambiaría a "Ninguno" sin que nadie lo pidiera.
+    for row in rows:
+        row["missing"] = bool(row["field"]) and row["field"] not in known
     return _render(
         request,
         ctx,
@@ -154,7 +161,7 @@ def levels(request: HttpRequest, project_id: UUID) -> HttpResponse:
         {
             **_context(ctx, project),
             "rows": rows,
-            "fields": _custom_fields(ctx, project),
+            "fields": fields,
             "from_project": from_project(current),
             "error": error,
         },

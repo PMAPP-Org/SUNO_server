@@ -98,6 +98,7 @@
   {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de las visitas.</p>{% endif %}
   {% if unplanned_executed %}<p class="pj-warning">Cantidades registradas en ítems fuera del plan (no suman al %): {% for f in unplanned_executed %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
   {% if chapter_plans %}<p class="pj-warning">Ítems del plan que hoy son capítulos del presupuesto (no suman al %): {% for f in chapter_plans %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}. Lo registrado en ellos se conserva.</p>{% endif %}
+  {% for f in retired_plans %}<p class="pj-warning">Ítem retirado del presupuesto: {{ f.code }} {{ f.description }}. Sigue en el plan con el precio de la última versión que lo tenía.</p>{% endfor %}
   {% if quantity_history %}
   <h3>Registros validados</h3>
   <div class="pj-scroll">

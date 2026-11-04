@@ -14,7 +14,7 @@
     <fieldset class="mx-level">
       <legend>Nivel {{ row.depth }}</legend>
       <label>Nombre <input type="text" name="name_{{ row.depth }}" value="{{ row.name }}" maxlength="60"></label>
-      <label>Campo de MS Project <select name="field_{{ row.depth }}"><option value="">Ninguno (se asigna en SUNO)</option>{% for f in fields %}<option value="{{ f.field_id }}" {% if row.field == f.field_id %}selected{% endif %}>{{ f.label }}</option>{% endfor %}{% if row.field and not fields %}<option value="{{ row.field }}" selected>{{ row.field }}</option>{% endif %}</select></label>
+      <label>Campo de MS Project <select name="field_{{ row.depth }}"><option value="">Ninguno (se asigna en SUNO)</option>{% for f in fields %}<option value="{{ f.field_id }}" {% if row.field == f.field_id %}selected{% endif %}>{{ f.label }}</option>{% endfor %}{% if row.missing %}<option value="{{ row.field }}" selected>{{ row.field }} (no está en el último XML)</option>{% endif %}</select></label>
     </fieldset>
     {% endfor %}
     {% if not fields %}<p class="pj-muted">El último XML importado no trae campos personalizados de tarea.</p>{% endif %}

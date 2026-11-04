@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
-from visitacampo.budgets.tests.samples import SPLIT_ROWS, V1_ROWS
+from visitacampo.budgets.tests.samples import SPLIT_ROWS, V1_ROWS, V2_ROWS
 from visitacampo.core.models import Project, QuantityPlan, ScheduleImport, Visit
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
@@ -57,6 +57,33 @@ class TaskPageTests(TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, "hoy son capítulos del presupuesto (no suman al %): 2.1")
         self.assertContains(response, "Concreto zapatas")  # la fila del plan se conserva
+
+    def test_planned_item_retired_from_the_budget_is_marked(self) -> None:
+        plan(self.world, 3, item(self.budget, "1.2"), "5")
+        apply_rows(self.world.ctx(), self.budget, V2_ROWS)  # quita el 1.2
+        self.client.force_login(self.world.supervisor)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Ítem retirado del presupuesto: 1.2 Cerramiento provisional")
+        self.assertNotContains(response, "Ítem retirado del presupuesto: 2.1")
+
+    def test_unplanned_executed_items_are_sorted_by_code(self) -> None:
+        rows = [
+            *V1_ROWS,
+            ["2.9", "Juntas", "ml", 5, 100, 500],
+            ["2.10", "Sellos", "ml", 5, 100, 500],
+        ]
+        apply_rows(self.world.ctx(), self.budget, rows)
+        self.world.approve(
+            quantity_visit(
+                self.world,
+                3,
+                quantity_row(item(self.budget, "2.10"), "1", note="x"),
+                quantity_row(item(self.budget, "2.9"), "1", note="x"),
+                hours=1,
+            )
+        )
+        self.client.force_login(self.world.supervisor)
+        self.assertContains(self.client.get(self.url), "2.9 Juntas; 2.10 Sellos")
 
     def test_field_agent_sees_quantities_without_amounts(self) -> None:
         self.world.responsible(3)

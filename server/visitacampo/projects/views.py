@@ -33,6 +33,7 @@ from visitacampo.core.download import ascii_filename
 from visitacampo.core.models import (
     AppUser,
     Budget,
+    BudgetItemVersion,
     BudgetRowKind,
     Membership,
     Project,
@@ -54,6 +55,7 @@ from visitacampo.core.policies import (
 from visitacampo.core.scoping import get_organization, scoped_qs
 from visitacampo.matrix.diff import code_key
 from visitacampo.matrix.edits import EditRejected, remove_plan, set_plan, set_task_location
+from visitacampo.matrix.importer import current_versions
 from visitacampo.matrix.locations import from_project, load_tree, project_levels
 from visitacampo.matrix.progress import item_pct
 from visitacampo.matrix.quantities import (
@@ -364,7 +366,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     )
     # Ítems con cantidades validadas que no están en el plan de la tarea: no suman al %.
     unplanned = item_facts(ctx, {item_id for (_, item_id) in executed} - {p.item_id for p in plans})
-    unplanned_executed = sorted(unplanned.values(), key=lambda f: f.code)
+    unplanned_executed = sorted(unplanned.values(), key=lambda f: code_key(f.code))
     # Ítems del plan que una reimportación volvió capítulos: la fila se conserva y lo que
     # el campo registre en ellos se acepta, pero no miden la tarea (`plan_lines`).
     chapter_plans = sorted(
@@ -373,6 +375,17 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             for p in plans
             if p.item_id in facts and facts[p.item_id].kind == BudgetRowKind.CHAPTER
         ),
+        key=lambda f: code_key(f.code),
+    )
+    # Ítems del plan que ya no están en la versión vigente de su presupuesto: siguen
+    # midiendo con el precio de la última versión que los tenía; se marcan.
+    in_budget = set(
+        scoped_qs(ctx, BudgetItemVersion)
+        .filter(version__in=current_versions(ctx, project), item_id__in=[p.item_id for p in plans])
+        .values_list("item_id", flat=True)
+    )
+    retired_plans = sorted(
+        (facts[p.item_id] for p in plans if p.item_id in facts and p.item_id not in in_budget),
         key=lambda f: code_key(f.code),
     )
     # Historial: los ítems de lo validado ya están en `facts` o en `unplanned`.
@@ -419,6 +432,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "plan_rows": plan_rows,
             "unplanned_executed": unplanned_executed,
             "chapter_plans": chapter_plans,
+            "retired_plans": retired_plans,
             "quantity_history": quantity_history,
             "history_truncated": history_truncated,
             "history_visits": QUANTITY_HISTORY_VISITS,

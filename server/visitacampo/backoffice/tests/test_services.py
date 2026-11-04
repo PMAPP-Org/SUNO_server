@@ -265,6 +265,12 @@ class ExportTests(TestCase):
             sheet = book.read("xl/worksheets/sheet1.xml").decode()
         self.assertIn("antesdespués\tcon tab", sheet)
 
+    def test_sheet_name_defaults_to_visitas(self) -> None:
+        for kwargs, expected in (({}, "Visitas"), ({"sheet_name": "A & B"}, "A &amp; B")):
+            with zipfile.ZipFile(io.BytesIO(to_xlsx(["a"], [], **kwargs))) as book:
+                workbook = book.read("xl/workbook.xml").decode()
+            self.assertIn(f'<sheet name="{expected}"', workbook)
+
 
 class SafeCellTests(TestCase):
     def test_formula_prefixes_are_neutralized(self) -> None:

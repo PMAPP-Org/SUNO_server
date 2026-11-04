@@ -12,9 +12,19 @@ from visitacampo.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from visitacampo.matrix.locations import LevelSpec, save_levels
 from visitacampo.matrix.template import header
+from visitacampo.projects.tests.samples import TEXT1
 
-from .factories import budget_world, item, locate, plan, suno_levels
+from .factories import (
+    budget_world,
+    import_schedule,
+    item,
+    locate,
+    located_xml,
+    plan,
+    suno_levels,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -65,6 +75,19 @@ class MatrixViewsTests(TestCase):
         self.assertEqual(LocationLevel.objects.filter(project=self.world.project).count(), 3)
         bad = self.client.post(self.base + "niveles/", {"name_1": "Tramo", "name_2": "tramo"})
         self.assertContains(bad, "repetido", status_code=200)
+
+    def test_levels_page_keeps_a_field_missing_from_the_latest_xml(self) -> None:
+        import_schedule(self.world, located_xml())
+        save_levels(
+            self.world.ctx(),
+            self.world.project,
+            [LevelSpec("Tramo", TEXT1), LevelSpec("PR", "999")],
+        )
+        response = self.client.get(self.base + "niveles/")
+        self.assertContains(
+            response, '<option value="999" selected>999 (no está en el último XML)</option>'
+        )
+        self.assertContains(response, f'<option value="{TEXT1}" selected>')
 
     def test_template_download(self) -> None:
         response = self.client.get(self.base + "plantilla.xlsx")

@@ -99,7 +99,7 @@ def build_template(level_names: Sequence[str], rows: Iterable[TemplateRow]) -> b
             "" if row.quantity is None else float(row.quantity),
         ]
 
-    return to_xlsx(header(level_names), (values(row) for row in rows))
+    return to_xlsx(header(level_names), (values(row) for row in rows), sheet_name=SHEET)
 
 
 def read_template(data: bytes) -> list[tuple[Any, ...]]:
