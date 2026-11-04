@@ -315,3 +315,17 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
   revisión los resalta ("no planeado y sin nota", "ajuste negativo sin nota", "ubicación
   fuera de la ubicación actual de la tarea"). La nota obligatoria de §4 la exige la app al
   capturar (etapa 4b); el servidor ya no rechaza con `note_required`.
+- Forma real de la API de tareas de campo (decisión 13 del plan), en vez de la ruta de
+  §4 Bajada: `FieldTask.location` es `{id, label}` (la ruta completa en un texto, "Tramo 2 /
+  PR 12+300") o `null`, y `location_options` lista el nodo de la tarea y sus descendientes
+  vigentes, cada uno `{id, label}`. Además `measured_by` (`pct` o `quantities`) y
+  `planned_items` (`item_id`, `code`, `description`, `unit`, `planned_quantity`,
+  `executed_quantity`); `last_validated_pct` es el % SUNO.
+- Retiro de nodos de ubicación: se aplaza. El modelo ya tiene `LocationNode.retired_at` y
+  la subida acepta un nodo retirado, pero en 4a no hay cómo retirar un nodo desde la web
+  ni la plantilla (un nodo sin tareas simplemente deja de usarse).
+- Lo que "tiene ejecución" para no borrar un par del plan (quitar desde la web, o un par
+  ausente en la plantilla, que queda en 0) cuenta también las visitas pendientes de
+  revisión (no las rechazadas ni las borradas): una pendiente puede validarse después. Una
+  importación de la plantilla no toca las filas del plan de las tareas retiradas, que la
+  plantilla omite.
