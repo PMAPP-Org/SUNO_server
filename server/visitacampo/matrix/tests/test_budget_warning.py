@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from django.test import TestCase
 
@@ -44,3 +45,36 @@ class BudgetPreviewWarningTests(TestCase):
         world, budget = budget_world()
         version = stage_rows(world.ctx(), budget, V2_ROWS)
         self.assertFalse(any("matriz" in w for w in version.summary["warnings"]))
+
+    def test_execution_only_does_not_mention_matrix_rows(self) -> None:
+        world, budget = budget_world()
+        world.approve(quantity_visit(world, 3, quantity_row(item(budget, "1.2"), "2")))
+        version = stage_rows(world.ctx(), budget, V2_ROWS)
+        warning = next(w for w in version.summary["warnings"] if "ítem(s) eliminado(s)" in w)
+        self.assertNotIn("filas de la matriz se conservan", warning)
+        self.assertIn(
+            "cantidades ejecutadas de los ítems sin filas en la matriz se conservan", warning
+        )
+
+    def test_matrix_only_does_not_mention_execution_kept(self) -> None:
+        world, budget = budget_world()
+        plan(world, 3, item(budget, "1.2"), "5")
+        version = stage_rows(world.ctx(), budget, V2_ROWS)
+        warning = next(w for w in version.summary["warnings"] if "ítem(s) eliminado(s)" in w)
+        self.assertIn("Sus filas de la matriz se conservan", warning)
+        self.assertNotIn("sin filas en la matriz", warning)
+
+    def test_visits_are_not_read_when_every_removed_item_is_in_the_matrix(self) -> None:
+        world, budget = budget_world()
+        plan(world, 3, item(budget, "1.2"), "5")
+        with mock.patch("visitacampo.matrix.quantities.executed_by_pair") as executed:
+            stage_rows(world.ctx(), budget, V2_ROWS)
+        executed.assert_not_called()
+
+    def test_visits_are_read_when_a_removed_item_is_not_in_the_matrix(self) -> None:
+        world, budget = budget_world()
+        with mock.patch(
+            "visitacampo.matrix.quantities.executed_by_pair", return_value={}
+        ) as executed:
+            stage_rows(world.ctx(), budget, V2_ROWS)
+        executed.assert_called_once()

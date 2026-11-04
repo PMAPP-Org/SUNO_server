@@ -10,12 +10,14 @@ from typing import Any
 from django.test import TestCase
 from django.utils import timezone
 
-from visitacampo.authn.tests.factories import make_user
+from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
 from visitacampo.budgets.tests.samples import V1_ROWS
 from visitacampo.core.context import Principal, resolve_request_context
 from visitacampo.core.models import (
+    AppUser,
     BudgetItem,
+    Organization,
     Project,
     QuantityPlan,
     Role,
@@ -258,3 +260,61 @@ class QuantityPushTests(TestCase):
         visit = visit_of(visit_id)
         self.assertEqual(visit.quantities, [])
         self.assertEqual(visit.progress_pct, Decimal("25.00"))
+
+    def _other_project(self, org: Organization | None = None) -> tuple[Project, Any]:
+        """Otro proyecto con el presupuesto `V1_ROWS` aplicado, y su contexto."""
+        if org is None:
+            org, ctx = self.scenario.org, self.ctx
+        else:
+            admin = make_user(org, username="admin-otra", role=Role.ADMIN)
+            ctx = resolve_request_context(Principal(user_id=admin.pk, org_id=org.pk))
+        user = AppUser.objects.get(pk=ctx.user_id)
+        project = Project.objects.create(org=org, name="Otra obra", created_by=user)
+        apply_rows(ctx, make_budget(project, user, code="C-09"), V1_ROWS)
+        return project, ctx
+
+    def test_chapter_is_rejected_even_with_a_note(self) -> None:
+        chapter = BudgetItem.objects.get(budget__project=self.project, code="2")
+        result = self.push_one(self.create(self.row(chapter, 1, note="capítulo")))
+        self.assertRejected(result, "item_not_in_project")
+
+    def test_real_item_of_another_project_in_the_org(self) -> None:
+        project, _ = self._other_project()
+        foreign = BudgetItem.objects.get(budget__project=project, code="2.1")
+        result = self.push_one(self.create(self.row(foreign, 1, note="otra obra")))
+        self.assertRejected(result, "item_not_in_project")
+
+    def test_real_item_of_another_org(self) -> None:
+        project, _ = self._other_project(make_org("Otra organización"))
+        foreign = BudgetItem.objects.get(budget__project=project, code="2.1")
+        result = self.push_one(self.create(self.row(foreign, 1, note="otra org")))
+        self.assertRejected(result, "item_not_in_project")
+
+    def test_real_location_of_another_project(self) -> None:
+        project, ctx = self._other_project()
+        save_levels(ctx, project, [LevelSpec("Tramo"), LevelSpec("PR")])
+        node, _ = load_tree(ctx, project).ensure(ctx, project_levels(ctx, project), ("Tramo 2",))
+        result = self.push_one(self.create(self.row(self.concrete, 1, location_id=str(node.pk))))
+        self.assertRejected(result, "location_outside_task")
+
+    def test_retired_location_is_accepted(self) -> None:
+        self.pr.retired_at = timezone.now()
+        self.pr.save(update_fields=["retired_at"])
+        result = self.push_one(self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk))))
+        self.assertEqual(result["status"], "applied", result)
+
+    def test_repeated_item_and_location_are_kept_as_separate_rows(self) -> None:
+        """Dos filas con el mismo ítem y ubicación se aceptan tal cual: no se suman ni se
+        deduplican al guardar; lo ejecutado las suma al leer."""
+        visit_id = uuid.uuid4()
+        result = self.push_one(
+            self.create(
+                self.row(self.concrete, 1, location_id=str(self.pr.pk)),
+                self.row(self.concrete, 2, location_id=str(self.pr.pk)),
+                visit_id=visit_id,
+            )
+        )
+        self.assertEqual(result["status"], "applied", result)
+        rows = visit_of(visit_id).quantities
+        self.assertEqual([r["quantity"] for r in rows], ["1.0000", "2.0000"])
+        self.assertEqual({r["location_id"] for r in rows}, {str(self.pr.pk)})

@@ -62,12 +62,16 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import connection, transaction
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
     Assignment,
     BudgetItem,
+    BudgetItemVersion,
+    BudgetRowKind,
+    BudgetVersionStatus,
     Device,
     FormTemplateVersion,
     LocationNode,
@@ -274,7 +278,7 @@ class _References:
     #: `visit_id → (task_id, progress_pct, quantities, version)` de las visitas validadas
     #: que el lote cambia de tarea, % o cantidades, o borra (ver `_validated_progress`).
     validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]
-    #: Costos, pieza 4: ítem → proyecto de su presupuesto.
+    #: Costos, pieza 4: ítem → proyecto de su presupuesto. Sin los capítulos: no se miden.
     items: dict[uuid.UUID, uuid.UUID]
     #: Nodo de ubicación → (proyecto, path).
     nodes: dict[uuid.UUID, tuple[uuid.UUID, str]]
@@ -350,8 +354,10 @@ class _References:
             item_id = uuid.UUID(row["item_id"])
             if self.items.get(item_id) != ref.project_id:
                 return reject(
-                    "The item is not in a budget of the task's project.", "item_not_in_project"
+                    "The item is not a measurable item of a budget of the task's project.",
+                    "item_not_in_project",
                 )
+            # Un nodo retirado se acepta a propósito: "se acepta y se resalta; nunca se pierde".
             if row["location_id"] is not None:
                 node = self.nodes.get(uuid.UUID(row["location_id"]))
                 inside = (
@@ -510,9 +516,22 @@ def _quantity_refs(
     item_ids = {uuid.UUID(row["item_id"]) for _, rows in wanted for row in rows}
     if not item_ids:
         return {}, {}, set()
-    items = dict(
-        scoped_qs(ctx, BudgetItem).filter(pk__in=item_ids).values_list("pk", "budget__project_id")
+    # El tipo del ítem en la última versión aplicada que lo contiene (la vigente si sigue
+    # en ella): un capítulo no recibe cantidades. Subconsulta: la misma query de antes.
+    kind = Subquery(
+        scoped_qs(ctx, BudgetItemVersion)
+        .filter(item=OuterRef("pk"), version__status=BudgetVersionStatus.APPLIED)
+        .order_by("-version__number")
+        .values("kind")[:1]
     )
+    items = {
+        pk: project_id
+        for pk, project_id, item_kind in scoped_qs(ctx, BudgetItem)
+        .filter(pk__in=item_ids)
+        .annotate(current_kind=kind)
+        .values_list("pk", "budget__project_id", "current_kind")
+        if item_kind != BudgetRowKind.CHAPTER
+    }
     node_ids = {
         uuid.UUID(row["location_id"])
         for _, rows in wanted

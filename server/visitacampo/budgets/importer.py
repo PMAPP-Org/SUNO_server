@@ -184,18 +184,35 @@ def _matrix_warning(
     ids = dict(
         scoped_qs(ctx, BudgetItem).filter(budget=budget, code__in=gone).values_list("pk", "code")
     )
+    if not ids:
+        return None
     used = set(
         scoped_qs(ctx, QuantityPlan).filter(item_id__in=ids).values_list("item_id", flat=True)
     )
-    executed = {item_id for (_, item_id) in executed_by_pair(ctx, project_ids=[budget.project_id])}
+    # Solo se leen las visitas si queda algún ítem quitado que no esté en la matriz.
+    pending = set(ids) - used
+    executed = (
+        {
+            item_id
+            for (_, item_id) in executed_by_pair(ctx, project_ids=[budget.project_id])
+            if item_id in pending
+        }
+        if pending
+        else set()
+    )
     codes = sorted(code for pk, code in ids.items() if pk in used or pk in executed)
     if not codes:
         return None
-    return (
+    message = (
         f"{len(codes)} ítem(s) eliminado(s) están en la matriz o tienen cantidades ejecutadas: "
         + ", ".join(codes[:20])
-        + ". Sus filas de la matriz se conservan marcadas como retiradas del presupuesto."
+        + "."
     )
+    if used:
+        message += " Sus filas de la matriz se conservan marcadas como retiradas del presupuesto."
+    if executed:
+        message += " Las cantidades ejecutadas de los ítems sin filas en la matriz se conservan."
+    return message
 
 
 def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMapping) -> BudgetVersion:
