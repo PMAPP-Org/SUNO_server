@@ -258,3 +258,19 @@ def load_tree(ctx: RequestContext, project: Project) -> Tree:
     ):
         tree._add(node)
     return tree
+
+
+def load_trees(ctx: RequestContext, project_ids: Iterable[UUID]) -> dict[UUID, Tree]:
+    """Los árboles de varios proyectos en una query (para la API de campo)."""
+    ids = set(project_ids)
+    trees: dict[UUID, Tree] = {}
+    if not ids:
+        return trees
+    for node in (
+        scoped_qs(ctx, LocationNode)
+        .filter(project_id__in=ids)
+        .select_related("level", "project")
+        .order_by(Lower("name"))
+    ):
+        trees.setdefault(node.project_id, Tree(project=node.project))._add(node)
+    return trees

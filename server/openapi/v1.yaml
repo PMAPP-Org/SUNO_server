@@ -2136,7 +2136,18 @@ components:
     FieldTask:
       type: object
       description: Una tarea del cronograma a la que la app puede vincular una visita.
-      required: [id, project_id, project_name, wbs, outline_number, name, last_validated_pct]
+      required:
+        - id
+        - project_id
+        - project_name
+        - wbs
+        - outline_number
+        - name
+        - last_validated_pct
+        - measured_by
+        - location
+        - location_options
+        - planned_items
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -2159,7 +2170,29 @@ components:
           type: [number, 'null']
           minimum: 0
           maximum: 100
-          description: '% de la visita validada más reciente de la tarea; `null` si no hay.'
+          description: |
+            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el de
+            la visita validada más reciente. `null` si no hay.
+        measured_by:
+          type: string
+          enum: [pct, quantities]
+          description: |
+            `quantities` si la tarea tiene ítems planeados (costos, pieza 4): la app registra
+            cantidades y no pide %; `pct` en el resto.
+        location:
+          oneOf:
+            - $ref: '#/components/schemas/FieldLocation'
+            - type: 'null'
+        location_options:
+          type: array
+          description: La ubicación de la tarea y sus descendientes vigentes, para precisar en campo.
+          items:
+            $ref: '#/components/schemas/FieldLocation'
+        planned_items:
+          type: array
+          description: Ítems planeados de la tarea, sin precios ni montos.
+          items:
+            $ref: '#/components/schemas/FieldPlannedItem'
 
     FieldTaskList:
       type: object
@@ -2176,6 +2209,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FieldTask'
+
+    FieldLocation:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        label:
+          type: string
+          description: Ruta completa, p. ej. "Tramo 2 / PR 12+300".
+
+    FieldPlannedItem:
+      type: object
+      required: [item_id, code, description, unit, planned_quantity, executed_quantity]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+        unit:
+          type: string
+          maxLength: 30
+        planned_quantity:
+          type: number
+        executed_quantity:
+          type: number
+          description: Suma de las cantidades de las visitas validadas (puede pasar lo planeado).
 
     HealthStatus:
       type: object
