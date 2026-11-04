@@ -24,7 +24,7 @@ class VisitAdminQuantitiesTests(TestCase):
     def setUp(self) -> None:
         self.world, budget = budget_world()
         self.concrete, self.steel = item(budget, "2.1"), item(budget, "2.2")
-        self.admin = VisitAdmin(Visit, None)  # type: ignore[arg-type]
+        self.admin = VisitAdmin(Visit, None)
 
     def test_quantities_are_listed_with_flags(self) -> None:
         plan(self.world, 3, self.concrete, "10")
