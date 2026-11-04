@@ -80,13 +80,14 @@
   {% if plan_rows %}
   <div class="pj-scroll">
   <table class="pj-table">
-    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th>{% if show_amounts %}<th class="num">Valor planeado</th>{% endif %}{% if can_edit_plan %}<th></th>{% endif %}</tr></thead>
+    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th><th class="num">%</th>{% if show_amounts %}<th class="num">Valor planeado</th>{% endif %}{% if can_edit_plan %}<th></th>{% endif %}</tr></thead>
     <tbody>
     {% for row in plan_rows %}
       <tr>
         <td>{{ row.code }}</td><td class="pj-name">{{ row.description }}</td><td>{{ row.unit }}</td>
         <td class="num">{{ row.planned|floatformat:"-4g" }}</td>
         <td class="num">{{ row.executed|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.pct_text }}</td>
         {% if show_amounts %}<td class="num">{{ row.value|floatformat:"2g"|default:"—" }}</td>{% endif %}
         {% if can_edit_plan %}<td><form method="post">{% csrf_token %}<input type="hidden" name="action" value="plan_remove"><input type="hidden" name="item" value="{{ row.item_id }}"><button class="text-link" type="submit" aria-label="Quitar {{ row.code }}">Quitar</button></form></td>{% endif %}
       </tr>
@@ -96,6 +97,28 @@
   </div>
   {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de las visitas.</p>{% endif %}
   {% if unplanned_executed %}<p class="pj-warning">Cantidades registradas en ítems fuera del plan (no suman al %): {% for f in unplanned_executed %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  {% if quantity_history %}
+  <h3>Registros validados</h3>
+  <div class="pj-scroll">
+  <table class="pj-table" id="mx-history">
+    <thead><tr><th>Fecha</th><th>Agente</th><th>Ítem</th><th>Ubicación</th><th class="num">Cantidad</th><th>Nota</th>{% if perms.core.view_visit %}<th>Visita</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for row in quantity_history %}
+      <tr>
+        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.code }}</td>
+        <td class="pj-wrap">{{ row.location|default:"—" }}</td>
+        <td class="num">{{ row.quantity|floatformat:"-4g" }} {{ row.unit }}</td>
+        <td class="pj-wrap">{{ row.note|default:"" }}</td>
+        {% if perms.core.view_visit %}<td><a href="{% url 'admin:core_visit_change' row.visit.pk %}">Ver visita</a></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if history_truncated %}<p class="pj-muted">Se muestran las {{ history_visits }} visitas validadas más recientes.</p>{% endif %}
+  {% endif %}
   {% if plan_error %}<p class="pj-late" role="alert">{{ plan_error }}</p>{% endif %}
   {% if can_edit_plan and not retired %}
   <form method="post" class="pj-filters">

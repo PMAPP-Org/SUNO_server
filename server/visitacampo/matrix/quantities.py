@@ -64,6 +64,43 @@ def executed_by_pair(
 
 
 @dataclass(frozen=True)
+class QuantityRecord:
+    """Una fila de cantidad de una visita validada (historial de la ficha de tarea)."""
+
+    visit: Visit
+    item_id: UUID
+    #: `None`: la ubicación de la tarea.
+    location_id: UUID | None
+    quantity: Decimal
+    note: str
+
+
+def validated_records(
+    ctx: RequestContext, task_id: UUID, *, max_visits: int
+) -> tuple[list[QuantityRecord], bool]:
+    """Las cantidades de las `max_visits` visitas validadas más recientes de la tarea,
+    con su autor; y si quedaron visitas por fuera. Una query."""
+    visits = list(
+        approved(scoped_qs(ctx, Visit).filter(task_id=task_id, deleted_at__isnull=True))
+        .exclude(quantities=[])
+        .select_related("created_by")
+        .order_by("-captured_at", "-change_seq")[: max_visits + 1]
+    )
+    records = [
+        QuantityRecord(
+            visit=visit,
+            item_id=UUID(row["item_id"]),
+            location_id=UUID(row["location_id"]) if row["location_id"] else None,
+            quantity=Decimal(row["quantity"]),
+            note=row["note"],
+        )
+        for visit in visits[:max_visits]
+        for row in visit.quantities
+    ]
+    return records, len(visits) > max_visits
+
+
+@dataclass(frozen=True)
 class ItemFacts:
     code: str
     kind: str

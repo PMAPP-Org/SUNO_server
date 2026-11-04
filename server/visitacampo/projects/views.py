@@ -54,11 +54,13 @@ from visitacampo.core.scoping import get_organization, scoped_qs
 from visitacampo.matrix.diff import code_key
 from visitacampo.matrix.edits import EditRejected, remove_plan, set_plan, set_task_location
 from visitacampo.matrix.locations import from_project, load_tree, project_levels
+from visitacampo.matrix.progress import item_pct
 from visitacampo.matrix.quantities import (
     executed_by_pair,
     item_facts,
     measured_progress,
     suno_pct_by_task,
+    validated_records,
 )
 
 from .access import effective_responsibles, get_visible_project, visible_projects
@@ -66,6 +68,9 @@ from .field_progress import format_pct, progress_visits
 from .importer import ImportRejected, apply_import, discard_import, stage_import
 from .mspdi import MAX_BYTES
 from .schedule import ScheduleRow, build_schedule, filter_rows
+
+#: Visitas validadas más recientes cuyo registro de cantidades muestra la ficha de tarea.
+QUANTITY_HISTORY_VISITS = 50
 
 
 def _ctx(request: HttpRequest) -> RequestContext:
@@ -329,6 +334,11 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     executed = executed_by_pair(ctx, task_ids=[task.pk])
     facts = item_facts(ctx, [p.item_id for p in plans])
     show_amounts = can_view_budgets(ctx, ctx.org_id)
+
+    def pct_text(planned: Decimal, done: Decimal) -> str:
+        pct = item_pct(planned, done)
+        return format_pct(pct) if pct is not None else "—"
+
     plan_rows = sorted(
         (
             {
@@ -338,6 +348,9 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
                 "unit": facts[p.item_id].unit if p.item_id in facts else "",
                 "planned": p.planned_quantity,
                 "executed": executed.get((task.pk, p.item_id), Decimal(0)),
+                "pct_text": pct_text(
+                    p.planned_quantity, executed.get((task.pk, p.item_id), Decimal(0))
+                ),
                 "value": (
                     money(p.planned_quantity * (facts[p.item_id].unit_price or 0))
                     if show_amounts and p.item_id in facts
@@ -351,6 +364,21 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     # Ítems con cantidades validadas que no están en el plan de la tarea: no suman al %.
     unplanned = item_facts(ctx, {item_id for (_, item_id) in executed} - {p.item_id for p in plans})
     unplanned_executed = sorted(unplanned.values(), key=lambda f: f.code)
+    # Historial: los ítems de lo validado ya están en `facts` o en `unplanned`.
+    records, history_truncated = validated_records(ctx, task.pk, max_visits=QUANTITY_HISTORY_VISITS)
+    known = {**facts, **unplanned}
+    quantity_history = [
+        {
+            "visit": record.visit,
+            "code": known[record.item_id].code if record.item_id in known else "?",
+            "unit": known[record.item_id].unit if record.item_id in known else "",
+            # Sin ubicación precisada: la de la tarea.
+            "location": tree.label(record.location_id or task.location_id),
+            "quantity": record.quantity,
+            "note": record.note,
+        }
+        for record in records
+    ]
     return _render(
         request,
         ctx,
@@ -378,6 +406,9 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "field_visits": progress_visits(ctx, task),
             "plan_rows": plan_rows,
             "unplanned_executed": unplanned_executed,
+            "quantity_history": quantity_history,
+            "history_truncated": history_truncated,
+            "history_visits": QUANTITY_HISTORY_VISITS,
             "show_amounts": show_amounts,
             "can_edit_plan": can_manage_budgets(ctx, ctx.org_id) and not task.is_summary,
             "plan_error": plan_error,

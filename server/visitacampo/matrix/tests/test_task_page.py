@@ -2,19 +2,31 @@ from __future__ import annotations
 
 import unittest
 from decimal import Decimal
+from unittest import mock
 
+from django.contrib.auth.models import Permission
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
 from visitacampo.budgets.tests.samples import V1_ROWS
-from visitacampo.core.models import Project, QuantityPlan, ScheduleImport
+from visitacampo.core.models import Project, QuantityPlan, ScheduleImport, Visit
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
 
-from .factories import budget_world, item, plan, quantity_row, quantity_visit, suno_levels
+from .factories import (
+    budget_world,
+    item,
+    locate,
+    plan,
+    quantity_row,
+    quantity_visit,
+    suno_levels,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -132,3 +144,104 @@ class TaskPageTests(TestCase):
         self.assertContains(response, "se leyó como miles")
         planned = QuantityPlan.objects.get(item__code="2.2").planned_quantity
         self.assertEqual(planned, Decimal("1234"))
+
+
+@skip_without_db
+class TaskPageQuantityHistoryTests(TestCase):
+    """% por ítem e historial de registros validados en el bloque *Cantidades planeadas*."""
+
+    def setUp(self) -> None:
+        self.world, self.budget = budget_world()
+        suno_levels(self.world)
+        locate(self.world, 3, "Tramo 2")
+        self.pr = locate(self.world, 5, "Tramo 2", "PR 1").location_id
+        self.concrete, self.steel = item(self.budget, "2.1"), item(self.budget, "2.2")
+        plan(self.world, 3, self.concrete, "10")
+        plan(self.world, 3, self.steel, "800")
+        self.world.approve(
+            quantity_visit(
+                self.world,
+                3,
+                quantity_row(self.concrete, "4"),
+                quantity_row(self.steel, "900", location=self.pr),
+            )
+        )
+        self.world.approve(
+            quantity_visit(self.world, 3, quantity_row(self.concrete, "2.5"), hours=2)
+        )
+        # Sin validar y rechazada: no salen en el historial ni suman.
+        quantity_visit(self.world, 3, quantity_row(self.concrete, "111"), hours=3)
+        self.world.reject(
+            quantity_visit(self.world, 3, quantity_row(self.concrete, "222"), hours=4)
+        )
+        self.url = f"/plataforma/proyectos/{self.world.project.pk}/tareas/{self.world.task(3).pk}/"
+
+    def _history(self, html: str) -> str:
+        start = html.index('id="mx-history"')
+        return html[start : html.index("</table>", start)]
+
+    def test_item_pct_is_capped_at_100(self) -> None:
+        self.client.force_login(self.world.supervisor)
+        html = self.client.get(self.url).content.decode()
+        self.assertIn('<th class="num">%</th>', html)
+        self.assertIn("65 %", html)  # 6,5 de 10
+        self.assertIn("100 %", html)  # 900 de 800
+        self.assertNotIn("112,5 %", html)
+
+    def test_history_lists_validated_records(self) -> None:
+        self.client.force_login(self.world.supervisor)
+        history = self._history(self.client.get(self.url).content.decode())
+        self.assertEqual(history.count("<tr>"), 4)  # encabezado y tres registros
+        self.assertIn("Tramo 2 / PR 1", history)
+        self.assertIn("Tramo 2</td>", history)  # sin ubicación precisada: la de la tarea
+        self.assertIn("2,5", history)
+        self.assertIn("900", history)
+        self.assertNotIn("111", history)
+        self.assertNotIn("222", history)
+        # La más reciente primero.
+        self.assertLess(history.index("2,5"), history.index("900"))
+        self.assertNotIn("/admin/core/visit/", history)  # sin permiso del Admin, sin enlace
+
+    def test_history_links_to_the_visit_with_admin_permission(self) -> None:
+        user = self.world.supervisor
+        user.user_permissions.add(Permission.objects.get(codename="view_visit"))
+        self.client.force_login(user)
+        visit = Visit.objects.filter(task=self.world.task(3)).order_by("captured_at").first()
+        assert visit is not None
+        history = self._history(self.client.get(self.url).content.decode())
+        self.assertIn(f"/admin/core/visit/{visit.pk}/change/", history)
+
+    def test_field_agent_sees_pct_and_history(self) -> None:
+        # Como el resto del bloque: lo ve quien ve la tarea; solo los montos se ocultan.
+        self.world.responsible(3)
+        self.client.force_login(self.world.agent)
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("65 %", html)
+        self.assertIn("Tramo 2 / PR 1", self._history(html))
+        self.assertNotIn("4.500.000,00", html)
+
+    def test_outsider_gets_404(self) -> None:
+        self.client.force_login(self.world.agent)  # sin tareas a su cargo
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_queries_do_not_grow_with_the_history(self) -> None:
+        self.client.force_login(self.world.supervisor)
+        self.client.get(self.url)  # calienta las cachés de Django (tipos de contenido)
+        with CaptureQueriesContext(connection) as before:
+            self.client.get(self.url)
+        for hours in range(5, 10):
+            self.world.approve(
+                quantity_visit(self.world, 3, quantity_row(self.concrete, "1"), hours=hours)
+            )
+        with CaptureQueriesContext(connection) as after:
+            self.client.get(self.url)
+        self.assertEqual(len(after), len(before))
+
+    def test_history_is_bounded(self) -> None:
+        self.client.force_login(self.world.supervisor)
+        with mock.patch("visitacampo.projects.views.QUANTITY_HISTORY_VISITS", 1):
+            html = self.client.get(self.url).content.decode()
+        history = self._history(html)
+        self.assertEqual(history.count("<tr>"), 2)  # la visita más reciente: una fila
+        self.assertIn("2,5", history)
+        self.assertIn("Se muestran las 1 visitas validadas más recientes.", html)

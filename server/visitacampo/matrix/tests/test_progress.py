@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from visitacampo.matrix.progress import PlanLine, task_progress
+from visitacampo.matrix.progress import PlanLine, item_pct, task_progress
 
 T1, T2 = uuid.uuid4(), uuid.uuid4()
 A, B = uuid.uuid4(), uuid.uuid4()
@@ -56,3 +56,14 @@ class TaskProgressTests(SimpleTestCase):
     def test_rounding(self) -> None:
         result = task_progress([line(T1, A, "3", "1", "1")])
         self.assertEqual(result[T1].pct, Decimal("33.33"))
+
+
+class ItemPctTests(SimpleTestCase):
+    def test_ratio_capped_and_rounded(self) -> None:
+        self.assertEqual(item_pct(Decimal(10), Decimal("6.5")), Decimal("65.00"))
+        self.assertEqual(item_pct(Decimal(3), Decimal(1)), Decimal("33.33"))
+        self.assertEqual(item_pct(Decimal(800), Decimal(900)), Decimal("100.00"))
+
+    def test_negative_executed_is_zero_and_zero_planned_is_not_measured(self) -> None:
+        self.assertEqual(item_pct(Decimal(10), Decimal(-2)), Decimal("0.00"))
+        self.assertIsNone(item_pct(Decimal(0), Decimal(5)))

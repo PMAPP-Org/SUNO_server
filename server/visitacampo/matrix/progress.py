@@ -38,6 +38,17 @@ class QuantityProgress:
     value: Decimal
 
 
+def item_pct(planned: Decimal, executed: Decimal) -> Decimal | None:
+    """% de un ítem: 100·max(ejecutada, 0)/planeada, tope 100, a dos decimales. Sin
+    cantidad planeada (> 0) no se mide, igual que en `task_progress`."""
+    if planned <= 0:
+        return None
+    with localcontext() as context:
+        context.prec = WIDE_PRECISION
+        pct = max(executed, _ZERO) * HUNDRED / planned
+        return min(HUNDRED, pct).quantize(PCT_STEP, rounding=ROUND_HALF_UP)
+
+
 def task_progress(lines: Iterable[PlanLine]) -> dict[UUID, QuantityProgress]:
     by_task: dict[UUID, list[PlanLine]] = defaultdict(list)
     for plan_line in lines:
