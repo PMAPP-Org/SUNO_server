@@ -1702,10 +1702,12 @@ components:
             una cantidad. Un `update` con `task_id` y `progress_pct` sin `quantities` deja la lista
             vacía. Rechazos (`validation_error`): `quantities_without_task`, `task_progress_pair`,
             `item_not_in_project` (el ítem no es de un presupuesto del proyecto de la tarea, o es
-            un capítulo),
-            `location_outside_task` (la ubicación no es la de la tarea ni está dentro de ella),
-            `note_required` (cantidad negativa, o ítem fuera del plan de la tarea, sin nota) y
-            `visit_validated` (la visita validada no cambia sus cantidades).
+            un capítulo fuera del plan de la tarea),
+            `location_outside_task` (la ubicación no es un nodo del proyecto de la tarea) y
+            `visit_validated` (la visita validada no cambia sus cantidades). Lo demás se acepta y
+            se resalta en la revisión, porque lo registrado sin conexión nunca se pierde: un ítem
+            fuera del plan o un ajuste negativo sin nota (la nota la exige la app al capturar), y
+            una ubicación del proyecto fuera de la ubicación actual de la tarea.
           items:
             $ref: '#/components/schemas/VisitQuantityPayload'
 

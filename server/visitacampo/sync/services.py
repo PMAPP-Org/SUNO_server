@@ -242,8 +242,6 @@ class _TaskRef:
     #: Quien envía el lote es responsable efectivo (directo o por la rama).
     covered: bool
     project_id: uuid.UUID
-    #: Ubicación de la tarea (costos, pieza 4): su `path`, o None si no tiene.
-    location_path: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,8 +278,8 @@ class _References:
     validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]
     #: Costos, pieza 4: ítem → (proyecto de su presupuesto, si es un capítulo).
     items: dict[uuid.UUID, tuple[uuid.UUID, bool]]
-    #: Nodo de ubicación → (proyecto, path).
-    nodes: dict[uuid.UUID, tuple[uuid.UUID, str]]
+    #: Nodo de ubicación → su proyecto.
+    nodes: dict[uuid.UUID, uuid.UUID]
     #: Pares (tarea, ítem) que están en la matriz.
     planned: set[tuple[uuid.UUID, uuid.UUID]]
 
@@ -332,10 +330,15 @@ class _References:
         return None
 
     def quantities_rejection(self, parsed: VisitWrite) -> Rejection | None:
-        """Cada cantidad: ítem de un presupuesto del proyecto de la tarea, ubicación en
-        la de la tarea (o dentro), y nota si es un ajuste negativo o el ítem no está en
-        el plan. `payloads` ya garantizó que hay tarea si hay cantidades, y `missing`
-        que la tarea existe."""
+        """Solo los errores estructurales: cada cantidad nombra un ítem que mide en un
+        presupuesto del proyecto de la tarea, y una ubicación de ese proyecto.
+        `payloads` ya garantizó que hay tarea si hay cantidades, y `missing` que la
+        tarea existe.
+
+        Lo demás se acepta y se resalta en la revisión (`VisitAdmin.quantities_pretty`):
+        entre la captura sin conexión y la sincronización la oficina pudo quitar el ítem
+        del plan o mover la tarea, y lo registrado nunca se pierde. La nota de un ítem
+        no planeado o de un ajuste negativo la exige la app al capturar (pieza 4b)."""
         rows = parsed.fields.get("quantities") or []
         task_id = parsed.fields.get("task_id")
         if not rows or task_id is None:
@@ -362,25 +365,15 @@ class _References:
                     "The item is not a measurable item of a budget of the task's project.",
                     "item_not_in_project",
                 )
-            # Un nodo retirado se acepta a propósito: "se acepta y se resalta; nunca se pierde".
+            # Un nodo retirado, o fuera de la ubicación actual de la tarea (la movieron o se
+            # la quitaron después de la captura), se acepta a propósito: "se acepta y se
+            # resalta; nunca se pierde".
             if row["location_id"] is not None:
-                node = self.nodes.get(uuid.UUID(row["location_id"]))
-                inside = (
-                    node is not None
-                    and node[0] == ref.project_id
-                    and ref.location_path is not None
-                    and node[1].startswith(ref.location_path)
-                )
-                if not inside:
+                if self.nodes.get(uuid.UUID(row["location_id"])) != ref.project_id:
                     return reject(
-                        "The location is not the task's location nor inside it.",
+                        "The location is not a location of the task's project.",
                         "location_outside_task",
                     )
-            if (Decimal(row["quantity"]) < 0 or not planned) and not row["note"]:
-                return reject(
-                    "A note is required for negative adjustments and unplanned items.",
-                    "note_required",
-                )
         return None
 
     def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
@@ -488,9 +481,7 @@ def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID,
     rows = list(
         scoped_qs(ctx, Task)
         .filter(pk__in=ids)
-        .values_list(
-            "pk", "project_id", "outline_number", "retired_in_id", "is_summary", "location__path"
-        )
+        .values_list("pk", "project_id", "outline_number", "retired_in_id", "is_summary")
     )
     outlines = responsible_outlines(
         ctx, user_id=ctx.user_id, project_ids={project_id for _, project_id, *_ in rows}
@@ -501,9 +492,8 @@ def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID,
             is_summary=is_summary,
             covered=covers(outlines.get(project_id, ()), outline),
             project_id=project_id,
-            location_path=location_path,
         )
-        for pk, project_id, outline, retired_in, is_summary, location_path in rows
+        for pk, project_id, outline, retired_in, is_summary in rows
     }
 
 
@@ -511,7 +501,7 @@ def _quantity_refs(
     ctx: RequestContext, writes: list[VisitWrite]
 ) -> tuple[
     dict[uuid.UUID, tuple[uuid.UUID, bool]],
-    dict[uuid.UUID, tuple[uuid.UUID, str]],
+    dict[uuid.UUID, uuid.UUID],
     set[tuple[uuid.UUID, uuid.UUID]],
 ]:
     """Ítems, nodos y pares del plan que nombran las cantidades del lote (costos,
@@ -542,14 +532,11 @@ def _quantity_refs(
         for row in rows
         if row["location_id"] is not None
     }
-    nodes: dict[uuid.UUID, tuple[uuid.UUID, str]] = {}
+    nodes: dict[uuid.UUID, uuid.UUID] = {}
     if node_ids:
-        nodes = {
-            pk: (project_id, path)
-            for pk, project_id, path in scoped_qs(ctx, LocationNode)
-            .filter(pk__in=node_ids)
-            .values_list("pk", "project_id", "path")
-        }
+        nodes = dict(
+            scoped_qs(ctx, LocationNode).filter(pk__in=node_ids).values_list("pk", "project_id")
+        )
     task_ids = {task_id for task_id, rows in wanted if task_id is not None and rows}
     planned = set(
         scoped_qs(ctx, QuantityPlan)

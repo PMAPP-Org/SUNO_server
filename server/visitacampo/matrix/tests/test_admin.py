@@ -4,6 +4,8 @@ import unittest
 
 from django.test import TestCase
 
+from visitacampo.budgets.tests.factories import apply_rows
+from visitacampo.budgets.tests.samples import SPLIT_ROWS
 from visitacampo.core.admin import VisitAdmin
 from visitacampo.core.models import Visit
 from visitacampo.core.tests.dbsupport import (
@@ -12,7 +14,7 @@ from visitacampo.core.tests.dbsupport import (
     teardown_test_database,
 )
 
-from .factories import budget_world, item, plan, quantity_row, quantity_visit
+from .factories import budget_world, item, locate, plan, quantity_row, quantity_visit, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -52,6 +54,50 @@ class VisitAdminQuantitiesTests(TestCase):
         self.assertIn("2.1 Concreto zapatas: 4 m3", text)
         self.assertNotIn("supera", text)
         self.assertNotIn("ignorado", text)
+
+    def test_unplanned_without_note_and_negative_without_note(self) -> None:
+        plan(self.world, 3, self.concrete, "10")
+        visit = quantity_visit(
+            self.world, 3, quantity_row(self.steel, "2"), quantity_row(self.concrete, "-1")
+        )
+        text = str(self.admin.quantities_pretty(visit))
+        self.assertIn("2.2 Acero de refuerzo: 2 kg — no planeado y sin nota", text)
+        self.assertIn("ajuste negativo sin nota", text)
+
+    def test_location_outside_the_current_task_location(self) -> None:
+        suno_levels(self.world)
+        plan(self.world, 3, self.concrete, "10")
+        inside = locate(self.world, 3, "Tramo 2", "PR 1").location_id
+        outside = locate(self.world, 3, "Tramo 3").location_id
+        locate(self.world, 3, "Tramo 2")
+        visit = quantity_visit(
+            self.world,
+            3,
+            quantity_row(self.concrete, "1", location=inside),
+            quantity_row(self.concrete, "2", location=outside),
+        )
+        lines = str(self.admin.quantities_pretty(visit)).split("</p>")
+        self.assertNotIn("ubicación fuera", lines[0])
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", lines[1])
+        task = self.world.task(3)
+        task.location = None
+        task.save(update_fields=["location"])
+        visit.refresh_from_db()
+        lines = str(self.admin.quantities_pretty(visit)).split("</p>")
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", lines[0])
+
+    def test_pct_is_not_ignored_when_the_plan_only_has_a_chapter(self) -> None:
+        """El 2.1 planeado se partió en un capítulo: la tarea ya no se mide por cantidades
+        (`measured_by`), así que el % manual cuenta."""
+        plan(self.world, 3, self.concrete, "10")
+        apply_rows(self.world.ctx(), self.concrete.budget, SPLIT_ROWS)
+        visit = quantity_visit(self.world, 3, quantity_row(self.concrete, "1"), pct="30")
+        self.assertNotIn("ignorado", str(self.admin.quantities_pretty(visit)))
+
+    def test_pct_is_not_ignored_when_the_plan_is_at_zero(self) -> None:
+        plan(self.world, 3, self.concrete, "0")
+        visit = quantity_visit(self.world, 3, quantity_row(self.concrete, "1"), pct="30")
+        self.assertNotIn("ignorado", str(self.admin.quantities_pretty(visit)))
 
     def test_visit_without_quantities(self) -> None:
         visit = self.world.visit(3, "40")

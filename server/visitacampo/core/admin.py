@@ -58,6 +58,7 @@ from visitacampo.backoffice.visit_pdf import visit_pdf
 from visitacampo.backoffice.xlsform_admin import import_view
 from visitacampo.basemaps.services import retire as retire_basemap
 from visitacampo.core.audit import AuditAction, record
+from visitacampo.core.context import system_context
 from visitacampo.core.models import (
     AppUser,
     Assignment,
@@ -70,12 +71,14 @@ from visitacampo.core.models import (
     FormTemplate,
     FormTemplateVersion,
     Job,
+    LocationNode,
     Membership,
     Organization,
     PrivacyConsent,
     QuantityPlan,
     ReferenceLayer,
     SyncOpLog,
+    Task,
     Visit,
     VisitAttachment,
     VisitReview,
@@ -91,6 +94,7 @@ from visitacampo.forms.definition import TemplateDefinitionError, validate_defin
 from visitacampo.forms.services import publish_version
 from visitacampo.layers.services import retire as retire_layer
 from visitacampo.matrix.diff import plain_quantity
+from visitacampo.matrix.quantities import measured_progress
 from visitacampo.projects.field_progress import (
     approved,
     format_pct,
@@ -381,7 +385,12 @@ class VisitAdmin(ReadOnlyAdmin):
     @admin.display(description="cantidades")
     def quantities_pretty(self, visit: Visit) -> Any:
         """Las cantidades de la visita, con avisos para la supervisión: ítem fuera del
-        plan de la tarea, o lo validado más esta visita supera lo planeado."""
+        plan de la tarea (sin nota), ajuste negativo sin nota, ubicación fuera de la
+        ubicación actual de la tarea, o lo validado más esta visita supera lo planeado.
+
+        El push acepta todo eso a propósito (`quantities_rejection`): la oficina pudo
+        cambiar el plan o la ubicación entre la captura sin conexión y la sincronización,
+        y lo registrado nunca se pierde; aquí se resalta."""
         if not visit.quantities or visit.task_id is None:
             return "—"
         item_ids = [row["item_id"] for row in visit.quantities]
@@ -419,6 +428,21 @@ class VisitAdmin(ReadOnlyAdmin):
             for row in rows:
                 key = row["item_id"]
                 validated[key] = validated.get(key, Decimal(0)) + Decimal(row["quantity"])
+        node_paths = {
+            str(pk): path
+            for pk, path in QuerySet(model=LocationNode)
+            .filter(
+                org_id=visit.org_id,
+                pk__in=[row["location_id"] for row in visit.quantities if row["location_id"]],
+            )
+            .values_list("pk", "path")
+        }
+        task_path = (
+            QuerySet(model=Task)
+            .filter(org_id=visit.org_id, pk=visit.task_id)
+            .values_list("location__path", flat=True)
+            .first()
+        )
         lines: list[str] = []
         for row in visit.quantities:
             code, description, unit = facts.get(row["item_id"], ("?", "", ""))
@@ -426,17 +450,27 @@ class VisitAdmin(ReadOnlyAdmin):
             text = f"{code} {description}: {plain_quantity(quantity)} {unit}".rstrip()
             target = planned.get(row["item_id"])
             if target is None:
-                text += " — fuera del plan"
+                text += " — fuera del plan" if row["note"] else " — no planeado y sin nota"
             else:
                 total = validated.get(row["item_id"], Decimal(0)) + quantity
                 if total > target:
                     text += (
                         f" — supera el plan ({plain_quantity(total)} de {plain_quantity(target)})"
                     )
+            if quantity < 0 and not row["note"]:
+                text += " — ajuste negativo sin nota"
+            if row["location_id"]:
+                path = node_paths.get(row["location_id"])
+                if task_path is None or path is None or not path.startswith(task_path):
+                    text += " — ubicación fuera de la ubicación actual de la tarea"
             if row["note"]:
                 text += f" — nota: {row['note']}"
             lines.append(text)
-        if visit.progress_pct is not None and any(q > 0 for q in planned.values()):
+        # Mide por cantidades con la misma regla que `measured_by` (sin capítulos ni filas en
+        # 0). `system_context` solo aísla por organización: es una lectura, sin políticas.
+        if visit.progress_pct is not None and visit.task_id in measured_progress(
+            system_context(visit.org_id), task_ids=[visit.task_id]
+        ):
             lines.append("% manual ignorado: la tarea se mide por cantidades.")
         # Cada línea se escapa: códigos, descripciones y notas los escribe un usuario.
         return format_html_join("", "<p>{}</p>", ((line,) for line in lines))

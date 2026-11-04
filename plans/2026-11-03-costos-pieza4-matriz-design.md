@@ -306,3 +306,12 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
   las ofrecen) y el cronograma coinciden. La ficha de la tarea las conserva con un aviso, y
   la vista previa del presupuesto avisa cuando un ítem con filas en la matriz o cantidades
   ejecutadas pasa a ser capítulo.
+- Validación de la subida ("nunca se pierde"): el servidor solo rechaza lo estructural:
+  cantidades sin tarea (`quantities_without_task`), un ítem que no mide en un presupuesto
+  del proyecto de la tarea (`item_not_in_project`, con la regla de capítulos de arriba) y
+  un nodo que no es del proyecto de la tarea (`location_outside_task`). Un ítem fuera del
+  plan o un ajuste negativo sin nota, y un nodo del proyecto fuera de la ubicación actual
+  de la tarea (la oficina la movió o la quitó después de la captura), se aceptan y la
+  revisión los resalta ("no planeado y sin nota", "ajuste negativo sin nota", "ubicación
+  fuera de la ubicación actual de la tarea"). La nota obligatoria de §4 la exige la app al
+  capturar (etapa 4b); el servidor ya no rechaza con `note_required`.

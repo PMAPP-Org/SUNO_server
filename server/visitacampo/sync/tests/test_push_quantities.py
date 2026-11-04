@@ -13,6 +13,7 @@ from django.utils import timezone
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
 from visitacampo.budgets.tests.samples import MERGED_ROWS, SPLIT_ROWS, V1_ROWS, V2_ROWS
+from visitacampo.core.admin import VisitAdmin
 from visitacampo.core.context import Principal, resolve_request_context
 from visitacampo.core.models import (
     AppUser,
@@ -23,6 +24,7 @@ from visitacampo.core.models import (
     Role,
     Task,
     TaskResponsible,
+    Visit,
     VisitReview,
     VisitReviewStatus,
 )
@@ -141,18 +143,55 @@ class QuantityPushTests(TestCase):
         )
         self.assertEqual(result["status"], "applied", result)
 
-    def test_location_outside_the_task(self) -> None:
-        result = self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.other.pk)))
-        )
-        self.assertRejected(result, "location_outside_task")
+    def warnings(self, visit_id: uuid.UUID) -> str:
+        return str(VisitAdmin(Visit, None).quantities_pretty(visit_of(visit_id)))
 
-    def test_task_without_location_rejects_a_location(self) -> None:
+    def test_location_of_the_project_outside_the_task_is_accepted_and_flagged(self) -> None:
+        visit_id = uuid.uuid4()
+        result = self.push_one(
+            self.create(
+                self.row(self.concrete, 1, location_id=str(self.other.pk)), visit_id=visit_id
+            )
+        )
+        self.assertEqual(result["status"], "applied", result)
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+
+    def test_task_relocated_after_the_capture(self) -> None:
+        """Se capturó en Tramo 2 > PR 1 y la oficina movió la tarea a Tramo 3: se acepta
+        y se resalta; nunca se pierde."""
+        task = self.task(3)
+        task.location = self.other
+        task.save(update_fields=["location"])
+        visit_id = uuid.uuid4()
+        result = self.push_one(
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+        )
+        self.assertEqual(result["status"], "applied", result)
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+
+    def test_task_location_cleared_after_the_capture(self) -> None:
         task = self.task(3)
         task.location = None
         task.save(update_fields=["location"])
-        result = self.push_one(self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk))))
+        visit_id = uuid.uuid4()
+        result = self.push_one(
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+        )
+        self.assertEqual(result["status"], "applied", result)
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+        # Un nodo de otro proyecto sigue siendo un error estructural.
+        project, ctx = self._other_project()
+        save_levels(ctx, project, [LevelSpec("Tramo")])
+        node, _ = load_tree(ctx, project).ensure(ctx, project_levels(ctx, project), ("Tramo 2",))
+        result = self.push_one(self.create(self.row(self.concrete, 1, location_id=str(node.pk))))
         self.assertRejected(result, "location_outside_task")
+
+    def test_location_inside_the_task_is_not_flagged(self) -> None:
+        visit_id = uuid.uuid4()
+        self.push_one(
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+        )
+        self.assertNotIn("ubicación fuera", self.warnings(visit_id))
 
     def test_unknown_location(self) -> None:
         result = self.push_one(
@@ -164,15 +203,32 @@ class QuantityPushTests(TestCase):
         result = self.push_one(self.create({"item_id": str(uuid.uuid4()), "quantity": 1}))
         self.assertRejected(result, "item_not_in_project")
 
-    def test_unplanned_item_and_negative_need_a_note(self) -> None:
-        self.assertRejected(self.push_one(self.create(self.row(self.steel, 3))), "note_required")
-        self.assertRejected(
-            self.push_one(self.create(self.row(self.concrete, -1))), "note_required"
+    def test_unplanned_item_and_negative_without_note_are_accepted_and_flagged(self) -> None:
+        """La nota la exige la app al capturar (pieza 4b); el servidor no pierde lo
+        registrado sin ella: lo acepta y la revisión lo ve resaltado."""
+        unplanned, negative = uuid.uuid4(), uuid.uuid4()
+        result = self.push_one(self.create(self.row(self.steel, 3), visit_id=unplanned))
+        self.assertEqual(result["status"], "applied", result)
+        self.assertIn("no planeado y sin nota", self.warnings(unplanned))
+        result = self.push_one(self.create(self.row(self.concrete, -1), visit_id=negative))
+        self.assertEqual(result["status"], "applied", result)
+        self.assertIn("ajuste negativo sin nota", self.warnings(negative))
+        noted = uuid.uuid4()
+        result = self.push_one(
+            self.create(self.row(self.steel, 3, note="no estaba en el plan"), visit_id=noted)
         )
-        result = self.push_one(self.create(self.row(self.steel, 3, note="no estaba en el plan")))
         self.assertEqual(result["status"], "applied", result)
-        result = self.push_one(self.create(self.row(self.concrete, -1, note="ajuste")))
+        self.assertNotIn("sin nota", self.warnings(noted))
+
+    def test_plan_removed_between_capture_and_push(self) -> None:
+        """El 2.1 estaba en el plan cuando se capturó sin nota; la oficina lo quitó antes
+        de la sincronización."""
+        QuantityPlan.objects.filter(task=self.task(3), item=self.concrete).delete()
+        visit_id = uuid.uuid4()
+        result = self.push_one(self.create(self.row(self.concrete, 4), visit_id=visit_id))
         self.assertEqual(result["status"], "applied", result)
+        self.assertIn("2.1", self.warnings(visit_id))
+        self.assertIn("no planeado y sin nota", self.warnings(visit_id))
 
     def test_validated_visit_quantities_cannot_change(self) -> None:
         visit_id = uuid.uuid4()
