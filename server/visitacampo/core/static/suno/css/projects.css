@@ -104,6 +104,7 @@ button.text-link:hover { color: var(--suno-red); }
 .bg-label.mx-under { background: var(--suno-topography); color: var(--suno-ink); }
 .bg-label.mx-ok { background: var(--suno-green); }
 .bg-label.mx-retired { background: var(--suno-red); }
+.bg-label.mx-chapter { background: var(--suno-amber); color: var(--suno-ink); }
 .mx-depth-2 { padding-left: 24px !important; }
 .mx-depth-3 { padding-left: 40px !important; }
 .mx-depth-4, .mx-depth-5, .mx-depth-6 { padding-left: 56px !important; }

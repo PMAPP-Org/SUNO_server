@@ -24,8 +24,8 @@ from visitacampo.core.scoping import scoped_qs
 from .diff import code_key
 from .importer import current_versions
 from .locations import SEPARATOR, Tree, load_tree
-from .progress import PCT_STEP
-from .quantities import executed_by_pair, item_facts
+from .progress import PCT_STEP, item_pct
+from .quantities import executed_by_pair, item_facts, plan_lines_with_facts
 
 _ZERO = Decimal(0)
 
@@ -34,6 +34,7 @@ STATUS_LABELS = {
     "under": "Sin asignar completo",
     "ok": "Cuadra",
     "retired": "Retirado del presupuesto",
+    "chapter": "Ahora es capítulo",
 }
 
 
@@ -52,11 +53,13 @@ class ItemRow:
     code: str
     description: str
     unit: str
-    #: Cantidad en la versión vigente; None si el ítem se retiró del presupuesto.
+    #: Cantidad en la versión vigente; None si el ítem se retiró del presupuesto o hoy es
+    #: un capítulo.
     budgeted: Decimal | None
     planned: Decimal
     executed: Decimal
-    #: "ok", "over", "under" o "retired" (sobre el total del ítem, sin filtros).
+    #: "ok", "over", "under", "retired" o "chapter" (una reimportación volvió capítulo un
+    #: ítem con plan; sobre el total del ítem, sin filtros).
     status: str
     #: Capítulos que lo contienen (sus ids), para el filtro por capítulo.
     chapters: frozenset[UUID]
@@ -64,11 +67,7 @@ class ItemRow:
 
     @property
     def pct_executed(self) -> Decimal | None:
-        if self.planned <= 0:
-            return None
-        return (max(self.executed, _ZERO) * HUNDRED / self.planned).quantize(
-            PCT_STEP, rounding=ROUND_HALF_UP
-        )
+        return item_pct(self.planned, self.executed)
 
     @property
     def status_label(self) -> str:
@@ -134,10 +133,14 @@ def item_rows(ctx: RequestContext, project: Project) -> list[ItemRow]:
         description: str,
         unit: str,
         budgeted: Decimal | None,
+        *,
+        chapter: bool = False,
     ) -> ItemRow:
         tasks = tuple(by_item.get(item_id, ()))
         planned = sum((t.planned for t in tasks), _ZERO)
-        if budgeted is None:
+        if chapter:
+            status = "chapter"
+        elif budgeted is None:
             status = "retired"
         else:
             status = "over" if planned > budgeted else "under" if planned < budgeted else "ok"
@@ -167,6 +170,21 @@ def item_rows(ctx: RequestContext, project: Project) -> list[ItemRow]:
         for row in version_rows
         if row["kind"] == "item"
     ]
+    # Ítems con plan que una reimportación volvió capítulos: siguen en el presupuesto, así
+    # que no son "retirados"; se listan aparte para que la fila del plan no se pierda.
+    rows.extend(
+        build(
+            row["item_id"],
+            budgets[row["version__budget_id"]],
+            row["item__code"],
+            row["description"],
+            row["unit"],
+            None,
+            chapter=True,
+        )
+        for row in version_rows
+        if row["kind"] == "chapter" and row["item_id"] in by_item
+    )
     current_ids = {row.item_id for row in rows}
     retired = [i for i in by_item if i not in current_ids]
     for item_id, facts in item_facts(ctx, retired).items():
@@ -245,25 +263,28 @@ class NodeRow:
 
 def location_rows(ctx: RequestContext, project: Project) -> list[NodeRow]:
     """Valor planeado y ejecutado ($) por nodo, consolidado hacia arriba; al final las
-    tareas sin ubicación y el total."""
-    plans = list(
-        scoped_qs(ctx, QuantityPlan)
-        .filter(project=project)
-        .values_list("task_id", "item_id", "planned_quantity", "task__location_id")
+    tareas sin ubicación y el total.
+
+    Con las mismas filas que miden el avance (`plan_lines_with_facts` y la regla de
+    `task_progress`): sin capítulos ni pares con planeado 0, y solo tareas vigentes,
+    como el cronograma."""
+    lines, _ = plan_lines_with_facts(ctx, project_ids=[project.pk])
+    locations = dict(
+        scoped_qs(ctx, Task)
+        .filter(project=project, retired_in__isnull=True)
+        .values_list("pk", "location_id")
     )
-    executed = executed_by_pair(ctx, project_ids=[project.pk])
-    prices = {
-        item_id: facts.unit_price or _ZERO
-        for item_id, facts in item_facts(ctx, {item_id for _, item_id, _, _ in plans}).items()
-    }
     tree = load_tree(ctx, project)
     planned: dict[UUID | None, Decimal] = defaultdict(Decimal)
     done: dict[UUID | None, Decimal] = defaultdict(Decimal)
     total_planned = total_done = _ZERO
-    for task_id, item_id, quantity, location_id in plans:
-        price = prices.get(item_id, _ZERO)
-        p = quantity * price
-        e = max(executed.get((task_id, item_id), _ZERO), _ZERO) * price
+    for line in lines:
+        if line.planned <= 0 or line.task_id not in locations:
+            continue
+        location_id = locations[line.task_id]
+        price = line.unit_price or _ZERO
+        p = line.planned * price
+        e = max(line.executed, _ZERO) * price
         total_planned += p
         total_done += e
         if location_id is None or location_id not in tree.nodes:
