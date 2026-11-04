@@ -23,8 +23,8 @@ def _q(value: Decimal) -> str:
     return str(value.quantize(QUANTITY_STEP))
 
 
-def _plain(value: Decimal) -> str:
-    """`Decimal("5.0000")` → "5"; `Decimal("2.5000")` → "2,5" (para los ejemplos)."""
+def plain_quantity(value: Decimal) -> str:
+    """`Decimal("5.0000")` → "5"; `Decimal("2.5000")` → "2,5" (ejemplos, Admin)."""
     return f"{value.normalize():f}".replace(".", ",")
 
 
@@ -48,9 +48,9 @@ def summarize_plan(
         "removed": len(removed),
         "kept_zero": len(kept),
         "examples": {
-            "added": [f"{label(p)}: {_plain(new[p])}" for p in added[:MAX_EXAMPLES]],
+            "added": [f"{label(p)}: {plain_quantity(new[p])}" for p in added[:MAX_EXAMPLES]],
             "changed": [
-                f"{label(p)}: {_plain(current[p])} → {_plain(new[p])}"
+                f"{label(p)}: {plain_quantity(current[p])} → {plain_quantity(new[p])}"
                 for p in changed[:MAX_EXAMPLES]
             ],
             "removed": [label(p) for p in removed[:MAX_EXAMPLES]],
