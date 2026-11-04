@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from visitacampo.authn.schemas import rfc3339_utc
@@ -41,6 +42,7 @@ __all__ = [
     "assignment_record",
     "form_template_version_record",
     "iso",
+    "quantity_records",
     "tombstone",
     "uuid_str",
     "visit_attachment_record",
@@ -86,8 +88,22 @@ def visit_record(visit: Visit) -> dict[str, Any]:
             "task_id": uuid_str(visit.task_id),
             # `numeric` → número JSON (el contrato dice `number`, no texto).
             "progress_pct": None if visit.progress_pct is None else float(visit.progress_pct),
+            "quantities": quantity_records(visit.quantities),
         },
     }
+
+
+def quantity_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`Visit.quantities` como lo publica el contrato: la cantidad como número JSON."""
+    return [
+        {
+            "item_id": row["item_id"],
+            "location_id": row["location_id"],
+            "quantity": float(Decimal(row["quantity"])),
+            "note": row["note"],
+        }
+        for row in rows
+    ]
 
 
 def visit_attachment_record(attachment: VisitAttachment) -> dict[str, Any]:

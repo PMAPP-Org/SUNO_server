@@ -184,3 +184,38 @@ class UpdateTests(SimpleTestCase):
         )
         self.assertIn('"answers" = %s::jsonb', statement.sql)
         self.assertIn(json.dumps({"a": 1}), statement.params)
+
+
+class QuantitiesTests(SimpleTestCase):
+    """Costos, pieza 4: `quantities` es JSONB, como `answers`."""
+
+    ROWS = [{"item_id": str(TEMPLATE), "location_id": None, "quantity": "4.5000", "note": ""}]
+
+    def test_insert_writes_an_empty_list_when_absent(self) -> None:
+        statement = sql.build_insert(
+            org_id=ORG, visit_id=VISIT, change_seq=42, created_by=USER, fields=create_fields()
+        )
+        self.assertIn('"quantities"', statement.sql)
+        self.assertEqual(statement.sql.count("%s::jsonb"), 2)
+        self.assertIn(json.dumps([]), statement.params)
+
+    def test_insert_serializes_the_rows(self) -> None:
+        statement = sql.build_insert(
+            org_id=ORG,
+            visit_id=VISIT,
+            change_seq=42,
+            created_by=USER,
+            fields={**create_fields(), "quantities": self.ROWS},
+        )
+        self.assertIn(json.dumps(self.ROWS), statement.params)
+
+    def test_update_casts_the_rows_to_jsonb(self) -> None:
+        statement = sql.build_update(
+            org_id=ORG,
+            visit_id=VISIT,
+            base_version=3,
+            change_seq=99,
+            fields={"quantities": self.ROWS},
+        )
+        self.assertIn('"quantities" = %s::jsonb', statement.sql)
+        self.assertIn(json.dumps(self.ROWS), statement.params)

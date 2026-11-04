@@ -287,6 +287,55 @@ Caption = Annotated[str, StringConstraints(max_length=512), AfterValidator(_text
 #: Mayor valor de `PositiveIntegerField` en PostgreSQL (`integer`).
 _MAX_ORDER = 2_147_483_647
 
+#: Costos, pieza 4: cantidad ejecutada de un ítem. `numeric(18,4)`: hasta 14
+#: dígitos enteros (|q| < 10¹⁴) y 4 decimales; distinta de 0 (validador).
+QuantityValue = Annotated[Decimal, BeforeValidator(_json_number)]
+
+#: Nota de una cantidad: obligatoria para ajustes negativos e ítems fuera del plan.
+QuantityNote = Annotated[str, StringConstraints(max_length=500), AfterValidator(_text_safe)]
+
+#: Filas de `quantities` por visita.
+MAX_QUANTITY_ROWS = 200
+
+_QUANTITY_STEP = Decimal("0.0001")
+
+
+class _QuantityPayload(BaseModel):
+    """Contrato `VisitQuantityPayload`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_id: uuid.UUID
+    location_id: uuid.UUID | None = None
+    quantity: QuantityValue = Field(max_digits=18, decimal_places=4)
+    note: QuantityNote = ""
+
+    @field_validator("quantity")
+    @classmethod
+    def _non_zero(cls, value: Decimal) -> Decimal:
+        if value == 0:
+            raise ValueError("must not be zero.")
+        return value
+
+
+def stored_quantities(rows: list[Any]) -> list[dict[str, Any]]:
+    """La forma guardada en `Visit.quantities`: ids como texto y la cantidad como
+    decimal de 4 decimales en texto (exacto). Es también la forma con la que se
+    compara una visita validada (`services._References.validated_rejection`)."""
+    stored: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.model_dump() if isinstance(row, BaseModel) else row
+        location = data.get("location_id")
+        stored.append(
+            {
+                "item_id": str(data["item_id"]),
+                "location_id": None if location is None else str(location),
+                "quantity": str(Decimal(data["quantity"]).quantize(_QUANTITY_STEP)),
+                "note": str(data.get("note") or "").strip(),
+            }
+        )
+    return stored
+
 
 class _AttachmentCreatePayload(BaseModel):
     """Contrato `VisitAttachmentPayload` en su forma completa (alta)."""
@@ -315,6 +364,7 @@ _NON_NULLABLE_ON_UPDATE: tuple[str, ...] = (
     "answers",
     "captured_at",
     "device_id",
+    "quantities",
 )
 
 
@@ -342,6 +392,8 @@ class _VisitCreatePayload(BaseModel):
     progress_pct: ProgressPct | None = Field(
         default=None, ge=0, le=100, max_digits=5, decimal_places=2
     )
+    # Costos, pieza 4. Opcional: un cliente anterior no lo envía.
+    quantities: list[_QuantityPayload] = Field(default_factory=list, max_length=MAX_QUANTITY_ROWS)
 
 
 class _VisitUpdatePayload(BaseModel):
@@ -363,6 +415,7 @@ class _VisitUpdatePayload(BaseModel):
     progress_pct: ProgressPct | None = Field(
         default=None, ge=0, le=100, max_digits=5, decimal_places=2
     )
+    quantities: list[_QuantityPayload] | None = Field(default=None, max_length=MAX_QUANTITY_ROWS)
 
     @field_validator(*_NON_NULLABLE_ON_UPDATE)
     @classmethod
@@ -405,6 +458,7 @@ _UPDATABLE_FIELDS: tuple[str, ...] = (
     "device_id",
     "task_id",
     "progress_pct",
+    "quantities",
 )
 
 
@@ -425,25 +479,57 @@ def _rejection(
 
 
 def _task_pair_rejection(fields: dict[str, Any], entity_id: uuid.UUID) -> Rejection | None:
-    """`task_id` y `progress_pct` van juntos: los dos con valor o los dos `null`.
+    """Regla del trío (`task_id`, `progress_pct`, `quantities`).
+
+    - `task_id` y `progress_pct` viajan siempre juntos (también en `update`), y
+      `quantities` solo viaja con ellos: aceptar uno solo obligaría a leer la
+      fila para saber si el conjunto queda coherente.
+    - Sin tarea: ni % ni cantidades. Desvincular vacía las cantidades.
+    - Con tarea: un % o al menos una cantidad (o ambos).
+    - Un `update` con tarea y % pero sin `quantities` deja la lista vacía: un
+      cliente anterior a la pieza 4 nunca tiene cantidades.
 
     Lo exige también la BD (`visit_task_progress_pair`), pero allí sería un
-    `IntegrityError` que tumba el lote entero (ver el docstring del módulo). En
-    un `update` tienen que viajar los dos: aceptar uno solo obligaría a leer la
-    fila para saber si el par queda completo.
+    `IntegrityError` que tumba el lote entero (ver el docstring del módulo).
+    Normaliza `fields["quantities"]` a la forma guardada (`stored_quantities`).
     """
     has_task, has_pct = "task_id" in fields, "progress_pct" in fields
-    if not has_task and not has_pct:
+    if not has_task and not has_pct and "quantities" not in fields:
         return None
     task_id, pct = fields.get("task_id"), fields.get("progress_pct")
-    if has_task and has_pct and (task_id is None) == (pct is None):
+    if not (has_task and has_pct):
+        return _rejection(
+            "task_id and progress_pct must be sent together (also with quantities).",
+            field="progress_pct" if has_task else "task_id",
+            reason="task_progress_pair",
+            entity_id=entity_id,
+        )
+    quantities = stored_quantities(fields.get("quantities") or [])
+    fields["quantities"] = quantities
+    if task_id is None:
+        if pct is not None:
+            return _rejection(
+                "progress_pct needs a task_id.",
+                field="task_id",
+                reason="task_progress_pair",
+                entity_id=entity_id,
+            )
+        if quantities:
+            return _rejection(
+                "quantities need a task_id.",
+                field="quantities",
+                reason="quantities_without_task",
+                entity_id=entity_id,
+            )
         return None
-    return _rejection(
-        "task_id and progress_pct must be sent together, both set or both null.",
-        field="progress_pct" if task_id is not None else "task_id",
-        reason="task_progress_pair",
-        entity_id=entity_id,
-    )
+    if pct is None and not quantities:
+        return _rejection(
+            "A visit linked to a task needs progress_pct or at least one quantity.",
+            field="progress_pct",
+            reason="task_progress_pair",
+            entity_id=entity_id,
+        )
+    return None
 
 
 def target_id(payload: Any) -> uuid.UUID | None:
