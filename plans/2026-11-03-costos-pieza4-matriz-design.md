@@ -291,3 +291,10 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
 - Consolidación por valor: los hitos y las tareas de peso 0 sin plan no cuentan; si un
   hijo con plan tiene valor 0 (ítems sin precio), el grupo se pondera por días, para que
   su avance no desaparezca.
+- Una versión anterior de la app (sin cantidades) que edita la tarea o el % de una visita
+  aún no validada le borra las cantidades: su `update` lleva tarea y % sin `quantities`, y
+  eso deja la lista vacía. Las visitas validadas están protegidas (`visit_validated`). Por
+  eso la etapa 4b debe exigir la versión de la app actualizada antes de usar cantidades
+  en campo.
+- Una cantidad sobre un capítulo del presupuesto se rechaza con `item_not_in_project`:
+  los capítulos no se miden.
