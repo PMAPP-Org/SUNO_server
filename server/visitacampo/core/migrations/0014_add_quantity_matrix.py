@@ -9,6 +9,28 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def unlink_quantity_only_visits(apps, schema_editor):
+    """Reversa: deja que vuelva el CHECK anterior (`visit_task_progress_pair` exigía un %
+    en toda visita con tarea).
+
+    Una visita con tarea y solo cantidades (`progress_pct` nulo) no cabe en el esquema
+    anterior, que no tiene `quantities`: se desvincula de la tarea y se vacían sus
+    cantidades (que de todos modos se pierden al quitar la columna). Es una pérdida de
+    datos deliberada: revertir esta migración solo tiene sentido en un entorno sin datos
+    de campo reales. No sube `change_seq`: los teléfonos no ven el cambio.
+
+    Corre mientras el CHECK nuevo sigue puesto (va justo después de `AddConstraint` en la
+    ida), y tarea nula con % nulo y lista vacía lo cumple. `SET CONSTRAINTS ALL IMMEDIATE`
+    dispara ya los triggers diferidos de las FK, para que el `ALTER TABLE` siguiente sobre
+    `visit` no choque con eventos pendientes."""
+    visit = apps.get_model("core", "Visit")
+    visit.objects.filter(task__isnull=False, progress_pct__isnull=True).update(
+        task=None, quantities=[]
+    )
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("core", "0013_add_budgets"),
@@ -150,6 +172,7 @@ class Migration(migrations.Migration):
                 name="visit_task_progress_pair",
             ),
         ),
+        migrations.RunPython(migrations.RunPython.noop, unlink_quantity_only_visits),
         migrations.AddField(
             model_name="locationlevel",
             name="org",
