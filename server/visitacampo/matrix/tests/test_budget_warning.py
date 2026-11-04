@@ -6,7 +6,7 @@ from unittest import mock
 from django.test import TestCase
 
 from visitacampo.budgets.tests.factories import stage_rows
-from visitacampo.budgets.tests.samples import V2_ROWS
+from visitacampo.budgets.tests.samples import SPLIT_ROWS, V2_ROWS
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -78,3 +78,23 @@ class BudgetPreviewWarningTests(TestCase):
         ) as executed:
             stage_rows(world.ctx(), budget, V2_ROWS)
         executed.assert_called_once()
+
+    def test_item_that_becomes_a_chapter_in_matrix_is_warned(self) -> None:
+        world, budget = budget_world()
+        plan(world, 3, item(budget, "2.1"), "5")  # SPLIT_ROWS vuelve capítulo el 2.1
+        version = stage_rows(world.ctx(), budget, SPLIT_ROWS)
+        warning = next(w for w in version.summary["warnings"] if "pasan a ser capítulos" in w)
+        self.assertIn("Los ítems 2.1 pasan a ser capítulos", warning)
+        self.assertIn("dejan de contar para el avance", warning)
+        self.assertFalse(any("eliminado(s)" in w for w in version.summary["warnings"]))
+
+    def test_item_that_becomes_a_chapter_with_execution_is_warned(self) -> None:
+        world, budget = budget_world()
+        world.approve(quantity_visit(world, 3, quantity_row(item(budget, "2.1"), "2")))
+        version = stage_rows(world.ctx(), budget, SPLIT_ROWS)
+        self.assertIn("Los ítems 2.1 pasan a ser capítulos", " ".join(version.summary["warnings"]))
+
+    def test_item_that_becomes_a_chapter_unused_is_not_warned(self) -> None:
+        world, budget = budget_world()
+        version = stage_rows(world.ctx(), budget, SPLIT_ROWS)
+        self.assertFalse(any("capítulos" in w for w in version.summary.get("warnings", [])))

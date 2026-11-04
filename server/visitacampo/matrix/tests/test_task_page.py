@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
-from visitacampo.budgets.tests.samples import V1_ROWS
+from visitacampo.budgets.tests.samples import SPLIT_ROWS, V1_ROWS
 from visitacampo.core.models import Project, QuantityPlan, ScheduleImport, Visit
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
@@ -50,6 +50,13 @@ class TaskPageTests(TestCase):
         self.assertContains(response, "Concreto zapatas")
         self.assertContains(response, "4.500.000,00")  # valor planeado
         self.assertNotContains(response, "Agregar ítem")  # supervisión no edita
+
+    def test_planned_item_that_became_a_chapter_is_highlighted(self) -> None:
+        apply_rows(self.world.ctx(), self.budget, SPLIT_ROWS)
+        self.client.force_login(self.world.supervisor)
+        response = self.client.get(self.url)
+        self.assertContains(response, "hoy son capítulos del presupuesto (no suman al %): 2.1")
+        self.assertContains(response, "Concreto zapatas")  # la fila del plan se conserva
 
     def test_field_agent_sees_quantities_without_amounts(self) -> None:
         self.world.responsible(3)

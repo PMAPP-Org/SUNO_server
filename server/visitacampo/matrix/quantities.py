@@ -14,6 +14,7 @@ from django.db.models import QuerySet
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
     BudgetItemVersion,
+    BudgetRowKind,
     BudgetVersionStatus,
     QuantityPlan,
     Visit,
@@ -127,23 +128,29 @@ def item_facts(ctx: RequestContext, item_ids: Iterable[UUID]) -> dict[UUID, Item
     }
 
 
-def plan_lines(
+def plan_lines_with_facts(
     ctx: RequestContext,
     *,
     task_ids: Iterable[UUID] | None = None,
     project_ids: Iterable[UUID] | None = None,
-) -> list[PlanLine]:
-    """Las filas del plan con lo ejecutado validado y el precio. Tres queries."""
+) -> tuple[list[PlanLine], dict[UUID, ItemFacts]]:
+    """Las filas del plan que miden, con lo ejecutado validado y el precio, y los datos de
+    sus ítems. Tres queries.
+
+    Sin las filas cuyo ítem es hoy un capítulo: una reimportación puede volver capítulo
+    un ítem planeado (el 2.1 se parte en 2.1.1 y 2.1.2) y la fila del plan sobrevive, pero
+    un encabezado no mide la tarea. Filtrar aquí hace que la ficha de la tarea, las tareas
+    de campo y el cronograma lean el mismo avance."""
     tasks, projects = _ids(task_ids), _ids(project_ids)
     if tasks == [] or projects == []:
-        return []
+        return [], {}
     plans = _by_scope(scoped_qs(ctx, QuantityPlan), tasks, projects, task="task")
     rows = list(plans.values_list("task_id", "item_id", "planned_quantity"))
     if not rows:
-        return []
+        return [], {}
     executed = executed_by_pair(ctx, task_ids=tasks, project_ids=projects)
     facts = item_facts(ctx, (item_id for _, item_id, _ in rows))
-    return [
+    lines = [
         PlanLine(
             task_id=task_id,
             item_id=item_id,
@@ -152,7 +159,20 @@ def plan_lines(
             unit_price=facts[item_id].unit_price if item_id in facts else None,
         )
         for task_id, item_id, planned in rows
+        if item_id not in facts or facts[item_id].kind != BudgetRowKind.CHAPTER
     ]
+    return lines, facts
+
+
+def plan_lines(
+    ctx: RequestContext,
+    *,
+    task_ids: Iterable[UUID] | None = None,
+    project_ids: Iterable[UUID] | None = None,
+) -> list[PlanLine]:
+    """Las filas del plan que miden (sin capítulos), con lo ejecutado validado y el precio.
+    Tres queries."""
+    return plan_lines_with_facts(ctx, task_ids=task_ids, project_ids=project_ids)[0]
 
 
 def measured_progress(

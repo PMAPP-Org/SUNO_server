@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.budgets.tests.factories import apply_rows, make_budget
-from visitacampo.budgets.tests.samples import V1_ROWS
+from visitacampo.budgets.tests.samples import MERGED_ROWS, SPLIT_ROWS, V1_ROWS, V2_ROWS
 from visitacampo.core.context import Principal, resolve_request_context
 from visitacampo.core.models import (
     AppUser,
@@ -277,6 +277,48 @@ class QuantityPushTests(TestCase):
         chapter = BudgetItem.objects.get(budget__project=self.project, code="2")
         result = self.push_one(self.create(self.row(chapter, 1, note="capítulo")))
         self.assertRejected(result, "item_not_in_project")
+
+    def _reimport(self, rows: list[list[Any]]) -> None:
+        apply_rows(self.ctx, self.concrete.budget, rows)
+
+    def test_item_retired_in_the_latest_version_is_accepted(self) -> None:
+        """V2 quita el 1.2: cuenta su tipo en la última versión aplicada que lo contiene."""
+        self._reimport(V2_ROWS)
+        removed = BudgetItem.objects.get(budget__project=self.project, code="1.2")
+        result = self.push_one(self.create(self.row(removed, 1, note="ya no está")))
+        self.assertEqual(result["status"], "applied", result)
+
+    def test_chapter_that_became_an_item_is_accepted(self) -> None:
+        self._reimport(MERGED_ROWS)
+        merged = BudgetItem.objects.get(budget__project=self.project, code="2")
+        result = self.push_one(self.create(self.row(merged, 1, note="global")))
+        self.assertEqual(result["status"], "applied", result)
+
+    def test_item_that_became_a_chapter_without_plan_is_rejected(self) -> None:
+        QuantityPlan.objects.filter(item=self.concrete).delete()
+        self._reimport(SPLIT_ROWS)
+        result = self.push_one(self.create(self.row(self.concrete, 1, note="capítulo")))
+        self.assertRejected(result, "item_not_in_project")
+
+    def test_planned_item_that_became_a_chapter_is_accepted(self) -> None:
+        """El 2.1 se le ofreció al campo en la tarea 1.2 antes de partirse: lo registrado
+        sin conexión no se pierde. En otra tarea sin plan sigue siendo un capítulo."""
+        self._reimport(SPLIT_ROWS)
+        result = self.push_one(self.create(self.row(self.concrete, 2)))
+        self.assertEqual(result["status"], "applied", result)
+        TaskResponsible.objects.create(
+            org=self.scenario.org,
+            task=self.task(2),
+            user=self.scenario.user,
+            assigned_by=self.admin,
+        )
+        other = create_op(
+            self.scenario,
+            task_id=str(self.task(2).pk),
+            progress_pct=None,
+            quantities=[self.row(self.concrete, 2, note="otra tarea")],
+        )
+        self.assertRejected(self.push_one(other), "item_not_in_project")
 
     def test_real_item_of_another_project_in_the_org(self) -> None:
         project, _ = self._other_project()

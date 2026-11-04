@@ -2194,7 +2194,9 @@ components:
             $ref: '#/components/schemas/FieldLocation'
         planned_items:
           type: array
-          description: Ítems planeados de la tarea, sin precios ni montos.
+          description: >-
+            Ítems planeados que miden la tarea (con cantidad planeada > 0; sin los que hoy
+            son capítulos del presupuesto), sin precios ni montos.
           items:
             $ref: '#/components/schemas/FieldPlannedItem'
 

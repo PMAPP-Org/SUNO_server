@@ -33,6 +33,7 @@ from visitacampo.core.download import ascii_filename
 from visitacampo.core.models import (
     AppUser,
     Budget,
+    BudgetRowKind,
     Membership,
     Project,
     QuantityPlan,
@@ -364,6 +365,16 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
     # Ítems con cantidades validadas que no están en el plan de la tarea: no suman al %.
     unplanned = item_facts(ctx, {item_id for (_, item_id) in executed} - {p.item_id for p in plans})
     unplanned_executed = sorted(unplanned.values(), key=lambda f: f.code)
+    # Ítems del plan que una reimportación volvió capítulos: la fila se conserva y lo que
+    # el campo registre en ellos se acepta, pero no miden la tarea (`plan_lines`).
+    chapter_plans = sorted(
+        (
+            facts[p.item_id]
+            for p in plans
+            if p.item_id in facts and facts[p.item_id].kind == BudgetRowKind.CHAPTER
+        ),
+        key=lambda f: code_key(f.code),
+    )
     # Historial: los ítems de lo validado ya están en `facts` o en `unplanned`.
     records, history_truncated = validated_records(ctx, task.pk, max_visits=QUANTITY_HISTORY_VISITS)
     known = {**facts, **unplanned}
@@ -372,7 +383,8 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "visit": record.visit,
             "code": known[record.item_id].code if record.item_id in known else "?",
             "unit": known[record.item_id].unit if record.item_id in known else "",
-            # Sin ubicación precisada: la de la tarea.
+            # Sin ubicación precisada: la ubicación *actual* de la tarea (no la que tenía al
+            # registrarse; si la tarea se movió, la fila muestra la nueva).
             "location": tree.label(record.location_id or task.location_id),
             "quantity": record.quantity,
             "note": record.note,
@@ -406,6 +418,7 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             "field_visits": progress_visits(ctx, task),
             "plan_rows": plan_rows,
             "unplanned_executed": unplanned_executed,
+            "chapter_plans": chapter_plans,
             "quantity_history": quantity_history,
             "history_truncated": history_truncated,
             "history_visits": QUANTITY_HISTORY_VISITS,

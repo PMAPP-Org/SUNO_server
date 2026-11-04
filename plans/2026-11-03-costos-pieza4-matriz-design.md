@@ -296,5 +296,13 @@ Precisiones del plan `2026-11-03-costos-pieza4-matriz-plan.md`; no cambian lo ap
   eso deja la lista vacía. Las visitas validadas están protegidas (`visit_validated`). Por
   eso la etapa 4b debe exigir la versión de la app actualizada antes de usar cantidades
   en campo.
-- Una cantidad sobre un capítulo del presupuesto se rechaza con `item_not_in_project`:
-  los capítulos no se miden.
+- Capítulos: el tipo de un ítem es el de la última versión aplicada que lo contiene. Una
+  cantidad sobre un capítulo se rechaza con `item_not_in_project` (los capítulos no se
+  miden), **salvo** que el par (tarea, ítem) esté en la matriz: una reimportación puede
+  volver capítulo un ítem planeado (el 2.1 se parte en 2.1.1 y 2.1.2) y la fila del plan
+  sobrevive; el campo ya lo tenía ofrecido, así que lo registrado se acepta y se resalta,
+  nunca se pierde. Esas filas del plan no miden: `plan_lines` las deja fuera, y con eso
+  el % por cantidades, `measured_by` y `planned_items` de las tareas de campo (que ya no
+  las ofrecen) y el cronograma coinciden. La ficha de la tarea las conserva con un aviso, y
+  la vista previa del presupuesto avisa cuando un ítem con filas en la matriz o cantidades
+  ejecutadas pasa a ser capítulo.

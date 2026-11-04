@@ -278,8 +278,8 @@ class _References:
     #: `visit_id → (task_id, progress_pct, quantities, version)` de las visitas validadas
     #: que el lote cambia de tarea, % o cantidades, o borra (ver `_validated_progress`).
     validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]
-    #: Costos, pieza 4: ítem → proyecto de su presupuesto. Sin los capítulos: no se miden.
-    items: dict[uuid.UUID, uuid.UUID]
+    #: Costos, pieza 4: ítem → (proyecto de su presupuesto, si es un capítulo).
+    items: dict[uuid.UUID, tuple[uuid.UUID, bool]]
     #: Nodo de ubicación → (proyecto, path).
     nodes: dict[uuid.UUID, tuple[uuid.UUID, str]]
     #: Pares (tarea, ítem) que están en la matriz.
@@ -352,7 +352,12 @@ class _References:
 
         for row in rows:
             item_id = uuid.UUID(row["item_id"])
-            if self.items.get(item_id) != ref.project_id:
+            planned = (task_id, item_id) in self.planned
+            project_id, chapter = self.items.get(item_id, (None, False))
+            # Un capítulo no recibe cantidades, salvo si está en el plan de la tarea: era un
+            # ítem cuando se le ofreció al campo y una reimportación lo volvió capítulo. Lo
+            # registrado sin conexión se acepta y se resalta; nunca se pierde.
+            if project_id != ref.project_id or (chapter and not planned):
                 return reject(
                     "The item is not a measurable item of a budget of the task's project.",
                     "item_not_in_project",
@@ -371,7 +376,6 @@ class _References:
                         "The location is not the task's location nor inside it.",
                         "location_outside_task",
                     )
-            planned = (task_id, item_id) in self.planned
             if (Decimal(row["quantity"]) < 0 or not planned) and not row["note"]:
                 return reject(
                     "A note is required for negative adjustments and unplanned items.",
@@ -506,7 +510,7 @@ def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID,
 def _quantity_refs(
     ctx: RequestContext, writes: list[VisitWrite]
 ) -> tuple[
-    dict[uuid.UUID, uuid.UUID],
+    dict[uuid.UUID, tuple[uuid.UUID, bool]],
     dict[uuid.UUID, tuple[uuid.UUID, str]],
     set[tuple[uuid.UUID, uuid.UUID]],
 ]:
@@ -517,7 +521,8 @@ def _quantity_refs(
     if not item_ids:
         return {}, {}, set()
     # El tipo del ítem en la última versión aplicada que lo contiene (la vigente si sigue
-    # en ella): un capítulo no recibe cantidades. Subconsulta: la misma query de antes.
+    # en ella): un capítulo solo recibe cantidades si está en el plan de la tarea (ver
+    # `quantities_rejection`). Subconsulta: la misma query de antes.
     kind = Subquery(
         scoped_qs(ctx, BudgetItemVersion)
         .filter(item=OuterRef("pk"), version__status=BudgetVersionStatus.APPLIED)
@@ -525,12 +530,11 @@ def _quantity_refs(
         .values("kind")[:1]
     )
     items = {
-        pk: project_id
+        pk: (project_id, item_kind == BudgetRowKind.CHAPTER)
         for pk, project_id, item_kind in scoped_qs(ctx, BudgetItem)
         .filter(pk__in=item_ids)
         .annotate(current_kind=kind)
         .values_list("pk", "budget__project_id", "current_kind")
-        if item_kind != BudgetRowKind.CHAPTER
     }
     node_ids = {
         uuid.UUID(row["location_id"])

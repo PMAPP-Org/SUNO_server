@@ -53,6 +53,19 @@ V2_ROWS: list[list[Any]] = [
     ["2.4", "Curado", "m2", 40, 3000, 120000],
 ]
 V3_ROWS: list[list[Any]] = [*V2_ROWS[:2], V1_ROWS[2], *V2_ROWS[2:]]
+#: La v1 con el 2.1 partido: pasa a ser un capítulo con los ítems 2.1.1 y 2.1.2.
+SPLIT_ROWS: list[list[Any]] = [
+    *V1_ROWS[:4],
+    ["2.1", "Concreto zapatas"],
+    ["2.1.1", "Concreto zapatas eje A", "m3", 6, 450000, 2700000],
+    ["2.1.2", "Concreto zapatas eje B", "m3", 4, 450000, 1800000],
+    *V1_ROWS[5:],
+]
+#: El capítulo 2 de la v1 pasa a ser un ítem global (sin hijos).
+MERGED_ROWS: list[list[Any]] = [
+    *V1_ROWS[:3],
+    ["2", "Estructura", "gl", 1, 7980000, 7980000],
+]
 
 AIU = [
     ChargeSpec(1, "Administración", Decimal("10"), BASE_DIRECT),

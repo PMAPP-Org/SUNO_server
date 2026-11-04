@@ -24,14 +24,17 @@ from visitacampo.core.scoping import scoped_qs
 from visitacampo.matrix.diff import code_key
 from visitacampo.matrix.locations import Tree, load_trees
 from visitacampo.matrix.progress import task_progress
-from visitacampo.matrix.quantities import item_facts, plan_lines, suno_pct_by_task
+from visitacampo.matrix.quantities import plan_lines_with_facts, suno_pct_by_task
 
 from .access import responsible_outlines
 
 
 def field_tasks(ctx: RequestContext) -> list[dict[str, Any]]:
-    """Contrato `FieldTask`, en el orden de proyecto y del Project. Diez queries como mucho:
-    responsables, tareas, plan (tres), datos de los ítems, % manual y ubicaciones."""
+    """Contrato `FieldTask`, en el orden de proyecto y del Project. Siete queries como mucho:
+    responsables, tareas, plan (tres, con los datos de los ítems), % manual y ubicaciones.
+
+    `planned_items` son los ítems que miden la tarea (los mismos que deciden
+    `measured_by`): sin capítulos (`plan_lines_with_facts`) ni filas sin cantidad planeada."""
     check_read_field_tasks(ctx, ctx.org_id)
     roots = responsible_outlines(ctx, user_id=ctx.user_id)
     if not roots:
@@ -49,14 +52,13 @@ def field_tasks(ctx: RequestContext) -> list[dict[str, Any]]:
         .order_by("project__name", "project_id", "sort_order")
     )
     ids = [t.pk for t in tasks]
-    lines = plan_lines(ctx, task_ids=ids)
+    lines, facts = plan_lines_with_facts(ctx, task_ids=ids)
     measured = task_progress(lines)
     pct = suno_pct_by_task(ctx, task_ids=ids, measured=measured)
-    facts = item_facts(ctx, {ln.item_id for ln in lines})
     planned_items: dict[UUID, list[dict[str, Any]]] = {}
     for ln in lines:
         info = facts.get(ln.item_id)
-        if info is None:
+        if info is None or ln.planned <= 0:
             continue
         planned_items.setdefault(ln.task_id, []).append(
             {
