@@ -4,6 +4,18 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.13.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.12.0...v0.13.0) (2026-11-06)
+
+
+### Agregado
+
+* **matrix:** matriz de homologación y ubicación (servidor) ([#56](https://github.com/PMAPP-Org/SUNO_server/issues/56)) ([cbb74eb](https://github.com/PMAPP-Org/SUNO_server/commit/cbb74eb5eabbab575898cfc3cf79d6330dcaa009))
+
+
+### Documentación
+
+* **plan:** registro de cierre del módulo de presupuestos ([#54](https://github.com/PMAPP-Org/SUNO_server/issues/54)) ([9bd29fc](https://github.com/PMAPP-Org/SUNO_server/commit/9bd29fcb2c70f3414d0cb8126f07012cf21b382c))
+
 ## [0.12.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.11.0...v0.12.0) (2026-11-03)
 
 
