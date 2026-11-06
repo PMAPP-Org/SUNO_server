@@ -1238,7 +1238,9 @@ components:
         note:
           type: string
           maxLength: 500
-          description: Obligatoria si la cantidad es negativa o el ítem no está en el plan de la tarea.
+          description: |
+            La app la exige al capturar si la cantidad es negativa o el ítem no está en el plan
+            de la tarea; el servidor la acepta vacía y la revisión lo resalta.
 
     VisitAttachment:
       type: object

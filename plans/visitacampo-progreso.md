@@ -1,7 +1,21 @@
 # Progreso de ejecución — VisitaCampo
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-11-01 (módulo de costos, etapa 1 completa: servidor v0.11.0 y app v0.11.0. Anterior: 2026-10-31; ver «Estado al 2026-10-29» abajo)
+**Última actualización**: 2026-11-06 (módulo de costos, pieza 4a: matriz de homologación en el servidor, PR abierto. Anterior: 2026-11-01; ver «Estado al 2026-10-29» abajo)
+
+## Módulo de costos — Pieza 4a (Matriz de homologación y ubicación), servidor — 2026-11-06
+
+**PR**: PR_PLACEHOLDER, pendiente de merge. Plan: [2026-11-03-costos-pieza4-matriz-plan.md](2026-11-03-costos-pieza4-matriz-plan.md). Spec: [2026-11-03-costos-pieza4-matriz-design.md](2026-11-03-costos-pieza4-matriz-design.md). Rama `feat/costos-matriz`.
+
+**Qué entra (Tasks 0–20)**: migración `0014_add_quantity_matrix` (reversible) con `LocationLevel`, `LocationNode` (árbol con `path`, hasta 6 niveles), `QuantityPlan`, `QuantityPlanImport`, `Task.location` y `Visit.quantities` (JSONB, con el `CHECK` del trío tarea/%/cantidades); paquete `visitacampo/matrix/` (niveles y árbol, avance por cantidades ponderado por costo, ejecutado validado y precios, plantilla Excel, diferencias, importación en dos pasos con vista previa obsoleta y bloqueo, ediciones web, vistas por ítem y por ubicación); ubicación leída de campos personalizados de MS Project (todo o nada) o asignada en SUNO; consolidación del cronograma por valor planeado; `quantities` en el push y el pull del sync; `FieldTask` con `measured_by`, `location`, `location_options` y `planned_items`; ficha de tarea con el bloque "Cantidades planeadas" (% por ítem, registros validados, avisos de capítulo, de ítem retirado y de cantidades fuera del plan); Admin de visitas con las cantidades y sus avisos; la vista previa de presupuestos avisa de ítems con plan o ejecución que desaparecen o pasan a capítulo. Pestaña **Matriz** con las políticas de presupuestos (el agente de campo recibe 404).
+
+**Verificación real**: `pytest` completo **1437 passed** (+1515 subtests), 4 fallos conocidos del entorno en `sync/tests/test_load_script.py`; cobertura **94,65 %** (master 93,77 %; suelo 90 %); `ruff check` limpio y `ruff format --check` sin archivos nuevos (los 8 ajenos de siempre); `mypy` limpio (291 archivos); `makemigrations --check` sin cambios; bandit y semgrep (packs de CI) sin hallazgos.
+
+**Revisión visual** (1440 px y 390 px, Edge headless, textos de 100+ caracteres, 6 niveles, montos de 12 dígitos): a 390 px los filtros con nombres largos (presupuesto, ubicación) desbordaban el formulario, y las tablas del historial de la matriz, del detalle de la tarea y de "Avance de campo" se salían del panel. Corregido: los `select` de `.pj-filters` se encogen a su etiqueta, los nombres de presupuesto en los `select` se recortan a 60 caracteres y esas tablas van en `pj-scroll`.
+
+**Decisiones registradas en la spec**: (1) el servidor solo rechaza cantidades por problemas estructurales (`quantities_without_task`, `item_not_in_project`, `location_outside_task`, `visit_validated`); un ítem fuera del plan o un ajuste negativo sin nota se aceptan y se resaltan en la revisión, y la nota obligatoria la exige la app al capturar; (2) una versión anterior de la app que edita la tarea o el % de una visita aún no validada le borra las cantidades (su `update` no lleva `quantities`); las validadas están protegidas; (3) el retiro de nodos de ubicación se aplaza (el modelo tiene `retired_at`, pero no hay cómo retirar desde la web ni la plantilla). Además: las cantidades viajan dentro de la visita; la ubicación sale toda de Project o toda de SUNO; un ítem planeado que se vuelve capítulo conserva su fila del plan y lo registrado, sin sumar al %.
+
+**Pendiente para 4b (app)**: (a) exigir la versión actualizada de la app antes de usar cantidades en campo (por la decisión 2); (b) la regla de la nota (cantidad negativa o ítem fuera del plan) al capturar; (c) un caso todavía rechaza para siempre un registro sin conexión: un ítem capturado mientras estaba en el plan de la tarea, cuyo par la oficina quita (aún sin ejecución) y que una reimportación del presupuesto vuelve capítulo. El push contesta `item_not_in_project` y el cliente 4b debe tratarlo con claridad (reasignar o quitar la cantidad). **Deuda**: la reversa de la migración `0014` no tiene prueba automática. Más adelante: valor ganado (pieza 5) y etiquetas transversales.
 
 ## Módulo de costos — Pieza 3 (Presupuesto), servidor — 2026-11-01
 
