@@ -26,6 +26,8 @@ class TaskInput:
     finish: date | None
     actual_finish: date | None
     project_pct: float | None
+    #: Valor planeado por cantidades (costos, pieza 4); None si la tarea no tiene plan.
+    value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class TaskIndicators:
     weight: int
     suno: SourceIndicators
     project: SourceIndicators
+    #: Valor planeado: suma de los hijos cuando todos lo tienen; None si no.
+    value: float | None = None
 
 
 def compute_indicators(
@@ -78,14 +82,22 @@ def compute_indicators(
 
 
 def rollup(children: Sequence[TaskIndicators]) -> TaskIndicators | None:
+    """Promedio ponderado de los hijos: por valor planeado si todos lo tienen (y suma
+    más que 0), si no por días hábiles de línea base."""
     if not children:
         return None
-    total = sum(c.weight for c in children)
+    # Un hito o una tarea de peso 0 sin plan no cuentan: no impiden ponderar por valor.
+    relevant = [c for c in children if not (c.value is None and c.weight == 0)]
+    by_value = bool(relevant) and all(c.value is not None and c.value > 0 for c in relevant)
+    weights = (
+        [float(c.value or 0) for c in children] if by_value else [float(c.weight) for c in children]
+    )
+    total = sum(weights)
 
-    def avg(values: list[float]) -> float:
+    def avg(items: list[float]) -> float:
         if total == 0:
-            return sum(values) / len(values)
-        return sum(v * c.weight for v, c in zip(values, children, strict=True)) / total
+            return sum(items) / len(items)
+        return sum(v * w for v, w in zip(items, weights, strict=True)) / total
 
     planned = avg([c.planned_pct for c in children])
 
@@ -101,9 +113,10 @@ def rollup(children: Sequence[TaskIndicators]) -> TaskIndicators | None:
 
     return TaskIndicators(
         planned_pct=round(planned, 1),
-        weight=total,
+        weight=sum(c.weight for c in children),
         suno=source("suno"),
         project=source("project"),
+        value=sum(weights) if by_value else None,
     )
 
 
@@ -123,6 +136,7 @@ def _leaf(task: TaskInput, suno: float, calendar: WorkCalendar, cut: date) -> Ta
         weight=weight,
         suno=_source(task, planned, suno, calendar, cut),
         project=_source(task, planned, task.project_pct or 0.0, calendar, cut),
+        value=task.value,
     )
 
 

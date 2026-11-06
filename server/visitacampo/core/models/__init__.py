@@ -45,6 +45,7 @@ from .budget import (
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .layer import ReferenceLayer
+from .location import MAX_LEVELS, LocationLevel, LocationNode
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
 from .project import (
@@ -58,6 +59,7 @@ from .project import (
     TaskResource,
     TaskResponsible,
 )
+from .quantity import QuantityPlan, QuantityPlanImport, QuantityPlanImportStatus
 from .tenancy import AppUser, Device, Membership, Organization
 from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
@@ -88,6 +90,9 @@ __all__ = [
     "FormTemplateVersion",
     "Job",
     "JobStatus",
+    "LocationLevel",
+    "LocationNode",
+    "MAX_LEVELS",
     "Membership",
     "MimeType",
     "OrgScopedModel",
@@ -95,6 +100,9 @@ __all__ = [
     "PrivacyConsent",
     "PrivacyPurpose",
     "Project",
+    "QuantityPlan",
+    "QuantityPlanImport",
+    "QuantityPlanImportStatus",
     "Platform",
     "Role",
     "RateLimitBucket",

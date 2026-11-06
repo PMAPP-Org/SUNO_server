@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
-from django.db.models import OuterRef, QuerySet, Subquery
+from django.db.models import OuterRef, Q, QuerySet, Subquery
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Task, Visit, VisitReview, VisitReviewStatus
@@ -62,6 +62,13 @@ def approved(visits: QuerySet[Visit]) -> QuerySet[Visit]:
     return with_review(visits).filter(last_review_status=APPROVED)
 
 
+def not_rejected(visits: QuerySet[Visit]) -> QuerySet[Visit]:
+    """Las visitas validadas o aún sin revisar (su revisión vigente no es `rejected`)."""
+    return with_review(visits).filter(
+        Q(last_review_status__isnull=True) | Q(last_review_status=APPROVED)
+    )
+
+
 def validated_pct_by_task(
     visits: QuerySet[Visit],
     *,
@@ -71,7 +78,7 @@ def validated_pct_by_task(
     """% SUNO por tarea: el de su visita validada más reciente. Una query.
 
     Sin `task_ids` ni `project_ids`, todas las tareas del queryset."""
-    linked = visits.filter(task__isnull=False, deleted_at__isnull=True)
+    linked = visits.filter(task__isnull=False, progress_pct__isnull=False, deleted_at__isnull=True)
     if task_ids is not None:
         ids = list(task_ids)
         if not ids:
@@ -101,6 +108,7 @@ def with_previous_validated_pct(visits: QuerySet[Visit], base: QuerySet[Visit]) 
             base.filter(
                 task=OuterRef("task"),
                 captured_at__lt=OuterRef("captured_at"),
+                progress_pct__isnull=False,
                 deleted_at__isnull=True,
             )
         )

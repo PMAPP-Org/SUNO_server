@@ -19,6 +19,10 @@ urlpatterns = [
         "plataforma/proyectos/<uuid:project_id>/presupuestos/",
         include("visitacampo.budgets.urls"),
     ),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/matriz/",
+        include("visitacampo.matrix.urls"),
+    ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),
 ]

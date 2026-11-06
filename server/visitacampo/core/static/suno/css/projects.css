@@ -18,7 +18,8 @@
 .pj-form label { display: grid; gap: 4px; font-size: 13px; }
 .pj-form input, .pj-form textarea, .pj-form select { padding: 8px; border: 1px solid var(--suno-line); font: inherit; }
 .pj-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; font-size: 13px; }
-.pj-filters label { display: grid; gap: 4px; }
+.pj-filters label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; max-width: 100%; }
+.pj-filters select { max-width: 100%; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 16px; row-gap: 6px; margin: 8px 0 0; font-size: 13px; }
 .pj-tabs a[aria-current="page"] { font-weight: 700; color: var(--suno-red); }
 .pj-messages { list-style: none; padding: 0; }
@@ -43,7 +44,7 @@ button.text-link { min-height: 0; padding: 4px 2px; border: 0; background: none;
 button.text-link:hover { color: var(--suno-red); }
 .pj-tree-actions { margin: 0 0 12px; font-size: 12px; color: var(--suno-muted); }
 /* Celdas de texto libre: se parten en varias líneas en vez de ensanchar la tabla. */
-.pj-table td.pj-wrap { white-space: normal; min-width: 120px; max-width: 200px; }
+.pj-table td.pj-wrap { white-space: normal; min-width: 120px; max-width: 200px; overflow-wrap: anywhere; }
 /* Nombres de proyecto largos: título más contenido que el de la portada. */
 .pj-page .workspace-heading h1 { font-size: clamp(28px, 3vw, 42px); letter-spacing: -.035em; line-height: 1.1; overflow-wrap: anywhere; }
 .pj-page .workspace-heading > div { min-width: 0; }
@@ -97,3 +98,17 @@ button.text-link:hover { color: var(--suno-red); }
 .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { letter-spacing: 0; font-variant-numeric: tabular-nums; font-size: clamp(18px, 1.8vw, 26px); white-space: nowrap; }
 .metrics-strip article:has(.bg-money), .metrics-strip .bg-money { min-width: 0; }
 @media (max-width: 767px) { .metrics-strip strong.bg-money, .metrics-strip .bg-money strong { font-size: 16px; } }
+/* Matriz de homologación (costos, pieza 4). */
+.mx-nav { margin: 16px 0 0; }
+.mx-items td.pj-name { min-width: 260px; max-width: 420px; }
+.bg-label.mx-over { background: var(--suno-amber); color: var(--suno-ink); }
+.bg-label.mx-under { background: var(--suno-topography); color: var(--suno-ink); }
+.bg-label.mx-ok { background: var(--suno-green); }
+.bg-label.mx-retired { background: var(--suno-red); }
+.bg-label.mx-chapter { background: var(--suno-amber); color: var(--suno-ink); }
+.mx-depth-2 { padding-left: 24px !important; }
+.mx-depth-3 { padding-left: 40px !important; }
+.mx-depth-4, .mx-depth-5, .mx-depth-6 { padding-left: 56px !important; }
+#mx-history td.pj-wrap { min-width: 220px; max-width: 320px; }
+.mx-level { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); border: 1px solid var(--suno-line); padding: 12px; }
+@media (max-width: 767px) { .mx-items td.pj-name { min-width: 180px; max-width: 240px; } }

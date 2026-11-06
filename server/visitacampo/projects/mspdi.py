@@ -46,6 +46,19 @@ class MspdiError(ValueError):
 
 
 @dataclass(frozen=True)
+class CustomField:
+    """Un campo personalizado de tarea definido en el proyecto (p. ej. Text1 "Tramo")."""
+
+    field_id: str
+    field_name: str
+    alias: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.field_name} ({self.alias})" if self.alias else self.field_name
+
+
+@dataclass(frozen=True)
 class ParsedTask:
     uid: int
     sort_order: int
@@ -67,6 +80,8 @@ class ParsedTask:
     total_slack_days: Decimal | None
     free_slack_days: Decimal | None
     is_critical: bool
+    #: Pares (FieldID, Value) de los campos personalizados con valor (costos, pieza 4).
+    custom_values: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,6 +109,8 @@ class ParsedSchedule:
     assignments: tuple[tuple[int, int], ...]
     #: Avisos del lector (cosas que se ignoraron) para mostrar en la vista previa.
     warnings: tuple[str, ...] = ()
+    #: Campos personalizados de tarea definidos en el proyecto, en el orden del archivo.
+    custom_fields: tuple[CustomField, ...] = ()
 
 
 class _Reader:
@@ -201,6 +218,7 @@ def parse_mspdi(data: bytes, *, max_bytes: int = MAX_BYTES) -> ParsedSchedule:
         resources=resources,
         assignments=tuple(assignments),
         warnings=tuple(warnings),
+        custom_fields=_custom_fields(r, root),
     )
 
 
@@ -259,6 +277,7 @@ def _tasks(
                 total_slack_days=_tenths_to_days(r.decimal(el, "TotalSlack"), minutes_per_day),
                 free_slack_days=_tenths_to_days(r.decimal(el, "FreeSlack"), minutes_per_day),
                 is_critical=r.flag(el, "Critical"),
+                custom_values=_custom_values(r, el),
             )
         )
         for link in el.iterfind(r.q("PredecessorLink")):
@@ -290,6 +309,38 @@ def _baseline(r: _Reader, el: Element) -> Element | None:
         if r.integer(baseline, "Number") == 0:
             return baseline
     return None
+
+
+#: Largo máximo que se conserva de un valor personalizado (la ubicación recorta a 120).
+MAX_CUSTOM_VALUE = 255
+
+
+def _custom_values(r: _Reader, el: Element) -> tuple[tuple[str, str], ...]:
+    """Los `ExtendedAttribute` de una tarea con `FieldID` y `Value` (sin `ValueID` solo)."""
+    values: list[tuple[str, str]] = []
+    for attr in el.iterfind(r.q("ExtendedAttribute")):
+        field_id, value = r.text(attr, "FieldID"), r.text(attr, "Value")
+        if field_id and value:
+            values.append((field_id, value[:MAX_CUSTOM_VALUE]))
+    return tuple(values)
+
+
+def _custom_fields(r: _Reader, root: Element) -> tuple[CustomField, ...]:
+    fields: list[CustomField] = []
+    seen: set[str] = set()
+    for el in root.iterfind(r.path("ExtendedAttributes", "ExtendedAttribute")):
+        field_id = r.text(el, "FieldID")
+        if not field_id or field_id in seen:
+            continue
+        seen.add(field_id)
+        fields.append(
+            CustomField(
+                field_id=field_id,
+                field_name=(r.text(el, "FieldName") or field_id)[:60],
+                alias=(r.text(el, "Alias") or "")[:60],
+            )
+        )
+    return tuple(fields)
 
 
 def _resources(r: _Reader, root: Element) -> tuple[ParsedResource, ...]:

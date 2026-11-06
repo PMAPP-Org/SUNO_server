@@ -285,6 +285,7 @@ class ConflictTests(TestCase):
                 "created_by",
                 "task_id",
                 "progress_pct",
+                "quantities",
             },
         )
         visit = visit_of(self.visit_id)

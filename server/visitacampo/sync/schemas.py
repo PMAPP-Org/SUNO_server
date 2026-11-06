@@ -108,6 +108,15 @@ class PushRequest(Schema):
     ops: Annotated[list[RawSyncOp], Field(min_length=1)]
 
 
+class VisitQuantityRecord(Schema):
+    """Contrato `VisitQuantity`."""
+
+    item_id: uuid.UUID
+    location_id: uuid.UUID | None
+    quantity: float
+    note: str
+
+
 class VisitData(Schema):
     """Contrato `Visit`: la fila autoritativa completa.
 
@@ -133,6 +142,7 @@ class VisitData(Schema):
     created_by: uuid.UUID
     task_id: uuid.UUID | None
     progress_pct: float | None
+    quantities: list[VisitQuantityRecord]
 
 
 class VisitRecord(Schema):

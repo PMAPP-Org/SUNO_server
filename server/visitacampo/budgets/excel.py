@@ -71,7 +71,7 @@ _TOTAL_LABEL = re.compile(r"(sub\s*-?\s*)?totale?s?\b")
 
 _NOT_XLSX = "El archivo no es un archivo .xlsx válido."
 
-_NUMERIC_CODE_HINT = (
+NUMERIC_CODE_HINT = (
     "Si hay códigos como 1.10 y 1.1, dales formato de texto en Excel: "
     "como número se pierde el cero."
 )
@@ -409,7 +409,7 @@ def interpret_rows(rows: Sequence[Sequence[Any]], mapping: ColumnMapping) -> Par
         else:
             kind = KIND_ITEM
         if code in first_seen:
-            hint = f" {_NUMERIC_CODE_HINT}" if numeric or code in numeric_codes else ""
+            hint = f" {NUMERIC_CODE_HINT}" if numeric or code in numeric_codes else ""
             raise ExcelRejected(
                 f"El código {code} está repetido (filas {first_seen[code]} y {number}).{hint}"
             )

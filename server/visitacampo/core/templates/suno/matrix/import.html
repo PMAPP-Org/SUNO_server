@@ -1,0 +1,21 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Importar matriz · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Importar la matriz</h2>
+  <p><a href="{% url 'matrix:template' project.pk %}">Descarga la plantilla</a> con la matriz actual, completa la columna <strong>Cantidad planeada</strong> (una fila por tarea e ítem; copia filas para agregar ítems) y súbela. Verás los cambios antes de aplicarlos.</p>
+  <ul class="pj-muted">
+    <li>Los ítems se buscan por presupuesto y código en la versión vigente.</li>
+    <li>Una fila con ítem y sin cantidad quita ese ítem de la tarea. Lo que no venga en el archivo se quita de la matriz, salvo lo que ya tiene cantidades ejecutadas, que queda en 0.</li>
+    {% if from_project %}<li>La ubicación se lee de MS Project: las columnas de ubicación son solo de referencia.</li>{% elif levels %}<li>Las columnas {% for l in levels %}«{{ l.name }}»{% if not forloop.last %}, {% endif %}{% endfor %} asignan la ubicación de cada tarea.</li>{% else %}<li>Sin <a href="{% url 'matrix:levels' project.pk %}">niveles de ubicación</a>, la plantilla no lleva columnas de ubicación.</li>{% endif %}
+  </ul>
+  <form method="post" enctype="multipart/form-data" class="pj-form">
+    {% csrf_token %}
+    <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
+    {% if errors %}<div class="pj-late" role="alert"><p>No se puede aplicar el archivo:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <button class="button" type="submit">Ver cambios</button>
+  </form>
+</section>
+{% endblock %}

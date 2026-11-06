@@ -49,6 +49,7 @@ def make_visit(
     pct: str | None = None,
     at: datetime | None = None,
     deleted: bool = False,
+    quantities: list[dict[str, object]] | None = None,
 ) -> Visit:
     """Una visita mínima, con o sin tarea. `pct` como texto (`"35.5"`)."""
     template, _ = FormTemplate.objects.get_or_create(org=org, name="Avance de obra")
@@ -75,6 +76,7 @@ def make_visit(
         created_by=author,
         task=task,
         progress_pct=None if pct is None else Decimal(pct),
+        quantities=quantities or [],
         deleted_at=moment if deleted else None,
     )
 

@@ -1,0 +1,24 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Niveles de ubicación · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="levels" %}
+<section class="pj-panel">
+  <h2>Niveles de ubicación</h2>
+  <p>Del más general al más preciso (p. ej. Tramo → PR → Costado). Deja vacíos los niveles que no uses.</p>
+  <p class="pj-muted">Si eliges un campo de MS Project para un nivel, elígelo para todos: la ubicación de las tareas se leerá del archivo en la siguiente importación del cronograma. Sin campos, la ubicación se asigna en la plantilla de la matriz o en cada tarea.</p>
+  {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" class="pj-form">
+    {% csrf_token %}
+    {% for row in rows %}
+    <fieldset class="mx-level">
+      <legend>Nivel {{ row.depth }}</legend>
+      <label>Nombre <input type="text" name="name_{{ row.depth }}" value="{{ row.name }}" maxlength="60"></label>
+      <label>Campo de MS Project <select name="field_{{ row.depth }}"><option value="">Ninguno (se asigna en SUNO)</option>{% for f in fields %}<option value="{{ f.field_id }}" {% if row.field == f.field_id %}selected{% endif %}>{{ f.label }}</option>{% endfor %}{% if row.missing %}<option value="{{ row.field }}" selected>{{ row.field }} (no está en el último XML)</option>{% endif %}</select></label>
+    </fieldset>
+    {% endfor %}
+    {% if not fields %}<p class="pj-muted">El último XML importado no trae campos personalizados de tarea.</p>{% endif %}
+    <button class="button" type="submit">Guardar niveles</button>
+  </form>
+</section>
+{% endblock %}

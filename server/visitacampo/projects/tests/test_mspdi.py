@@ -9,7 +9,7 @@ from django.test import SimpleTestCase
 
 from visitacampo.projects.mspdi import MspdiError, _duration_days, parse_mspdi
 
-from .samples import project_xml, task_xml, v1
+from .samples import TEXT1, TEXT2, project_xml, task_xml, v1
 
 
 class ParseV1Tests(SimpleTestCase):
@@ -202,3 +202,34 @@ class DurationTests(SimpleTestCase):
     def test_months_are_not_minutes(self) -> None:
         self.assertIsNone(_duration_days("P1M", 480))
         self.assertIsNone(_duration_days("P1Y", 480))
+
+
+class CustomFieldsTests(SimpleTestCase):
+    def test_reads_definitions_and_task_values(self) -> None:
+        data = project_xml(
+            [
+                task_xml(1, "Tramo 2", "1", summary=True),
+                task_xml(2, "Excavación", "1.1", custom=((TEXT1, "Tramo 2"), (TEXT2, "PR 12+300"))),
+            ],
+            custom_fields=((TEXT1, "Text1", "Tramo"), (TEXT2, "Text2", "")),
+        )
+        parsed = parse_mspdi(data)
+        self.assertEqual(
+            [(f.field_id, f.label) for f in parsed.custom_fields],
+            [(TEXT1, "Text1 (Tramo)"), (TEXT2, "Text2")],
+        )
+        excavation = next(t for t in parsed.tasks if t.uid == 2)
+        self.assertEqual(dict(excavation.custom_values), {TEXT1: "Tramo 2", TEXT2: "PR 12+300"})
+        self.assertEqual(next(t for t in parsed.tasks if t.uid == 1).custom_values, ())
+
+    def test_ignores_values_without_field_or_value(self) -> None:
+        task = (
+            "<Task><UID>2</UID><ID>2</ID><Name>X</Name><OutlineNumber>1</OutlineNumber>"
+            "<OutlineLevel>1</OutlineLevel>"
+            "<ExtendedAttribute><FieldID>188743731</FieldID><ValueID>7</ValueID>"
+            "</ExtendedAttribute>"
+            "<ExtendedAttribute><Value>sin campo</Value></ExtendedAttribute></Task>"
+        )
+        parsed = parse_mspdi(project_xml([task]))
+        self.assertEqual(parsed.tasks[0].custom_values, ())
+        self.assertEqual(parsed.custom_fields, ())

@@ -62,13 +62,20 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import connection, transaction
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import (
     Assignment,
+    BudgetItem,
+    BudgetItemVersion,
+    BudgetRowKind,
+    BudgetVersionStatus,
     Device,
     FormTemplateVersion,
+    LocationNode,
+    QuantityPlan,
     SyncOpLog,
     Task,
     Visit,
@@ -234,6 +241,7 @@ class _TaskRef:
     is_summary: bool
     #: Quien envía el lote es responsable efectivo (directo o por la rama).
     covered: bool
+    project_id: uuid.UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,9 +273,15 @@ class _References:
     devices: set[uuid.UUID]
     visit_template_versions: dict[uuid.UUID, uuid.UUID]
     tasks: dict[uuid.UUID, _TaskRef]
-    #: `visit_id → (task_id, progress_pct, version)` de las visitas validadas que el lote
-    #: cambia de tarea o %, o borra (ver `_validated_progress`).
-    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]
+    #: `visit_id → (task_id, progress_pct, quantities, version)` de las visitas validadas
+    #: que el lote cambia de tarea, % o cantidades, o borra (ver `_validated_progress`).
+    validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]
+    #: Costos, pieza 4: ítem → (proyecto de su presupuesto, si es un capítulo).
+    items: dict[uuid.UUID, tuple[uuid.UUID, bool]]
+    #: Nodo de ubicación → su proyecto.
+    nodes: dict[uuid.UUID, uuid.UUID]
+    #: Pares (tarea, ítem) que están en la matriz.
+    planned: set[tuple[uuid.UUID, uuid.UUID]]
 
     def missing(self, fields: dict[str, Any]) -> str | None:
         """Nombre del primer campo con una referencia inexistente, o `None`."""
@@ -315,9 +329,56 @@ class _References:
             )
         return None
 
+    def quantities_rejection(self, parsed: VisitWrite) -> Rejection | None:
+        """Solo los errores estructurales: cada cantidad nombra un ítem que mide en un
+        presupuesto del proyecto de la tarea, y una ubicación de ese proyecto.
+        `payloads` ya garantizó que hay tarea si hay cantidades, y `missing` que la
+        tarea existe.
+
+        Lo demás se acepta y se resalta en la revisión (`VisitAdmin.quantities_pretty`):
+        entre la captura sin conexión y la sincronización la oficina pudo quitar el ítem
+        del plan o mover la tarea, y lo registrado nunca se pierde. La nota de un ítem
+        no planeado o de un ajuste negativo la exige la app al capturar (pieza 4b)."""
+        rows = parsed.fields.get("quantities") or []
+        task_id = parsed.fields.get("task_id")
+        if not rows or task_id is None:
+            return None
+        ref = self.tasks[task_id]
+
+        def reject(message: str, reason: str) -> Rejection:
+            return Rejection(
+                code=CODE_VALIDATION_ERROR,
+                message=message,
+                details={"field": "quantities", "reason": reason},
+                entity_id=parsed.entity_id,
+            )
+
+        for row in rows:
+            item_id = uuid.UUID(row["item_id"])
+            planned = (task_id, item_id) in self.planned
+            project_id, chapter = self.items.get(item_id, (None, False))
+            # Un capítulo no recibe cantidades, salvo si está en el plan de la tarea: era un
+            # ítem cuando se le ofreció al campo y una reimportación lo volvió capítulo. Lo
+            # registrado sin conexión se acepta y se resalta; nunca se pierde.
+            if project_id != ref.project_id or (chapter and not planned):
+                return reject(
+                    "The item is not a measurable item of a budget of the task's project.",
+                    "item_not_in_project",
+                )
+            # Un nodo retirado, o fuera de la ubicación actual de la tarea (la movieron o se
+            # la quitaron después de la captura), se acepta a propósito: "se acepta y se
+            # resalta; nunca se pierde".
+            if row["location_id"] is not None:
+                if self.nodes.get(uuid.UUID(row["location_id"])) != ref.project_id:
+                    return reject(
+                        "The location is not a location of the task's project.",
+                        "location_outside_task",
+                    )
+        return None
+
     def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
-        """Una visita validada no cambia su tarea ni su % sin una nueva revisión,
-        y no se borra.
+        """Una visita validada no cambia su tarea, su % ni sus cantidades sin una
+        nueva revisión, y no se borra.
 
         Una operación con `base_version` distinto al guardado no se rechaza aquí:
         la deja pasar para que el CAS conteste `conflict` con la fila del servidor.
@@ -325,7 +386,7 @@ class _References:
         current = self.validated.get(parsed.entity_id)
         if current is None or parsed.op_type == "create":
             return None
-        task_id, pct, version = current
+        task_id, pct, quantities, version = current
         if parsed.base_version != version:
             return None
         if parsed.op_type == "delete":
@@ -335,11 +396,18 @@ class _References:
                 details={"field": "id", "reason": "visit_validated"},
                 entity_id=parsed.entity_id,
             )
-        for field, stored in (("task_id", task_id), ("progress_pct", pct)):
+        # `quantities` ya viene en la forma guardada (`payloads.stored_quantities`).
+        for field, stored in (
+            ("task_id", task_id),
+            ("progress_pct", pct),
+            ("quantities", quantities),
+        ):
             if field in parsed.fields and parsed.fields[field] != stored:
                 return Rejection(
                     code=CODE_VALIDATION_ERROR,
-                    message="The visit was validated: its task and progress cannot change.",
+                    message=(
+                        "The visit was validated: its task, progress and quantities cannot change."
+                    ),
                     details={"field": field, "reason": "visit_validated"},
                     entity_id=parsed.entity_id,
                 )
@@ -348,8 +416,8 @@ class _References:
 
 def _validated_progress(
     ctx: RequestContext, writes: list[VisitWrite]
-) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, int]]:
-    """Visitas validadas que el lote podría cambiar de tarea o %, o borrar.
+) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]:
+    """Visitas validadas que el lote podría cambiar de tarea, % o cantidades, o borrar.
 
     Una query para todo el lote, y ninguna si ninguna operación lo intenta.
     Las filas se **bloquean** (`select_for_update`, dentro de la transacción del
@@ -362,16 +430,21 @@ def _validated_progress(
         w.entity_id
         for w in writes
         if w.op_type == "delete"
-        or (w.op_type == "update" and ("task_id" in w.fields or "progress_pct" in w.fields))
+        or (
+            w.op_type == "update"
+            and ("task_id" in w.fields or "progress_pct" in w.fields or "quantities" in w.fields)
+        )
     }
     if not ids:
         return {}
     rows = (
         approved(scoped_qs(ctx, Visit).filter(pk__in=ids))
         .select_for_update()
-        .values_list("pk", "task_id", "progress_pct", "version")
+        .values_list("pk", "task_id", "progress_pct", "quantities", "version")
     )
-    return {pk: (task_id, pct, version) for pk, task_id, pct, version in rows}
+    return {
+        pk: (task_id, pct, quantities, version) for pk, task_id, pct, quantities, version in rows
+    }
 
 
 def _visit_template_versions(
@@ -418,9 +491,59 @@ def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID,
             retired=retired_in is not None,
             is_summary=is_summary,
             covered=covers(outlines.get(project_id, ()), outline),
+            project_id=project_id,
         )
         for pk, project_id, outline, retired_in, is_summary in rows
     }
+
+
+def _quantity_refs(
+    ctx: RequestContext, writes: list[VisitWrite]
+) -> tuple[
+    dict[uuid.UUID, tuple[uuid.UUID, bool]],
+    dict[uuid.UUID, uuid.UUID],
+    set[tuple[uuid.UUID, uuid.UUID]],
+]:
+    """Ítems, nodos y pares del plan que nombran las cantidades del lote (costos,
+    pieza 4). Tres queries como mucho para todo el lote; ninguna sin cantidades."""
+    wanted = [(w.fields.get("task_id"), w.fields.get("quantities") or []) for w in writes]
+    item_ids = {uuid.UUID(row["item_id"]) for _, rows in wanted for row in rows}
+    if not item_ids:
+        return {}, {}, set()
+    # El tipo del ítem en la última versión aplicada que lo contiene (la vigente si sigue
+    # en ella): un capítulo solo recibe cantidades si está en el plan de la tarea (ver
+    # `quantities_rejection`). Subconsulta: la misma query de antes.
+    kind = Subquery(
+        scoped_qs(ctx, BudgetItemVersion)
+        .filter(item=OuterRef("pk"), version__status=BudgetVersionStatus.APPLIED)
+        .order_by("-version__number")
+        .values("kind")[:1]
+    )
+    items = {
+        pk: (project_id, item_kind == BudgetRowKind.CHAPTER)
+        for pk, project_id, item_kind in scoped_qs(ctx, BudgetItem)
+        .filter(pk__in=item_ids)
+        .annotate(current_kind=kind)
+        .values_list("pk", "budget__project_id", "current_kind")
+    }
+    node_ids = {
+        uuid.UUID(row["location_id"])
+        for _, rows in wanted
+        for row in rows
+        if row["location_id"] is not None
+    }
+    nodes: dict[uuid.UUID, uuid.UUID] = {}
+    if node_ids:
+        nodes = dict(
+            scoped_qs(ctx, LocationNode).filter(pk__in=node_ids).values_list("pk", "project_id")
+        )
+    task_ids = {task_id for task_id, rows in wanted if task_id is not None and rows}
+    planned = set(
+        scoped_qs(ctx, QuantityPlan)
+        .filter(task_id__in=task_ids, item_id__in=item_ids)
+        .values_list("task_id", "item_id")
+    )
+    return items, nodes, planned
 
 
 def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _References:
@@ -443,6 +566,7 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
             scoped_qs(ctx, FormTemplateVersion).filter(pk__in=known).values_list("pk", "definition")
         )
 
+    items, nodes, planned = _quantity_refs(ctx, writes)
     return _References(
         template_versions=definitions,
         assignments=_existing_ids(ctx, Assignment, wanted["assignment_id"]),
@@ -450,6 +574,9 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
         visit_template_versions=visit_template_versions,
         tasks=_task_refs(ctx, writes),
         validated=_validated_progress(ctx, writes),
+        items=items,
+        nodes=nodes,
+        planned=planned,
     )
 
 
@@ -850,6 +977,11 @@ def _process(
     task_problem = references.task_rejection(parsed)
     if task_problem is not None:
         return _rejected_result(op, task_problem)
+
+    # Costos, pieza 4: cantidades coherentes con la tarea, su ubicación y su plan.
+    quantity_problem = references.quantities_rejection(parsed)
+    if quantity_problem is not None:
+        return _rejected_result(op, quantity_problem)
 
     # `answers` contra el esquema de **su** versión de plantilla (Paso 20). Va
     # después de resolver referencias —hace falta saber que la plantilla existe

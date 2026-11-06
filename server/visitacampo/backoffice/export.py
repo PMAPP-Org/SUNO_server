@@ -174,8 +174,11 @@ def _xlsx_cell(ref: str, value: Any) -> str:
     return f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
 
 
-def to_xlsx(header: Sequence[str], rows: Iterable[Sequence[Any]]) -> bytes:
-    """Libro `.xlsx` mínimo válido: una hoja, cadenas en línea y números."""
+def to_xlsx(
+    header: Sequence[str], rows: Iterable[Sequence[Any]], *, sheet_name: str = "Visitas"
+) -> bytes:
+    """Libro `.xlsx` mínimo válido: una hoja (`sheet_name`), cadenas en línea y números."""
+    name = _xml_text(sheet_name).replace('"', "&quot;")
     sheet_rows = []
     for row_index, row in enumerate([list(header), *rows], start=1):
         cells = "".join(
@@ -211,7 +214,7 @@ def to_xlsx(header: Sequence[str], rows: Iterable[Sequence[Any]]) -> bytes:
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            '<sheets><sheet name="Visitas" sheetId="1" r:id="rId1"/></sheets></workbook>'
+            f'<sheets><sheet name="{name}" sheetId="1" r:id="rId1"/></sheets></workbook>'
         ),
         "xl/_rels/workbook.xml.rels": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

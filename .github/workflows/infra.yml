@@ -51,6 +51,12 @@ jobs:
           if sudo bash infra/provision/provision.sh; then echo "debía fallar sin DEPLOY_SSH_PUBKEY"; exit 1; fi
           test ! -f /etc/ssh/sshd_config.d/10-visitacampo.conf
 
+      # Solo en CI: el runner trae el firefox de Mozilla y el `apt-get upgrade` de
+      # provision.sh lo cambiaría por el paquete de transición a snap, cuya descarga
+      # agota el tiempo del job. Un VPS real no trae firefox.
+      - name: Fijar firefox del runner
+        run: sudo apt-mark hold firefox
+
       - name: Aprovisionar (1.ª vez y 2.ª vez, idempotente)
         run: |
           ssh-keygen -t ed25519 -N '' -q -f ci_deploy_key

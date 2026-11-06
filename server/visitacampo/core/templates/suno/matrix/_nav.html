@@ -1,0 +1,10 @@
+<nav class="pj-tabs mx-nav" aria-label="Secciones de la matriz">
+  <a href="{% url 'matrix:items' project.pk %}" {% if sub == "items" %}aria-current="page"{% endif %}>Por ítem</a>
+  <a href="{% url 'matrix:locations' project.pk %}" {% if sub == "locations" %}aria-current="page"{% endif %}>Por ubicación</a>
+  <a href="{% url 'matrix:history' project.pk %}" {% if sub == "history" %}aria-current="page"{% endif %}>Historial</a>
+  <a href="{% url 'matrix:template' project.pk %}">Descargar plantilla</a>
+  {% if can_manage_matrix %}
+  <a href="{% url 'matrix:import' project.pk %}" {% if sub == "import" %}aria-current="page"{% endif %}>Importar Excel</a>
+  <a href="{% url 'matrix:levels' project.pk %}" {% if sub == "levels" %}aria-current="page"{% endif %}>Niveles de ubicación</a>
+  {% endif %}
+</nav>

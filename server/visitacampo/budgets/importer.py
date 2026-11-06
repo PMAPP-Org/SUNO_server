@@ -16,7 +16,7 @@ importaciones simultáneas no se esperan, la segunda se rechaza con un mensaje.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from django.db import OperationalError, transaction
@@ -32,11 +32,14 @@ from visitacampo.core.models import (
     BudgetItemVersion,
     BudgetVersion,
     BudgetVersionStatus,
+    QuantityPlan,
 )
 from visitacampo.core.scoping import scoped_qs
 
 from .diff import Values, summarize_changes
 from .excel import (
+    KIND_CHAPTER,
+    KIND_ITEM,
     MAX_BYTES,
     ExcelRejected,
     ParsedBudget,
@@ -167,6 +170,75 @@ def _replace_charges(
     )
 
 
+def _matrix_warnings(
+    ctx: RequestContext, budget: Budget, current: Mapping[str, Values], parsed: ParsedBudget
+) -> list[str]:
+    """Ítems de la versión vigente que la nueva quita o vuelve capítulos y que están en la
+    matriz o tienen cantidades validadas en campo (costos, pieza 4)."""
+    # Import local: `matrix.quantities` importa `budgets` (vía `matrix.progress`); un
+    # import de módulo cerraría el ciclo `budgets.importer` → `matrix` → `budgets`.
+    from visitacampo.matrix.quantities import executed_by_pair
+
+    new_kinds = {row.code: row.kind for row in parsed.rows}
+    current_items = {code for code, values in current.items() if values.kind == KIND_ITEM}
+    gone = current_items - new_kinds.keys()
+    chapters = {code for code in current_items if new_kinds.get(code) == KIND_CHAPTER}
+    if not gone and not chapters:
+        return []
+    ids = dict(
+        scoped_qs(ctx, BudgetItem)
+        .filter(budget=budget, code__in=gone | chapters)
+        .values_list("pk", "code")
+    )
+    if not ids:
+        return []
+    used = set(
+        scoped_qs(ctx, QuantityPlan).filter(item_id__in=ids).values_list("item_id", flat=True)
+    )
+    # Solo se leen las visitas si queda algún ítem afectado que no esté en la matriz.
+    pending = set(ids) - used
+    executed = (
+        {
+            item_id
+            for (_, item_id) in executed_by_pair(ctx, project_ids=[budget.project_id])
+            if item_id in pending
+        }
+        if pending
+        else set()
+    )
+
+    def flagged(codes: set[str]) -> tuple[list[str], bool, bool]:
+        """Los códigos de `codes` en la matriz o con ejecución, y si hay de cada clase."""
+        pks = {pk for pk, code in ids.items() if code in codes and (pk in used or pk in executed)}
+        return sorted(ids[pk] for pk in pks), bool(pks & used), bool(pks & executed)
+
+    warnings: list[str] = []
+    codes, in_matrix, with_execution = flagged(gone)
+    if codes:
+        message = (
+            f"{len(codes)} ítem(s) eliminado(s) están en la matriz o tienen cantidades "
+            "ejecutadas: " + ", ".join(codes[:20]) + "."
+        )
+        if in_matrix:
+            message += (
+                " Sus filas de la matriz se conservan marcadas como retiradas del presupuesto."
+            )
+        if with_execution:
+            message += (
+                " Las cantidades ejecutadas de los ítems sin filas en la matriz se conservan."
+            )
+        warnings.append(message)
+    codes, _, _ = flagged(chapters)
+    if codes:
+        warnings.append(
+            f"Los ítems {', '.join(codes[:20])} pasan a ser capítulos y tienen filas en la "
+            "matriz o cantidades ejecutadas; dejan de contar para el avance de sus tareas. "
+            "Sus filas y cantidades se conservan, y lo que el campo registre sobre ellos en "
+            "las tareas que los tienen en el plan se sigue aceptando."
+        )
+    return warnings
+
+
 def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMapping) -> BudgetVersion:
     """Lee la versión pendiente con `mapping` y deja lista su vista previa."""
     with transaction.atomic():
@@ -174,7 +246,11 @@ def prepare_version(ctx: RequestContext, version_id: UUID, mapping: ColumnMappin
         parsed = _parse(version.source_file, mapping)
         current = current_version(ctx, budget)
         known = set(scoped_qs(ctx, BudgetItem).filter(budget=budget).values_list("code", flat=True))
-        summary = summarize_changes(_values_by_code(ctx, current), parsed, known)
+        values = _values_by_code(ctx, current)
+        summary = summarize_changes(values, parsed, known)
+        warnings = _matrix_warnings(ctx, budget, values, parsed)
+        if warnings:
+            summary.setdefault("warnings", []).extend(warnings)
         summary["mapping"] = mapping.to_json()
         # Versión sobre la que se calculó la vista previa; si cambia, hay que re-subir.
         summary["base_number"] = current.number if current else None

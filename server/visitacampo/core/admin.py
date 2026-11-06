@@ -22,6 +22,7 @@ Cubre lo que pide el back-office del MVP:
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 from django import forms
@@ -33,7 +34,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 
 from visitacampo.attachments.services import download_url
 from visitacampo.backoffice.admin_base import OrgScopedAdmin, ReadOnlyAdmin, run_action
@@ -57,21 +58,27 @@ from visitacampo.backoffice.visit_pdf import visit_pdf
 from visitacampo.backoffice.xlsform_admin import import_view
 from visitacampo.basemaps.services import retire as retire_basemap
 from visitacampo.core.audit import AuditAction, record
+from visitacampo.core.context import system_context
 from visitacampo.core.models import (
     AppUser,
     Assignment,
     AuditEvent,
     BasemapPackage,
     Blob,
+    BudgetItemVersion,
+    BudgetVersionStatus,
     Device,
     FormTemplate,
     FormTemplateVersion,
     Job,
+    LocationNode,
     Membership,
     Organization,
     PrivacyConsent,
+    QuantityPlan,
     ReferenceLayer,
     SyncOpLog,
+    Task,
     Visit,
     VisitAttachment,
     VisitReview,
@@ -86,7 +93,10 @@ from visitacampo.core.policies import (
 from visitacampo.forms.definition import TemplateDefinitionError, validate_definition
 from visitacampo.forms.services import publish_version
 from visitacampo.layers.services import retire as retire_layer
+from visitacampo.matrix.diff import plain_quantity
+from visitacampo.matrix.quantities import measured_progress
 from visitacampo.projects.field_progress import (
+    approved,
     format_pct,
     is_regression,
     review_status,
@@ -336,6 +346,7 @@ class VisitAdmin(ReadOnlyAdmin):
         "answers_pretty",
         "task",
         "progress",
+        "quantities_pretty",
         "version",
         "change_seq",
         "deleted_at",
@@ -370,6 +381,99 @@ class VisitAdmin(ReadOnlyAdmin):
         if previous is not None and is_regression(visit.progress_pct, previous):
             text += f" ⚠ menor que el último validado ({format_pct(previous)})"
         return text
+
+    @admin.display(description="cantidades")
+    def quantities_pretty(self, visit: Visit) -> Any:
+        """Las cantidades de la visita, con avisos para la supervisión: ítem fuera del
+        plan de la tarea (sin nota), ajuste negativo sin nota, ubicación fuera de la
+        ubicación actual de la tarea, o lo validado más esta visita supera lo planeado.
+
+        El push acepta todo eso a propósito (`quantities_rejection`): la oficina pudo
+        cambiar el plan o la ubicación entre la captura sin conexión y la sincronización,
+        y lo registrado nunca se pierde; aquí se resalta."""
+        if not visit.quantities or visit.task_id is None:
+            return "—"
+        item_ids = [row["item_id"] for row in visit.quantities]
+        # El Admin no tiene `RequestContext`: se acota a la organización de la visita.
+        versions = (
+            QuerySet(model=BudgetItemVersion)
+            .filter(
+                org_id=visit.org_id,
+                item_id__in=item_ids,
+                version__status=BudgetVersionStatus.APPLIED,
+            )
+            .order_by("item_id", "-version__number")
+            .distinct("item_id")
+            .values_list("item_id", "item__code", "description", "unit")
+        )
+        facts = {str(i): (code, desc, unit) for i, code, desc, unit in versions}
+        planned = {
+            str(item_id): quantity
+            for item_id, quantity in QuerySet(model=QuantityPlan)
+            .filter(org_id=visit.org_id, task_id=visit.task_id)
+            .values_list("item_id", "planned_quantity")
+        }
+        validated: dict[str, Decimal] = {}
+        others = (
+            approved(
+                QuerySet(model=Visit).filter(
+                    org_id=visit.org_id, task_id=visit.task_id, deleted_at__isnull=True
+                )
+            )
+            .exclude(pk=visit.pk)
+            .exclude(quantities=[])
+            .values_list("quantities", flat=True)
+        )
+        for rows in others:
+            for row in rows:
+                key = row["item_id"]
+                validated[key] = validated.get(key, Decimal(0)) + Decimal(row["quantity"])
+        node_paths = {
+            str(pk): path
+            for pk, path in QuerySet(model=LocationNode)
+            .filter(
+                org_id=visit.org_id,
+                pk__in=[row["location_id"] for row in visit.quantities if row["location_id"]],
+            )
+            .values_list("pk", "path")
+        }
+        task_path = (
+            QuerySet(model=Task)
+            .filter(org_id=visit.org_id, pk=visit.task_id)
+            .values_list("location__path", flat=True)
+            .first()
+        )
+        lines: list[str] = []
+        for row in visit.quantities:
+            code, description, unit = facts.get(row["item_id"], ("?", "", ""))
+            quantity = Decimal(row["quantity"])
+            text = f"{code} {description}: {plain_quantity(quantity)} {unit}".rstrip()
+            target = planned.get(row["item_id"])
+            if target is None:
+                text += " — fuera del plan" if row["note"] else " — no planeado y sin nota"
+            else:
+                total = validated.get(row["item_id"], Decimal(0)) + quantity
+                if total > target:
+                    text += (
+                        f" — supera el plan ({plain_quantity(total)} de {plain_quantity(target)})"
+                    )
+            if quantity < 0 and not row["note"]:
+                text += " — ajuste negativo sin nota"
+            if row["location_id"]:
+                path = node_paths.get(row["location_id"])
+                if task_path is None or path is None or not path.startswith(task_path):
+                    text += " — ubicación fuera de la ubicación actual de la tarea"
+            if row["note"]:
+                text += f" — nota: {row['note']}"
+            lines.append(text)
+        # Mide por cantidades con la misma regla que `measured_by` (sin capítulos ni filas en
+        # 0). `system_context` solo aísla por organización: es una lectura, sin políticas.
+        if visit.progress_pct is not None and visit.task_id in measured_progress(
+            system_context(visit.org_id), task_ids=[visit.task_id]
+        ):
+            lines.append("% manual ignorado: la tarea se mide por cantidades.")
+        # Cada línea se escapa: códigos, descripciones y notas los escribe un usuario.
+        return format_html_join("", "<p>{}</p>", ((line,) for line in lines))
 
     @admin.display(description="plantilla")
     def template(self, visit: Visit) -> str:

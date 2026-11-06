@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import uuid
+from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -17,6 +19,7 @@ from visitacampo.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from visitacampo.matrix.tests.factories import budget_world, item, plan
 from visitacampo.projects.field_progress import (
     format_pct,
     is_regression,
@@ -29,7 +32,7 @@ from visitacampo.projects.importer import stage_import, summarize_changes
 from visitacampo.projects.mspdi import parse_mspdi
 from visitacampo.projects.schedule import Schedule, ScheduleRow, build_schedule
 
-from .factories import make_field_world, make_visit
+from .factories import T0, make_field_world, make_visit
 from .samples import v2
 
 setUpModule = setup_test_database
@@ -95,6 +98,27 @@ class ValidatedPctTests(TestCase):
         self.assertEqual(self.pct(task_ids=[w.task(3).pk]), {w.task(3).pk: Decimal("30.00")})
         self.assertEqual(self.pct(task_ids=[]), {})
         self.assertEqual(len(self.pct(project_ids=[w.project.pk])), 2)
+
+    def test_a_visit_with_only_quantities_does_not_replace_the_manual_pct(self) -> None:
+        w = self.world
+        w.approve(w.visit(3, "30", hours=1))
+        only_quantities = make_visit(
+            w.org,
+            w.agent,
+            task=w.task(3),
+            pct=None,
+            at=T0 + timedelta(hours=2),
+            quantities=[
+                {
+                    "item_id": str(uuid.uuid4()),
+                    "location_id": None,
+                    "quantity": "1.0000",
+                    "note": "",
+                }
+            ],
+        )
+        w.approve(only_quantities)
+        self.assertEqual(self.pct(), {w.task(3).pk: Decimal("30.00")})
 
     def test_previous_validated_and_regression(self) -> None:
         w = self.world
@@ -214,17 +238,18 @@ class LatestReviewTieTests(TestCase):
 @skip_without_db
 class ProjectListQueriesTests(TestCase):
     def count(self, projects: int) -> int:
-        w = make_field_world(f"Obra de prueba {projects}")
+        w, budget = budget_world(f"Obra de prueba {projects}")
+        plan(w, 5, item(budget, "2.1"), "10")
         for n in range(projects - 1):
             Project.objects.create(org=w.org, name=f"Otra {n}", created_by=w.admin)
         self.client.force_login(w.supervisor)
         with CaptureQueriesContext(connection) as captured:
             response = self.client.get("/plataforma/proyectos/")
         self.assertEqual(response.status_code, 200)
-        n = sum("visit_review" in q["sql"] for q in captured.captured_queries)
-        return n
+        tables = ("visit_review", "quantity_plan")
+        return sum(any(t in q["sql"] for t in tables) for q in captured.captured_queries)
 
-    def test_validated_progress_is_read_once_for_all_projects(self) -> None:
+    def test_progress_is_read_once_for_all_projects(self) -> None:
         self.assertEqual(self.count(1), self.count(3))
 
 

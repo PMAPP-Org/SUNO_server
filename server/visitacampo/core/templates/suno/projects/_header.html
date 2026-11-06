@@ -7,6 +7,7 @@
       <a href="{% url 'projects:gantt' project.pk %}" {% if tab == "gantt" %}aria-current="page"{% endif %}>Gantt</a>
       <a href="{% url 'projects:history' project.pk %}" {% if tab == "history" %}aria-current="page"{% endif %}>Historial</a>
       {% if can_view_budgets %}<a href="{% url 'budgets:list' project.pk %}" {% if tab == "budgets" %}aria-current="page"{% endif %}>Presupuestos</a>{% endif %}
+      {% if can_view_budgets %}<a href="{% url 'matrix:items' project.pk %}" {% if tab == "matrix" %}aria-current="page"{% endif %}>Matriz</a>{% endif %}
       {% if can_manage %}<a href="{% url 'projects:import' project.pk %}" {% if tab == "import" %}aria-current="page"{% endif %}>Importar XML</a>{% endif %}
     </nav>
   </div>

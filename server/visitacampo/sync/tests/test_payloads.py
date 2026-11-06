@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from visitacampo.sync.payloads import Rejection, VisitWrite, parse_op, target_id
+from visitacampo.sync.payloads import AttachmentWrite, Rejection, VisitWrite, parse_op, target_id
 
 
 def _create_payload(**overrides: object) -> dict[str, object]:
@@ -54,6 +54,7 @@ class CreateTests(SimpleTestCase):
                 "device_id",
                 "task_id",
                 "progress_pct",
+                "quantities",
             },
         )
         self.assertIsNone(parsed.fields["assignment_id"])
@@ -492,15 +493,17 @@ class TaskProgressTests(SimpleTestCase):
             "visit", "update", 3, {"id": visit_id, "task_id": self.TASK, "progress_pct": 50}
         )
         assert isinstance(both, VisitWrite)
+        # Sin `quantities`, el par deja la lista vacía (costos, pieza 4).
         self.assertEqual(
-            both.fields, {"task_id": uuid.UUID(self.TASK), "progress_pct": Decimal("50")}
+            both.fields,
+            {"task_id": uuid.UUID(self.TASK), "progress_pct": Decimal("50"), "quantities": []},
         )
 
         unlink = parse_op(
             "visit", "update", 3, {"id": visit_id, "task_id": None, "progress_pct": None}
         )
         assert isinstance(unlink, VisitWrite)
-        self.assertEqual(unlink.fields, {"task_id": None, "progress_pct": None})
+        self.assertEqual(unlink.fields, {"task_id": None, "progress_pct": None, "quantities": []})
 
         only_pct = parse_op("visit", "update", 3, {"id": visit_id, "progress_pct": 50})
         self.assertEqual(self._reasons(only_pct), {("task_id", "task_progress_pair")})
@@ -509,3 +512,106 @@ class TaskProgressTests(SimpleTestCase):
             "visit", "update", 3, {"id": visit_id, "task_id": self.TASK, "progress_pct": None}
         )
         self.assertEqual(self._reasons(half_null), {("progress_pct", "task_progress_pair")})
+
+
+class QuantitiesPayloadTests(SimpleTestCase):
+    """Costos, pieza 4: `quantities` y la regla del trío (sin BD)."""
+
+    ITEM = str(uuid.uuid4())
+    TASK = str(uuid.uuid4())
+
+    def _create(self, **fields: object) -> VisitWrite | Rejection:
+        parsed = parse_op("visit", "create", None, _create_payload(**fields))
+        assert not isinstance(parsed, AttachmentWrite)
+        return parsed
+
+    def _update(self, **fields: object) -> VisitWrite | Rejection:
+        payload = {"id": str(uuid.uuid4()), **fields}
+        parsed = parse_op("visit", "update", 1, payload)
+        assert not isinstance(parsed, AttachmentWrite)
+        return parsed
+
+    def _row(self, **values: object) -> dict[str, object]:
+        return {"item_id": self.ITEM, "quantity": 12.5, **values}
+
+    def test_quantities_are_normalized(self) -> None:
+        write = self._create(task_id=self.TASK, progress_pct=None, quantities=[self._row()])
+        assert isinstance(write, VisitWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [{"item_id": self.ITEM, "location_id": None, "quantity": "12.5000", "note": ""}],
+        )
+
+    def test_location_and_note_are_kept(self) -> None:
+        location = str(uuid.uuid4())
+        write = self._create(
+            task_id=self.TASK,
+            progress_pct=40,
+            quantities=[self._row(quantity=-2, location_id=location, note="  ajuste  ")],
+        )
+        assert isinstance(write, VisitWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [
+                {
+                    "item_id": self.ITEM,
+                    "location_id": location,
+                    "quantity": "-2.0000",
+                    "note": "ajuste",
+                }
+            ],
+        )
+
+    def test_defaults_to_empty_list(self) -> None:
+        write = self._create()
+        assert isinstance(write, VisitWrite)
+        self.assertEqual(write.fields["quantities"], [])
+
+    def test_task_needs_pct_or_quantities(self) -> None:
+        rejection = self._create(task_id=self.TASK, progress_pct=None)
+        assert isinstance(rejection, Rejection)
+        assert rejection.details is not None
+        self.assertEqual(rejection.details["reason"], "task_progress_pair")
+
+    def test_quantities_need_a_task(self) -> None:
+        rejection = self._create(quantities=[self._row()])
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(
+            rejection.details, {"field": "quantities", "reason": "quantities_without_task"}
+        )
+
+    def test_quantity_shape(self) -> None:
+        for bad in (0, "3", True, 1e15, 1.23456, float("nan")):
+            with self.subTest(quantity=bad):
+                rejection = self._create(
+                    task_id=self.TASK, progress_pct=None, quantities=[self._row(quantity=bad)]
+                )
+                assert isinstance(rejection, Rejection)
+                self.assertEqual(rejection.code, "validation_error")
+        too_many = [self._row()] * 201
+        rejection = self._create(task_id=self.TASK, progress_pct=None, quantities=too_many)
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(rejection.code, "validation_error")
+
+    def test_note_is_limited(self) -> None:
+        rejection = self._create(
+            task_id=self.TASK, progress_pct=None, quantities=[self._row(note="x" * 501)]
+        )
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(rejection.code, "validation_error")
+
+    def test_update_without_quantities_clears_them(self) -> None:
+        write = self._update(task_id=self.TASK, progress_pct=20)
+        assert isinstance(write, VisitWrite)
+        self.assertEqual(write.fields["quantities"], [])
+
+    def test_update_with_quantities_alone_is_rejected(self) -> None:
+        rejection = self._update(quantities=[self._row()])
+        assert isinstance(rejection, Rejection)
+        assert rejection.details is not None
+        self.assertEqual(rejection.details["reason"], "task_progress_pair")
+
+    def test_update_cannot_send_null_quantities(self) -> None:
+        rejection = self._update(task_id=self.TASK, progress_pct=20, quantities=None)
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(rejection.code, "validation_error")

@@ -70,6 +70,7 @@ _MODEL_FIELD_BY_CONTRACT_NAME: dict[str, str] = {
     "created_by": "created_by",
     "task_id": "task",
     "progress_pct": "progress_pct",
+    "quantities": "quantities",
 }
 
 #: Campos que el servidor escribe en un alta, en orden estable.
@@ -91,6 +92,7 @@ _INSERT_FIELDS: tuple[str, ...] = (
     "created_by",
     "task_id",
     "progress_pct",
+    "quantities",
 )
 
 
@@ -117,15 +119,16 @@ class Statement:
 
 
 def _placeholder_and_param(contract_name: str, value: Any) -> tuple[str, Any]:
-    """`%s` y su valor, con el único caso especial que hay: `answers`.
+    """`%s` y su valor, con el único caso especial que hay: las columnas JSONB.
 
-    `answers` es `JSONB` y se envía ya serializado con un cast explícito. Django
+    `answers` y `quantities` (costos, pieza 4) son `JSONB` y se envían ya
+    serializados con un cast explícito. Django
     usa el cursor de *client-side binding* de psycopg 3, que adapta un `dict` de
     Python a `hstore`/texto según el contexto y no necesariamente a `jsonb`;
     `json.dumps(...)::jsonb` no deja esa elección al adaptador. Es además lo
     mismo que hace el propio `JSONField` del ORM al preparar el valor.
     """
-    if contract_name == "answers":
+    if contract_name in ("answers", "quantities"):
         return "%s::jsonb", json.dumps(value)
     return "%s", value
 
@@ -156,6 +159,8 @@ def build_insert(
         # Costos, etapa 1: un alta sin tarea las escribe en NULL.
         "task_id": None,
         "progress_pct": None,
+        # Costos, pieza 4: sin cantidades, la lista vacía.
+        "quantities": [],
         **fields,
     }
     columns: list[str] = []

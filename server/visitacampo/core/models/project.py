@@ -146,6 +146,15 @@ class Task(OrgScopedModel):
     total_slack_days = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     free_slack_days = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_critical = models.BooleanField(default=False, verbose_name="crítica")
+    #: Costos, pieza 4: dónde está la tarea (solo hojas). Desde Project o asignada en SUNO.
+    location = models.ForeignKey(
+        "core.LocationNode",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tasks",
+        verbose_name="ubicación",
+    )
     #: Importación en la que dejó de venir en el XML; nula = vigente.
     retired_in = models.ForeignKey(
         ScheduleImport, null=True, blank=True, on_delete=models.PROTECT, related_name="+"
