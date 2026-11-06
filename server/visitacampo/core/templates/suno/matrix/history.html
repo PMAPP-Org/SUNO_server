@@ -5,6 +5,7 @@
 {% include "suno/matrix/_nav.html" with sub="history" %}
 <section class="pj-panel">
   <h2>Importaciones de la matriz</h2>
+  <div class="pj-scroll">
   <table class="pj-table">
     <thead><tr><th>Versión</th><th>Archivo</th><th>Subida</th><th>Por</th><th>Estado</th></tr></thead>
     <tbody>
@@ -21,5 +22,6 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% endblock %}

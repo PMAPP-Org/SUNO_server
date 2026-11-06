@@ -5,7 +5,7 @@
 {% include "suno/matrix/_nav.html" with sub="items" %}
 <section class="pj-panel">
   <form method="get" class="pj-filters">
-    <label>Presupuesto <select name="presupuesto"><option value="">Todos</option>{% for b in budgets %}<option value="{{ b.pk }}" {% if filters.presupuesto == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></label>
+    <label>Presupuesto <select name="presupuesto"><option value="">Todos</option>{% for b in budgets %}<option value="{{ b.pk }}" {% if filters.presupuesto == b.pk|stringformat:"s" %}selected{% endif %}>{{ b.name|truncatechars:60 }}</option>{% endfor %}</select></label>
     <label>Capítulo <select name="capitulo"><option value="">Todos</option>{% for pk, label in chapters %}<option value="{{ pk }}" {% if filters.capitulo == pk|stringformat:"s" %}selected{% endif %}>{{ label|truncatechars:60 }}</option>{% endfor %}</select></label>
     <label>Ubicación <select name="ubicacion"><option value="">Todas</option>{% for pk, label in nodes %}<option value="{{ pk }}" {% if filters.ubicacion == pk|stringformat:"s" %}selected{% endif %}>{{ label|truncatechars:60 }}</option>{% endfor %}</select></label>
     <label>Estado <select name="estado"><option value="">Todos</option>{% for key, label in status_labels.items %}<option value="{{ key }}" {% if filters.estado == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>

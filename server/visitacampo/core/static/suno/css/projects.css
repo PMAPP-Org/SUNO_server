@@ -18,7 +18,8 @@
 .pj-form label { display: grid; gap: 4px; font-size: 13px; }
 .pj-form input, .pj-form textarea, .pj-form select { padding: 8px; border: 1px solid var(--suno-line); font: inherit; }
 .pj-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; font-size: 13px; }
-.pj-filters label { display: grid; gap: 4px; }
+.pj-filters label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; max-width: 100%; }
+.pj-filters select { max-width: 100%; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 16px; row-gap: 6px; margin: 8px 0 0; font-size: 13px; }
 .pj-tabs a[aria-current="page"] { font-weight: 700; color: var(--suno-red); }
 .pj-messages { list-style: none; padding: 0; }
@@ -108,5 +109,6 @@ button.text-link:hover { color: var(--suno-red); }
 .mx-depth-2 { padding-left: 24px !important; }
 .mx-depth-3 { padding-left: 40px !important; }
 .mx-depth-4, .mx-depth-5, .mx-depth-6 { padding-left: 56px !important; }
+#mx-history td.pj-wrap { min-width: 220px; max-width: 320px; }
 .mx-level { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); border: 1px solid var(--suno-line); padding: 12px; }
 @media (max-width: 767px) { .mx-items td.pj-name { min-width: 180px; max-width: 240px; } }

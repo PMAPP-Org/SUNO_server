@@ -6,6 +6,7 @@
 {% if retired %}<p class="pj-message pj-message-warning" role="status">Tarea retirada en la versión v{{ retired_version }}</p>{% endif %}
 <section class="pj-panel">
   <h2>{{ task.wbs }} {{ task.name }}{% if task.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</h2>
+  <div class="pj-scroll">
   <table class="pj-table">
     <tbody>
       <tr><th>Etapa</th><td>{{ task.stage.name|default:"—" }}</td></tr>
@@ -17,6 +18,7 @@
       <tr><th>Predecesoras</th><td>{% for link in predecessors %}{{ link.predecessor.wbs }} {{ link.predecessor.name }} ({{ link.type }}){% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td></tr>
     </tbody>
   </table>
+  </div>
 </section>
 
 <section class="pj-panel">
@@ -45,6 +47,7 @@
   <h2>Avance de campo</h2>
   <p>% SUNO ({% if measured_by_quantities %}por cantidades{% else %}última visita validada{% endif %}): <strong>{{ suno_pct_text }}</strong></p>
   {% if field_visits %}
+  <div class="pj-scroll">
   <table class="pj-table">
     <thead><tr><th>Fecha</th><th>Autor</th><th>% acumulado</th><th>Revisión</th><th>Aviso</th></tr></thead>
     <tbody>
@@ -59,6 +62,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="pj-muted">Sin visitas vinculadas.</p>
   {% endif %}
@@ -126,7 +130,7 @@
   <form method="post" class="pj-filters">
     {% csrf_token %}
     <input type="hidden" name="action" value="plan_set">
-    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}"{% if plan_input.budget == b.pk|stringformat:"s" %} selected{% endif %}>{{ b.name }}</option>{% endfor %}</select></label>
+    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}"{% if plan_input.budget == b.pk|stringformat:"s" %} selected{% endif %}>{{ b.name|truncatechars:60 }}</option>{% endfor %}</select></label>
     <label>Código <input type="text" name="code" value="{{ plan_input.code }}" maxlength="50" size="10" required></label>
     <label>Cantidad <input type="text" name="quantity" value="{{ plan_input.quantity }}" inputmode="decimal" size="10" required></label>
     <button class="button" type="submit">Agregar ítem</button>
