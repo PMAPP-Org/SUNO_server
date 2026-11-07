@@ -11,7 +11,7 @@ name: Uptime
 #
 # Inactivo hasta que se defina la variable de repositorio PRODUCTION_URL
 # (Settings → Secrets and variables → Actions → Variables), p. ej.
-# `https://visitas.example.com`.
+# `https://registros.example.com`.
 
 on:
   schedule:

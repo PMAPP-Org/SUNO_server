@@ -2,7 +2,7 @@
 
 > **BORRADOR — pendiente de aprobación por la dirección.** Preparado desde el repositorio el 2026-10-17. Las decisiones de aplicabilidad de los controles organizacionales, de personas y físicos las toma la organización; aquí se proponen y se marcan como tales.
 
-**Alcance propuesto del SGSI:** desarrollo, operación y soporte del sistema SUNO, que comprende la app móvil Flutter, el backend Django, la infraestructura en VPS con Docker Compose y Caddy, y el almacenamiento S3/R2 de adjuntos y backups. También el ciclo de vida del código en GitHub y los datos de visitas de campo de las organizaciones cliente.
+**Alcance propuesto del SGSI:** desarrollo, operación y soporte del sistema SUNO, que comprende la app móvil Flutter, el backend Django, la infraestructura en VPS con Docker Compose y Caddy, y el almacenamiento S3/R2 de adjuntos y backups. También el ciclo de vida del código en GitHub y los datos de registros de campo de las organizaciones cliente.
 
 **Leyenda de estado**
 
@@ -53,7 +53,7 @@
 | 5.31 Requisitos legales y contractuales | Sí | 🟡 | Ley 1581 de 2012 identificada ([`tratamiento-datos-personales.md`](tratamiento-datos-personales.md)). Faltan el registro ante la SIC si aplica y los contratos con clientes |
 | 5.32 Derechos de propiedad intelectual | Sí | ✅ | Dependency Review deniega licencias copyleft fuertes; decisión de no copiar código GPL de QField (doc 08 §7). Falta definir la licencia del propio repo |
 | 5.33 Protección de los registros | Sí | ✅ | `AuditEvent` sin alta, cambio ni borrado en el Admin; purga solo por política; historial de git y de CI |
-| 5.34 Privacidad y protección de datos personales | Sí | 🟡 | IP solo como HMAC, retención definida, sin backup en la nube en Android. Falta el aviso de privacidad en la app y la retención de visitas y fotos |
+| 5.34 Privacidad y protección de datos personales | Sí | 🟡 | IP solo como HMAC, retención definida, sin backup en la nube en Android. Falta el aviso de privacidad en la app y la retención de registros y fotos |
 | 5.35 Revisión independiente de la seguridad | Sí | 🏢 | Auditoría interna o externa del SGSI |
 | 5.36 Cumplimiento de políticas y normas | Sí | ✅ | Los gates de CI hacen cumplir las políticas técnicas en cada PR ([`owasp-top10-2025.md`](owasp-top10-2025.md)) |
 | 5.37 Procedimientos de operación documentados | Sí | ✅ | Runbooks en [`docs/operacion/`](../operacion/README.md) (despliegue y rollback, incidentes por alerta, restauración), `infra/backup/README.md`, `infra/monitoring/README.md` |
@@ -105,7 +105,7 @@ El software corre en un VPS de un proveedor de nube: la seguridad física del ce
 | 8.7 Protección contra el malware | Sí | 🟡 | Imágenes escaneadas con grype; contenedores sin privilegios y con código de solo lectura. Endpoints del personal a cargo de la organización |
 | 8.8 Gestión de vulnerabilidades técnicas | Sí | ✅ | pip-audit, osv-scanner, grype, Dependency Review, Dependabot, escaneos semanales; plazos de corrección en [`politicas.md`](politicas.md) §4; [`excepciones.md`](excepciones.md) con caducidad |
 | 8.9 Gestión de la configuración | Sí | ✅ | Configuración como código; lockfiles con hashes; digests; `check --deploy` contra prod; `check_envvars.sh` |
-| 8.10 Eliminación de la información | Sí | 🟡 | Purga automática de trazas ([`retencion.md`](retencion.md)). Falta la retención de visitas y fotos y el borrado a petición del titular |
+| 8.10 Eliminación de la información | Sí | 🟡 | Purga automática de trazas ([`retencion.md`](retencion.md)). Falta la retención de registros y fotos y el borrado a petición del titular |
 | 8.11 Enmascaramiento de datos | Sí | ✅ | IP como HMAC en auditoría; redacción de secretos en logs y en `job.output` (RD-12) |
 | 8.12 Prevención de fuga de datos | Sí | ✅ | Scrubber de logs, gitleaks, sin backup Android, `CSP default-src 'none'` en la API, secretos fuera de git |
 | 8.13 Copias de seguridad | Sí | 🟡 | `infra/backup/` (cifrado age, rotación, adjuntos inmutables) con simulacro en CI. Falta desplegarlo y fijar RTO/RPO |

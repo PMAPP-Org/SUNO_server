@@ -19,6 +19,7 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from suno.serverinfo import capabilities
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -56,6 +57,10 @@ class ServerInfoTests(TestCase):
         body = self.client.get("/v1/server/info", **self.auth).json()
         self.assertGreaterEqual(body["schema_version"], 1)
         self.assertLessEqual(body["min_supported_schema_version"], body["schema_version"])
+
+    def test_schema_1_clients_are_no_longer_supported(self) -> None:
+        self.assertEqual(capabilities.SCHEMA_VERSION, 2)
+        self.assertEqual(capabilities.MIN_SUPPORTED_SCHEMA_VERSION, 2)
 
     def test_capabilities_carry_the_limits_the_client_needs(self) -> None:
         capabilities = self.client.get("/v1/server/info", **self.auth).json()["capabilities"]

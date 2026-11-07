@@ -19,7 +19,7 @@ import uuid
 from django.test import TestCase
 from django.utils import timezone
 
-from suno.core.audit import record
+from suno.core import audit as audit_log
 from suno.core.models import (
     Assignment,
     AuditEvent,
@@ -28,9 +28,9 @@ from suno.core.models import (
     Job,
     Membership,
     PrivacyConsent,
+    RecordAttachment,
+    RecordReview,
     Role,
-    VisitAttachment,
-    VisitReview,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -56,20 +56,20 @@ class AdminScopingTests(TestCase):
         self.rows = {}
         Blob.objects.create(sha256=SHA, size=4, mime="image/jpeg", bucket_key=f"blobs/ab/ab/{SHA}")
         for tenant in (self.a, self.b):
-            visit = tenant.visit(altura_cm=1)
-            attachment = VisitAttachment.objects.create(
+            record = tenant.record(altura_cm=1)
+            attachment = RecordAttachment.objects.create(
                 id=uuid.uuid4(),
                 org=tenant.org,
                 version=1,
                 change_seq=2,
-                visit=visit,
+                record=record,
                 blob_id=SHA,
                 role="foto",
                 captured_at=timezone.now(),
             )
             job = Job.objects.create(org=tenant.org, type="test.job", status="dead_letter")
-            review = VisitReview.objects.create(
-                org=tenant.org, visit=visit, status="approved", reviewer=tenant.staff
+            review = RecordReview.objects.create(
+                org=tenant.org, record=record, status="approved", reviewer=tenant.staff
             )
             assignment = Assignment.objects.create(
                 org=tenant.org,
@@ -78,7 +78,9 @@ class AdminScopingTests(TestCase):
                 template_version=tenant.version,
                 assigned_to=tenant.agent,
             )
-            audit = record(tenant.ctx(), action="test.action", target=f"marca-{tenant.org.name}")
+            audit = audit_log.record(
+                tenant.ctx(), action="test.action", target=f"marca-{tenant.org.name}"
+            )
             consent = PrivacyConsent.objects.create(
                 org=tenant.org,
                 user=tenant.agent,
@@ -88,10 +90,10 @@ class AdminScopingTests(TestCase):
                 accepted_at=timezone.now(),
             )
             self.rows[tenant.org.name] = {
-                "visit": visit,
-                "visitattachment": attachment,
+                "record": record,
+                "recordattachment": attachment,
                 "job": job,
-                "visitreview": review,
+                "recordreview": review,
                 "assignment": assignment,
                 "auditevent": audit,
                 "privacyconsent": consent,
@@ -146,7 +148,7 @@ class AdminScopingTests(TestCase):
     def test_a_member_without_a_role_in_the_org_sees_nothing(self) -> None:
         Membership.objects.filter(user=self.a.staff).delete()
         client = admin_client(self.a.staff)
-        self.assertNotEqual(client.get("/admin/core/visit/").status_code, 200)
+        self.assertNotEqual(client.get("/admin/core/record/").status_code, 200)
 
     def test_staff_cannot_grant_themselves_superuser(self) -> None:
         client = admin_client(self.a.staff)
@@ -171,17 +173,17 @@ class PlatformOperatorTests(TestCase):
         self.operator.save()
 
     def test_sees_every_organization(self) -> None:
-        visit_a, visit_b = self.a.visit(), self.b.visit()
-        content = admin_client(self.operator).get("/admin/core/visit/").content.decode()
-        self.assertIn(str(visit_a.pk), content)
-        self.assertIn(str(visit_b.pk), content)
+        record_a, record_b = self.a.record(), self.b.record()
+        content = admin_client(self.operator).get("/admin/core/record/").content.decode()
+        self.assertIn(str(record_a.pk), content)
+        self.assertIn(str(record_b.pk), content)
 
     def test_but_cannot_act_where_it_is_not_a_member(self) -> None:
-        visit_b = self.b.visit()
+        record_b = self.b.record()
         admin_client(self.operator).post(
-            "/admin/core/visit/", {"action": "approve", "_selected_action": [str(visit_b.pk)]}
+            "/admin/core/record/", {"action": "approve", "_selected_action": [str(record_b.pk)]}
         )
-        self.assertFalse(VisitReview.objects.filter(visit=visit_b).exists(), "ver no es actuar")
+        self.assertFalse(RecordReview.objects.filter(record=record_b).exists(), "ver no es actuar")
 
     def test_blob_is_only_for_the_operator(self) -> None:
         self.assertEqual(admin_client(self.operator).get("/admin/core/blob/").status_code, 200)
@@ -192,12 +194,12 @@ class PlatformOperatorTests(TestCase):
 class RoleTests(TestCase):
     def test_a_supervisor_can_review_but_not_revoke_devices(self) -> None:
         tenant = make_tenant("Org S", staff_role=Role.SUPERVISOR)
-        visit = tenant.visit()
+        record = tenant.record()
         client = admin_client(tenant.staff)
         client.post(
-            "/admin/core/visit/", {"action": "approve", "_selected_action": [str(visit.pk)]}
+            "/admin/core/record/", {"action": "approve", "_selected_action": [str(record.pk)]}
         )
-        self.assertTrue(VisitReview.objects.filter(visit=visit, status="approved").exists())
+        self.assertTrue(RecordReview.objects.filter(record=record, status="approved").exists())
 
         from suno.authn.models import RefreshToken
 
@@ -220,9 +222,9 @@ class RoleTests(TestCase):
 
     def test_export_from_the_admin_is_a_download_of_own_rows(self) -> None:
         tenant, other = make_tenant("Org E", staff_role=Role.SUPERVISOR), make_tenant("Org F")
-        own, foreign = tenant.visit(), other.visit()
+        own, foreign = tenant.record(), other.record()
         response = admin_client(tenant.staff).post(
-            "/admin/core/visit/",
+            "/admin/core/record/",
             {"action": "export_csv", "_selected_action": [str(own.pk), str(foreign.pk)]},
         )
         self.assertEqual(response.status_code, 200)

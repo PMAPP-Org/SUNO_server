@@ -25,8 +25,8 @@ class PrivacyPurpose(models.TextChoices):
     """Finalidades que el aviso enumera y el titular acepta una a una."""
 
     ACCOUNT = "account", "Cuenta y uso de la aplicación"
-    LOCATION = "location", "Ubicación de las visitas"
-    PHOTOS = "photos", "Fotos y firmas de las visitas"
+    LOCATION = "location", "Ubicación de los registros"
+    PHOTOS = "photos", "Fotos y firmas de los registros"
 
 
 class PrivacyConsent(OrgScopedModel):

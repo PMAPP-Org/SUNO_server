@@ -67,13 +67,13 @@ from suno.matrix.quantities import (
 )
 
 from .access import effective_responsibles, get_visible_project, visible_projects
-from .field_progress import format_pct, progress_visits
+from .field_progress import format_pct, progress_records
 from .importer import ImportRejected, apply_import, discard_import, stage_import
 from .mspdi import MAX_BYTES
 from .schedule import ScheduleRow, build_schedule, filter_rows
 
-#: Visitas validadas más recientes cuyo registro de cantidades muestra la ficha de tarea.
-QUANTITY_HISTORY_VISITS = 50
+#: Registros validados más recientes cuyas cantidades muestra la ficha de tarea.
+QUANTITY_HISTORY_RECORDS = 50
 
 
 def _ctx(request: HttpRequest) -> RequestContext:
@@ -389,20 +389,22 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
         key=lambda f: code_key(f.code),
     )
     # Historial: los ítems de lo validado ya están en `facts` o en `unplanned`.
-    records, history_truncated = validated_records(ctx, task.pk, max_visits=QUANTITY_HISTORY_VISITS)
+    history, history_truncated = validated_records(
+        ctx, task.pk, max_records=QUANTITY_HISTORY_RECORDS
+    )
     known = {**facts, **unplanned}
     quantity_history = [
         {
-            "visit": record.visit,
-            "code": known[record.item_id].code if record.item_id in known else "?",
-            "unit": known[record.item_id].unit if record.item_id in known else "",
+            "record": entry.record,
+            "code": known[entry.item_id].code if entry.item_id in known else "?",
+            "unit": known[entry.item_id].unit if entry.item_id in known else "",
             # Sin ubicación precisada: la ubicación *actual* de la tarea (no la que tenía al
             # registrarse; si la tarea se movió, la fila muestra la nueva).
-            "location": tree.label(record.location_id or task.location_id),
-            "quantity": record.quantity,
-            "note": record.note,
+            "location": tree.label(entry.location_id or task.location_id),
+            "quantity": entry.quantity,
+            "note": entry.note,
         }
-        for record in records
+        for entry in history
     ]
     return _render(
         request,
@@ -428,14 +430,14 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
             .select_related("predecessor"),
             "suno_pct_text": suno_text,
             "measured_by_quantities": task.pk in measured,
-            "field_visits": progress_visits(ctx, task),
+            "field_records": progress_records(ctx, task),
             "plan_rows": plan_rows,
             "unplanned_executed": unplanned_executed,
             "chapter_plans": chapter_plans,
             "retired_plans": retired_plans,
             "quantity_history": quantity_history,
             "history_truncated": history_truncated,
-            "history_visits": QUANTITY_HISTORY_VISITS,
+            "history_records": QUANTITY_HISTORY_RECORDS,
             "show_amounts": show_amounts,
             "can_edit_plan": can_manage_budgets(ctx, ctx.org_id) and not task.is_summary,
             "plan_error": plan_error,

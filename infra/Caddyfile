@@ -6,7 +6,7 @@
 # TLS por entorno — un único Caddyfile para dev y producción, seleccionado por
 # el valor de la variable de entorno CADDY_DOMAIN (ver .env / .env.example):
 #
-#   - Producción: CADDY_DOMAIN=visitas.tudominio.com (o el dominio real).
+#   - Producción: CADDY_DOMAIN=registros.tudominio.com (o el dominio real).
 #     Al ser un nombre DNS público, Caddy emite y renueva automáticamente un
 #     certificado Let's Encrypt vía ACME (HTTP-01/TLS-ALPN) — cero
 #     configuración manual de certificados.

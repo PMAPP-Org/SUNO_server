@@ -1,11 +1,11 @@
 """Publicar una versión de plantilla, y la **regla de inmutabilidad** (Paso 20).
 
 **La regla, en una frase**: una versión publicada no se edita nunca; para
-cambiar un formulario se **publica otra versión**. Es lo que hace que una
-visita histórica siga siendo interpretable años después (ADR-012) y también la
+cambiar un formulario se **publica otra versión**. Es lo que hace que un
+registro histórico siga siendo interpretable años después (ADR-012) y también la
 estrategia de rollback del propio paso: un error en una plantilla no puede
-estropear las visitas ya capturadas con la versión anterior, porque esa versión
-sigue existiendo intacta y es la que ellas referencian.
+estropear los registros ya capturados con la versión anterior, porque esa versión
+sigue existiendo intacta y es la que ellos referencian.
 
 Dónde se hace cumplir, en dos capas y a propósito:
 
@@ -50,9 +50,9 @@ __all__ = ["PUBLISHED_IMMUTABLE_FIELDS", "TemplateNotFound", "publish_version"]
 
 #: Lo que queda congelado en cuanto una versión está publicada. `name` no está:
 #: corregir una errata en el nombre de una versión no cambia ni una respuesta ni
-#: cómo se interpreta una visita histórica. `definition` sí, obviamente; y
+#: cómo se interpreta un registro histórico. `definition` sí, obviamente; y
 #: `version_number`/`template` porque son la identidad de la versión, es decir,
-#: exactamente lo que `Visit.template_version_id` promete haber usado.
+#: exactamente lo que `Record.template_version_id` promete haber usado.
 PUBLISHED_IMMUTABLE_FIELDS: tuple[str, ...] = (
     "definition",
     "version_number",

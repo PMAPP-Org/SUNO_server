@@ -7,13 +7,13 @@ al del propio doc 08:
 - `base`     — enumeraciones, rangos y bases **abstractas** compartidas.
 - `tenancy`  — `Organization`, `AppUser`, `Membership`, `Device`.
 - `catalog`  — `FormTemplate`, `FormTemplateVersion`, `Assignment`.
-- `visit`    — `Visit`, `Blob`, `VisitAttachment`.
+- `record`    — `Record`, `Blob`, `RecordAttachment`.
 - `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
 - `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
 - `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
-import Visit` funcione igual que con un `models.py` plano.
+import Record` funcione igual que con un `models.py` plano.
 """
 
 from .base import (
@@ -60,8 +60,8 @@ from .project import (
     TaskResponsible,
 )
 from .quantity import QuantityPlan, QuantityPlanImport, QuantityPlanImportStatus
+from .record import Blob, Record, RecordAttachment, RecordReview, RecordReviewStatus
 from .tenancy import AppUser, Device, Membership, Organization
-from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
 __all__ = [
     "ACTIVE_JOB_STATUSES",
@@ -119,8 +119,8 @@ __all__ = [
     "TaskResource",
     "TaskResponsible",
     "TileFormat",
-    "Visit",
-    "VisitAttachment",
-    "VisitReview",
-    "VisitReviewStatus",
+    "Record",
+    "RecordAttachment",
+    "RecordReview",
+    "RecordReviewStatus",
 ]

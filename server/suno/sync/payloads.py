@@ -9,7 +9,7 @@ la versión servidor del hallazgo H-02/H-03 de la auditoría (validar con un
 de campo creería haber guardado algo que el servidor nunca escribió.
 
 **Nada de aquí lanza excepciones hacia arriba.** `parse_op` devuelve o un
-`VisitWrite` (dato ya validado, listo para el CAS) o un `Rejection`
+`RecordWrite` (dato ya validado, listo para el CAS) o un `Rejection`
 (estructurado, con `code`/`message`/`details` del contrato). Esa es la garantía
 de "payload que no valida → `rejected`, nunca un 500" del criterio de salida:
 no depende de que alguien se acuerde de poner un `try` alrededor.
@@ -23,7 +23,7 @@ expresa aquí para no romper la generación de modelos"):
 - `update` exige `base_version` conocido y admite solo los campos que cambian;
   se distingue "campo ausente" de "campo enviado como `null`" con
   `model_fields_set`, porque poner `assignment_id: null` es una escritura
-  legítima (desligar la visita de su asignación) y no lo mismo que no tocarlo.
+  legítima (desligar el registro de su asignación) y no lo mismo que no tocarlo.
 - `delete` exige `base_version` y **solo** `id`. Se rechaza un `delete` que
   traiga más campos en vez de ignorarlos: ver el párrafo de arriba. (Nota para
   el Paso 13: el cliente debe enviar `payload: {"id": ...}` a secas en los
@@ -95,7 +95,7 @@ __all__ = [
     "AttachmentWrite",
     "OpType",
     "Rejection",
-    "VisitWrite",
+    "RecordWrite",
     "parse_op",
 ]
 
@@ -107,15 +107,15 @@ OpType = Literal["create", "update", "delete"]
 
 _OP_TYPES: frozenset[str] = frozenset({"create", "update", "delete"})
 
-#: Entidades escribibles por el push. `visit` desde el Paso 8; `visit_attachment`
+#: Entidades escribibles por el push. `record` desde el Paso 8; `record_attachment`
 #: desde el Paso 22, porque una respuesta de tipo foto/firma guarda el `id` de un
 #: adjunto y sin esta escritura ese `id` no apuntaría a nada. `assignment` y
 #: `form_template_version` existen en el enum porque el **pull** las entrega;
 #: una operación sobre ellas se rechaza con detalle, nunca se descarta en silencio.
-WRITABLE_ENTITIES: frozenset[str] = frozenset({"visit", "visit_attachment"})
+WRITABLE_ENTITIES: frozenset[str] = frozenset({"record", "record_attachment"})
 
-#: Operaciones admitidas sobre `visit_attachment`. Solo el alta: el adjunto se
-#: crea junto a su visita y, en el MVP, nada en la app lo modifica ni lo borra
+#: Operaciones admitidas sobre `record_attachment`. Solo el alta: el adjunto se
+#: crea junto a su registro y, en el MVP, nada en la app lo modifica ni lo borra
 #: después (repetir una foto antes de guardar no llega a crear el primero).
 #: `update`/`delete` se rechazan con detalle hasta que exista ese caso de uso.
 ATTACHMENT_OP_TYPES: frozenset[str] = frozenset({"create"})
@@ -141,12 +141,12 @@ class Rejection:
 
 
 @dataclass(frozen=True, slots=True)
-class VisitWrite:
-    """Operación de `visit` ya validada: lo único que `sql.py` acepta.
+class RecordWrite:
+    """Operación de `record` ya validada: lo único que `sql.py` acepta.
 
     `fields` usa los nombres del **contrato** (`assignment_id`,
     `template_version_id`, `device_id`…), no los del ORM; la traducción a
-    columnas la hace `sql.py` a partir de `Visit._meta`, en un solo sitio.
+    columnas la hace `sql.py` a partir de `Record._meta`, en un solo sitio.
     """
 
     entity_id: uuid.UUID
@@ -157,10 +157,10 @@ class VisitWrite:
 
 @dataclass(frozen=True, slots=True)
 class AttachmentWrite:
-    """Alta de `visit_attachment` ya validada (Paso 22).
+    """Alta de `record_attachment` ya validada (Paso 22).
 
-    `fields` usa los nombres del contrato (`visit_id`, `sha256`, `role`,
-    `caption`, `captured_at`, `order`). Que la visita exista **en esta
+    `fields` usa los nombres del contrato (`record_id`, `sha256`, `role`,
+    `caption`, `captured_at`, `order`). Que el registro exista **en esta
     organización** no se sabe aquí —es una consulta—: lo comprueba
     `services.py` en bloque, antes del bucle.
     """
@@ -223,7 +223,7 @@ AnswersJson = Annotated[dict[str, Any], AfterValidator(_json_safe)]
 #: `applied`. La bomba estallaba después, lejos de su causa y sin nada que la
 #: relacionara con ella:
 #:
-#: - si esa fila entraba luego en un `conflict`, `records.visit_record()` la
+#: - si esa fila entraba luego en un `conflict`, `records.record_row()` la
 #:   serializaba a `sync_op_log.result` (`JSONField`→`jsonb`) y el encoder de
 #:   Django usa `allow_nan=True`, con lo que emitía el literal desnudo `NaN`
 #:   dentro del `jsonb` ⇒ `DataError` ⇒ 500 con pérdida del lote entero;
@@ -294,14 +294,14 @@ QuantityValue = Annotated[Decimal, BeforeValidator(_json_number)]
 #: Nota de una cantidad: obligatoria para ajustes negativos e ítems fuera del plan.
 QuantityNote = Annotated[str, StringConstraints(max_length=500), AfterValidator(_text_safe)]
 
-#: Filas de `quantities` por visita.
+#: Filas de `quantities` por registro.
 MAX_QUANTITY_ROWS = 200
 
 _QUANTITY_STEP = Decimal("0.0001")
 
 
 class _QuantityPayload(BaseModel):
-    """Contrato `VisitQuantityPayload`."""
+    """Contrato `RecordQuantityPayload`."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -319,9 +319,9 @@ class _QuantityPayload(BaseModel):
 
 
 def stored_quantities(rows: list[Any]) -> list[dict[str, Any]]:
-    """La forma guardada en `Visit.quantities`: ids como texto y la cantidad como
+    """La forma guardada en `Record.quantities`: ids como texto y la cantidad como
     decimal de 4 decimales en texto (exacto). Es también la forma con la que se
-    compara una visita validada (`services._References.validated_rejection`)."""
+    compara un registro validado (`services._References.validated_rejection`)."""
     stored: list[dict[str, Any]] = []
     for row in rows:
         data = row.model_dump() if isinstance(row, BaseModel) else row
@@ -338,12 +338,12 @@ def stored_quantities(rows: list[Any]) -> list[dict[str, Any]]:
 
 
 class _AttachmentCreatePayload(BaseModel):
-    """Contrato `VisitAttachmentPayload` en su forma completa (alta)."""
+    """Contrato `RecordAttachmentPayload` en su forma completa (alta)."""
 
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID
-    visit_id: uuid.UUID
+    record_id: uuid.UUID
     # El blob puede no estar subido todavía (contrato): la fila referencia el
     # hash y la subida llega después por el carril de adjuntos.
     sha256: Sha256Hex
@@ -355,7 +355,7 @@ class _AttachmentCreatePayload(BaseModel):
 
 
 #: Campos que un `update` puede omitir pero **no** enviar como `null`: su
-#: columna es `NOT NULL` en `Visit` (Paso 5) y el contrato tampoco los declara
+#: columna es `NOT NULL` en `Record` (Paso 5) y el contrato tampoco los declara
 #: nulables. Los que faltan de esta lista (`assignment_id`, `lat`, `lon`,
 #: `accuracy_m`, `altitude_m`) sí admiten `null` y ponerlo es una escritura
 #: legítima.
@@ -368,8 +368,8 @@ _NON_NULLABLE_ON_UPDATE: tuple[str, ...] = (
 )
 
 
-class _VisitCreatePayload(BaseModel):
-    """Contrato `VisitPayload` en su forma completa (alta)."""
+class _RecordCreatePayload(BaseModel):
+    """Contrato `RecordPayload` en su forma completa (alta)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -396,8 +396,8 @@ class _VisitCreatePayload(BaseModel):
     quantities: list[_QuantityPayload] = Field(default_factory=list, max_length=MAX_QUANTITY_ROWS)
 
 
-class _VisitUpdatePayload(BaseModel):
-    """Contrato `VisitPayload` en su forma parcial (modificación)."""
+class _RecordUpdatePayload(BaseModel):
+    """Contrato `RecordPayload` en su forma parcial (modificación)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -436,7 +436,7 @@ class _VisitUpdatePayload(BaseModel):
         return value
 
 
-class _VisitDeletePayload(BaseModel):
+class _RecordDeletePayload(BaseModel):
     """Un borrado no lleva datos: solo a quién borra."""
 
     model_config = ConfigDict(extra="forbid")
@@ -489,7 +489,7 @@ def _task_pair_rejection(fields: dict[str, Any], entity_id: uuid.UUID) -> Reject
     - Un `update` con tarea y % pero sin `quantities` deja la lista vacía: un
       cliente anterior a la pieza 4 nunca tiene cantidades.
 
-    Lo exige también la BD (`visit_task_progress_pair`), pero allí sería un
+    Lo exige también la BD (`record_task_progress_pair`), pero allí sería un
     `IntegrityError` que tumba el lote entero (ver el docstring del módulo).
     Normaliza `fields["quantities"]` a la forma guardada (`stored_quantities`).
     """
@@ -524,7 +524,7 @@ def _task_pair_rejection(fields: dict[str, Any], entity_id: uuid.UUID) -> Reject
         return None
     if pct is None and not quantities:
         return _rejection(
-            "A visit linked to a task needs progress_pct or at least one quantity.",
+            "A record linked to a task needs progress_pct or at least one quantity.",
             field="progress_pct",
             reason="task_progress_pair",
             entity_id=entity_id,
@@ -580,7 +580,7 @@ def parse_op(
     op_type: Any,
     base_version: Any,
     payload: Any,
-) -> VisitWrite | AttachmentWrite | Rejection:
+) -> RecordWrite | AttachmentWrite | Rejection:
     """Valida una operación del lote. Nunca lanza; devuelve dato o rechazo."""
     entity_id = target_id(payload)
 
@@ -617,17 +617,17 @@ def parse_op(
             entity_id=entity_id,
         )
 
-    if entity == "visit_attachment":
+    if entity == "record_attachment":
         return _parse_attachment(op_type, payload, entity_id)
 
-    validated: _VisitCreatePayload | _VisitUpdatePayload | _VisitDeletePayload
+    validated: _RecordCreatePayload | _RecordUpdatePayload | _RecordDeletePayload
     try:
         if op_type == "create":
-            validated = _VisitCreatePayload.model_validate(payload)
+            validated = _RecordCreatePayload.model_validate(payload)
         elif op_type == "update":
-            validated = _VisitUpdatePayload.model_validate(payload)
+            validated = _RecordUpdatePayload.model_validate(payload)
         else:
-            validated = _VisitDeletePayload.model_validate(payload)
+            validated = _RecordDeletePayload.model_validate(payload)
     except ValidationError as exc:
         return Rejection(
             code=CODE_VALIDATION_ERROR,
@@ -637,10 +637,10 @@ def parse_op(
             entity_id=entity_id,
         )
 
-    if isinstance(validated, _VisitCreatePayload):
+    if isinstance(validated, _RecordCreatePayload):
         fields = validated.model_dump()
         fields.pop("id")
-    elif isinstance(validated, _VisitUpdatePayload):
+    elif isinstance(validated, _RecordUpdatePayload):
         fields = {
             name: getattr(validated, name)
             for name in _UPDATABLE_FIELDS
@@ -660,7 +660,7 @@ def parse_op(
     if pair is not None:
         return pair
 
-    return VisitWrite(
+    return RecordWrite(
         entity_id=validated.id,
         op_type=op_type,  # type: ignore[arg-type]  # ya comprobado contra _OP_TYPES
         base_version=parsed_base,
@@ -671,10 +671,10 @@ def parse_op(
 def _parse_attachment(
     op_type: str, payload: dict[str, Any], entity_id: uuid.UUID | None
 ) -> AttachmentWrite | Rejection:
-    """`visit_attachment`: solo `create` (ver `ATTACHMENT_OP_TYPES`)."""
+    """`record_attachment`: solo `create` (ver `ATTACHMENT_OP_TYPES`)."""
     if op_type not in ATTACHMENT_OP_TYPES:
         return _rejection(
-            "visit_attachment only supports create in this server version.",
+            "record_attachment only supports create in this server version.",
             field="op_type",
             reason="unsupported_op_type",
             entity_id=entity_id,

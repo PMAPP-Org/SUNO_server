@@ -164,36 +164,36 @@ class ScannerTests(SimpleTestCase):
     SERVICE = "suno/core/services.py"
 
     def test_flags_objects_all(self) -> None:
-        source = "def listar(ctx):\n    return Visit.objects.all()\n"
+        source = "def listar(ctx):\n    return Record.objects.all()\n"
         found = [v.expression for v in scan_source(source, self.SERVICE)]
-        self.assertEqual(found, ["Visit.objects"])
+        self.assertEqual(found, ["Record.objects"])
 
     def test_flags_objects_filter(self) -> None:
         """El caso realmente peligroso: parece filtrado, pero no por `org_id`."""
-        source = "def buscar(ctx, visit_id):\n    return Visit.objects.filter(id=visit_id)\n"
+        source = "def buscar(ctx, record_id):\n    return Record.objects.filter(id=record_id)\n"
         self.assertEqual(len(scan_source(source, self.SERVICE)), 1)
 
     def test_flags_a_manager_bound_to_a_variable(self) -> None:
         """La variante que un `grep` de `.objects.all(` no vería."""
-        source = "def buscar(ctx):\n    qs = Visit.objects\n    return qs.filter(id=1)\n"
+        source = "def buscar(ctx):\n    qs = Record.objects\n    return qs.filter(id=1)\n"
         self.assertEqual(len(scan_source(source, self.SERVICE)), 1)
 
     def test_flags_the_private_manager_aliases(self) -> None:
-        source = "def a(ctx):\n    return Visit._default_manager.all()\n"
+        source = "def a(ctx):\n    return Record._default_manager.all()\n"
         self.assertEqual(len(scan_source(source, self.SERVICE)), 1)
-        source = "def a(ctx):\n    return Visit._base_manager.all()\n"
+        source = "def a(ctx):\n    return Record._base_manager.all()\n"
         self.assertEqual(len(scan_source(source, self.SERVICE)), 1)
 
     def test_accepts_the_scoped_alternative(self) -> None:
         source = (
             "from suno.core.scoping import scoped_qs\n"
             "def listar(ctx):\n"
-            "    return scoped_qs(ctx, Visit).filter(deleted_at__isnull=True)\n"
+            "    return scoped_qs(ctx, Record).filter(deleted_at__isnull=True)\n"
         )
         self.assertEqual(scan_source(source, self.SERVICE), [])
 
     def test_reports_path_and_line(self) -> None:
-        source = "def a(ctx):\n    pass\n\n\ndef b(ctx):\n    return Visit.objects.all()\n"
+        source = "def a(ctx):\n    pass\n\n\ndef b(ctx):\n    return Record.objects.all()\n"
         violation = scan_source(source, self.SERVICE)[0]
         self.assertEqual(violation.path, self.SERVICE)
         self.assertEqual(violation.line, 6)
@@ -262,7 +262,7 @@ class NegativeCaseTests(SimpleTestCase):
     test) en rojo hasta que alguien lo borrara a mano.
     """
 
-    PROBE_SOURCE = '"""Módulo temporal del test de arquitectura."""\n\n\ndef listar():\n    return Visit.objects.all()\n'  # noqa: E501
+    PROBE_SOURCE = '"""Módulo temporal del test de arquitectura."""\n\n\ndef listar():\n    return Record.objects.all()\n'  # noqa: E501
 
     def test_a_module_with_unscoped_access_breaks_the_build(self) -> None:
         self.assertEqual(scan_repository(), [], "el repositorio real debe partir limpio")
@@ -277,7 +277,7 @@ class NegativeCaseTests(SimpleTestCase):
             violations = scan_repository(root=tmp_root)
             self.assertEqual(len(violations), 1)
             self.assertEqual(violations[0].path, "suno/core/_architecture_probe.py")
-            self.assertEqual(violations[0].expression, "Visit.objects")
+            self.assertEqual(violations[0].expression, "Record.objects")
             self.assertEqual(violations[0].line, 5)
 
         # El `with` ya limpió el directorio temporal completo (probe incluido)

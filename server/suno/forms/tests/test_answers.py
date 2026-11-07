@@ -6,8 +6,8 @@ mitad que atraviesa el push de verdad (código de error del contrato, lote que
 no se cae, etc.) está en `sync/tests/test_push_answers.py`, que sí necesita
 PostgreSQL.
 
-Incluye el **test de retrocompatibilidad histórica** del paso: una visita
-capturada con la versión 1 sigue siendo válida contra la versión 1 aunque
+Incluye el **test de retrocompatibilidad histórica** del paso: un registro
+capturado con la versión 1 sigue siendo válido contra la versión 1 aunque
 exista una versión 2 incompatible.
 """
 
@@ -189,7 +189,7 @@ class FieldTypeTests(SimpleTestCase):
 class HistoricalCompatibilityTests(SimpleTestCase):
     """**Retrocompatibilidad histórica** (criterio de salida del Paso 20).
 
-    Una visita antigua se valida contra la definición de **su** versión, no
+    Un registro antiguo se valida contra la definición de **su** versión, no
     contra la última publicada. Publicar una versión nueva —aunque renombre
     campos y endurezca la obligatoriedad— no puede invalidar dato histórico ni
     forzar una migración de datos.

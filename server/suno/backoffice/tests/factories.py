@@ -24,8 +24,8 @@ from suno.core.models import (
     FormTemplate,
     FormTemplateVersion,
     Organization,
+    Record,
     Role,
-    Visit,
 )
 
 DEFINITION = {
@@ -48,8 +48,8 @@ class Tenant:
         who = user or self.staff
         return resolve_request_context(Principal(user_id=who.pk, org_id=who.org_id))
 
-    def visit(self, **answers: object) -> Visit:
-        return Visit.objects.create(
+    def record(self, **answers: object) -> Record:
+        return Record.objects.create(
             id=uuid.uuid4(),
             org=self.org,
             version=1,

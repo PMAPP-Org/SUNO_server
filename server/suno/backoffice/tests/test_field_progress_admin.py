@@ -1,4 +1,4 @@
-"""Admin de visitas: la supervisión ve la tarea, el % y el aviso de retroceso."""
+"""Admin de registros: la supervisión ve la tarea, el % y el aviso de retroceso."""
 
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ tearDownModule = teardown_test_database
 
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
-URL = "/admin/core/visit/"
+URL = "/admin/core/record/"
 
 
 @skip_without_db
-class VisitAdminFieldProgressTests(TestCase):
+class RecordAdminFieldProgressTests(TestCase):
     def setUp(self) -> None:
         self.world = make_field_world()
         staff = self.world.supervisor
@@ -33,9 +33,9 @@ class VisitAdminFieldProgressTests(TestCase):
         staff.save()
         staff.user_permissions.set(Permission.objects.filter(content_type__app_label="core"))
         self.client_ = admin_client(staff)
-        self.high = self.world.visit(3, "60", hours=1)
+        self.high = self.world.record(3, "60", hours=1)
         self.world.approve(self.high)
-        self.low = self.world.visit(3, "40", hours=2)
+        self.low = self.world.record(3, "40", hours=2)
 
     def test_list_shows_task_progress_and_regression(self) -> None:
         content = self.client_.get(URL).content.decode()
@@ -52,6 +52,6 @@ class VisitAdminFieldProgressTests(TestCase):
         self.assertIn("menor que el último validado (60 %)", content)
 
     def test_percentages_use_up_to_two_decimals(self) -> None:
-        self.world.visit(3, "35.5", hours=3)
+        self.world.record(3, "35.5", hours=3)
         content = self.client_.get(URL).content.decode()
         self.assertIn("1.2 Descapote · 35,5 %", content)

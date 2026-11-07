@@ -23,8 +23,8 @@ from __future__ import annotations
 __all__ = ["CURSOR_ZERO", "InvalidCursor", "decode_cursor", "encode_cursor"]
 
 #: Prefijo del formato de cursor vigente ("c1" = versión 1 del formato de
-#: cursor, no `schema_version` del payload — hoy coinciden en valor por
-#: casualidad, no por diseño; son dos números que versionan cosas distintas).
+#: cursor). No es el `schema_version` del payload (hoy 2): son dos números que
+#: versionan cosas distintas y cambian por separado.
 _PREFIX = "c1:"
 
 #: Ancho fijo del campo numérico. `change_seq` es `PositiveBigIntegerField`

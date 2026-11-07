@@ -3,15 +3,15 @@
 Vive en su propio archivo porque tiene **dos** consumidores con requisitos
 distintos y la traducción tiene que ser la misma para ambos:
 
-1. El `server_row` de un `conflict` en el push (Paso 8, solo `visit`: es la
+1. El `server_row` de un `conflict` en el push (Paso 8, solo `record`: es la
    única entidad que el push puede escribir en el MVP).
 2. Las `rows` del pull (Paso 9), que emite las cuatro entidades sincronizables
-   —`visit`, `visit_attachment`, `assignment`, `form_template_version`— con el
+   —`record`, `record_attachment`, `assignment`, `form_template_version`— con el
    mismo formato exacto que usaría un conflicto de push si esa entidad fuera
    escribible.
 
 Todo se emite **ya en tipos JSON** (cadenas para UUID e instantes) y no en
-objetos de Python. El motivo no es estético: el diccionario de `visit_record`
+objetos de Python. El motivo no es estético: el diccionario de `record_row`
 se guarda tal cual en `sync_op_log.result` (JSONB) y se devuelve byte a byte
 idéntico cuando el cliente reenvía la operación. Si aquí salieran objetos y la
 serialización ocurriera más tarde, el resultado guardado y el resultado
@@ -20,8 +20,8 @@ que la idempotencia promete que no pasa. Las otras tres entidades no pasan por
 `sync_op_log`, pero se mantienen en la misma forma por consistencia: un solo
 patrón de traducción fila→JSON en todo el módulo de sync.
 
-**Ninguno de los cuatro navega una relación** (`visit.assignment`,
-`attachment.visit`, `assignment.template_version`…): todos leen los `*_id`
+**Ninguno de los cuatro navega una relación** (`record.assignment`,
+`attachment.record`, `assignment.template_version`…): todos leen los `*_id`
 que ya vienen en la propia fila. Seguir una relación aquí dispararía una
 query perezosa por fila del pull —potencialmente cientos, la misma forma de
 H-07 que RD-07 elimina en el push— reintroducida por la puerta de atrás.
@@ -35,7 +35,7 @@ from decimal import Decimal
 from typing import Any
 
 from suno.authn.schemas import rfc3339_utc
-from suno.core.models import Assignment, FormTemplateVersion, Visit, VisitAttachment
+from suno.core.models import Assignment, FormTemplateVersion, Record, RecordAttachment
 
 __all__ = [
     "RECORD_BUILDERS",
@@ -45,8 +45,8 @@ __all__ = [
     "quantity_records",
     "tombstone",
     "uuid_str",
-    "visit_attachment_record",
-    "visit_record",
+    "record_attachment_row",
+    "record_row",
 ]
 
 
@@ -59,8 +59,8 @@ def uuid_str(value: uuid.UUID | None) -> str | None:
     return None if value is None else str(value)
 
 
-def visit_record(visit: Visit) -> dict[str, Any]:
-    """Contrato `VisitRecord`: `{entity: "visit", data: {...}}`.
+def record_row(record: Record) -> dict[str, Any]:
+    """Contrato `RecordRow`: `{entity: "record", data: {...}}`.
 
     Se emiten **todas** las propiedades, incluidas las que valen `null`: la
     convención del contrato para entidades del servidor es que lo opcional lo
@@ -68,33 +68,33 @@ def visit_record(visit: Visit) -> dict[str, Any]:
     deriva contrato↔backend detecte un campo omitido en vez de tragárselo.
     """
     return {
-        "entity": "visit",
+        "entity": "record",
         "data": {
-            "id": str(visit.pk),
-            "org_id": str(visit.org_id),
-            "version": visit.version,
-            "change_seq": visit.change_seq,
-            "deleted_at": iso(visit.deleted_at),
-            "assignment_id": uuid_str(visit.assignment_id),
-            "template_version_id": str(visit.template_version_id),
-            "answers": visit.answers,
-            "lat": visit.lat,
-            "lon": visit.lon,
-            "accuracy_m": visit.accuracy_m,
-            "altitude_m": visit.altitude_m,
-            "captured_at": iso(visit.captured_at),
-            "device_id": str(visit.device_id),
-            "created_by": str(visit.created_by_id),
-            "task_id": uuid_str(visit.task_id),
+            "id": str(record.pk),
+            "org_id": str(record.org_id),
+            "version": record.version,
+            "change_seq": record.change_seq,
+            "deleted_at": iso(record.deleted_at),
+            "assignment_id": uuid_str(record.assignment_id),
+            "template_version_id": str(record.template_version_id),
+            "answers": record.answers,
+            "lat": record.lat,
+            "lon": record.lon,
+            "accuracy_m": record.accuracy_m,
+            "altitude_m": record.altitude_m,
+            "captured_at": iso(record.captured_at),
+            "device_id": str(record.device_id),
+            "created_by": str(record.created_by_id),
+            "task_id": uuid_str(record.task_id),
             # `numeric` → número JSON (el contrato dice `number`, no texto).
-            "progress_pct": None if visit.progress_pct is None else float(visit.progress_pct),
-            "quantities": quantity_records(visit.quantities),
+            "progress_pct": None if record.progress_pct is None else float(record.progress_pct),
+            "quantities": quantity_records(record.quantities),
         },
     }
 
 
 def quantity_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """`Visit.quantities` como lo publica el contrato: la cantidad como número JSON."""
+    """`Record.quantities` como lo publica el contrato: la cantidad como número JSON."""
     return [
         {
             "item_id": row["item_id"],
@@ -106,24 +106,24 @@ def quantity_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def visit_attachment_record(attachment: VisitAttachment) -> dict[str, Any]:
-    """Contrato `VisitAttachmentRecord`.
+def record_attachment_row(attachment: RecordAttachment) -> dict[str, Any]:
+    """Contrato `RecordAttachmentRow`.
 
     `data.sha256` se lee de `attachment.blob_id` (el atributo `*_id` que
     Django genera para el campo `blob`, cuya columna real es `sha256` —
-    `db_column="sha256"`, ver `core/models/visit.py`): es el valor de la FK
+    `db_column="sha256"`, ver `core/models/record.py`): es el valor de la FK
     sin `db_constraint`, así que sigue siendo correcto aunque el `Blob`
     referenciado todavía no exista (adjunto pendiente de subir, Paso 17/18).
     """
     return {
-        "entity": "visit_attachment",
+        "entity": "record_attachment",
         "data": {
             "id": str(attachment.pk),
             "org_id": str(attachment.org_id),
             "version": attachment.version,
             "change_seq": attachment.change_seq,
             "deleted_at": iso(attachment.deleted_at),
-            "visit_id": str(attachment.visit_id),
+            "record_id": str(attachment.record_id),
             "sha256": attachment.blob_id,
             "role": attachment.role,
             "caption": attachment.caption,
@@ -196,8 +196,8 @@ def tombstone(
 #: *serialización*, no de *asignación de change_seq*: son preocupaciones
 #: distintas que `sync/pull.py` (Paso 9) combina, cada una desde su módulo.
 RECORD_BUILDERS: dict[str, Any] = {
-    "visit": visit_record,
-    "visit_attachment": visit_attachment_record,
+    "record": record_row,
+    "record_attachment": record_attachment_row,
     "assignment": assignment_record,
     "form_template_version": form_template_version_record,
 }

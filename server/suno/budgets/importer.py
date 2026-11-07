@@ -195,7 +195,7 @@ def _matrix_warnings(
     used = set(
         scoped_qs(ctx, QuantityPlan).filter(item_id__in=ids).values_list("item_id", flat=True)
     )
-    # Solo se leen las visitas si queda algún ítem afectado que no esté en la matriz.
+    # Solo se leen los registros si queda algún ítem afectado que no esté en la matriz.
     pending = set(ids) - used
     executed = (
         {

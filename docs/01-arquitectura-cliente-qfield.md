@@ -94,7 +94,7 @@ qfield_core (STATIC)  →  qfield_gui (STATIC, linka core)  →  qfield_app (STA
 ## 8. Patrones reutilizables para SUNO
 
 1. **3 capas C++ estáticas** (`core` sin UI → `gui` presentación → `app` orquestación), cada una con su registro QML — facilita testear el core aislado y mantener la UI "tonta".
-2. **Offline-first con cola de cambios tipo outbox/delta**: ediciones locales se acumulan como operaciones versionadas (create/update/delete) con snapshot old/new, se aplican de inmediato (UI optimista) y se sincronizan en batch — aplicable directo a "visitas de campo" (cada visita/formulario = un delta).
+2. **Offline-first con cola de cambios tipo outbox/delta**: ediciones locales se acumulan como operaciones versionadas (create/update/delete) con snapshot old/new, se aplican de inmediato (UI optimista) y se sincronizan en batch — aplicable directo a "registros de campo" (cada registro/formulario = un delta).
 3. **Servicios nativos en background** para seguir subiendo datos/tracking GPS con la app minimizada.
 4. **Abstracción de fuente de posición** (`AbstractGnssReceiver`) — permite testear sin hardware real y soportar receptores externos a futuro.
 5. **Credenciales nunca en texto plano** — usar el keychain/keystore nativo en vez de preferencias planas.

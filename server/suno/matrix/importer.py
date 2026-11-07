@@ -321,7 +321,7 @@ def apply_plan(ctx: RequestContext, import_id: UUID) -> QuantityPlanImport:
             raise PlanRejected([STALE])
         context = _load(ctx, project)
         parsed = _parse(bytes(imp.source_file), context)
-        # Ejecución validada o pendiente de revisión: una visita pendiente puede validarse.
+        # Ejecución validada o pendiente de revisión: un registro pendiente puede validarse.
         executed = set(executed_by_pair(ctx, project_ids=[project.pk], include_pending=True))
         now = timezone.now()
         plans = scoped_qs(ctx, QuantityPlan)

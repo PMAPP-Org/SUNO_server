@@ -36,8 +36,8 @@ from .factories import (
     import_schedule,
     item,
     plan,
+    quantity_record,
     quantity_row,
-    quantity_visit,
     suno_levels,
 )
 
@@ -89,7 +89,7 @@ class ImporterTests(TestCase):
         concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
         plan(self.world, 3, concrete, "10")
         plan(self.world, 3, steel, "100")
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(concrete, "2")))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(concrete, "2")))
         staged = self._stage(sheet([3, "", "", "", "", "", "1.1", "", "", 1]))
         self.assertEqual(
             (staged.summary["added"], staged.summary["removed"], staged.summary["kept_zero"]),
@@ -280,8 +280,8 @@ class ReviewFixImporterTests(TestCase):
         concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
         plan(self.world, 3, concrete, "10")
         plan(self.world, 3, steel, "10")
-        quantity_visit(self.world, 3, quantity_row(concrete, "2"))
-        self.world.reject(quantity_visit(self.world, 3, quantity_row(steel, "2"), hours=1))
+        quantity_record(self.world, 3, quantity_row(concrete, "2"))
+        self.world.reject(quantity_record(self.world, 3, quantity_row(steel, "2"), hours=1))
         staged = stage_plan(
             self.ctx,
             self.world.project,

@@ -29,7 +29,7 @@ corrección de H-06 en su forma más severa):
 - `definition.py` — el **meta-schema**: qué es una plantilla bien formada
   (catálogo cerrado de tipos de campo, etiquetas i18n, obligatoriedad, rangos).
   Se aplica al crear/publicar una versión.
-- `answers.py` — la validación de `visit.answers` **contra la definición de su
+- `answers.py` — la validación de `record.answers` **contra la definición de su
   propia versión de plantilla**. La ejecuta el servidor en el push
   (`sync/services.py`); el cliente nunca es la fuente de verdad (RD-03).
 - `services.py` — publicar una versión nueva y la regla de **inmutabilidad**

@@ -22,8 +22,8 @@ from suno.core.models import (
     FormTemplate,
     FormTemplateVersion,
     Organization,
+    Record,
     Role,
-    Visit,
 )
 from suno.serverinfo import capabilities as caps
 
@@ -33,7 +33,7 @@ BOOTSTRAP_URL = "/v1/sync/bootstrap"
 
 #: `change_seq` de la `FormTemplateVersion` del escenario. No es 0 a propósito:
 #: obliga a que el asignador de `change_seq` mire también las entidades que no
-#: son `visit` (doc 08 §4.4, cursor único por organización).
+#: son `record` (doc 08 §4.4, cursor único por organización).
 TEMPLATE_CHANGE_SEQ = 41
 
 #: Definición de la plantilla del escenario (Paso 20). Declara de verdad el
@@ -99,13 +99,13 @@ def build_scenario(
 
 def create_op(
     scenario: Scenario,
-    visit_id: uuid.UUID | None = None,
+    record_id: uuid.UUID | None = None,
     op_uuid: uuid.UUID | None = None,
     **payload_overrides: Any,
 ) -> dict[str, Any]:
-    """Operación `create` de `visit` con el conjunto completo que exige el contrato."""
+    """Operación `create` de `record` con el conjunto completo que exige el contrato."""
     payload: dict[str, Any] = {
-        "id": str(visit_id or uuid.uuid4()),
+        "id": str(record_id or uuid.uuid4()),
         "template_version_id": str(scenario.template_version.pk),
         "answers": {"altura_cm": 12},
         "captured_at": "2026-07-30T14:05:09.123Z",
@@ -114,7 +114,7 @@ def create_op(
     payload.update(payload_overrides)
     return {
         "op_uuid": str(op_uuid or uuid.uuid4()),
-        "entity": "visit",
+        "entity": "record",
         "op_type": "create",
         "base_version": None,
         "payload": payload,
@@ -122,16 +122,16 @@ def create_op(
 
 
 def update_op(
-    visit_id: uuid.UUID,
+    record_id: uuid.UUID,
     base_version: int,
     op_uuid: uuid.UUID | None = None,
     **payload_overrides: Any,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {"id": str(visit_id), "lat": 4.61, "lon": -74.08}
+    payload: dict[str, Any] = {"id": str(record_id), "lat": 4.61, "lon": -74.08}
     payload.update(payload_overrides)
     return {
         "op_uuid": str(op_uuid or uuid.uuid4()),
-        "entity": "visit",
+        "entity": "record",
         "op_type": "update",
         "base_version": base_version,
         "payload": payload,
@@ -139,16 +139,16 @@ def update_op(
 
 
 def delete_op(
-    visit_id: uuid.UUID,
+    record_id: uuid.UUID,
     base_version: int,
     op_uuid: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     return {
         "op_uuid": str(op_uuid or uuid.uuid4()),
-        "entity": "visit",
+        "entity": "record",
         "op_type": "delete",
         "base_version": base_version,
-        "payload": {"id": str(visit_id)},
+        "payload": {"id": str(record_id)},
     }
 
 
@@ -172,8 +172,8 @@ def push(
     )
 
 
-def visit_of(visit_id: uuid.UUID) -> Visit:
-    return Visit.objects.get(pk=visit_id)
+def record_of(record_id: uuid.UUID) -> Record:
+    return Record.objects.get(pk=record_id)
 
 
 def pull(scenario: Scenario, cursor: str, limit: int | None = None):

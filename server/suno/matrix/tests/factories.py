@@ -9,10 +9,10 @@ from django.utils import timezone
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import V1_ROWS
-from suno.core.models import Budget, BudgetItem, QuantityPlan, Task, Visit
+from suno.core.models import Budget, BudgetItem, QuantityPlan, Record, Task
 from suno.matrix.locations import LevelSpec, load_tree, project_levels, save_levels
 from suno.projects.importer import apply_import, stage_import
-from suno.projects.tests.factories import T0, FieldWorld, make_field_world, make_visit
+from suno.projects.tests.factories import T0, FieldWorld, make_field_world, make_record
 from suno.projects.tests.samples import TEXT1, TEXT2, project_xml, task_xml
 
 
@@ -89,7 +89,7 @@ def plan(world: FieldWorld, uid: int, budget_item: BudgetItem, quantity: str) ->
 def quantity_row(
     budget_item: BudgetItem, quantity: str, *, location: object = None, note: str = ""
 ) -> dict[str, object]:
-    """Una fila de `Visit.quantities` en el formato guardado."""
+    """Una fila de `Record.quantities` en el formato guardado."""
     return {
         "item_id": str(budget_item.pk),
         "location_id": None if location is None else str(location),
@@ -98,15 +98,15 @@ def quantity_row(
     }
 
 
-def quantity_visit(
+def quantity_record(
     world: FieldWorld,
     uid: int,
     *rows: dict[str, object],
     pct: str | None = None,
     hours: int = 0,
-) -> Visit:
-    """Visita del agente a la tarea `uid` con las cantidades `rows` (y opcionalmente un %)."""
-    return make_visit(
+) -> Record:
+    """Registro del agente a la tarea `uid` con las cantidades `rows` (y opcionalmente un %)."""
+    return make_record(
         world.org,
         world.agent,
         task=world.task(uid),

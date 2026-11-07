@@ -7,7 +7,7 @@
 | Nivel | Qué es | Ejemplos | Tratamiento mínimo |
 |---|---|---|---|
 | **Secreto** | Su divulgación compromete todo el sistema | Llaves privadas, contraseñas, tokens | Nunca en git ni en logs; solo en gestor de secretos o environment de GitHub; acceso nominal; rotación ante sospecha |
-| **Confidencial** | Datos de clientes y personales | Visitas, fotos, GPS, usuarios, trazas con IP | Cifrado en tránsito y en reposo (backups); acceso por organización; retención definida |
+| **Confidencial** | Datos de clientes y personales | Registros, fotos, GPS, usuarios, trazas con IP | Cifrado en tránsito y en reposo (backups); acceso por organización; retención definida |
 | **Interno** | Útil para atacar el sistema, sin ser un dato de cliente | Configuración de producción no secreta, métricas, logs redactados | Solo personal autorizado |
 | **Público** | Puede publicarse | Código y documentación del repositorio (hoy público, ver R-22) | — |
 
@@ -15,7 +15,7 @@
 
 | Activo | Clasificación | Dónde vive | Protección | Dueño |
 |---|---|---|---|---|
-| Datos de visitas (respuestas, GPS) | Confidencial | PostgreSQL (VPS); BD local cifrada en cada teléfono | Aislamiento por organización, TLS, SQLCipher, backups cifrados | Por designar |
+| Datos de registros (respuestas, GPS) | Confidencial | PostgreSQL (VPS); BD local cifrada en cada teléfono | Aislamiento por organización, TLS, SQLCipher, backups cifrados | Por designar |
 | Fotos y adjuntos | Confidencial | Bucket R2 de adjuntos; teléfono hasta subir | Direccionados por contenido, URL prefirmada de corta vida, backups | Por designar |
 | Cuentas de usuario y membresías | Confidencial | PostgreSQL | Argon2id, bloqueo por fallos, auditoría | Por designar |
 | Traza de auditoría y logs de axes | Confidencial | PostgreSQL | Solo lectura en el Admin, IP como HMAC, retención ([`retencion.md`](retencion.md)) | Por designar |

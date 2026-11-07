@@ -30,7 +30,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from suno.core.models import Visit
+from suno.core.models import Record
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -52,7 +52,7 @@ PERMISSION_TABLES = ("membership", "app_user")
 
 
 def queries_of(scenario, size: int) -> list[str]:
-    ops = [create_op(scenario, visit_id=uuid.uuid4()) for _ in range(size)]
+    ops = [create_op(scenario, record_id=uuid.uuid4()) for _ in range(size)]
     with CaptureQueriesContext(connection) as captured:
         response = push(scenario, ops)
     assert response.status_code == 200, response.content
@@ -86,7 +86,7 @@ class QueryBudgetTests(TestCase):
     def test_the_batch_of_200_matches_its_derived_budget(self) -> None:
         """La forma `assertNumQueries` que pide el brief, con el mismo presupuesto."""
         baseline = len(queries_of(self.scenario, 1))
-        ops = [create_op(self.scenario, visit_id=uuid.uuid4()) for _ in range(BATCH)]
+        ops = [create_op(self.scenario, record_id=uuid.uuid4()) for _ in range(BATCH)]
         with self.assertNumQueries(baseline + BATCH - 1):
             push(self.scenario, ops)
 
@@ -131,11 +131,11 @@ class QueryBudgetTests(TestCase):
         queries = queries_of(self.scenario, BATCH)
         lock_at = next(i for i, sql in enumerate(queries) if "pg_advisory_xact_lock" in sql)
         first_write = next(
-            i for i, sql in enumerate(queries) if sql.startswith("INSERT INTO") and "visit" in sql
+            i for i, sql in enumerate(queries) if sql.startswith("INSERT INTO") and "record" in sql
         )
         self.assertLess(lock_at, first_write)
 
     def test_all_the_rows_land(self) -> None:
         """Un presupuesto de queries que se cumple sin escribir nada no valdría."""
         queries_of(self.scenario, BATCH)
-        self.assertEqual(Visit.objects.count(), BATCH)
+        self.assertEqual(Record.objects.count(), BATCH)

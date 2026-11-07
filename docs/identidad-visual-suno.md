@@ -30,7 +30,7 @@ Ritmo de 4/8 px, márgenes de 24 px en móvil, botones de al menos 48 dp y esqui
 
 ## Iconografía
 
-Iconos funcionales de línea y un significado estable por acción: persona (usuario), candado (contraseña), ubicación con signo más (visita), flechas circulares (sincronizar), documento (registros) y alerta (revisión). Flutter centraliza Material Icons Outlined en `lib/ui/theme/app_icons.dart`. La web usa SVG locales de línea, 24 × 24, trazo 1.6 y sin relleno. Django conserva sus iconos de acciones y estado para respetar su comportamiento nativo. No se utilizan emojis como iconos de producto.
+Iconos funcionales de línea y un significado estable por acción: persona (usuario), candado (contraseña), ubicación con signo más (registro), flechas circulares (sincronizar), documento (registros) y alerta (revisión). Flutter centraliza Material Icons Outlined en `lib/ui/theme/app_icons.dart`. La web usa SVG locales de línea, 24 × 24, trazo 1.6 y sin relleno. Django conserva sus iconos de acciones y estado para respetar su comportamiento nativo. No se utilizan emojis como iconos de producto.
 
 ## Archivos y mantenimiento
 

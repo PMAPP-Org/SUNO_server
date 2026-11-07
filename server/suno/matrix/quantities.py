@@ -17,7 +17,7 @@ from suno.core.models import (
     BudgetRowKind,
     BudgetVersionStatus,
     QuantityPlan,
-    Visit,
+    Record,
 )
 from suno.core.scoping import scoped_qs
 from suno.projects.field_progress import approved, not_rejected, validated_pct_by_task
@@ -48,21 +48,21 @@ def executed_by_pair(
     project_ids: Iterable[UUID] | None = None,
     include_pending: bool = False,
 ) -> dict[Pair, Decimal]:
-    """(tarea, ítem) → suma de las cantidades de sus visitas validadas. Una query.
+    """(tarea, ítem) → suma de las cantidades de sus registros validados. Una query.
 
-    `include_pending`: también las visitas aún sin revisar (no las rechazadas). Lo usa
-    quien decide si un par "tiene ejecución" para no borrarlo del plan: una visita
+    `include_pending`: también los registros aún sin revisar (no los rechazados). Lo usa
+    quien decide si un par "tiene ejecución" para no borrarlo del plan: un registro
     pendiente puede validarse después."""
     tasks, projects = _ids(task_ids), _ids(project_ids)
     if tasks == [] or projects == []:
         return {}
-    visits = (
-        scoped_qs(ctx, Visit)
+    records = (
+        scoped_qs(ctx, Record)
         .filter(task__isnull=False, deleted_at__isnull=True)
         .exclude(quantities=[])
     )
-    visits = _by_scope(visits, tasks, projects, task="task")
-    counted = not_rejected(visits) if include_pending else approved(visits)
+    records = _by_scope(records, tasks, projects, task="task")
+    counted = not_rejected(records) if include_pending else approved(records)
     totals: dict[Pair, Decimal] = defaultdict(Decimal)
     for task_id, rows in counted.values_list("task_id", "quantities"):
         for row in rows:
@@ -72,9 +72,9 @@ def executed_by_pair(
 
 @dataclass(frozen=True)
 class QuantityRecord:
-    """Una fila de cantidad de una visita validada (historial de la ficha de tarea)."""
+    """Una fila de cantidad de un registro validado (historial de la ficha de tarea)."""
 
-    visit: Visit
+    record: Record
     item_id: UUID
     #: `None`: la ubicación de la tarea.
     location_id: UUID | None
@@ -83,28 +83,28 @@ class QuantityRecord:
 
 
 def validated_records(
-    ctx: RequestContext, task_id: UUID, *, max_visits: int
+    ctx: RequestContext, task_id: UUID, *, max_records: int
 ) -> tuple[list[QuantityRecord], bool]:
-    """Las cantidades de las `max_visits` visitas validadas más recientes de la tarea,
-    con su autor; y si quedaron visitas por fuera. Una query."""
-    visits = list(
-        approved(scoped_qs(ctx, Visit).filter(task_id=task_id, deleted_at__isnull=True))
+    """Las cantidades de los `max_records` registros validados más recientes de la tarea,
+    con su autor; y si quedaron registros por fuera. Una query."""
+    records = list(
+        approved(scoped_qs(ctx, Record).filter(task_id=task_id, deleted_at__isnull=True))
         .exclude(quantities=[])
         .select_related("created_by")
-        .order_by("-captured_at", "-change_seq")[: max_visits + 1]
+        .order_by("-captured_at", "-change_seq")[: max_records + 1]
     )
-    records = [
+    history = [
         QuantityRecord(
-            visit=visit,
+            record=record,
             item_id=UUID(row["item_id"]),
             location_id=UUID(row["location_id"]) if row["location_id"] else None,
             quantity=Decimal(row["quantity"]),
             note=row["note"],
         )
-        for visit in visits[:max_visits]
-        for row in visit.quantities
+        for record in records[:max_records]
+        for row in record.quantities
     ]
-    return records, len(visits) > max_visits
+    return history, len(records) > max_records
 
 
 @dataclass(frozen=True)
@@ -203,7 +203,7 @@ def suno_pct_by_task(
     tasks, projects = _ids(task_ids), _ids(project_ids)
     if tasks == [] or projects == []:
         return {}
-    manual = validated_pct_by_task(scoped_qs(ctx, Visit), task_ids=tasks, project_ids=projects)
+    manual = validated_pct_by_task(scoped_qs(ctx, Record), task_ids=tasks, project_ids=projects)
     if measured is None:
         measured = measured_progress(ctx, task_ids=tasks, project_ids=projects)
     return {**manual, **{task_id: p.pct for task_id, p in measured.items()}}

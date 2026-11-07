@@ -46,7 +46,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 #: Debe coincidir con `suno/serverinfo/capabilities.py::SCHEMA_VERSION`.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -116,7 +116,7 @@ def batch(device: Device, template_version_id: str, ops: int) -> dict[str, Any]:
         "ops": [
             {
                 "op_uuid": str(uuid.uuid4()),
-                "entity": "visit",
+                "entity": "record",
                 "op_type": "create",
                 "base_version": None,
                 "payload": {
