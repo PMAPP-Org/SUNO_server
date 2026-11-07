@@ -85,11 +85,10 @@ def capabilities() -> dict[str, object]:
         "sync_pull_max_limit": SYNC_PULL_MAX_LIMIT,
         "attachment_max_bytes": ATTACHMENT_MAX_BYTES,
         "attachment_allowed_mime": list(ATTACHMENT_ALLOWED_MIME),
-        # No está entre las `required` de `components.schemas.
-        # ServerCapabilities`, pero el esquema declara
-        # `additionalProperties: true`, así que anunciarlo es válido contra el
-        # contrato. Y merece anunciarse: sin este número el cliente no puede
-        # saber que una foto más va a ser rechazada hasta haberla subido, que
-        # es exactamente el gasto de datos móviles que ADR-007 quiere evitar.
+        # Declarado en `components.schemas.ServerCapabilities` pero no entre las
+        # `required`: un servidor puede no anunciarlo. Este lo anuncia porque sin
+        # este número el cliente no puede saber que una foto más va a ser
+        # rechazada hasta haberla subido, que es exactamente el gasto de datos
+        # móviles que ADR-007 quiere evitar.
         "attachment_max_bytes_per_record": ATTACHMENT_MAX_BYTES_PER_RECORD,
     }

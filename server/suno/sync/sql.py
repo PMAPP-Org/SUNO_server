@@ -147,7 +147,7 @@ def build_insert(
     una fila nace viva. `org_id` y `created_by` los pone el servidor —son
     server-authoritative y el contrato ni siquiera los admite en `RecordPayload`—,
     de modo que un cliente no puede crear un registro en otra organización ni
-    atribuírsela a otro usuario.
+    atribuírselo a otro usuario.
     """
     values: dict[str, Any] = {
         "id": record_id,

@@ -479,6 +479,12 @@ class BatchGateTests(TestCase):
         self.assertEqual(response.status_code, 422, response.content)
         self.assertEqual(response.json()["code"], "schema_unsupported")
 
+    def test_a_schema_1_client_is_422(self) -> None:
+        """El contrato 1 ya no se acepta: la app anterior deja de sincronizar."""
+        response = push(self.scenario, [create_op(self.scenario)], schema_version=1)
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertEqual(response.json()["code"], "schema_unsupported")
+
     def test_a_batch_from_another_device_is_403(self) -> None:
         response = push(self.scenario, [create_op(self.scenario)], device_id=uuid.uuid4())
         self.assertEqual(response.status_code, 403, response.content)

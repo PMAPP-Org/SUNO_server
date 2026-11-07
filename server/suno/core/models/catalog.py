@@ -126,7 +126,7 @@ class FormTemplateVersion(SyncedModel):
            `has_declared_schema()` para por qué no se convierte en un error.
         2. Una versión **ya publicada** no admite cambios en su definición ni
            en su identidad. Corregir un formulario es publicar otra versión;
-           reescribir una versión en uso reinterpretaría en silencio las
+           reescribir una versión en uso reinterpretaría en silencio los
            registros históricos que la referencian, que es exactamente lo que
            ADR-012 existe para impedir.
 

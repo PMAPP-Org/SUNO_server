@@ -605,7 +605,7 @@ paths:
       summary: Tareas del cronograma de las que quien llama es responsable
       description: |
         Tareas **de detalle vigentes** (ni resumen ni retiradas) de las que quien llama es
-        responsable, directamente o por una tarea superior de la EDT, con su último % validado (la
+        responsable, directamente o por una tarea superior de la EDT, con su último % validado (el
         registro validado más reciente vinculado a la tarea). Es lo que la app ofrece para vincular
         un registro a una tarea (`RecordPayload.task_id`).
 
@@ -1086,6 +1086,13 @@ components:
           type: integer
           minimum: 1
           description: Tamaño máximo por adjunto individual.
+        attachment_max_bytes_per_record:
+          type: integer
+          minimum: 1
+          description: |
+            Tope acumulado de bytes de adjuntos por registro (ADR-007; 200 MiB). Opcional: un
+            servidor que no lo anuncie no fija este tope.
+          examples: [209715200]
         attachment_allowed_mime:
           type: array
           items:
@@ -2179,8 +2186,8 @@ components:
           minimum: 0
           maximum: 100
           description: |
-            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el de
-            el registro validado más reciente. `null` si no hay.
+            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el del
+            registro validado más reciente. `null` si no hay.
         measured_by:
           type: string
           enum: [pct, quantities]
