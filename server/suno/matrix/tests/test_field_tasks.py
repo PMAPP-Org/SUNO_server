@@ -16,7 +16,7 @@ from suno.core.tests.dbsupport import (
 from suno.matrix.quantities import measured_progress, suno_pct_by_task
 from suno.projects.field_tasks import field_tasks, list_version
 
-from .factories import budget_world, item, locate, plan, quantity_row, quantity_record, suno_levels
+from .factories import budget_world, item, locate, plan, quantity_record, quantity_row, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

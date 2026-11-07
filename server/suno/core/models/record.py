@@ -65,7 +65,7 @@ class Record(SyncedModel):
     )
     altitude_m = models.FloatField(null=True, blank=True, default=None, verbose_name="altitud (m)")
 
-    captured_at = models.DateTimeField(verbose_name="capturada en")
+    captured_at = models.DateTimeField(verbose_name="capturado en")
     device = models.ForeignKey(
         "core.Device",
         on_delete=models.PROTECT,
@@ -76,7 +76,7 @@ class Record(SyncedModel):
         "core.AppUser",
         on_delete=models.PROTECT,
         related_name="records",
-        verbose_name="creada por",
+        verbose_name="creado por",
     )
     #: Costos, etapa 1: la tarea del cronograma cuyo avance reporta el registro y
     #: el % acumulado observado en campo. Los dos o ninguno
@@ -104,7 +104,7 @@ class Record(SyncedModel):
     #: Costos, pieza 4: cantidades ejecutadas en este registro, por ítem del
     #: presupuesto. Lista de `{item_id, location_id, quantity, note}`, con la
     #: cantidad como texto decimal de 4 decimales (`sync/payloads.py`). Cuentan
-    #: para el avance cuando el registro está validada (`matrix/quantities.py`).
+    #: para el avance cuando el registro está validado (`matrix/quantities.py`).
     quantities = models.JSONField(
         default=list, db_default=[], blank=True, verbose_name="cantidades"
     )
@@ -145,7 +145,7 @@ class Record(SyncedModel):
             ),
             # Destino de la FK compuesta de `record_attachment` (migración
             # 0002): Postgres exige un UNIQUE sobre exactamente las columnas
-            # referenciadas. Es también la invariante que impide que una
+            # referenciadas. Es también la invariante que impide que un
             # registro "cambie de organización" sin cambiar de identidad.
             models.UniqueConstraint(fields=["id", "org"], name="record_id_org_uq"),
             # Costos, etapa 1 y pieza 4: sin tarea, ni % ni cantidades; con
@@ -312,8 +312,8 @@ class RecordAttachment(SyncedModel):
 
 
 class RecordReviewStatus(models.TextChoices):
-    APPROVED = "approved", "Validada"
-    REJECTED = "rejected", "Rechazada"
+    APPROVED = "approved", "Validado"
+    REJECTED = "rejected", "Rechazado"
 
 
 class RecordReview(OrgScopedModel):
@@ -324,7 +324,7 @@ class RecordReview(OrgScopedModel):
     - `Record` es una entidad sincronizada: un campo nuevo cambiaría el contrato
       que leen los teléfonos (`RecordRow`), y la revisión es un dato del
       back-office que el agente no edita.
-    - Editar una `Record` desde el Admin la escribiría sin pasar por el push,
+    - Editar un `Record` desde el Admin lo escribiría sin pasar por el push,
       sin `change_seq` nuevo: los teléfonos nunca recibirían el cambio. Por eso
       el Admin de `Record` es de solo lectura, y la supervisión escribe aquí.
 

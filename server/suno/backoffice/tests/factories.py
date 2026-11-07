@@ -24,8 +24,8 @@ from suno.core.models import (
     FormTemplate,
     FormTemplateVersion,
     Organization,
-    Role,
     Record,
+    Role,
 )
 
 DEFINITION = {

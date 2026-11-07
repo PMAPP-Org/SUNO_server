@@ -24,7 +24,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from suno.core.models import INITIAL_VERSION, Role, SyncOpLog, Record
+from suno.core.models import INITIAL_VERSION, Record, Role, SyncOpLog
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -38,8 +38,8 @@ from .factories import (
     create_op,
     delete_op,
     push,
-    update_op,
     record_of,
+    update_op,
 )
 
 setUpModule = setup_test_database
@@ -509,7 +509,9 @@ class TenantIsolationTests(TestCase):
         their_record = uuid.uuid4()
         push(self.theirs, [create_op(self.theirs, record_id=their_record)])
 
-        result = push(self.mine, [create_op(self.mine, record_id=their_record)]).json()["results"][0]
+        result = push(self.mine, [create_op(self.mine, record_id=their_record)]).json()["results"][
+            0
+        ]
         # `rejected` y no `conflict`: un `conflict` tendría que adjuntar la
         # fila autoritativa, es decir la fila de la otra organización.
         self.assertEqual(result["status"], "rejected")

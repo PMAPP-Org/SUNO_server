@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import V1_ROWS
-from suno.core.models import Budget, BudgetItem, QuantityPlan, Task, Record
+from suno.core.models import Budget, BudgetItem, QuantityPlan, Record, Task
 from suno.matrix.locations import LevelSpec, load_tree, project_levels, save_levels
 from suno.projects.importer import apply_import, stage_import
 from suno.projects.tests.factories import T0, FieldWorld, make_field_world, make_record

@@ -72,7 +72,7 @@ from .importer import ImportRejected, apply_import, discard_import, stage_import
 from .mspdi import MAX_BYTES
 from .schedule import ScheduleRow, build_schedule, filter_rows
 
-#: Registros validados más recientes cuyo registro de cantidades muestra la ficha de tarea.
+#: Registros validados más recientes cuyas cantidades muestra la ficha de tarea.
 QUANTITY_HISTORY_RECORDS = 50
 
 
@@ -389,7 +389,9 @@ def task_detail(request: HttpRequest, project_id: UUID, task_id: UUID) -> HttpRe
         key=lambda f: code_key(f.code),
     )
     # Historial: los ítems de lo validado ya están en `facts` o en `unplanned`.
-    history, history_truncated = validated_records(ctx, task.pk, max_records=QUANTITY_HISTORY_RECORDS)
+    history, history_truncated = validated_records(
+        ctx, task.pk, max_records=QUANTITY_HISTORY_RECORDS
+    )
     known = {**facts, **unplanned}
     quantity_history = [
         {

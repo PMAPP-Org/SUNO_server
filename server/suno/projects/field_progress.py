@@ -1,11 +1,11 @@
 """Avance de campo (costos, etapa 1): el % que reportan los registros vinculados
 a tareas del cronograma.
 
-- **% SUNO de una tarea hoja** = `progress_pct` del registro **validada** más
-  reciente (por `captured_at`) vinculada a ella. "Validada" = su revisión
+- **% SUNO de una tarea hoja** = `progress_pct` del registro **validado** más
+  reciente (por `captured_at`) vinculado a ella. "Validado" = su revisión
   vigente —la más reciente, `RecordReview` es un historial— es `approved`.
-- **Menor que el último validado**: un registro cuyo % es menor que el de la
-  registro validado más reciente de la misma tarea capturada **antes** que ella.
+- **Menor que el último validado**: un registro cuyo % es menor que el del
+  registro validado más reciente de la misma tarea capturado **antes** que él.
   Se calcula al leer: validar o rechazar después el registro de referencia
   cambia el aviso.
 
@@ -25,13 +25,13 @@ from uuid import UUID
 from django.db.models import OuterRef, Q, QuerySet, Subquery
 
 from suno.core.context import RequestContext
-from suno.core.models import Task, Record, RecordReview, RecordReviewStatus
+from suno.core.models import Record, RecordReview, RecordReviewStatus, Task
 from suno.core.scoping import scoped_qs
 
 APPROVED = str(RecordReviewStatus.APPROVED)
 REJECTED = str(RecordReviewStatus.REJECTED)
 
-REVIEW_LABELS = {APPROVED: "Validada", REJECTED: "Rechazada", None: "Sin revisar"}
+REVIEW_LABELS = {APPROVED: "Validado", REJECTED: "Rechazado", None: "Sin revisar"}
 
 
 def with_review(records: QuerySet[Record]) -> QuerySet[Record]:
@@ -98,9 +98,11 @@ def validated_pct_by_task(
     return dict(rows)
 
 
-def with_previous_validated_pct(records: QuerySet[Record], base: QuerySet[Record]) -> QuerySet[Record]:
+def with_previous_validated_pct(
+    records: QuerySet[Record], base: QuerySet[Record]
+) -> QuerySet[Record]:
     """Anota `previous_validated_pct`: el % del registro validado más reciente
-    de la misma tarea capturada antes. `base` es de dónde se buscan (la misma
+    de la misma tarea capturado antes. `base` es de dónde se buscan (la misma
     organización, o todas para el superusuario del Admin: la correlación por
     tarea ya restringe a una sola)."""
     previous = (
@@ -155,7 +157,7 @@ class ProgressRecord:
 
 
 def progress_records(ctx: RequestContext, task: Task) -> list[ProgressRecord]:
-    """Registros vivos vinculadas a `task`, la más reciente primero. Una query."""
+    """Registros vivos vinculados a `task`, el más reciente primero. Una query."""
     base = scoped_qs(ctx, Record)
     records = (
         with_previous_validated_pct(

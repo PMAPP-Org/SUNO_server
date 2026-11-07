@@ -14,7 +14,7 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 
-from .factories import budget_world, item, locate, plan, quantity_row, quantity_record, suno_levels
+from .factories import budget_world, item, locate, plan, quantity_record, quantity_row, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from django.test import SimpleTestCase
 
-from suno.sync.payloads import AttachmentWrite, Rejection, RecordWrite, parse_op, target_id
+from suno.sync.payloads import AttachmentWrite, RecordWrite, Rejection, parse_op, target_id
 
 
 def _create_payload(**overrides: object) -> dict[str, object]:
@@ -397,7 +397,9 @@ class HostileInputTests(SimpleTestCase):
         for op_type in ("create", "update", "delete"):
             for payload in self.HOSTILE:
                 with self.subTest(op_type=op_type, payload=payload):
-                    parsed = parse_op("record", op_type, None if op_type == "create" else 1, payload)
+                    parsed = parse_op(
+                        "record", op_type, None if op_type == "create" else 1, payload
+                    )
                     assert isinstance(parsed, Rejection)
                     self.assertTrue(parsed.code)
                     self.assertTrue(parsed.message)

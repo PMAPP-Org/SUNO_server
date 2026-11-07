@@ -36,8 +36,8 @@ from .factories import (
     import_schedule,
     item,
     plan,
-    quantity_row,
     quantity_record,
+    quantity_row,
     suno_levels,
 )
 

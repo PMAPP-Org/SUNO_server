@@ -7,7 +7,7 @@ no se cae, etc.) está en `sync/tests/test_push_answers.py`, que sí necesita
 PostgreSQL.
 
 Incluye el **test de retrocompatibilidad histórica** del paso: un registro
-capturada con la versión 1 sigue siendo válida contra la versión 1 aunque
+capturado con la versión 1 sigue siendo válido contra la versión 1 aunque
 exista una versión 2 incompatible.
 """
 

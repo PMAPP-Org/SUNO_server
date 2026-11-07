@@ -50,7 +50,7 @@ def executed_by_pair(
 ) -> dict[Pair, Decimal]:
     """(tarea, ítem) → suma de las cantidades de sus registros validados. Una query.
 
-    `include_pending`: también los registros aún sin revisar (no las rechazadas). Lo usa
+    `include_pending`: también los registros aún sin revisar (no los rechazados). Lo usa
     quien decide si un par "tiene ejecución" para no borrarlo del plan: un registro
     pendiente puede validarse después."""
     tasks, projects = _ids(task_ids), _ids(project_ids)
@@ -85,7 +85,7 @@ class QuantityRecord:
 def validated_records(
     ctx: RequestContext, task_id: UUID, *, max_records: int
 ) -> tuple[list[QuantityRecord], bool]:
-    """Las cantidades de las `max_records` registros validados más recientes de la tarea,
+    """Las cantidades de los `max_records` registros validados más recientes de la tarea,
     con su autor; y si quedaron registros por fuera. Una query."""
     records = list(
         approved(scoped_qs(ctx, Record).filter(task_id=task_id, deleted_at__isnull=True))

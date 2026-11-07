@@ -11,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import SPLIT_ROWS, V1_ROWS, V2_ROWS
-from suno.core.models import Project, QuantityPlan, ScheduleImport, Record
+from suno.core.models import Project, QuantityPlan, Record, ScheduleImport
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -23,8 +23,8 @@ from .factories import (
     item,
     locate,
     plan,
-    quantity_row,
     quantity_record,
+    quantity_row,
     suno_levels,
 )
 
@@ -278,4 +278,4 @@ class TaskPageQuantityHistoryTests(TestCase):
         history = self._history(html)
         self.assertEqual(history.count("<tr>"), 2)  # el registro más reciente: una fila
         self.assertIn("2,5", history)
-        self.assertIn("Se muestran las 1 registros validados más recientes.", html)
+        self.assertIn("Se muestran los 1 registros validados más recientes.", html)

@@ -119,7 +119,7 @@ def remove_plan(ctx: RequestContext, task: Task, item_id: UUID) -> bool:
         if plan is None:
             return True
         before = str(plan.planned_quantity)
-        # Con registros validados o pendientes de revisión: una pendiente puede validarse.
+        # Con registros validados o pendientes de revisión: uno pendiente puede validarse.
         executed = (task.pk, item_id) in executed_by_pair(
             ctx, task_ids=[task.pk], include_pending=True
         )

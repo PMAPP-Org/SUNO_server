@@ -20,15 +20,15 @@ from pypdf.generic import DictionaryObject
 
 from suno.backoffice import export, spatial_export
 from suno.backoffice.export import ExportTooLarge
+from suno.backoffice.record_pdf import record_pdf
 from suno.backoffice.spatial_export import (
     export_records,
+    record_features,
     to_geojson,
     to_geopackage,
-    record_features,
 )
-from suno.backoffice.record_pdf import record_pdf
 from suno.core.audit import AuditAction
-from suno.core.models import AuditEvent, FormTemplateVersion, Role, Record
+from suno.core.models import AuditEvent, FormTemplateVersion, Record, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -62,7 +62,9 @@ class FormsAndExportsTests(TestCase):
         deleted = self.a.record()
         deleted.deleted_at = timezone.now()
         deleted.save()
-        self.assertEqual([v.pk for v in export_records(self.a.ctx(), Record.objects.all())], [own.pk])
+        self.assertEqual(
+            [v.pk for v in export_records(self.a.ctx(), Record.objects.all())], [own.pk]
+        )
         with self.assertRaises(PermissionDenied):
             export_records(self.a.ctx(self.a.agent), Record.objects.all())
         response = self.action("export_geojson", [own, foreign])

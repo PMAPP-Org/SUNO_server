@@ -19,7 +19,7 @@ from suno.matrix.quantities import (
     suno_pct_by_task,
 )
 
-from .factories import budget_world, item, plan, quantity_row, quantity_record
+from .factories import budget_world, item, plan, quantity_record, quantity_row
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

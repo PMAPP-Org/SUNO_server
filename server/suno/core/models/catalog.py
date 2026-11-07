@@ -65,7 +65,7 @@ class FormTemplate(OrgScopedModel):
 class FormTemplateVersion(SyncedModel):
     """Versión **inmutable** de una plantilla (ADR-012).
 
-    Cada registro referencia la versión exacta usada, de modo que las
+    Cada registro referencia la versión exacta usada, de modo que los
     registros históricos siguen siendo interpretables tras cambios de
     formulario. "Inmutable" es aquí una invariante de aplicación (no se
     reescribe una versión publicada, se publica otra): a diferencia de

@@ -60,8 +60,8 @@ from .project import (
     TaskResponsible,
 )
 from .quantity import QuantityPlan, QuantityPlanImport, QuantityPlanImportStatus
-from .tenancy import AppUser, Device, Membership, Organization
 from .record import Blob, Record, RecordAttachment, RecordReview, RecordReviewStatus
+from .tenancy import AppUser, Device, Membership, Organization
 
 __all__ = [
     "ACTIVE_JOB_STATUSES",

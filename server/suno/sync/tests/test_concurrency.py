@@ -43,7 +43,7 @@ from typing import Any
 from django.db import connections
 from django.test import TransactionTestCase
 
-from suno.core.models import SyncOpLog, Record
+from suno.core.models import Record, SyncOpLog
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,

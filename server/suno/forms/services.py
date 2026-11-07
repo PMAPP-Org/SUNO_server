@@ -1,11 +1,11 @@
 """Publicar una versión de plantilla, y la **regla de inmutabilidad** (Paso 20).
 
 **La regla, en una frase**: una versión publicada no se edita nunca; para
-cambiar un formulario se **publica otra versión**. Es lo que hace que una
+cambiar un formulario se **publica otra versión**. Es lo que hace que un
 registro histórico siga siendo interpretable años después (ADR-012) y también la
 estrategia de rollback del propio paso: un error en una plantilla no puede
-estropear los registros ya capturadas con la versión anterior, porque esa versión
-sigue existiendo intacta y es la que ellas referencian.
+estropear los registros ya capturados con la versión anterior, porque esa versión
+sigue existiendo intacta y es la que ellos referencian.
 
 Dónde se hace cumplir, en dos capas y a propósito:
 

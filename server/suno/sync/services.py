@@ -76,10 +76,10 @@ from suno.core.models import (
     FormTemplateVersion,
     LocationNode,
     QuantityPlan,
-    SyncOpLog,
-    Task,
     Record,
     RecordAttachment,
+    SyncOpLog,
+    Task,
 )
 from suno.core.policies import (
     CODE_FORBIDDEN,
@@ -103,8 +103,8 @@ from suno.sync.payloads import (
     CODE_NOT_FOUND,
     CODE_VALIDATION_ERROR,
     AttachmentWrite,
-    Rejection,
     RecordWrite,
+    Rejection,
     parse_op,
 )
 from suno.sync.records import record_attachment_row, record_row
@@ -755,8 +755,8 @@ def apply_push(
             ctx, [item for item in parsed.values() if isinstance(item, RecordWrite)]
         )
         answers_gate = _AnswersGate(references.template_versions)
-        # Registros vivos a las que apuntan los adjuntos del lote: una query, y
-        # ninguna si el lote no trae adjuntos. Las que se crean dentro de este
+        # Registros vivos a los que apuntan los adjuntos del lote: una query, y
+        # ninguna si el lote no trae adjuntos. Los que se crean dentro de este
         # mismo lote se añaden en el bucle (el cliente envía el registro antes
         # que sus adjuntos).
         live_records = _live_record_ids(
@@ -764,7 +764,7 @@ def apply_push(
         )
         # Autores de los registros que el lote edita o borra: una query, y
         # ninguna si el lote solo trae altas. Un registro creado en este mismo
-        # lote la añade el bucle (su autor es quien la envía).
+        # lote lo añade el bucle (su autor es quien lo envía).
         authors = _authors_of_modifications(
             ctx, [item for item in parsed.values() if isinstance(item, RecordWrite)]
         )
@@ -845,7 +845,7 @@ def _authors_of_modifications(
 
 
 def _live_record_ids(ctx: RequestContext, writes: list[AttachmentWrite]) -> set[uuid.UUID]:
-    """Registros **vivas de esta organización** a las que apuntan los adjuntos."""
+    """Registros **vivos de esta organización** a los que apuntan los adjuntos."""
     ids = {write.fields["record_id"] for write in writes}
     if not ids:
         return set()
@@ -878,7 +878,7 @@ def _process_attachment(
 ) -> dict[str, Any]:
     """Alta de `record_attachment` (Paso 22). Misma forma que la de `record`.
 
-    El registro tiene que existir y estar viva **en esta organización**, o
+    El registro tiene que existir y estar vivo **en esta organización**, o
     haberse creado antes en este mismo lote. Si no, `rejected` con
     `not_found`: dejarlo al `INSERT` sería un `IntegrityError` de la FK
     compuesta, que dentro de la transacción tumbaría el lote entero.

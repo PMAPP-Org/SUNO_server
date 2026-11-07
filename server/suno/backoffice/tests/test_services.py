@@ -24,7 +24,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from suno.authn.models import RefreshToken
 from suno.backoffice import export
-from suno.backoffice.export import ExportTooLarge, safe_cell, to_csv, to_xlsx, record_table
+from suno.backoffice.export import ExportTooLarge, record_table, safe_cell, to_csv, to_xlsx
 from suno.backoffice.personal_data import (
     SUPPRESSED_PREFIX,
     export_personal_data,
@@ -37,7 +37,7 @@ from suno.backoffice.services import (
     revoke_device_sessions,
 )
 from suno.core.audit import AuditAction
-from suno.core.models import AuditEvent, Job, Role, Record, RecordReview
+from suno.core.models import AuditEvent, Job, Record, RecordReview, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,

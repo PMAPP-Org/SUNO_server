@@ -35,8 +35,8 @@ from suno.core.models import (
     Organization,
     OrgScopedModel,
     Platform,
-    Role,
     Record,
+    Role,
 )
 from suno.core.scoping import NotOrgScopedError, scoped_qs
 

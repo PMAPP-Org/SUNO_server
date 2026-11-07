@@ -20,8 +20,8 @@ from .factories import (
     budget_world,
     item,
     project_levels_from_xml,
-    quantity_row,
     quantity_record,
+    quantity_row,
     suno_levels,
 )
 
@@ -110,8 +110,8 @@ class EditsTests(TestCase):
         self.assertEqual(QuantityPlan.objects.count(), 1)
 
     def test_remove_keeps_pending_execution_at_zero(self) -> None:
-        """Un registro aún sin revisar puede validarse después: su par no se borra. Una
-        rechazada o borrada no cuenta."""
+        """Un registro aún sin revisar puede validarse después: su par no se borra. Uno
+        rechazado o borrado no cuenta."""
         concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
         task = self.world.task(3)
         set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4")

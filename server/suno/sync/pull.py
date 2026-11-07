@@ -37,9 +37,9 @@ from suno.core.context import RequestContext
 from suno.core.models import (
     Assignment,
     FormTemplateVersion,
-    SyncedModel,
     Record,
     RecordAttachment,
+    SyncedModel,
 )
 from suno.core.policies import check_read_record
 from suno.core.scoping import get_app_user, get_organization, scoped_qs

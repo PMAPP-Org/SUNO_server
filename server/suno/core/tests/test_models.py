@@ -79,9 +79,9 @@ from suno.core.models import (
     MimeType,
     Organization,
     Platform,
-    Role,
     Record,
     RecordAttachment,
+    Role,
 )
 
 # --- Detección de PostgreSQL ------------------------------------------------

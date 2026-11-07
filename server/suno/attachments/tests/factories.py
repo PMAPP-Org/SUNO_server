@@ -92,7 +92,7 @@ def download_url(sha256: str) -> str:
 
 
 def make_record(scenario: Scenario, record_id: uuid.UUID | None = None):
-    """Un registro mínima de la organización del escenario, escrita directamente.
+    """Un registro mínimo de la organización del escenario, escrito directamente.
 
     Se crea con el ORM en vez de por `POST /v1/sync/push` a propósito: lo que
     estos tests ejercitan es el carril de adjuntos, y hacerlo depender del

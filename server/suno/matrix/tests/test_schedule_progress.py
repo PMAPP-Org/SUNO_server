@@ -12,7 +12,7 @@ from suno.core.tests.dbsupport import (
 from suno.projects.field_tasks import field_tasks
 from suno.projects.schedule import build_schedule
 
-from .factories import budget_world, item, plan, quantity_row, quantity_record
+from .factories import budget_world, item, plan, quantity_record, quantity_row
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

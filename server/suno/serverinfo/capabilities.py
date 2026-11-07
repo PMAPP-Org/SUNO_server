@@ -30,14 +30,14 @@ __all__ = [
 ]
 
 #: Versión del *payload* de sincronización (RD-03, contrato `SchemaVersion`).
-#: Fase 0 emite la primera y única versión.
-SCHEMA_VERSION = 1
+#: La 2 introduce los registros (`record`, `record_attachment`).
+SCHEMA_VERSION = 2
 
-#: Versión mínima que este servidor sigue aceptando. Hoy coincide con
-#: `SCHEMA_VERSION` porque no hay ninguna anterior; cuando haya una v2, esto
-#: es lo que permite seguir sirviendo a clientes que aún no se han
-#: actualizado, y subirlo es la decisión explícita de dejar de hacerlo.
-MIN_SUPPORTED_SCHEMA_VERSION = 1
+#: Versión mínima que este servidor sigue aceptando: subirla es la decisión
+#: explícita de dejar de servir a los clientes que aún no se han actualizado.
+#: El contrato 1 usaba el nombre anterior del concepto; el 2 habla de "registros".
+#: Sin producción no hay período de convivencia: la app vieja deja de sincronizar.
+MIN_SUPPORTED_SCHEMA_VERSION = 2
 
 #: ADR-003: máximo de operaciones por lote de push.
 SYNC_PUSH_MAX_OPS = 500

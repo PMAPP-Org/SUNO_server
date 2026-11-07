@@ -670,7 +670,7 @@ def has_declared_schema(definition: Any) -> bool:
     columna y lo que tienen las filas creadas antes de este paso: significa
     "esta versión no declara esquema", y sus `answers` no se restringen. La
     alternativa —tratar `{}` como plantilla inválida— convertiría en
-    irrecuperables lotes de registros ya sincronizadas contra versiones
+    irrecuperables lotes de registros ya sincronizados contra versiones
     antiguas, que es exactamente el tipo de migración forzosa de datos
     históricos que ADR-012 existe para evitar. Al publicar por
     `services.publish_version()` la definición **siempre** cumple el

@@ -26,7 +26,7 @@ import uuid
 from django.test import TestCase, override_settings
 
 from suno.attachments.localfs import LocalFsBlobStore
-from suno.core.models import Blob, Role, RecordAttachment
+from suno.core.models import Blob, RecordAttachment, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,

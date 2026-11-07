@@ -1,8 +1,8 @@
 """Back-office de SUNO sobre Django Admin (Paso 24; doc 08 §8 Fase 1).
 
 Cubre lo que pide el back-office del MVP:
-- listar y filtrar registros, verlas con sus adjuntos (vista previa por URL
-  prefirmada) y validarlas o rechazarlas;
+- listar y filtrar registros, verlos con sus adjuntos (vista previa por URL
+  prefirmada) y validarlos o rechazarlos;
 - gestionar plantillas (publicar versiones nuevas) y asignaciones;
 - revocar dispositivos; ver jobs y dead-letters y relanzarlos;
 - exportar registros a CSV/Excel;
@@ -39,8 +39,9 @@ from django.utils.html import format_html, format_html_join
 from suno.attachments.services import download_url
 from suno.backoffice.admin_base import OrgScopedAdmin, ReadOnlyAdmin, run_action
 from suno.backoffice.context import admin_context, is_platform_operator
-from suno.backoffice.export import ExportTooLarge, to_csv, to_xlsx, record_table
+from suno.backoffice.export import ExportTooLarge, record_table, to_csv, to_xlsx
 from suno.backoffice.personal_data import export_personal_data, suppress_personal_data
+from suno.backoffice.record_pdf import record_pdf
 from suno.backoffice.services import (
     create_assignment,
     retry_job,
@@ -50,11 +51,10 @@ from suno.backoffice.services import (
 from suno.backoffice.spatial_export import (
     ExportContentTooLarge,
     export_records,
+    record_features,
     to_geojson,
     to_geopackage,
-    record_features,
 )
-from suno.backoffice.record_pdf import record_pdf
 from suno.backoffice.xlsform_admin import import_view
 from suno.basemaps.services import retire as retire_basemap
 from suno.core import audit
@@ -77,13 +77,13 @@ from suno.core.models import (
     Organization,
     PrivacyConsent,
     QuantityPlan,
-    ReferenceLayer,
-    SyncOpLog,
-    Task,
     Record,
     RecordAttachment,
     RecordReview,
     RecordReviewStatus,
+    ReferenceLayer,
+    SyncOpLog,
+    Task,
 )
 from suno.core.policies import (
     PolicyDenied,
@@ -255,7 +255,7 @@ def _latest_review(record: Record) -> str | None:
 
 
 class ProgressRegressionFilter(admin.SimpleListFilter):
-    """Costos, etapa 1: registros vinculados a una tarea y las que retroceden."""
+    """Costos, etapa 1: registros vinculados a una tarea y los que retroceden."""
 
     title = "avance de cronograma"
     parameter_name = "avance"
@@ -368,8 +368,8 @@ class RecordAdmin(ReadOnlyAdmin):
         base = super().get_queryset(request)
         linked = base
         if request.GET.get(ProgressRegressionFilter.parameter_name) in ("tarea", "menor"):
-            # Solo las vinculadas: la subconsulta del "último validado" no se
-            # calcula para las demás registros.
+            # Solo los vinculados: la subconsulta del "último validado" no se
+            # calcula para los demás registros.
             linked = base.filter(task__isnull=False)
         return with_previous_validated_pct(with_review(linked), base)
 
@@ -488,7 +488,9 @@ class RecordAdmin(ReadOnlyAdmin):
 
     @admin.display(description="respuestas")
     def answers_pretty(self, record: Record) -> Any:
-        return format_html("<pre>{}</pre>", json.dumps(record.answers, ensure_ascii=False, indent=2))
+        return format_html(
+            "<pre>{}</pre>", json.dumps(record.answers, ensure_ascii=False, indent=2)
+        )
 
     @admin.action(description="Validar los registros seleccionados", permissions=["view"])
     def approve(self, request: Any, queryset: QuerySet[Record]) -> None:

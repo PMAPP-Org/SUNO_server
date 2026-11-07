@@ -5,7 +5,7 @@ escritura ese `id` no apuntaría a nada. Se fija aquí:
 
 - el registro y sus adjuntos viajan en el **mismo lote** (registro primero) y se
   aplican juntos, aunque el blob todavía no esté subido (contrato);
-- un adjunto que apunta a un registro inexistente, borrada o de otra
+- un adjunto que apunta a un registro inexistente, borrado o de otra
   organización se rechaza con `not_found`, **sin tumbar el lote**;
 - el payload es sellado (sin claves extra, `sha256` en minúsculas, `role`
   cerrado, `order` entero estricto);

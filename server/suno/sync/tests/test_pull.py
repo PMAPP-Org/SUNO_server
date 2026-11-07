@@ -25,7 +25,7 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
 
 from suno.core.context import Principal, resolve_request_context
-from suno.core.models import Role, Record
+from suno.core.models import Record, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,

@@ -28,9 +28,9 @@ from suno.core.models import (
     Job,
     Membership,
     PrivacyConsent,
-    Role,
     RecordAttachment,
     RecordReview,
+    Role,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -78,7 +78,9 @@ class AdminScopingTests(TestCase):
                 template_version=tenant.version,
                 assigned_to=tenant.agent,
             )
-            audit = audit_log.record(tenant.ctx(), action="test.action", target=f"marca-{tenant.org.name}")
+            audit = audit_log.record(
+                tenant.ctx(), action="test.action", target=f"marca-{tenant.org.name}"
+            )
             consent = PrivacyConsent.objects.create(
                 org=tenant.org,
                 user=tenant.agent,

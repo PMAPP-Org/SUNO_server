@@ -26,6 +26,7 @@ from suno.core.models import (
     LocationLevel,
     Project,
     QuantityPlan,
+    Record,
     Resource,
     ScheduleImport,
     ScheduleImportStatus,
@@ -33,7 +34,6 @@ from suno.core.models import (
     TaskDependency,
     TaskResource,
     TaskResponsible,
-    Record,
 )
 from suno.core.scoping import scoped_qs
 from suno.matrix.locations import (

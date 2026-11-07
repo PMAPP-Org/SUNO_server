@@ -32,7 +32,7 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 
-from .factories import build_scenario, create_op, push, update_op, record_of
+from .factories import build_scenario, create_op, push, record_of, update_op
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

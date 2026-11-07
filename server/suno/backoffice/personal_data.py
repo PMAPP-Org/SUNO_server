@@ -9,7 +9,7 @@ auditoría. Ver `docs/seguridad/tratamiento-datos-personales.md`.
   para entregárselo a la persona que lo pide.
 - **Rectificación**: se edita el usuario en el Admin (nombre, correo).
 - **Supresión** ([suppress_personal_data]): **anonimización**, no borrado
-  físico. Los registros son registros del cliente (la organización), con su
+  físico. Los registros pertenecen al cliente (la organización), con su
   propio plazo de retención (`docs/seguridad/retencion.md`), así que se
   conservan, pero dejan de apuntar a una persona identificable: el usuario
   pasa a llamarse `suprimido-<id>`, se vacían nombre, correo y nombres de
@@ -97,7 +97,7 @@ def export_personal_data(ctx: RequestContext, user: AppUser) -> dict[str, Any]:
         ],
         # La ubicación y la hora de cada registro son datos personales del agente.
         "registros": [
-            {"id": str(pk), "capturada_en": iso(at), "lat": lat, "lon": lon}
+            {"id": str(pk), "capturado_en": iso(at), "lat": lat, "lon": lon}
             for pk, at, lat, lon in scoped_qs(ctx, Record)
             .filter(created_by=user)
             .order_by("captured_at")

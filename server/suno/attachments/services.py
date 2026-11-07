@@ -265,7 +265,7 @@ def _check_record_quota(ctx: RequestContext, *, record_id: uuid.UUID, incoming_s
     """Cuota acumulada por registro (tarea 5). Autoriza **sobre el registro real**.
 
     `scoped_qs` es lo que hace que un registro de otra organización sea
-    indistinguible de una inexistente: el filtro por `org_id` va en el punto de
+    indistinguible de uno inexistente: el filtro por `org_id` va en el punto de
     partida, no encadenado después (RD-11).
     """
     target = scoped_qs(ctx, Record).filter(pk=record_id).first()

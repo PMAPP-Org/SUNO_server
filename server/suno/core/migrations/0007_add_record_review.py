@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
                 (
                     "status",
                     models.CharField(
-                        choices=[("approved", "Validada"), ("rejected", "Rechazada")],
+                        choices=[("approved", "Validado"), ("rejected", "Rechazado")],
                         max_length=16,
                         verbose_name="decisión",
                     ),

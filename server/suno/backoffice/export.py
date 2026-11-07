@@ -66,10 +66,10 @@ def _xml_text(value: str) -> str:
 
 _BASE_COLUMNS = (
     "id",
-    "capturada_en",
+    "capturado_en",
     "plantilla",
     "version_plantilla",
-    "creada_por",
+    "creado_por",
     "dispositivo",
     "lat",
     "lon",
@@ -102,8 +102,8 @@ def safe_cell(value: Any) -> Any:
 
 
 def exportable_records(ctx: RequestContext, queryset: QuerySet[Record]) -> QuerySet[Record]:
-    """Los registros vivos de [queryset] **de la organización de [ctx]** (las de
-    otra se ignoran: nunca salen en un archivo ajeno; las borradas tampoco),
+    """Los registros vivos de [queryset] **de la organización de [ctx]** (los de
+    otra se ignoran: nunca salen en un archivo ajeno; los borrados tampoco),
     en orden estable. Lanza [ExportTooLarge]. Común a todos los formatos."""
     queryset = queryset.filter(org_id=ctx.org_id, deleted_at__isnull=True)
     count = queryset.count()
@@ -122,7 +122,9 @@ def record_table(
         .order_by("-created_at")
         .values("status")[:1]
     )
-    records = list(exportable_records(ctx, queryset).annotate(review_status=Subquery(latest_review)))
+    records = list(
+        exportable_records(ctx, queryset).annotate(review_status=Subquery(latest_review))
+    )
     answer_keys = sorted({key for record in records for key in (record.answers or {})})
     header = [*_BASE_COLUMNS, *(f"answers.{key}" for key in answer_keys)]
     rows = [

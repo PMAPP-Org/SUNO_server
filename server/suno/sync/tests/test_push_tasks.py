@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 
 from suno.authn.tests.factories import make_org, make_user
 from suno.core.context import Principal, resolve_request_context
-from suno.core.models import Project, Role, Task, TaskResponsible, RecordReview
+from suno.core.models import Project, RecordReview, Role, Task, TaskResponsible
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -24,7 +24,7 @@ from suno.projects.importer import apply_import, stage_import
 from suno.projects.tests.samples import v1, v2
 from suno.sync.cursor import CURSOR_ZERO
 
-from .factories import build_scenario, create_op, delete_op, pull, push, update_op, record_of
+from .factories import build_scenario, create_op, delete_op, pull, push, record_of, update_op
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

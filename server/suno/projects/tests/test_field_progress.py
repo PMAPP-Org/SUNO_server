@@ -186,7 +186,7 @@ class TaskPageFieldProgressTests(TestCase):
         self.assertContains(
             response, "% SUNO (último registro validado): <strong>60 %</strong>", html=False
         )
-        self.assertContains(response, "Validada")
+        self.assertContains(response, "Validado")
         self.assertContains(response, "Sin revisar")
         self.assertContains(response, "Menor que el último validado (60 %)")
         self.assertContains(response, w.agent.username)

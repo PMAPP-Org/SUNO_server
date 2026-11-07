@@ -26,7 +26,7 @@ from ninja.errors import HttpError
 
 from suno.core import policies
 from suno.core.context import RequestContext
-from suno.core.models import Device, FormTemplate, Job, Role, Record
+from suno.core.models import Device, FormTemplate, Job, Record, Role
 from suno.core.policies import (
     can_manage_device,
     can_publish_form_template,

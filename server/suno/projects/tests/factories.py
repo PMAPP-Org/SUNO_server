@@ -24,12 +24,12 @@ from suno.core.models import (
     FormTemplateVersion,
     Organization,
     Project,
-    Role,
-    Task,
-    TaskResponsible,
     Record,
     RecordReview,
     RecordReviewStatus,
+    Role,
+    Task,
+    TaskResponsible,
 )
 from suno.projects.importer import apply_import, stage_import
 
@@ -51,7 +51,7 @@ def make_record(
     deleted: bool = False,
     quantities: list[dict[str, object]] | None = None,
 ) -> Record:
-    """Un registro mínima, con o sin tarea. `pct` como texto (`"35.5"`)."""
+    """Un registro mínimo, con o sin tarea. `pct` como texto (`"35.5"`)."""
     template, _ = FormTemplate.objects.get_or_create(org=org, name="Avance de obra")
     version, _ = FormTemplateVersion.objects.get_or_create(
         org=org,

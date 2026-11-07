@@ -21,12 +21,12 @@ from suno.core.models import (
     Organization,
     Project,
     QuantityPlan,
-    Role,
-    Task,
-    TaskResponsible,
     Record,
     RecordReview,
     RecordReviewStatus,
+    Role,
+    Task,
+    TaskResponsible,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -38,7 +38,7 @@ from suno.projects.importer import apply_import, stage_import
 from suno.projects.tests.samples import v1
 from suno.sync.cursor import CURSOR_ZERO
 
-from .factories import build_scenario, create_op, pull, push, update_op, record_of
+from .factories import build_scenario, create_op, pull, push, record_of, update_op
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -154,7 +154,9 @@ class QuantityPushTests(TestCase):
             )
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
+        self.assertIn(
+            "ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id)
+        )
 
     def test_task_relocated_after_the_capture(self) -> None:
         """Se capturó en Tramo 2 > PR 1 y la oficina movió la tarea a Tramo 3: se acepta
@@ -164,10 +166,14 @@ class QuantityPushTests(TestCase):
         task.save(update_fields=["location"])
         record_id = uuid.uuid4()
         result = self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
+            self.create(
+                self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id
+            )
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
+        self.assertIn(
+            "ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id)
+        )
 
     def test_task_location_cleared_after_the_capture(self) -> None:
         task = self.task(3)
@@ -175,10 +181,14 @@ class QuantityPushTests(TestCase):
         task.save(update_fields=["location"])
         record_id = uuid.uuid4()
         result = self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
+            self.create(
+                self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id
+            )
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
+        self.assertIn(
+            "ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id)
+        )
         # Un nodo de otro proyecto sigue siendo un error estructural.
         project, ctx = self._other_project()
         save_levels(ctx, project, [LevelSpec("Tramo")])
@@ -189,7 +199,9 @@ class QuantityPushTests(TestCase):
     def test_location_inside_the_task_is_not_flagged(self) -> None:
         record_id = uuid.uuid4()
         self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
+            self.create(
+                self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id
+            )
         )
         self.assertNotIn("ubicación fuera", self.warnings(record_id))
 

@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SUNO API
-  version: 1.0.0
+  version: 2.0.0
   summary: Contrato de API v1 (superficie mínima) de SUNO.
   description: |
     Contrato **fuente de verdad** de la API v1 de SUNO, escrito antes que el código
@@ -606,7 +606,7 @@ paths:
       description: |
         Tareas **de detalle vigentes** (ni resumen ni retiradas) de las que quien llama es
         responsable, directamente o por una tarea superior de la EDT, con su último % validado (la
-        registro validado más reciente vinculada a la tarea). Es lo que la app ofrece para vincular
+        registro validado más reciente vinculado a la tarea). Es lo que la app ofrece para vincular
         un registro a una tarea (`RecordPayload.task_id`).
 
         Se entrega la lista **completa** y el cliente reemplaza la suya: una tarea retirada o una
@@ -794,7 +794,7 @@ components:
         Versión del *payload* de sincronización (RD-03). Presente en todos los cuerpos de
         `/v1/sync/*`. Se negocia con `GET /v1/server/info`.
       examples:
-        - 1
+        - 2
 
     ChangeSeq:
       type: integer
@@ -1194,7 +1194,7 @@ components:
           type: array
           description: |
             Costos, pieza 4: cantidades ejecutadas en este registro por ítem del presupuesto. Cuentan
-            para el avance de la tarea cuando el registro está validada. Lista vacía si no hay.
+            para el avance de la tarea cuando el registro está validado. Lista vacía si no hay.
           items:
             $ref: '#/components/schemas/RecordQuantity'
 
@@ -1685,7 +1685,7 @@ components:
             `progress_pct`, también en `update`: con tarea, `progress_pct` con valor o `null` si hay
             al menos una cantidad; los dos `null` (desvincular); o ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
             (`task_retired`, `task_is_summary`, `task_progress_pair`, `record_validated`: el registro ya fue
-            validada y no puede cambiar de tarea ni de %; también rechaza el `delete` de ese registro, con `field: id`),
+            validado y no puede cambiar de tarea ni de %; también rechaza el `delete` de ese registro, con `field: id`),
             `forbidden` (`not_responsible`). Una operación con `base_version` obsoleto contesta `conflict`,
             no `record_validated`.
         progress_pct:
@@ -1853,7 +1853,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
-          description: Registro a la que se destina, para comprobar permisos y cuota por registro.
+          description: Registro al que se destina, para comprobar permisos y cuota por registro.
 
     PresignResponse:
       type: object

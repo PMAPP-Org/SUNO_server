@@ -18,7 +18,7 @@ from suno.core.tests.dbsupport import (
 from suno.matrix.locations import load_tree
 from suno.matrix.reports import filter_item_rows, item_rows, location_rows
 
-from .factories import budget_world, item, locate, plan, quantity_row, quantity_record, suno_levels
+from .factories import budget_world, item, locate, plan, quantity_record, quantity_row, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database

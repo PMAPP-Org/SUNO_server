@@ -101,7 +101,7 @@ def record_pdf(record: Record) -> bytes:
         f"{record.template_version.name or 'Registro'} · "
         f"versión {record.template_version.version_number}",
     )
-    add("Capturada (fecha y zona horaria)", record.captured_at.isoformat())
+    add("Capturado (fecha y zona horaria)", record.captured_at.isoformat())
     add("Autor", record.created_by.username)
     add(
         "Ubicación · EPSG:4326",

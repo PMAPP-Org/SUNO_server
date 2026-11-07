@@ -57,7 +57,9 @@ def record_features(records: list[Record]) -> dict[str, Any]:
     for record in records:
         geometries: list[tuple[str, dict[str, Any] | None]] = []
         if record.lat is not None and record.lon is not None:
-            geometries.append(("record", {"type": "Point", "coordinates": [record.lon, record.lat]}))
+            geometries.append(
+                ("record", {"type": "Point", "coordinates": [record.lon, record.lat]})
+            )
         try:
             definition = validate_definition(record.template_version.definition)
         except TemplateDefinitionError:
