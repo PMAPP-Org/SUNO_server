@@ -261,7 +261,7 @@ class ProgressRegressionFilter(admin.SimpleListFilter):
     parameter_name = "avance"
 
     def lookups(self, request: Any, model_admin: Any) -> Any:
-        return (("tarea", "Vinculadas a una tarea"), ("menor", "Menor que el último validado"))
+        return (("tarea", "Vinculados a una tarea"), ("menor", "Menor que el último validado"))
 
     def queryset(self, request: Any, queryset: QuerySet[Record]) -> QuerySet[Record]:
         if self.value() == "tarea":
