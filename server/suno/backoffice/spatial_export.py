@@ -1,4 +1,4 @@
-"""Visit exports: RFC 7946 GeoJSON and OGC GeoPackage 1.3 (WGS84 XY)."""
+"""Record exports: RFC 7946 GeoJSON and OGC GeoPackage 1.3 (WGS84 XY)."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from typing import Any
 from django.core.exceptions import PermissionDenied
 from django.db.models import QuerySet
 
-from suno.backoffice.export import exportable_visits
+from suno.backoffice.export import exportable_records
 from suno.core.context import RequestContext
-from suno.core.models import Visit
-from suno.core.policies import can_export_visits
+from suno.core.models import Record
+from suno.core.policies import can_export_records
 from suno.forms.definition import TemplateDefinitionError, validate_definition
 
 MAX_EXPORT_FEATURES = 20_000
@@ -28,10 +28,10 @@ class ExportContentTooLarge(ValueError):
         super().__init__("La exportación supera 20000 geometrías o 64 MiB. Reduce la selección.")
 
 
-def export_visits(ctx: RequestContext, queryset: QuerySet[Visit]) -> list[Visit]:
-    if not can_export_visits(ctx, ctx.org_id):
-        raise PermissionDenied("No puede exportar visitas.")
-    return list(exportable_visits(ctx, queryset))
+def export_records(ctx: RequestContext, queryset: QuerySet[Record]) -> list[Record]:
+    if not can_export_records(ctx, ctx.org_id):
+        raise PermissionDenied("No puede exportar registros.")
+    return list(exportable_records(ctx, queryset))
 
 
 def answer_geometries(
@@ -51,46 +51,46 @@ def answer_geometries(
                 yield path, value
 
 
-def visit_features(visits: list[Visit]) -> dict[str, Any]:
+def record_features(records: list[Record]) -> dict[str, Any]:
     features = []
     size = 0
-    for visit in visits:
+    for record in records:
         geometries: list[tuple[str, dict[str, Any] | None]] = []
-        if visit.lat is not None and visit.lon is not None:
-            geometries.append(("visit", {"type": "Point", "coordinates": [visit.lon, visit.lat]}))
+        if record.lat is not None and record.lon is not None:
+            geometries.append(("record", {"type": "Point", "coordinates": [record.lon, record.lat]}))
         try:
-            definition = validate_definition(visit.template_version.definition)
+            definition = validate_definition(record.template_version.definition)
         except TemplateDefinitionError:
             definition = None  # Historical untyped templates still retain all answers.
         if definition:
-            geometries.extend(answer_geometries(definition.fields, visit.answers or {}))
+            geometries.extend(answer_geometries(definition.fields, record.answers or {}))
         if not geometries:
-            geometries.append(("visit", None))
+            geometries.append(("record", None))
         # Las respuestas completas van en cada entidad (docs/forms-and-exports.md):
-        # se miden una vez por visita, no una por entidad.
+        # se miden una vez por registro, no una por entidad.
         answers_size = len(
-            json.dumps(visit.answers, ensure_ascii=False, allow_nan=False).encode("utf-8")
+            json.dumps(record.answers, ensure_ascii=False, allow_nan=False).encode("utf-8")
         )
         for path, geometry in geometries:
             properties = {
-                "visit_id": str(visit.pk),
+                "record_id": str(record.pk),
                 "field": path,
-                "captured_at": visit.captured_at.isoformat(),
-                "template": visit.template_version.name,
-                "template_version": visit.template_version.version_number,
-                "created_by": str(visit.created_by_id),
-                "accuracy_m": visit.accuracy_m,
+                "captured_at": record.captured_at.isoformat(),
+                "template": record.template_version.name,
+                "template_version": record.template_version.version_number,
+                "created_by": str(record.created_by_id),
+                "accuracy_m": record.accuracy_m,
             }
             feature = {
                 "type": "Feature",
-                "id": f"{visit.pk}:{path}",
+                "id": f"{record.pk}:{path}",
                 "geometry": geometry,
                 "properties": properties,
             }
             size += answers_size + len(
                 json.dumps(feature, ensure_ascii=False, allow_nan=False).encode("utf-8")
             )
-            properties["answers"] = visit.answers
+            properties["answers"] = record.answers
             features.append(feature)
             if len(features) > MAX_EXPORT_FEATURES or size > MAX_EXPORT_BYTES:
                 raise ExportContentTooLarge
@@ -119,7 +119,7 @@ def _wkb(geometry: dict[str, Any]) -> bytes:
 def to_geopackage(collection: dict[str, Any]) -> bytes:
     # Fixed SQL identifiers; values always bound. No extension or network loading.
     with tempfile.TemporaryDirectory(prefix="suno-gpkg-") as directory:
-        path = Path(directory) / "visitas.gpkg"
+        path = Path(directory) / "registros.gpkg"
         connection = sqlite3.connect(path)
         try:
             connection.executescript("""
@@ -143,9 +143,9 @@ def to_geopackage(collection: dict[str, Any]) -> bytes:
                     PRIMARY KEY(table_name,column_name), UNIQUE(table_name),
                     FOREIGN KEY(table_name) REFERENCES gpkg_contents(table_name),
                     FOREIGN KEY(srs_id) REFERENCES gpkg_spatial_ref_sys(srs_id));
-                CREATE TABLE visitas (
+                CREATE TABLE registros (
                     fid INTEGER PRIMARY KEY AUTOINCREMENT, geom GEOMETRY,
-                    visit_id TEXT NOT NULL, field TEXT NOT NULL, captured_at TEXT,
+                    record_id TEXT NOT NULL, field TEXT NOT NULL, captured_at TEXT,
                     template TEXT, template_version INTEGER, created_by TEXT,
                     accuracy_m REAL, answers TEXT);
             """)
@@ -164,10 +164,10 @@ def to_geopackage(collection: dict[str, Any]) -> bytes:
             )
             connection.execute(
                 "INSERT INTO gpkg_contents (table_name,data_type,identifier,srs_id) "
-                "VALUES ('visitas','features','Visitas',4326)"
+                "VALUES ('registros','features','Registros',4326)"
             )
             connection.execute(
-                "INSERT INTO gpkg_geometry_columns VALUES ('visitas','geom','GEOMETRY',4326,0,0)"
+                "INSERT INTO gpkg_geometry_columns VALUES ('registros','geom','GEOMETRY',4326,0,0)"
             )
             for feature in collection["features"]:
                 geometry, props = feature["geometry"], feature["properties"]
@@ -177,11 +177,11 @@ def to_geopackage(collection: dict[str, Any]) -> bytes:
                     else None
                 )
                 connection.execute(
-                    "INSERT INTO visitas (geom,visit_id,field,captured_at,template,"
+                    "INSERT INTO registros (geom,record_id,field,captured_at,template,"
                     "template_version,created_by,accuracy_m,answers) VALUES (?,?,?,?,?,?,?,?,?)",
                     (
                         blob,
-                        props["visit_id"],
+                        props["record_id"],
                         props["field"],
                         props["captured_at"],
                         props["template"],

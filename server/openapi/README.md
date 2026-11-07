@@ -89,9 +89,9 @@ Paso 9) para que servidor y cliente validen **exactamente los mismos bytes**.
    campo**, no un inconveniente de despliegue.
 5. `id`, `version`, `change_seq`, `deleted_at` y `org_id` son **server-authoritative** salvo el
    `id` de las entidades creadas en el dispositivo. El cliente nunca los envía en un payload de
-   push (ver `VisitPayload` / `VisitAttachmentPayload`).
+   push (ver `RecordPayload` / `RecordAttachmentPayload`).
 6. **Presencia vs. valor: dos convenciones opuestas y deliberadas.**
-   - **Entidades emitidas por el servidor** (`Visit`, `VisitAttachment`, `Assignment`,
+   - **Entidades emitidas por el servidor** (`Record`, `RecordAttachment`, `Assignment`,
      `FormTemplateVersion`, `Job`, `UserProfile`, `Organization`, `Blob` — todo lo que se lee de
      `/v1/sync/pull`, `/v1/sync/bootstrap` o como `server_row` de un `OpResult`): **el 100% de
      las propiedades declaradas está en `required`**. Lo que es opcional lo es en el *valor*
@@ -99,7 +99,7 @@ Paso 9) para que servidor y cliente validen **exactamente los mismos bytes**.
      nunca en la *presencia*. Sin esta regla, dos backends pueden validar contra el mismo esquema
      emitiendo uno el campo ausente y el otro `null`, y el test de deriva Ninja↔contrato **no lo
      detectaría**: la divergencia se descubriría en el dispositivo, en campo.
-   - **Payloads escribibles por el cliente** (`VisitPayload`, `VisitAttachmentPayload`): lo
+   - **Payloads escribibles por el cliente** (`RecordPayload`, `RecordAttachmentPayload`): lo
      contrario. Solo `id` es `required` porque **la ausencia es significativa**: un `op_type:
      delete` envía solo `id`, y un `update` envía solo los campos que cambian. Aquí "campo
      ausente" y "campo a `null`" son dos intenciones distintas (no tocar vs. borrar el valor) y el
@@ -137,14 +137,14 @@ revisión si algún paso posterior descubre una necesidad distinta:
 
 - **`DeviceInfo`**: doc 08 §6 solo dice "`device_info`". Se concretó como
   `{device_id, platform, os_version, model, app_version, display_name}`; `device_id` es
-  obligatorio porque el refresh y la outbox son **por dispositivo** (ADR-008) y `visit.device_id`
+  obligatorio porque el refresh y la outbox son **por dispositivo** (ADR-008) y `record.device_id`
   existe en §4.4.
 - **`op_type` (`create`/`update`/`delete`) en la operación de push**: §4.4 nombra
   `op_uuid`, `base_version`, `entity`, `payload`. El tipo de operación se hace explícito en lugar
   de inferirlo de `base_version == null` y de la presencia de `deleted_at` en el payload.
-- **Entidades sincronizables**: `visit`, `visit_attachment`, `assignment` y
+- **Entidades sincronizables**: `record`, `record_attachment`, `assignment` y
   `form_template_version` (las plantillas viajan por el pull, ADR-012; las asignaciones originan
-  visitas, §4.4). Solo `visit` y `visit_attachment` son **escribibles** por el cliente vía push.
+  registros, §4.4). Solo `record` y `record_attachment` son **escribibles** por el cliente vía push.
 - **Campos de `assignment` y `form_template_version`**: §4.4 no los tabula. Se definió el mínimo
   necesario para el MVP; ampliable de forma compatible.
 - **Códigos de error genéricos**: a los seis códigos de contrato (`conflict`, `cursor_expired`,

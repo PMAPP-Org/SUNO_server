@@ -179,7 +179,7 @@ class AuditEvent(OrgScopedModel):
         help_text="Nulo cuando la acción la ejecuta el propio sistema.",
     )
     action = models.CharField(max_length=64, verbose_name="acción")
-    # Referencia libre al objeto afectado, p. ej. `visit:018f3c2a-...`.
+    # Referencia libre al objeto afectado, p. ej. `record:018f3c2a-...`.
     target = models.CharField(max_length=256, verbose_name="objetivo")
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

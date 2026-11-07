@@ -61,12 +61,12 @@ def compute_indicators(
     by_key = {t.key: t for t in tasks}
     result: dict[str, TaskIndicators | None] = {}
 
-    def visit(key: str) -> TaskIndicators | None:
+    def record(key: str) -> TaskIndicators | None:
         if key in result:
             return result[key]
         task = by_key[key]
         if children.get(key):
-            own = rollup([i for c in children[key] if (i := visit(c)) is not None])
+            own = rollup([i for c in children[key] if (i := record(c)) is not None])
             if own is not None and task.baseline_start and task.baseline_finish:
                 own = replace(
                     own, weight=calendar.count_inclusive(task.baseline_start, task.baseline_finish)
@@ -77,7 +77,7 @@ def compute_indicators(
         return result[key]
 
     for t in tasks:
-        visit(t.key)
+        record(t.key)
     return result
 
 

@@ -44,7 +44,7 @@ def purge_expired_tombstones(ctx: RequestContext, cutoff: datetime | None = None
     """Borra físicamente los tombstones de `ctx.org_id` anteriores a `cutoff`.
 
     Recorre las mismas `SYNCED_MODELS` que `changeseq.py` (las cuatro
-    entidades del cursor de pull), no solo `visit`: un tombstone purgado de
+    entidades del cursor de pull), no solo `record`: un tombstone purgado de
     cualquiera de ellas es la misma clase de pérdida silenciosa si no se
     registra en `SyncCursorFloor`.
 

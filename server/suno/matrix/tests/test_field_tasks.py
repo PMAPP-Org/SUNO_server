@@ -16,7 +16,7 @@ from suno.core.tests.dbsupport import (
 from suno.matrix.quantities import measured_progress, suno_pct_by_task
 from suno.projects.field_tasks import field_tasks, list_version
 
-from .factories import budget_world, item, locate, plan, quantity_row, quantity_visit, suno_levels
+from .factories import budget_world, item, locate, plan, quantity_row, quantity_record, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -41,7 +41,7 @@ class FieldTasksMatrixTests(TestCase):
         return {ids[i["id"]]: i for i in field_tasks(self.world.ctx(self.world.agent))}
 
     def test_planned_task(self) -> None:
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(self.concrete, "4")))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(self.concrete, "4")))
         task = self._items()[3]
         self.assertEqual(task["measured_by"], "quantities")
         self.assertEqual(task["location"]["label"], "Tramo 2")  # type: ignore[index]
@@ -87,7 +87,7 @@ class FieldTasksMatrixTests(TestCase):
 
     def test_queries_are_bounded(self) -> None:
         plan(self.world, 3, item(self.budget, "2.2"), "5")
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(self.concrete, "4")))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(self.concrete, "4")))
         ctx = self.world.ctx(self.world.agent)
         with self.assertNumQueries(7):
             field_tasks(ctx)
@@ -122,7 +122,7 @@ class ItemThatBecameAChapterTests(TestCase):
 
     def test_progress_ignores_it(self) -> None:
         self.world.approve(
-            quantity_visit(self.world, 3, quantity_row(self.concrete, "4"), pct="30")
+            quantity_record(self.world, 3, quantity_row(self.concrete, "4"), pct="30")
         )
         ctx = self.world.ctx()
         task_id = self.world.task(3).pk

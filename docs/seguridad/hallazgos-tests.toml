@@ -57,7 +57,7 @@ title = "Carrera en la escritura local (deltafiles)"
 severity = "HIGH"
 rd = "RD-04"
 evidence = [
-  { repo = "client", kind = "test", path = "test/data/local/database_test.dart", contains = "atomicidad visita + outbox (RD-04)" },
+  { repo = "client", kind = "test", path = "test/data/local/database_test.dart", contains = "atomicidad registro + outbox (RD-04)" },
 ]
 
 [[finding]]
@@ -121,7 +121,7 @@ id = "H-11"
 title = "Caché global sin invalidación"
 severity = "MEDIUM"
 evidence = [
-  { repo = "client", kind = "test", path = "test/data/local/form_template_repository_test.dart", contains = "H-11: al llegar la v2, una visita nueva usa la v2" },
+  { repo = "client", kind = "test", path = "test/data/local/form_template_repository_test.dart", contains = "H-11: al llegar la v2, un registro nuevo usa la v2" },
 ]
 
 [[finding]]

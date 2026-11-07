@@ -1,4 +1,4 @@
-"""Printable per-visit report. No external resources, scripts or attachment URLs."""
+"""Printable per-record report. No external resources, scripts or attachment URLs."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from suno.core.models import Visit
+from suno.core.models import Record
 from suno.forms.definition import TemplateDefinitionError, validate_definition
 
 
@@ -54,7 +54,7 @@ def answer_lines(
     return lines
 
 
-def visit_pdf(visit: Visit) -> bytes:
+def record_pdf(record: Record) -> bytes:
     if "SunoReport" not in pdfmetrics.getRegisteredFontNames():
         # ReportLab ships Bitstream Vera and its redistribution license.
         pdfmetrics.registerFont(
@@ -85,7 +85,7 @@ def visit_pdf(visit: Visit) -> bytes:
         textColor=colors.HexColor("#555555"),
         keepWithNext=True,
     )
-    story: list[Any] = [Paragraph("SUNO · Informe de visita", heading)]
+    story: list[Any] = [Paragraph("SUNO · Informe de registro", heading)]
 
     def add(label: str, value: Any) -> None:
         text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
@@ -95,28 +95,28 @@ def visit_pdf(visit: Visit) -> bytes:
             for chunk in textwrap.wrap(paragraph, width=1800, break_on_hyphens=False) or [""]:
                 story.append(Paragraph(escape(chunk), body))
 
-    add("Identificador", str(visit.pk))
+    add("Identificador", str(record.pk))
     add(
         "Formulario",
-        f"{visit.template_version.name or 'Visita'} · "
-        f"versión {visit.template_version.version_number}",
+        f"{record.template_version.name or 'Registro'} · "
+        f"versión {record.template_version.version_number}",
     )
-    add("Capturada (fecha y zona horaria)", visit.captured_at.isoformat())
-    add("Autor", visit.created_by.username)
+    add("Capturada (fecha y zona horaria)", record.captured_at.isoformat())
+    add("Autor", record.created_by.username)
     add(
         "Ubicación · EPSG:4326",
-        f"Latitud: {visit.lat}; longitud: {visit.lon}; precisión: {visit.accuracy_m} m",
+        f"Latitud: {record.lat}; longitud: {record.lon}; precisión: {record.accuracy_m} m",
     )
     try:
-        fields = validate_definition(visit.template_version.definition).fields
+        fields = validate_definition(record.template_version.definition).fields
     except TemplateDefinitionError:
         fields = []
-    for label, value in answer_lines(fields, visit.answers or {}):
+    for label, value in answer_lines(fields, record.answers or {}):
         add(label, value)
     story.append(Spacer(1, 14))
     story.append(
         Paragraph(
-            "Las referencias de fotos y firmas identifican los adjuntos de la visita. "
+            "Las referencias de fotos y firmas identifican los adjuntos del registro. "
             "Este informe no incorpora sus archivos.",
             body,
         )
@@ -125,7 +125,7 @@ def visit_pdf(visit: Visit) -> bytes:
     def footer(canvas: Any, doc: Any) -> None:
         canvas.saveState()
         canvas.setFont("SunoReport", 8)
-        canvas.drawString(42, 24, f"SUNO · {visit.pk}")
+        canvas.drawString(42, 24, f"SUNO · {record.pk}")
         canvas.drawRightString(A4[0] - 42, 24, str(doc.page))
         canvas.restoreState()
 
@@ -136,7 +136,7 @@ def visit_pdf(visit: Visit) -> bytes:
         rightMargin=42,
         topMargin=36,
         bottomMargin=44,
-        title="Informe de visita SUNO",
+        title="Informe de registro SUNO",
         author="SUNO",
     ).build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()

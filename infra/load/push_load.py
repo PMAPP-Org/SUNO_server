@@ -116,7 +116,7 @@ def batch(device: Device, template_version_id: str, ops: int) -> dict[str, Any]:
         "ops": [
             {
                 "op_uuid": str(uuid.uuid4()),
-                "entity": "visit",
+                "entity": "record",
                 "op_type": "create",
                 "base_version": None,
                 "payload": {

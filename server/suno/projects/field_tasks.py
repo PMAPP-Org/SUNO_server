@@ -1,4 +1,4 @@
-"""Las tareas del cronograma que el agente puede vincular a una visita.
+"""Las tareas del cronograma que el agente puede vincular a un registro.
 
 Tareas **vigentes de detalle** de las que quien llama es responsable efectivo
 (directo o por la rama, `access.covers`), con su % SUNO, su ubicación y sus

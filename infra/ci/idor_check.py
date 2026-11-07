@@ -5,7 +5,7 @@ test. Esto lo prueba de punta a punta, como lo vería un atacante: por HTTPS,
 a través de Caddy, con la imagen y los settings de producción, y con dos
 cuentas reales de dos organizaciones.
 
-La organización B crea una visita. Con las credenciales de A se intenta:
+La organización B crea un registro. Con las credenciales de A se intenta:
 
 1. verla en `GET /v1/sync/pull` y en `GET /v1/sync/bootstrap`;
 2. sobrescribirla con un `create` sobre su id y modificarla con un `update`:
@@ -103,14 +103,14 @@ class Client:
         )
 
 
-def create_op(client: Client, template_version_id: str, visit_id: str, op_uuid: str) -> dict:
+def create_op(client: Client, template_version_id: str, record_id: str, op_uuid: str) -> dict:
     return {
         "op_uuid": op_uuid,
-        "entity": "visit",
+        "entity": "record",
         "op_type": "create",
         "base_version": None,
         "payload": {
-            "id": visit_id,
+            "id": record_id,
             "template_version_id": template_version_id,
             "answers": {"notas": "secreto de la organización B"},
             "captured_at": CAPTURED_AT,
@@ -119,10 +119,10 @@ def create_op(client: Client, template_version_id: str, visit_id: str, op_uuid: 
     }
 
 
-def visit_ids(body: Any) -> set[str]:
+def record_ids(body: Any) -> set[str]:
     rows = body.get("rows", []) if isinstance(body, dict) else []
-    visits = body.get("visits", []) if isinstance(body, dict) else []
-    return {str(r["data"]["id"]) for r in rows} | {str(v["id"]) for v in visits}
+    records = body.get("records", []) if isinstance(body, dict) else []
+    return {str(r["data"]["id"]) for r in rows} | {str(v["id"]) for v in records}
 
 
 def main() -> int:
@@ -143,33 +143,33 @@ def main() -> int:
 
     failures: list[str] = []
 
-    # La visita de B.
-    their_visit, their_op = str(uuid.uuid4()), str(uuid.uuid4())
-    status, body = b.push([create_op(b, template_b, their_visit, their_op)])
+    # El registro de B.
+    their_record, their_op = str(uuid.uuid4()), str(uuid.uuid4())
+    status, body = b.push([create_op(b, template_b, their_record, their_op)])
     if status != 200 or body["results"][0]["status"] != "applied":
-        raise SystemExit(f"B no pudo crear su visita: {status} {body}")
+        raise SystemExit(f"B no pudo crear su registro: {status} {body}")
 
     # 1. A no la ve.
     for path in ("/v1/sync/pull?cursor=c1:00000000000000000000", "/v1/sync/bootstrap"):
         status, body = a.call("GET", path)
         if status != 200:
             failures.append(f"{path}: HTTP {status}")
-        elif their_visit in visit_ids(body):
-            failures.append(f"{path}: devuelve la visita de otra organización")
+        elif their_record in record_ids(body):
+            failures.append(f"{path}: devuelve el registro de otra organización")
         elif "secreto de la organización B" in json.dumps(body, ensure_ascii=False):
             failures.append(f"{path}: devuelve datos de otra organización")
 
     # 2. A no puede escribirla ni recibe su fila.
     update = {
         "op_uuid": str(uuid.uuid4()),
-        "entity": "visit",
+        "entity": "record",
         "op_type": "update",
         "base_version": 1,
-        "payload": {"id": their_visit, "answers": {"notas": "pisado por A"}},
+        "payload": {"id": their_record, "answers": {"notas": "pisado por A"}},
     }
     for label, op in (
-        ("create sobre su id", create_op(a, template_a, their_visit, str(uuid.uuid4()))),
-        ("update de su visita", update),
+        ("create sobre su id", create_op(a, template_a, their_record, str(uuid.uuid4()))),
+        ("update de su registro", update),
     ):
         status, body = a.push([op])
         if status != 200:
@@ -181,14 +181,14 @@ def main() -> int:
         if result.get("server_row"):
             failures.append(f"push ({label}): devuelve la fila de otra organización")
 
-    # 3. URL de subida ligada a la visita de B: 404, no 403.
+    # 3. URL de subida ligada al registro de B: 404, no 403.
     status, _ = a.call(
         "POST",
         "/v1/attachments/presign",
-        {"sha256": "a" * 64, "size": 10, "mime": "image/jpeg", "visit_id": their_visit},
+        {"sha256": "a" * 64, "size": 10, "mime": "image/jpeg", "record_id": their_record},
     )
     if status != 404:
-        failures.append(f"presign con la visita de B: HTTP {status} (se esperaba 404)")
+        failures.append(f"presign con el registro de B: HTTP {status} (se esperaba 404)")
 
     # 4. El op_uuid de B no devuelve su resultado guardado.
     mine = str(uuid.uuid4())
@@ -197,14 +197,14 @@ def main() -> int:
         failures.append(f"push con el op_uuid de B: HTTP {status}")
     else:
         result = body["results"][0]
-        if result.get("entity_id") == their_visit or result["status"] != "applied":
+        if result.get("entity_id") == their_record or result["status"] != "applied":
             failures.append("push con el op_uuid de B: devuelve el resultado de B")
 
-    # Y B sigue teniendo su visita intacta.
+    # Y B sigue teniendo su registro intacto.
     status, body = b.call("GET", "/v1/sync/bootstrap")
-    notes = [v["answers"].get("notas") for v in body.get("visits", []) if v["id"] == their_visit]
+    notes = [v["answers"].get("notas") for v in body.get("records", []) if v["id"] == their_record]
     if notes != ["secreto de la organización B"]:
-        failures.append(f"la visita de B cambió o desapareció: {notes}")
+        failures.append(f"el registro de B cambió o desapareció: {notes}")
 
     if failures:
         print("IDOR: fallos de aislamiento entre organizaciones:", file=sys.stderr)

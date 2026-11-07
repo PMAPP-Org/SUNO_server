@@ -34,9 +34,9 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 
-def _push_visits(scenario, count: int) -> list[str]:
+def _push_records(scenario, count: int) -> list[str]:
     ids = [str(uuid.uuid4()) for _ in range(count)]
-    response = push(scenario, [create_op(scenario, visit_id=uuid.UUID(i)) for i in ids])
+    response = push(scenario, [create_op(scenario, record_id=uuid.UUID(i)) for i in ids])
     assert response.status_code == 200, response.content
     return ids
 
@@ -52,9 +52,9 @@ class PullIsolationTests(TestCase):
     def setUp(self) -> None:
         self.a = build_scenario(username="agente-a")
         self.b = build_scenario(username="agente-b")
-        self.own = set(_push_visits(self.a, 2))
+        self.own = set(_push_records(self.a, 2))
         # B con más cambios: sus `change_seq` superan a los de A.
-        self.foreign = set(_push_visits(self.b, 5))
+        self.foreign = set(_push_records(self.b, 5))
 
     def test_pull_returns_only_the_own_organization(self) -> None:
         response = pull(self.a, CURSOR_ZERO)
@@ -68,9 +68,9 @@ class PullIsolationTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
         self.assertEqual(body["organization"]["id"], str(self.a.org.pk))
-        visits = {visit["id"] for visit in body["visits"]}
+        records = {record["id"] for record in body["records"]}
         templates = {version["id"] for version in body["form_template_versions"]}
-        self.assertEqual(visits, self.own)
+        self.assertEqual(records, self.own)
         self.assertNotIn(str(self.b.template_version.pk), templates)
 
     def test_the_template_of_another_organization_is_not_synced(self) -> None:
@@ -86,7 +86,7 @@ class PullIsolationTests(TestCase):
 class PullQueryBudgetTests(TestCase):
     def _queries_for_pull_of(self, rows: int) -> int:
         scenario = build_scenario(username=f"agente-{rows}")
-        _push_visits(scenario, rows)
+        _push_records(scenario, rows)
         with CaptureQueriesContext(connection) as captured:
             response = pull(scenario, CURSOR_ZERO)
         self.assertEqual(response.status_code, 200, response.content)

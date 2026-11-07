@@ -59,7 +59,7 @@ def attachments_presign(request, payload: PresignRequest):
         sha256=payload.sha256,
         size=payload.size,
         mime=payload.mime,
-        visit_id=payload.visit_id,
+        record_id=payload.record_id,
     )
     return {
         "already_present": result.already_present,

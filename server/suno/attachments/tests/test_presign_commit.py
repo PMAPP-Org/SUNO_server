@@ -26,7 +26,7 @@ import uuid
 from django.test import TestCase, override_settings
 
 from suno.attachments.localfs import LocalFsBlobStore
-from suno.core.models import Blob, Role, VisitAttachment
+from suno.core.models import Blob, Role, RecordAttachment
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -44,7 +44,7 @@ from .factories import (
     commit_url,
     digest_of,
     download_url,
-    make_visit,
+    make_record,
     presign_body,
 )
 
@@ -175,20 +175,20 @@ class PresignTests(_AttachmentsTestCase):
 
 @skip_without_db
 class PresignQuotaTests(_AttachmentsTestCase):
-    """Cuota acumulada por visita (tarea 5), y permisos sobre la visita."""
+    """Cuota acumulada por registro (tarea 5), y permisos sobre el registro."""
 
-    def _attach(self, visit, data: bytes) -> None:
+    def _attach(self, record, data: bytes) -> None:
         digest = digest_of(data)
         Blob.objects.create(
             sha256=digest,
-            size=caps.ATTACHMENT_MAX_BYTES_PER_VISIT - 10,
+            size=caps.ATTACHMENT_MAX_BYTES_PER_RECORD - 10,
             mime=JPEG_MIME,
             bucket_key=f"blobs/{digest[0:2]}/{digest[2:4]}/{digest}",
         )
-        VisitAttachment.objects.create(
+        RecordAttachment.objects.create(
             id=uuid.uuid4(),
             org=self.scenario.org,
-            visit=visit,
+            record=record,
             blob_id=digest,
             role="foto",
             captured_at="2026-07-30T14:05:09.123Z",
@@ -196,37 +196,37 @@ class PresignQuotaTests(_AttachmentsTestCase):
         )
 
     def test_within_quota_is_accepted(self) -> None:
-        visit = make_visit(self.scenario)
-        response = self.presign(visit_id=visit.pk)
+        record = make_record(self.scenario)
+        response = self.presign(record_id=record.pk)
         self.assertEqual(response.status_code, 200)
 
-    def test_over_the_per_visit_quota_is_rejected_with_413(self) -> None:
-        visit = make_visit(self.scenario)
-        self._attach(visit, PNG_BYTES)
+    def test_over_the_per_record_quota_is_rejected_with_413(self) -> None:
+        record = make_record(self.scenario)
+        self._attach(record, PNG_BYTES)
 
-        response = self.presign(visit_id=visit.pk, size=1000)
+        response = self.presign(record_id=record.pk, size=1000)
         self.assertEqual(response.status_code, 413)
         self.assertEqual(response.json()["code"], "payload_too_large")
 
     def test_a_deleted_attachment_frees_its_quota(self) -> None:
         """Corregir una foto no debe pagar dos veces por el mismo hueco."""
-        visit = make_visit(self.scenario)
-        self._attach(visit, PNG_BYTES)
-        VisitAttachment.objects.filter(visit=visit).update(deleted_at="2026-08-01T00:00:00Z")
+        record = make_record(self.scenario)
+        self._attach(record, PNG_BYTES)
+        RecordAttachment.objects.filter(record=record).update(deleted_at="2026-08-01T00:00:00Z")
 
-        self.assertEqual(self.presign(visit_id=visit.pk, size=1000).status_code, 200)
+        self.assertEqual(self.presign(record_id=record.pk, size=1000).status_code, 200)
 
-    def test_a_visit_of_another_organization_is_a_404(self) -> None:
-        """RD-11: indistinguible de una visita inexistente."""
+    def test_a_record_of_another_organization_is_a_404(self) -> None:
+        """RD-11: indistinguible de un registro inexistente."""
         other = build_scenario(username=f"ajeno-{uuid.uuid4().hex[:8]}")
-        foreign_visit = make_visit(other)
+        foreign_record = make_record(other)
 
-        response = self.presign(visit_id=foreign_visit.pk)
+        response = self.presign(record_id=foreign_record.pk)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["code"], "not_found")
 
-    def test_an_unknown_visit_is_a_404(self) -> None:
-        self.assertEqual(self.presign(visit_id=uuid.uuid4()).status_code, 404)
+    def test_an_unknown_record_is_a_404(self) -> None:
+        self.assertEqual(self.presign(record_id=uuid.uuid4()).status_code, 404)
 
 
 @skip_without_db
@@ -343,14 +343,14 @@ class CommitTests(_AttachmentsTestCase):
 class DownloadUrlTests(_AttachmentsTestCase):
     """`GET /v1/attachments/{sha256}/url`: nunca sin comprobar permisos."""
 
-    def _commit_and_attach(self, visit=None):
+    def _commit_and_attach(self, record=None):
         self.upload(JPEG_BYTES)
         self.commit(JPEG_SHA, len(JPEG_BYTES))
-        target = visit if visit is not None else make_visit(self.scenario)
-        VisitAttachment.objects.create(
+        target = record if record is not None else make_record(self.scenario)
+        RecordAttachment.objects.create(
             id=uuid.uuid4(),
             org=self.scenario.org,
-            visit=target,
+            record=target,
             blob_id=JPEG_SHA,
             role="foto",
             captured_at="2026-07-30T14:05:09.123Z",
@@ -384,20 +384,20 @@ class DownloadUrlTests(_AttachmentsTestCase):
         """El contrato, literal: `404` por inexistencia, no `403`."""
         self.upload(JPEG_BYTES)
         self.commit(JPEG_SHA, len(JPEG_BYTES))  # el blob existe...
-        # ...pero no hay ningún `visit_attachment` de esta organización.
+        # ...pero no hay ningún `record_attachment` de esta organización.
         response = self.get(JPEG_SHA)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["code"], "not_found")
 
     def test_an_attachment_of_another_organization_is_a_404(self) -> None:
-        """El aislamiento que `Blob` delega en `visit_attachment` (RD-11)."""
+        """El aislamiento que `Blob` delega en `record_attachment` (RD-11)."""
         other = build_scenario(username=f"ajeno-{uuid.uuid4().hex[:8]}")
         self.upload(JPEG_BYTES)
         self.commit(JPEG_SHA, len(JPEG_BYTES))
-        VisitAttachment.objects.create(
+        RecordAttachment.objects.create(
             id=uuid.uuid4(),
             org=other.org,
-            visit=make_visit(other),
+            record=make_record(other),
             blob_id=JPEG_SHA,
             role="foto",
             captured_at="2026-07-30T14:05:09.123Z",
@@ -409,15 +409,15 @@ class DownloadUrlTests(_AttachmentsTestCase):
 
     def test_a_deleted_attachment_no_longer_grants_access(self) -> None:
         self._commit_and_attach()
-        VisitAttachment.objects.filter(blob_id=JPEG_SHA).update(deleted_at="2026-08-01T00:00:00Z")
+        RecordAttachment.objects.filter(blob_id=JPEG_SHA).update(deleted_at="2026-08-01T00:00:00Z")
         self.assertEqual(self.get(JPEG_SHA).status_code, 404)
 
     def test_a_pending_blob_is_a_404_not_a_broken_url(self) -> None:
         """El adjunto llegó por el push antes que sus bytes: aún no hay descarga."""
-        VisitAttachment.objects.create(
+        RecordAttachment.objects.create(
             id=uuid.uuid4(),
             org=self.scenario.org,
-            visit=make_visit(self.scenario),
+            record=make_record(self.scenario),
             blob_id=JPEG_SHA,
             role="foto",
             captured_at="2026-07-30T14:05:09.123Z",
@@ -439,7 +439,7 @@ class ViewerDownloadTests(_AttachmentsTestCase):
     role = Role.VIEWER
 
     def test_a_viewer_can_download_what_it_can_read(self) -> None:
-        """Leer es leer: `VIEWER` existe para consultar (política `can_read_visit`)."""
+        """Leer es leer: `VIEWER` existe para consultar (política `can_read_record`)."""
         self.store.put_object(JPEG_SHA, JPEG_BYTES, JPEG_MIME)
         Blob.objects.create(
             sha256=JPEG_SHA,
@@ -447,10 +447,10 @@ class ViewerDownloadTests(_AttachmentsTestCase):
             mime=JPEG_MIME,
             bucket_key=f"blobs/{JPEG_SHA[0:2]}/{JPEG_SHA[2:4]}/{JPEG_SHA}",
         )
-        VisitAttachment.objects.create(
+        RecordAttachment.objects.create(
             id=uuid.uuid4(),
             org=self.scenario.org,
-            visit=make_visit(self.scenario),
+            record=make_record(self.scenario),
             blob_id=JPEG_SHA,
             role="foto",
             captured_at="2026-07-30T14:05:09.123Z",

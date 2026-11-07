@@ -33,8 +33,8 @@ from suno.core.context import (
     get_request_context,
     resolve_request_context,
 )
-from suno.core.models import AppUser, Membership, Organization, Role, Visit
-from suno.core.policies import can_read_visit
+from suno.core.models import AppUser, Membership, Organization, Role, Record
+from suno.core.policies import can_read_record
 
 from .dbsupport import SKIP_REASON, setup_test_database, teardown_test_database
 
@@ -261,23 +261,23 @@ class QueryBudgetTests(TestCase):
     def test_authorizing_a_batch_costs_one_query_in_total(self) -> None:
         principal = Principal(user_id=self.user.pk, org_id=self.org.pk, device_id=uuid.uuid4())
         # Recursos en memoria (no persistidos): la política solo mira `org_id`,
-        # así que un `Visit` sin guardar es un recurso perfectamente real para
-        # este test — y si alguna política tocara una FK (`visit.org.id`), el
+        # así que un `Record` sin guardar es un recurso perfectamente real para
+        # este test — y si alguna política tocara una FK (`record.org.id`), el
         # presupuesto de 0 queries lo delataría al instante.
-        visits = [Visit(id=uuid.uuid4(), org_id=self.org.pk) for _ in range(self.BATCH_SIZE)]
+        records = [Record(id=uuid.uuid4(), org_id=self.org.pk) for _ in range(self.BATCH_SIZE)]
 
         with self.assertNumQueries(1):
             ctx = resolve_request_context(principal)
-            for visit in visits:
-                self.assertTrue(can_read_visit(ctx, visit))
+            for record in records:
+                self.assertTrue(can_read_record(ctx, record))
 
     def test_the_budget_does_not_depend_on_the_batch_size(self) -> None:
         principal = Principal(user_id=self.user.pk, org_id=self.org.pk)
         ctx = resolve_request_context(principal)
         for size in (1, self.BATCH_SIZE, self.BATCH_SIZE * 2):
-            visits = [Visit(id=uuid.uuid4(), org_id=self.org.pk) for _ in range(size)]
+            records = [Record(id=uuid.uuid4(), org_id=self.org.pk) for _ in range(size)]
             with self.subTest(size=size), self.assertNumQueries(0):
-                self.assertTrue(all(can_read_visit(ctx, visit) for visit in visits))
+                self.assertTrue(all(can_read_record(ctx, record) for record in records))
 
 
 @unittest.skipUnless(_SKIP_REASON is None, _SKIP_REASON or "")

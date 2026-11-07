@@ -26,8 +26,8 @@ quien lo pide:
    es el enum `EntityType` del contrato y emitir ahí una cadena arbitraria
    sería devolver una respuesta que no valida contra el propio contrato.
 
-`server_row` (push, `OpResultSchema`) se tipa como `PushServerRow` (`visit` o
-`visit_attachment`, las entidades escribibles desde el Paso 22) y no como la
+`server_row` (push, `OpResultSchema`) se tipa como `PushServerRow` (`record` o
+`record_attachment`, las entidades escribibles desde el Paso 22) y no como la
 unión `EntityRecord` completa. Es un estrechamiento compatible: toda rama de
 `PushServerRow` es un `EntityRecord` válido. La propia unión `EntityRecord` sí
 existe desde el Paso 9, para `PullResponse.rows` — el pull, a diferencia del
@@ -63,14 +63,14 @@ __all__ = [
     "PushResponse",
     "RawSyncOp",
     "TombstoneSchema",
-    "VisitAttachmentData",
-    "VisitAttachmentRecord",
-    "VisitData",
-    "VisitRecord",
+    "RecordAttachmentData",
+    "RecordAttachmentRow",
+    "RecordData",
+    "RecordRow",
 ]
 
 #: Contrato `EntityType`. Cerrado a propósito: ver el punto 2 del docstring.
-EntityType = Literal["visit", "visit_attachment", "assignment", "form_template_version"]
+EntityType = Literal["record", "record_attachment", "assignment", "form_template_version"]
 
 #: Contrato `OpStatus`.
 OpStatus = Literal["applied", "conflict", "rejected"]
@@ -108,8 +108,8 @@ class PushRequest(Schema):
     ops: Annotated[list[RawSyncOp], Field(min_length=1)]
 
 
-class VisitQuantityRecord(Schema):
-    """Contrato `VisitQuantity`."""
+class RecordQuantityRow(Schema):
+    """Contrato `RecordQuantity`."""
 
     item_id: uuid.UUID
     location_id: uuid.UUID | None
@@ -117,8 +117,8 @@ class VisitQuantityRecord(Schema):
     note: str
 
 
-class VisitData(Schema):
-    """Contrato `Visit`: la fila autoritativa completa.
+class RecordData(Schema):
+    """Contrato `Record`: la fila autoritativa completa.
 
     **Todas las propiedades son `required`** (convención del contrato para
     entidades emitidas por el servidor): lo opcional lo es en el *valor*
@@ -142,14 +142,14 @@ class VisitData(Schema):
     created_by: uuid.UUID
     task_id: uuid.UUID | None
     progress_pct: float | None
-    quantities: list[VisitQuantityRecord]
+    quantities: list[RecordQuantityRow]
 
 
-class VisitRecord(Schema):
-    """Contrato `VisitRecord` — la rama `visit` de `EntityRecord`."""
+class RecordRow(Schema):
+    """Contrato `RecordRow` — la rama `record` de `EntityRecord`."""
 
-    entity: Literal["visit"] = "visit"
-    data: VisitData
+    entity: Literal["record"] = "record"
+    data: RecordData
 
 
 class OpErrorSchema(Schema):
@@ -179,7 +179,7 @@ class OpResultSchema(Schema):
     entity_id: uuid.UUID | None = None
     status: OpStatus
     server_version: int | None = None
-    # Definido más abajo (necesita `VisitAttachmentRecord`); ver `PushServerRow`.
+    # Definido más abajo (necesita `RecordAttachmentRow`); ver `PushServerRow`.
     server_row: PushServerRow | None = None
     error: OpErrorSchema | None = None
 
@@ -193,20 +193,20 @@ class PushResponse(Schema):
 
 
 # --------------------------------------------------------- pull / bootstrap ----
-# Paso 9. `VisitData` se reutiliza tal cual para `BootstrapResponse.visits`: el
-# contrato declara ahí el mismo `Visit` que en `VisitRecord.data`, sin envoltorio
+# Paso 9. `RecordData` se reutiliza tal cual para `BootstrapResponse.records`: el
+# contrato declara ahí el mismo `Record` que en `RecordRow.data`, sin envoltorio
 # `{entity, data}` — el bootstrap ya sabe de qué tipo es cada array por su clave.
 
 
-class VisitAttachmentData(Schema):
-    """Contrato `VisitAttachment`. Ver la nota de `VisitData` sobre `required`."""
+class RecordAttachmentData(Schema):
+    """Contrato `RecordAttachment`. Ver la nota de `RecordData` sobre `required`."""
 
     id: uuid.UUID
     org_id: uuid.UUID
     version: int
     change_seq: int
     deleted_at: Timestamp | None
-    visit_id: uuid.UUID
+    record_id: uuid.UUID
     sha256: str
     role: Literal["foto", "firma", "doc"]
     caption: str | None
@@ -245,11 +245,11 @@ class FormTemplateVersionData(Schema):
     published_at: Timestamp | None
 
 
-class VisitAttachmentRecord(Schema):
-    """Contrato `VisitAttachmentRecord` — la rama `visit_attachment` de `EntityRecord`."""
+class RecordAttachmentRow(Schema):
+    """Contrato `RecordAttachmentRow` — la rama `record_attachment` de `EntityRecord`."""
 
-    entity: Literal["visit_attachment"] = "visit_attachment"
-    data: VisitAttachmentData
+    entity: Literal["record_attachment"] = "record_attachment"
+    data: RecordAttachmentData
 
 
 class AssignmentRecord(Schema):
@@ -272,14 +272,14 @@ class FormTemplateVersionRecord(Schema):
 #: todo, sin el riesgo de que una forma más permissiva (p. ej. una con más
 #: campos opcionales) "robe" una fila que en realidad era de otra rama.
 EntityRecord = Annotated[
-    VisitRecord | VisitAttachmentRecord | AssignmentRecord | FormTemplateVersionRecord,
+    RecordRow | RecordAttachmentRow | AssignmentRecord | FormTemplateVersionRecord,
     Field(discriminator="entity"),
 ]
 
-#: `server_row` del push: solo las entidades **escribibles** (`visit` y, desde el
-#: Paso 22, `visit_attachment`). Estrechamiento compatible de `EntityRecord`.
+#: `server_row` del push: solo las entidades **escribibles** (`record` y, desde el
+#: Paso 22, `record_attachment`). Estrechamiento compatible de `EntityRecord`.
 PushServerRow = Annotated[
-    VisitRecord | VisitAttachmentRecord,
+    RecordRow | RecordAttachmentRow,
     Field(discriminator="entity"),
 ]
 
@@ -318,8 +318,8 @@ class BootstrapResponse(Schema):
     user: AuthUserProfile
     form_template_versions: list[FormTemplateVersionData]
     assignments: list[AssignmentData]
-    visits: list[VisitData]
-    visit_attachments: list[VisitAttachmentData]
+    records: list[RecordData]
+    record_attachments: list[RecordAttachmentData]
     has_more: bool = False
 
 

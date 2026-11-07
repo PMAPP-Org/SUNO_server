@@ -1,5 +1,5 @@
-"""Núcleo del dominio: `Visit`, `Blob` y `VisitAttachment` (doc 08 §4.4), más
-`VisitReview` (validación del back-office, Paso 24)."""
+"""Núcleo del dominio: `Record`, `Blob` y `RecordAttachment` (doc 08 §4.4), más
+`RecordReview` (validación del back-office, Paso 24)."""
 
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ from .base import (
 )
 
 
-class Visit(SyncedModel):
-    """Visita de campo. Tabla `visit` de doc 08 §4.4, campo por campo.
+class Record(SyncedModel):
+    """Registro de campo. Tabla `record` de doc 08 §4.4, campo por campo.
 
     - `id` **generado en el cliente** (UUIDv7): es lo que hace la
       idempotencia real del push (ADR-003). Por eso el campo **no tiene
-      `default`**: el servidor nunca inventa el identificador de una visita.
+      `default`**: el servidor nunca inventa el identificador de un registro.
     - `answers` en `JSONB`, validado contra el JSON Schema de
       `template_version_id` (Paso 20) — evita una migración por formulario.
     - Ubicación en **columnas planas**, no geometría (ADR-005), con `CHECK`
@@ -40,7 +40,7 @@ class Visit(SyncedModel):
     assignment = models.ForeignKey(
         "core.Assignment",
         on_delete=models.PROTECT,
-        related_name="visits",
+        related_name="records",
         null=True,
         blank=True,
         default=None,
@@ -49,7 +49,7 @@ class Visit(SyncedModel):
     template_version = models.ForeignKey(
         "core.FormTemplateVersion",
         on_delete=models.PROTECT,
-        related_name="visits",
+        related_name="records",
         verbose_name="versión de plantilla",
     )
     answers = models.JSONField(default=dict, blank=True, verbose_name="respuestas")
@@ -69,25 +69,25 @@ class Visit(SyncedModel):
     device = models.ForeignKey(
         "core.Device",
         on_delete=models.PROTECT,
-        related_name="visits",
+        related_name="records",
         verbose_name="dispositivo",
     )
     created_by = models.ForeignKey(
         "core.AppUser",
         on_delete=models.PROTECT,
-        related_name="visits",
+        related_name="records",
         verbose_name="creada por",
     )
-    #: Costos, etapa 1: la tarea del cronograma cuyo avance reporta la visita y
+    #: Costos, etapa 1: la tarea del cronograma cuyo avance reporta el registro y
     #: el % acumulado observado en campo. Los dos o ninguno
-    #: (`visit_task_progress_pair`). Cuenta para el % SUNO de la tarea cuando
-    #: la revisión vigente de la visita es `approved` (`projects.field_progress`).
+    #: (`record_task_progress_pair`). Cuenta para el % SUNO de la tarea cuando
+    #: la revisión vigente del registro es `approved` (`projects.field_progress`).
     #: `PROTECT`: las tareas nunca se borran (se retiran), y así sigue siendo.
     task = models.ForeignKey(
         "core.Task",
         on_delete=models.PROTECT,
-        related_name="field_visits",
-        db_index=False,  # lo cubre `visit_task_captured_idx` (task, captured_at)
+        related_name="field_records",
+        db_index=False,  # lo cubre `record_task_captured_idx` (task, captured_at)
         null=True,
         blank=True,
         default=None,
@@ -101,18 +101,18 @@ class Visit(SyncedModel):
         default=None,
         verbose_name="% avance acumulado",
     )
-    #: Costos, pieza 4: cantidades ejecutadas en esta visita, por ítem del
+    #: Costos, pieza 4: cantidades ejecutadas en este registro, por ítem del
     #: presupuesto. Lista de `{item_id, location_id, quantity, note}`, con la
     #: cantidad como texto decimal de 4 decimales (`sync/payloads.py`). Cuentan
-    #: para el avance cuando la visita está validada (`matrix/quantities.py`).
+    #: para el avance cuando el registro está validada (`matrix/quantities.py`).
     quantities = models.JSONField(
         default=list, db_default=[], blank=True, verbose_name="cantidades"
     )
 
     class Meta:
-        db_table = "visit"
-        verbose_name = "visita"
-        verbose_name_plural = "visitas"
+        db_table = "record"
+        verbose_name = "registro"
+        verbose_name_plural = "registros"
         constraints = [
             # ADR-005: rango de coordenadas garantizado por la BD. La forma
             # `IS NULL OR (rango)` es necesaria porque la ubicación es
@@ -121,11 +121,11 @@ class Visit(SyncedModel):
             # dejarlo implícito sería frágil ante futuros cambios.
             models.CheckConstraint(
                 condition=models.Q(lat__isnull=True) | models.Q(lat__gte=LAT_MIN, lat__lte=LAT_MAX),
-                name="visit_lat_range",
+                name="record_lat_range",
             ),
             models.CheckConstraint(
                 condition=models.Q(lon__isnull=True) | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
-                name="visit_lon_range",
+                name="record_lon_range",
             ),
             # `accuracy_m` y `altitude_m`: no negativa la primera, y **finitas**
             # las dos (revisión del Paso 8, ver `finite_q`). El `>= 0` a secas
@@ -137,17 +137,17 @@ class Visit(SyncedModel):
             models.CheckConstraint(
                 condition=models.Q(accuracy_m__isnull=True)
                 | (models.Q(accuracy_m__gte=0) & finite_q("accuracy_m")),
-                name="visit_accuracy_finite_non_negative",
+                name="record_accuracy_finite_non_negative",
             ),
             models.CheckConstraint(
                 condition=models.Q(altitude_m__isnull=True) | finite_q("altitude_m"),
-                name="visit_altitude_finite",
+                name="record_altitude_finite",
             ),
-            # Destino de la FK compuesta de `visit_attachment` (migración
+            # Destino de la FK compuesta de `record_attachment` (migración
             # 0002): Postgres exige un UNIQUE sobre exactamente las columnas
             # referenciadas. Es también la invariante que impide que una
-            # visita "cambie de organización" sin cambiar de identidad.
-            models.UniqueConstraint(fields=["id", "org"], name="visit_id_org_uq"),
+            # registro "cambie de organización" sin cambiar de identidad.
+            models.UniqueConstraint(fields=["id", "org"], name="record_id_org_uq"),
             # Costos, etapa 1 y pieza 4: sin tarea, ni % ni cantidades; con
             # tarea, un % en 0..100 o al menos una cantidad (o ambos).
             # `payloads.py` lo rechaza antes con detalle; esto es la red.
@@ -170,16 +170,16 @@ class Visit(SyncedModel):
                         | (models.Q(progress_pct__isnull=True) & ~models.Q(quantities=[]))
                     )
                 ),
-                name="visit_task_progress_pair",
+                name="record_task_progress_pair",
             ),
         ]
         indexes = [
             # Bounding box (ADR-005).
-            models.Index(fields=["org", "lat", "lon"], name="visit_org_lat_lon_idx"),
+            models.Index(fields=["org", "lat", "lon"], name="record_org_lat_lon_idx"),
             # Escaneo ordenado del cursor de pull (doc 08 §4.4).
-            models.Index(fields=["org", "change_seq"], name="visit_org_change_seq_idx"),
-            # % SUNO: la visita más reciente de cada tarea (`field_progress`).
-            models.Index(fields=["task", "captured_at"], name="visit_task_captured_idx"),
+            models.Index(fields=["org", "change_seq"], name="record_org_change_seq_idx"),
+            # % SUNO: el registro más reciente de cada tarea (`field_progress`).
+            models.Index(fields=["task", "captured_at"], name="record_task_captured_idx"),
         ]
 
     def __str__(self) -> str:
@@ -205,15 +205,15 @@ class Blob(models.Model):
 
     - doc 08 §4.4 lista sus campos de forma cerrada y `org_id` no está.
     - La deduplicación entre dispositivos —y entre organizaciones— es el
-      objetivo declarado ("un mismo blob puede estar en varias visitas sin
+      objetivo declarado ("un mismo blob puede estar en varios registros sin
       duplicar bytes"); un `org_id` la rompería por definición.
     - No es una tabla de negocio: no contiene datos del tenant, solo un
       hash, un tamaño, un MIME y una clave de almacenamiento. La
-      pertenencia a una organización vive en `visit_attachment`, que sí
+      pertenencia a una organización vive en `record_attachment`, que sí
       lleva `org_id`, y es ahí donde se aplica el aislamiento (RD-11).
     - Conocer el `sha256` de un blob implica poseer ya sus bytes exactos,
       así que la tabla no filtra nada por sí sola. La autorización de
-      descarga se resuelve por `visit_attachment` (Paso 10), nunca
+      descarga se resuelve por `record_attachment` (Paso 10), nunca
       consultando `blob` directamente.
     """
 
@@ -237,23 +237,23 @@ class Blob(models.Model):
         return self.sha256
 
 
-class VisitAttachment(SyncedModel):
-    """Uso de un blob dentro de una visita (doc 08 §4.4).
+class RecordAttachment(SyncedModel):
+    """Uso de un blob dentro de un registro (doc 08 §4.4).
 
     Separa "qué archivo" (`Blob`, inmutable y compartido) de "dónde se
-    usa". Un mismo blob puede estar en varias visitas sin duplicar bytes.
+    usa". Un mismo blob puede estar en varios registros sin duplicar bytes.
 
     **`sha256` es FK a `blob` pero sin constraint en la BD**
     (`db_constraint=False`) — decisión no trivial, se explica entera:
 
     doc 08 §4.4 pide `sha256 FK→blob` y el contrato del Paso 1 declara
-    `VisitAttachment.sha256` como `required` y **no nulo**. Pero el mismo
-    contrato dice que "una visita se acepta aunque el blob todavía no esté
+    `RecordAttachment.sha256` como `required` y **no nulo**. Pero el mismo
+    contrato dice que "un registro se acepta aunque el blob todavía no esté
     subido: el adjunto queda pendiente y se confirma por el carril de
     adjuntos". Y una fila de `blob` no puede existir antes de la subida:
     `size`/`mime`/`bucket_key` solo se conocen cuando el servidor verifica
     el objeto, y RD-08 prohíbe añadirle a `blob` un campo de estado
-    "pendiente". Es decir: la fila hija (`visit_attachment`) precede
+    "pendiente". Es decir: la fila hija (`record_attachment`) precede
     legítimamente a la padre (`blob`).
 
     Las tres salidas posibles eran (a) columna nullable — rompe el
@@ -265,11 +265,11 @@ class VisitAttachment(SyncedModel):
     importa: al emitir la URL de descarga (Paso 10).
 
     **Aislamiento entre organizaciones (tarea 12 del brief)**: se aplica
-    en la BD con una **FK compuesta** `(visit_id, org_id) → visit (id,
+    en la BD con una **FK compuesta** `(record_id, org_id) → record (id,
     org_id)`, añadida en la migración `0002` con `RunSQL` reversible
     (Django no sabe expresar FKs compuestas). Un `CHECK` no serviría: no
     puede leer otra tabla. Con esa FK, insertar un adjunto de la org A
-    apuntando a una visita de la org B falla en Postgres, con
+    apuntando a un registro de la org B falla en Postgres, con
     independencia de lo que haga el código de aplicación. El `scoped_qs`
     del Paso 6 sigue siendo necesario para las *lecturas* (RD-11); esta
     constraint solo cubre las *escrituras*, que es donde el dato podría
@@ -277,11 +277,11 @@ class VisitAttachment(SyncedModel):
     """
 
     id = models.UUIDField(primary_key=True, editable=False, verbose_name="id (cliente)")
-    visit = models.ForeignKey(
-        Visit,
+    record = models.ForeignKey(
+        Record,
         on_delete=models.PROTECT,
         related_name="attachments",
-        verbose_name="visita",
+        verbose_name="registro",
     )
     blob = models.ForeignKey(
         Blob,
@@ -299,34 +299,34 @@ class VisitAttachment(SyncedModel):
     order = models.PositiveIntegerField(default=0, verbose_name="orden")
 
     class Meta:
-        db_table = "visit_attachment"
-        verbose_name = "adjunto de visita"
-        verbose_name_plural = "adjuntos de visita"
+        db_table = "record_attachment"
+        verbose_name = "adjunto de registro"
+        verbose_name_plural = "adjuntos de registro"
         indexes = [
             models.Index(fields=["org", "change_seq"], name="attachment_org_seq_idx"),
-            models.Index(fields=["visit", "order"], name="attachment_visit_order_idx"),
+            models.Index(fields=["record", "order"], name="attachment_record_order_idx"),
         ]
 
     def __str__(self) -> str:
         return f"{self.role}:{self.id}"
 
 
-class VisitReviewStatus(models.TextChoices):
+class RecordReviewStatus(models.TextChoices):
     APPROVED = "approved", "Validada"
     REJECTED = "rejected", "Rechazada"
 
 
-class VisitReview(OrgScopedModel):
-    """Validación o rechazo de una visita por supervisión (Paso 24, back-office).
+class RecordReview(OrgScopedModel):
+    """Validación o rechazo de un registro por supervisión (Paso 24, back-office).
 
-    **Tabla aparte y no un campo de `Visit`**, por dos razones:
+    **Tabla aparte y no un campo de `Record`**, por dos razones:
 
-    - `Visit` es una entidad sincronizada: un campo nuevo cambiaría el contrato
-      que leen los teléfonos (`VisitRecord`), y la revisión es un dato del
+    - `Record` es una entidad sincronizada: un campo nuevo cambiaría el contrato
+      que leen los teléfonos (`RecordRow`), y la revisión es un dato del
       back-office que el agente no edita.
-    - Editar una `Visit` desde el Admin la escribiría sin pasar por el push,
+    - Editar una `Record` desde el Admin la escribiría sin pasar por el push,
       sin `change_seq` nuevo: los teléfonos nunca recibirían el cambio. Por eso
-      el Admin de `Visit` es de solo lectura, y la supervisión escribe aquí.
+      el Admin de `Record` es de solo lectura, y la supervisión escribe aquí.
 
     Es un **historial**: cada decisión es una fila nueva, y la vigente es la
     más reciente. Rechazar y luego validar deja las dos decisiones registradas,
@@ -334,32 +334,32 @@ class VisitReview(OrgScopedModel):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    visit = models.ForeignKey(
-        Visit,
+    record = models.ForeignKey(
+        Record,
         on_delete=models.PROTECT,
         related_name="reviews",
-        verbose_name="visita",
+        verbose_name="registro",
     )
     status = models.CharField(
-        max_length=16, choices=VisitReviewStatus.choices, verbose_name="decisión"
+        max_length=16, choices=RecordReviewStatus.choices, verbose_name="decisión"
     )
     comment = models.CharField(max_length=512, null=True, blank=True, verbose_name="comentario")
     reviewer = models.ForeignKey(
         "core.AppUser",
         on_delete=models.PROTECT,
-        related_name="visit_reviews",
+        related_name="record_reviews",
         verbose_name="revisada por",
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="fecha")
 
     class Meta:
-        db_table = "visit_review"
-        verbose_name = "revisión de visita"
-        verbose_name_plural = "revisiones de visita"
+        db_table = "record_review"
+        verbose_name = "revisión de registro"
+        verbose_name_plural = "revisiones de registro"
         ordering = ("-created_at",)
         indexes = [
-            models.Index(fields=["org", "visit", "-created_at"], name="review_org_visit_idx")
+            models.Index(fields=["org", "record", "-created_at"], name="review_org_record_idx")
         ]
 
     def __str__(self) -> str:
-        return f"{self.get_status_display()}:{self.visit_id}"
+        return f"{self.get_status_display()}:{self.record_id}"

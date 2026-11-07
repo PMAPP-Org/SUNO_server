@@ -11,7 +11,7 @@ from django.test.utils import CaptureQueriesContext
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import SPLIT_ROWS, V1_ROWS, V2_ROWS
-from suno.core.models import Project, QuantityPlan, ScheduleImport, Visit
+from suno.core.models import Project, QuantityPlan, ScheduleImport, Record
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -24,7 +24,7 @@ from .factories import (
     locate,
     plan,
     quantity_row,
-    quantity_visit,
+    quantity_record,
     suno_levels,
 )
 
@@ -40,7 +40,7 @@ class TaskPageTests(TestCase):
         suno_levels(self.world)
         self.concrete = item(self.budget, "2.1")
         plan(self.world, 3, self.concrete, "10")
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(self.concrete, "4")))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(self.concrete, "4")))
         self.url = f"/plataforma/proyectos/{self.world.project.pk}/tareas/{self.world.task(3).pk}/"
 
     def test_block_with_amounts_for_budget_viewers(self) -> None:
@@ -74,7 +74,7 @@ class TaskPageTests(TestCase):
         ]
         apply_rows(self.world.ctx(), self.budget, rows)
         self.world.approve(
-            quantity_visit(
+            quantity_record(
                 self.world,
                 3,
                 quantity_row(item(self.budget, "2.10"), "1", note="x"),
@@ -193,7 +193,7 @@ class TaskPageQuantityHistoryTests(TestCase):
         plan(self.world, 3, self.concrete, "10")
         plan(self.world, 3, self.steel, "800")
         self.world.approve(
-            quantity_visit(
+            quantity_record(
                 self.world,
                 3,
                 quantity_row(self.concrete, "4"),
@@ -201,12 +201,12 @@ class TaskPageQuantityHistoryTests(TestCase):
             )
         )
         self.world.approve(
-            quantity_visit(self.world, 3, quantity_row(self.concrete, "2.5"), hours=2)
+            quantity_record(self.world, 3, quantity_row(self.concrete, "2.5"), hours=2)
         )
         # Sin validar y rechazada: no salen en el historial ni suman.
-        quantity_visit(self.world, 3, quantity_row(self.concrete, "111"), hours=3)
+        quantity_record(self.world, 3, quantity_row(self.concrete, "111"), hours=3)
         self.world.reject(
-            quantity_visit(self.world, 3, quantity_row(self.concrete, "222"), hours=4)
+            quantity_record(self.world, 3, quantity_row(self.concrete, "222"), hours=4)
         )
         self.url = f"/plataforma/proyectos/{self.world.project.pk}/tareas/{self.world.task(3).pk}/"
 
@@ -234,16 +234,16 @@ class TaskPageQuantityHistoryTests(TestCase):
         self.assertNotIn("222", history)
         # La más reciente primero.
         self.assertLess(history.index("2,5"), history.index("900"))
-        self.assertNotIn("/admin/core/visit/", history)  # sin permiso del Admin, sin enlace
+        self.assertNotIn("/admin/core/record/", history)  # sin permiso del Admin, sin enlace
 
-    def test_history_links_to_the_visit_with_admin_permission(self) -> None:
+    def test_history_links_to_the_record_with_admin_permission(self) -> None:
         user = self.world.supervisor
-        user.user_permissions.add(Permission.objects.get(codename="view_visit"))
+        user.user_permissions.add(Permission.objects.get(codename="view_record"))
         self.client.force_login(user)
-        visit = Visit.objects.filter(task=self.world.task(3)).order_by("captured_at").first()
-        assert visit is not None
+        record = Record.objects.filter(task=self.world.task(3)).order_by("captured_at").first()
+        assert record is not None
         history = self._history(self.client.get(self.url).content.decode())
-        self.assertIn(f"/admin/core/visit/{visit.pk}/change/", history)
+        self.assertIn(f"/admin/core/record/{record.pk}/change/", history)
 
     def test_field_agent_sees_pct_and_history(self) -> None:
         # Como el resto del bloque: lo ve quien ve la tarea; solo los montos se ocultan.
@@ -265,7 +265,7 @@ class TaskPageQuantityHistoryTests(TestCase):
             self.client.get(self.url)
         for hours in range(5, 10):
             self.world.approve(
-                quantity_visit(self.world, 3, quantity_row(self.concrete, "1"), hours=hours)
+                quantity_record(self.world, 3, quantity_row(self.concrete, "1"), hours=hours)
             )
         with CaptureQueriesContext(connection) as after:
             self.client.get(self.url)
@@ -273,9 +273,9 @@ class TaskPageQuantityHistoryTests(TestCase):
 
     def test_history_is_bounded(self) -> None:
         self.client.force_login(self.world.supervisor)
-        with mock.patch("suno.projects.views.QUANTITY_HISTORY_VISITS", 1):
+        with mock.patch("suno.projects.views.QUANTITY_HISTORY_RECORDS", 1):
             html = self.client.get(self.url).content.decode()
         history = self._history(html)
-        self.assertEqual(history.count("<tr>"), 2)  # la visita más reciente: una fila
+        self.assertEqual(history.count("<tr>"), 2)  # el registro más reciente: una fila
         self.assertIn("2,5", history)
-        self.assertIn("Se muestran las 1 visitas validadas más recientes.", html)
+        self.assertIn("Se muestran las 1 registros validados más recientes.", html)

@@ -71,7 +71,7 @@ class MimeType(models.TextChoices):
 
 
 class AttachmentRole(models.TextChoices):
-    """Rol de un adjunto dentro de la visita (doc 08 §4.4, contrato)."""
+    """Rol de un adjunto dentro del registro (doc 08 §4.4, contrato)."""
 
     FOTO = "foto", "Foto"
     FIRMA = "firma", "Firma"
@@ -81,8 +81,8 @@ class AttachmentRole(models.TextChoices):
 class SyncEntityType(models.TextChoices):
     """Entidades que participan en la sincronización (contrato `EntityType`)."""
 
-    VISIT = "visit", "Visita"
-    VISIT_ATTACHMENT = "visit_attachment", "Adjunto de visita"
+    RECORD = "record", "Registro"
+    RECORD_ATTACHMENT = "record_attachment", "Adjunto de registro"
     ASSIGNMENT = "assignment", "Asignación"
     FORM_TEMPLATE_VERSION = "form_template_version", "Versión de plantilla"
 

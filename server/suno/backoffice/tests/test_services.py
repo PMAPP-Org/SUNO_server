@@ -24,7 +24,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from suno.authn.models import RefreshToken
 from suno.backoffice import export
-from suno.backoffice.export import ExportTooLarge, safe_cell, to_csv, to_xlsx, visit_table
+from suno.backoffice.export import ExportTooLarge, safe_cell, to_csv, to_xlsx, record_table
 from suno.backoffice.personal_data import (
     SUPPRESSED_PREFIX,
     export_personal_data,
@@ -33,11 +33,11 @@ from suno.backoffice.personal_data import (
 from suno.backoffice.services import (
     create_assignment,
     retry_job,
-    review_visit,
+    review_record,
     revoke_device_sessions,
 )
 from suno.core.audit import AuditAction
-from suno.core.models import AuditEvent, Job, Role, Visit, VisitReview
+from suno.core.models import AuditEvent, Job, Role, Record, RecordReview
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -75,37 +75,37 @@ class ReviewTests(TestCase):
         self.b = make_tenant("Org B")
 
     def test_supervision_reviews_and_it_is_audited(self) -> None:
-        visit = self.a.visit()
-        review = review_visit(self.a.ctx(), visit, status="rejected", comment="  falta la foto  ")
+        record = self.a.record()
+        review = review_record(self.a.ctx(), record, status="rejected", comment="  falta la foto  ")
         self.assertEqual(review.org_id, self.a.org.pk)
         self.assertEqual(review.reviewer_id, self.a.staff.pk)
         self.assertEqual(review.comment, "falta la foto")
-        self.assertTrue(audited(AuditAction.VISIT_REVIEWED))
+        self.assertTrue(audited(AuditAction.RECORD_REVIEWED))
 
     def test_a_review_takes_the_organization_push_lock(self) -> None:
-        visit = self.a.visit()
+        record = self.a.record()
         with CaptureQueriesContext(connection) as captured:
-            review_visit(self.a.ctx(), visit, status="approved")
+            review_record(self.a.ctx(), record, status="approved")
         self.assertTrue(any("pg_advisory_xact_lock" in q["sql"] for q in captured.captured_queries))
 
     def test_each_decision_is_a_new_row(self) -> None:
-        visit = self.a.visit()
-        review_visit(self.a.ctx(), visit, status="rejected")
-        review_visit(self.a.ctx(), visit, status="approved")
-        self.assertEqual(VisitReview.objects.filter(visit=visit).count(), 2)
+        record = self.a.record()
+        review_record(self.a.ctx(), record, status="rejected")
+        review_record(self.a.ctx(), record, status="approved")
+        self.assertEqual(RecordReview.objects.filter(record=record).count(), 2)
 
     def test_a_field_agent_cannot_review(self) -> None:
         with self.assertRaises(PermissionDenied):
-            review_visit(self.a.ctx(self.a.agent), self.a.visit(), status="approved")
+            review_record(self.a.ctx(self.a.agent), self.a.record(), status="approved")
 
-    def test_a_foreign_visit_cannot_be_reviewed(self) -> None:
+    def test_a_foreign_record_cannot_be_reviewed(self) -> None:
         with self.assertRaises(PermissionDenied):
-            review_visit(self.a.ctx(), self.b.visit(), status="approved")
-        self.assertFalse(VisitReview.objects.exists())
+            review_record(self.a.ctx(), self.b.record(), status="approved")
+        self.assertFalse(RecordReview.objects.exists())
 
     def test_an_unknown_decision_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            review_visit(self.a.ctx(), self.a.visit(), status="maybe")
+            review_record(self.a.ctx(), self.a.record(), status="maybe")
 
 
 @skip_without_db
@@ -202,9 +202,9 @@ class ExportTests(TestCase):
         self.b = make_tenant("Org B")
 
     def test_only_the_own_organization_reaches_the_file(self) -> None:
-        own = self.a.visit(altura_cm=12, notas='=HYPERLINK("http://x")')
-        self.b.visit()
-        header, rows = visit_table(self.a.ctx(), Visit.objects.all())
+        own = self.a.record(altura_cm=12, notas='=HYPERLINK("http://x")')
+        self.b.record()
+        header, rows = record_table(self.a.ctx(), Record.objects.all())
         self.assertEqual([row[0] for row in rows], [str(own.pk)])
         self.assertIn("answers.altura_cm", header)
         notes = rows[0][header.index("answers.notas")]
@@ -212,16 +212,16 @@ class ExportTests(TestCase):
         self.assertEqual(rows[0][header.index("answers.altura_cm")], 12)
 
     def test_the_latest_review_is_exported(self) -> None:
-        visit = self.a.visit()
-        review_visit(self.a.ctx(), visit, status="rejected")
-        review_visit(self.a.ctx(), visit, status="approved")
-        header, rows = visit_table(self.a.ctx(), Visit.objects.all())
+        record = self.a.record()
+        review_record(self.a.ctx(), record, status="rejected")
+        review_record(self.a.ctx(), record, status="approved")
+        header, rows = record_table(self.a.ctx(), Record.objects.all())
         self.assertEqual(rows[0][header.index("revision")], "approved")
 
     def test_over_the_limit_it_refuses_instead_of_truncating(self) -> None:
-        self.a.visit(), self.a.visit()
+        self.a.record(), self.a.record()
         with mock.patch.object(export, "MAX_EXPORT_ROWS", 1), self.assertRaises(ExportTooLarge):
-            visit_table(self.a.ctx(), Visit.objects.all())
+            record_table(self.a.ctx(), Record.objects.all())
 
     def test_query_count_does_not_grow_with_the_rows(self) -> None:
         """Paso 25, tarea 2 (H-07): coste fijo en queries, sin N+1 por fila."""
@@ -229,17 +229,17 @@ class ExportTests(TestCase):
         def queries_for(count: int) -> int:
             tenant = make_tenant(f"Org {count} filas", staff_role=Role.SUPERVISOR)
             for _ in range(count):
-                review_visit(tenant.ctx(), tenant.visit(), status="approved")
+                review_record(tenant.ctx(), tenant.record(), status="approved")
             ctx = tenant.ctx()
             with CaptureQueriesContext(connection) as captured:
-                visit_table(ctx, Visit.objects.all())
+                record_table(ctx, Record.objects.all())
             return len(captured.captured_queries)
 
         self.assertEqual(queries_for(1), queries_for(30))
 
     def test_csv_and_xlsx_are_readable(self) -> None:
-        self.a.visit(notas="ñandú & <b>")
-        header, rows = visit_table(self.a.ctx(), Visit.objects.all())
+        self.a.record(notas="ñandú & <b>")
+        header, rows = record_table(self.a.ctx(), Record.objects.all())
 
         data = to_csv(header, rows)
         self.assertTrue(data.startswith("﻿".encode()))
@@ -256,8 +256,8 @@ class ExportTests(TestCase):
     def test_control_characters_do_not_break_the_xlsx(self) -> None:
         """Un carácter de control pegado en una respuesta no puede dejar el
         libro ilegible: XML 1.0 no lo admite ni escapado."""
-        self.a.visit(notas="antes\x01\x0b\x1fdespués\tcon tab")
-        header, rows = visit_table(self.a.ctx(), Visit.objects.all())
+        self.a.record(notas="antes\x01\x0b\x1fdespués\tcon tab")
+        header, rows = record_table(self.a.ctx(), Record.objects.all())
         with zipfile.ZipFile(io.BytesIO(to_xlsx(header, rows))) as book:
             for name in book.namelist():
                 with self.subTest(part=name):
@@ -265,8 +265,8 @@ class ExportTests(TestCase):
             sheet = book.read("xl/worksheets/sheet1.xml").decode()
         self.assertIn("antesdespués\tcon tab", sheet)
 
-    def test_sheet_name_defaults_to_visitas(self) -> None:
-        for kwargs, expected in (({}, "Visitas"), ({"sheet_name": "A & B"}, "A &amp; B")):
+    def test_sheet_name_defaults_to_registros(self) -> None:
+        for kwargs, expected in (({}, "Registros"), ({"sheet_name": "A & B"}, "A &amp; B")):
             with zipfile.ZipFile(io.BytesIO(to_xlsx(["a"], [], **kwargs))) as book:
                 workbook = book.read("xl/workbook.xml").decode()
             self.assertIn(f'<sheet name="{expected}"', workbook)
@@ -293,15 +293,15 @@ class PersonalDataTests(TestCase):
         self.b = make_tenant("Org B")
 
     def test_export_contains_the_person_and_their_traces(self) -> None:
-        visit = self.a.visit()
+        record = self.a.record()
         data = export_personal_data(self.a.ctx(), self.a.agent)
         self.assertEqual(data["usuario"]["usuario"], self.a.agent.username)
-        self.assertEqual([v["id"] for v in data["visitas"]], [str(visit.pk)])
+        self.assertEqual([v["id"] for v in data["registros"]], [str(record.pk)])
         self.assertEqual([d["id"] for d in data["dispositivos"]], [str(self.a.device.pk)])
         self.assertTrue(audited(AuditAction.PERSONAL_DATA_EXPORTED))
 
     def test_suppression_anonymizes_and_closes_everything(self) -> None:
-        visit = self.a.visit()
+        record = self.a.record()
         token = live_token(self.a)
         TOTPDevice.objects.create(user=self.a.agent, name="tel", confirmed=True)
         suppress_personal_data(self.a.ctx(), self.a.agent)
@@ -317,7 +317,7 @@ class PersonalDataTests(TestCase):
         self.a.device.refresh_from_db()
         self.assertIsNone(self.a.device.display_name)
         self.assertTrue(
-            Visit.objects.filter(pk=visit.pk).exists(), "las visitas son de la organización"
+            Record.objects.filter(pk=record.pk).exists(), "los registros son de la organización"
         )
         self.assertTrue(audited(AuditAction.PERSONAL_DATA_SUPPRESSED))
 

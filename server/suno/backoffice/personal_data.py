@@ -2,14 +2,14 @@
 
 Los titulares de datos personales de la plataforma son los **usuarios** (los
 agentes de campo y el personal): su nombre, usuario, correo, sus
-dispositivos, la ubicación y la hora de sus visitas, y su rastro en la
+dispositivos, la ubicación y la hora de sus registros, y su rastro en la
 auditoría. Ver `docs/seguridad/tratamiento-datos-personales.md`.
 
 - **Consulta** ([export_personal_data]): todo lo anterior en un JSON legible,
   para entregárselo a la persona que lo pide.
 - **Rectificación**: se edita el usuario en el Admin (nombre, correo).
 - **Supresión** ([suppress_personal_data]): **anonimización**, no borrado
-  físico. Las visitas son registros del cliente (la organización), con su
+  físico. Los registros son registros del cliente (la organización), con su
   propio plazo de retención (`docs/seguridad/retencion.md`), así que se
   conservan, pero dejan de apuntar a una persona identificable: el usuario
   pasa a llamarse `suprimido-<id>`, se vacían nombre, correo y nombres de
@@ -38,7 +38,7 @@ from suno.core.models import (
     Device,
     Membership,
     PrivacyConsent,
-    Visit,
+    Record,
 )
 from suno.core.policies import can_manage_personal_data
 from suno.core.scoping import scoped_qs
@@ -95,10 +95,10 @@ def export_personal_data(ctx: RequestContext, user: AppUser) -> dict[str, Any]:
             }
             for device in scoped_qs(ctx, Device).filter(owner=user).order_by("created_at")
         ],
-        # La ubicación y la hora de cada visita son datos personales del agente.
-        "visitas": [
+        # La ubicación y la hora de cada registro son datos personales del agente.
+        "registros": [
             {"id": str(pk), "capturada_en": iso(at), "lat": lat, "lon": lon}
-            for pk, at, lat, lon in scoped_qs(ctx, Visit)
+            for pk, at, lat, lon in scoped_qs(ctx, Record)
             .filter(created_by=user)
             .order_by("captured_at")
             .values_list("pk", "captured_at", "lat", "lon")

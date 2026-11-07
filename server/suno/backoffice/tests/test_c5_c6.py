@@ -21,14 +21,14 @@ from pypdf.generic import DictionaryObject
 from suno.backoffice import export, spatial_export
 from suno.backoffice.export import ExportTooLarge
 from suno.backoffice.spatial_export import (
-    export_visits,
+    export_records,
     to_geojson,
     to_geopackage,
-    visit_features,
+    record_features,
 )
-from suno.backoffice.visit_pdf import visit_pdf
+from suno.backoffice.record_pdf import record_pdf
 from suno.core.audit import AuditAction
-from suno.core.models import AuditEvent, FormTemplateVersion, Role, Visit
+from suno.core.models import AuditEvent, FormTemplateVersion, Role, Record
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -48,56 +48,56 @@ class FormsAndExportsTests(TestCase):
         self.a = make_tenant("Org A")
         self.b = make_tenant("Org B")
 
-    def action(self, name, visits, user=None):
+    def action(self, name, records, user=None):
         return admin_client(user or self.a.staff).post(
-            "/admin/core/visit/",
+            "/admin/core/record/",
             {
                 "action": name,
-                "_selected_action": [str(v.pk) for v in visits],
+                "_selected_action": [str(v.pk) for v in records],
             },
         )
 
     def test_exports_authorize_and_scope_even_an_unscoped_queryset(self):
-        own, foreign = self.a.visit(), self.b.visit()
-        deleted = self.a.visit()
+        own, foreign = self.a.record(), self.b.record()
+        deleted = self.a.record()
         deleted.deleted_at = timezone.now()
         deleted.save()
-        self.assertEqual([v.pk for v in export_visits(self.a.ctx(), Visit.objects.all())], [own.pk])
+        self.assertEqual([v.pk for v in export_records(self.a.ctx(), Record.objects.all())], [own.pk])
         with self.assertRaises(PermissionDenied):
-            export_visits(self.a.ctx(self.a.agent), Visit.objects.all())
+            export_records(self.a.ctx(self.a.agent), Record.objects.all())
         response = self.action("export_geojson", [own, foreign])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/geo+json")
         self.assertNotIn(str(foreign.pk), response.content.decode())
         self.assertTrue(
             AuditEvent.objects.filter(
-                action=AuditAction.VISITS_EXPORTED, metadata__format="geojson"
+                action=AuditAction.RECORDS_EXPORTED, metadata__format="geojson"
             ).exists()
         )
         with patch.object(export, "MAX_EXPORT_ROWS", 0), self.assertRaises(ExportTooLarge):
-            export_visits(self.a.ctx(), Visit.objects.all())
+            export_records(self.a.ctx(), Record.objects.all())
         with patch.object(export, "MAX_EXPORT_ROWS", 0):
             self.assertEqual(self.action("export_gpkg", [own]).status_code, 302)
-        # CSV/XLSX share the selection: deleted visits never leave either.
+        # CSV/XLSX share the selection: deleted records never leave either.
         csv = self.action("export_csv", [own, deleted]).content.decode()
         self.assertIn(str(own.pk), csv)
         self.assertNotIn(str(deleted.pk), csv)
 
-    def test_agent_staff_cannot_export_and_pdf_requires_one_visit(self):
+    def test_agent_staff_cannot_export_and_pdf_requires_one_record(self):
         self.a.agent.is_staff = True
         self.a.agent.save()
         self.a.agent.user_permissions.set(self.a.staff.user_permissions.all())
-        visit = self.a.visit()
-        self.assertEqual(self.action("export_geojson", [visit], self.a.agent).status_code, 302)
-        self.assertFalse(AuditEvent.objects.filter(action=AuditAction.VISITS_EXPORTED).exists())
-        self.assertEqual(self.action("export_pdf", [visit, self.a.visit()]).status_code, 302)
+        record = self.a.record()
+        self.assertEqual(self.action("export_geojson", [record], self.a.agent).status_code, 302)
+        self.assertFalse(AuditEvent.objects.filter(action=AuditAction.RECORDS_EXPORTED).exists())
+        self.assertEqual(self.action("export_pdf", [record, self.a.record()]).status_code, 302)
 
     def test_large_geometry_exports_refuse_without_a_download_or_audit(self):
-        visit = self.a.visit()
+        record = self.a.record()
         for limit in ("MAX_EXPORT_FEATURES", "MAX_EXPORT_BYTES"):
             with patch.object(spatial_export, limit, 0):
-                self.assertEqual(self.action("export_geojson", [visit]).status_code, 302)
-        self.assertFalse(AuditEvent.objects.filter(action=AuditAction.VISITS_EXPORTED).exists())
+                self.assertEqual(self.action("export_geojson", [record]).status_code, 302)
+        self.assertFalse(AuditEvent.objects.filter(action=AuditAction.RECORDS_EXPORTED).exists())
 
     def test_pdf_labels_choices_and_repeat_rows_remain_readable(self):
         options = [{"value": "ok", "label": {"es": "Bueno"}}]
@@ -126,15 +126,15 @@ class FormsAndExportsTests(TestCase):
             ]
         }
         self.a.version.save()
-        visit = self.a.visit(rows=[{"state": "ok", "many": ["ok"]}])
-        reader = PdfReader(io.BytesIO(visit_pdf(visit)))
+        record = self.a.record(rows=[{"state": "ok", "many": ["ok"]}])
+        reader = PdfReader(io.BytesIO(record_pdf(record)))
         text = "\n".join(p.extract_text() for p in reader.pages)
         self.assertIn("Activos / 1 / Estado", text)
         self.assertIn("Bueno", text)
         self.assertNotIn("Sin responder", text)
         # Historical values that do not fit the choice type print as stored.
-        legacy = self.a.visit(rows=[{"state": {"x": 1}, "many": [{"y": 2}]}])
-        text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(visit_pdf(legacy))).pages)
+        legacy = self.a.record(rows=[{"state": {"x": 1}, "many": [{"y": 2}]}])
+        text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(record_pdf(legacy))).pages)
         self.assertIn("Activos / 1 / Estado", text)
 
     def test_geometry_roundtrip_all_kinds_nested_and_null(self):
@@ -158,13 +158,13 @@ class FormsAndExportsTests(TestCase):
             ]
         }
         self.a.version.save()
-        visit = self.a.visit(
+        record = self.a.record(
             rows=[{"line": line, "polygon": polygon, "point": {"lat": 4.5, "lon": -74.2}}]
         )
-        blank = self.a.visit()
+        blank = self.a.record()
         blank.lat = blank.lon = None
         blank.save()
-        collection = visit_features(export_visits(self.a.ctx(), Visit.objects.all()))
+        collection = record_features(export_records(self.a.ctx(), Record.objects.all()))
         features = collection["features"]
         self.assertEqual(
             [f["geometry"]["type"] if f["geometry"] else None for f in features],
@@ -173,7 +173,7 @@ class FormsAndExportsTests(TestCase):
         self.assertEqual(features[1]["properties"]["field"], "rows.0.line")
         self.assertEqual(json.loads(to_geojson(collection)), collection)
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "visitas.gpkg"
+            path = Path(directory) / "registros.gpkg"
             path.write_bytes(to_geopackage(collection))
             with sqlite3.connect(path) as connection:
                 self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
@@ -182,7 +182,7 @@ class FormsAndExportsTests(TestCase):
                     connection.execute("PRAGMA application_id").fetchone()[0], 0x47504B47
                 )
                 rows = connection.execute(
-                    "SELECT geom,answers FROM visitas ORDER BY fid"
+                    "SELECT geom,answers FROM registros ORDER BY fid"
                 ).fetchall()
                 self.assertEqual(len(rows), 5)
                 self.assertIsNone(rows[-1][0])
@@ -190,29 +190,29 @@ class FormsAndExportsTests(TestCase):
                 self.assertEqual(struct.unpack("<BIdd", rows[0][0][8:]), (1, 1, -74.08, 4.6))
                 self.assertEqual(struct.unpack("<BII", rows[1][0][8:17]), (1, 2, 2))
                 self.assertEqual(struct.unpack("<BII", rows[2][0][8:17]), (1, 3, 1))
-                self.assertEqual(json.loads(rows[0][1]), visit.answers)
+                self.assertEqual(json.loads(rows[0][1]), record.answers)
             # Windows closes connections on exit, not just the transaction context.
             connection.close()
-        response = self.action("export_gpkg", [visit])
+        response = self.action("export_gpkg", [record])
         self.assertTrue(response.content.startswith(b"SQLite format 3"))
 
     def test_legacy_template_and_multipage_pdf_escape_markup(self):
         self.a.version.definition = {}
         self.a.version.save()
-        visit = self.a.visit(notas="Bogotá <script> & firma " * 800, final="FIN DEL INFORME")
-        data = visit_pdf(visit)
+        record = self.a.record(notas="Bogotá <script> & firma " * 800, final="FIN DEL INFORME")
+        data = record_pdf(record)
         reader = PdfReader(io.BytesIO(data))
         text = "\n".join(p.extract_text() for p in reader.pages)
         self.assertGreater(len(reader.pages), 1)
         self.assertIn("Bogotá <script> & firma", text)
         self.assertIn("FIN DEL INFORME", text)
-        self.assertIn(str(visit.pk), text)
+        self.assertIn(str(record.pk), text)
         root = reader.trailer["/Root"]
         self.assertIsInstance(root, DictionaryObject)
         assert isinstance(root, DictionaryObject)
         self.assertFalse(root.get("/OpenAction"))
-        self.assertEqual(len(visit_features([visit])["features"]), 1)
-        response = self.action("export_pdf", [visit])
+        self.assertEqual(len(record_features([record])["features"]), 1)
+        response = self.action("export_pdf", [record])
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertIn("no-store", response["Cache-Control"])
 

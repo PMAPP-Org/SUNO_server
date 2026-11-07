@@ -7,7 +7,7 @@ ADR-004: aquí vive la lógica; `api.py` solo traduce a HTTP. Los cuatro flujos:
    tamaño, tipo y checksum ya fijados.
 2. **commit** — comprueba contra el objeto **real** y solo entonces registra el
    `Blob`, con un `INSERT ... ON CONFLICT DO NOTHING`.
-3. **download_url** — autoriza por `visit_attachment` (que sí lleva `org_id`) y
+3. **download_url** — autoriza por `record_attachment` (que sí lleva `org_id`) y
    firma un `GET` corto.
 4. **collect_unconfirmed_uploads** — la basura de las subidas que nunca se
    confirmaron. Lógica lista; quien la invoque periódicamente es el Paso 19.
@@ -48,13 +48,13 @@ from suno.attachments.blobstore import (
 )
 from suno.attachments.storage import get_blob_store
 from suno.core.context import RequestContext
-from suno.core.models import Blob, Visit, VisitAttachment
+from suno.core.models import Blob, Record, RecordAttachment
 from suno.core.policies import (
     CODE_NOT_FOUND,
     PolicyDenied,
-    check_read_visit,
+    check_read_record,
     check_upload_attachment,
-    check_write_visit,
+    check_write_record,
 )
 from suno.core.scoping import blob_registry, scoped_qs
 from suno.serverinfo import capabilities as caps
@@ -81,7 +81,7 @@ __all__ = [
 
 
 class AttachmentTooLarge(HttpError):
-    """`413 payload_too_large`: por archivo o por visita.
+    """`413 payload_too_large`: por archivo o por registro.
 
     Se usa el mismo código que el lote de push demasiado grande porque
     significa lo mismo para el cliente: *no reintentes esto tal cual*. La
@@ -210,7 +210,7 @@ def presign(
     sha256: str,
     size: int,
     mime: str,
-    visit_id: uuid.UUID | None = None,
+    record_id: uuid.UUID | None = None,
     store: BlobStore | None = None,
 ) -> PresignResult:
     """URL prefirmada de subida, o `already_present` si el contenido ya existe.
@@ -243,8 +243,8 @@ def presign(
             f"{caps.ATTACHMENT_MAX_BYTES} bytes."
         )
 
-    if visit_id is not None:
-        _check_visit_quota(ctx, visit_id=visit_id, incoming_size=size)
+    if record_id is not None:
+        _check_record_quota(ctx, record_id=record_id, incoming_size=size)
 
     if blob_registry().filter(pk=digest).exists():
         return PresignResult(already_present=True)
@@ -261,38 +261,38 @@ def presign(
     )
 
 
-def _check_visit_quota(ctx: RequestContext, *, visit_id: uuid.UUID, incoming_size: int) -> None:
-    """Cuota acumulada por visita (tarea 5). Autoriza **sobre la visita real**.
+def _check_record_quota(ctx: RequestContext, *, record_id: uuid.UUID, incoming_size: int) -> None:
+    """Cuota acumulada por registro (tarea 5). Autoriza **sobre el registro real**.
 
-    `scoped_qs` es lo que hace que una visita de otra organización sea
+    `scoped_qs` es lo que hace que un registro de otra organización sea
     indistinguible de una inexistente: el filtro por `org_id` va en el punto de
     partida, no encadenado después (RD-11).
     """
-    target = scoped_qs(ctx, Visit).filter(pk=visit_id).first()
+    target = scoped_qs(ctx, Record).filter(pk=record_id).first()
     if target is None:
         raise AttachmentNotFound()
-    check_write_visit(ctx, target)
+    check_write_record(ctx, target)
 
-    used = _committed_bytes_of_visit(ctx, visit_id)
-    if used + incoming_size > caps.ATTACHMENT_MAX_BYTES_PER_VISIT:
+    used = _committed_bytes_of_record(ctx, record_id)
+    if used + incoming_size > caps.ATTACHMENT_MAX_BYTES_PER_RECORD:
         raise AttachmentTooLarge(
-            f"Visit attachments would reach {used + incoming_size} bytes, over the "
-            f"per-visit limit of {caps.ATTACHMENT_MAX_BYTES_PER_VISIT} bytes."
+            f"Record attachments would reach {used + incoming_size} bytes, over the "
+            f"per-record limit of {caps.ATTACHMENT_MAX_BYTES_PER_RECORD} bytes."
         )
 
 
-def _committed_bytes_of_visit(ctx: RequestContext, visit_id: uuid.UUID) -> int:
-    """Bytes ya confirmados de una visita: adjuntos vivos con blob registrado.
+def _committed_bytes_of_record(ctx: RequestContext, record_id: uuid.UUID) -> int:
+    """Bytes ya confirmados de un registro: adjuntos vivos con blob registrado.
 
-    Dos consultas y no un `JOIN` porque `visit_attachment.sha256` es una FK
+    Dos consultas y no un `JOIN` porque `record_attachment.sha256` es una FK
     **sin constraint física** (ver el docstring del modelo): un adjunto puede
     referenciar un blob que todavía no existe, y un `JOIN` del ORM sobre esa
     relación mezclaría "aún no subido" con "no cuenta". Contando en dos pasos,
     lo pendiente simplemente no suma — que es la semántica correcta.
     """
     pending = (
-        scoped_qs(ctx, VisitAttachment)
-        .filter(visit_id=visit_id, deleted_at__isnull=True)
+        scoped_qs(ctx, RecordAttachment)
+        .filter(record_id=record_id, deleted_at__isnull=True)
         .values_list("blob_id", flat=True)
     )
     digests = list(pending)
@@ -435,10 +435,10 @@ def download_url(
     """URL prefirmada de descarga, **solo tras comprobar permisos** (ADR-007 punto 6).
 
     La autorización no se hace sobre `blob` —que no tiene `org_id` y no podría
-    responder la pregunta— sino sobre `visit_attachment`, que sí lo tiene: se
+    responder la pregunta— sino sobre `record_attachment`, que sí lo tiene: se
     exige que exista **al menos un adjunto vivo de la organización del
     solicitante** que referencie este contenido, y que el solicitante pueda leer
-    su visita. Es el camino que el docstring de `Blob` anticipaba desde el Paso
+    su registro. Es el camino que el docstring de `Blob` anticipaba desde el Paso
     5 y el que `scoping.blob_registry()` obliga a recorrer.
 
     El bucket nunca es público: sin pasar por aquí no hay forma de llegar a los
@@ -447,19 +447,19 @@ def download_url(
     digest = normalize_sha256(sha256)
 
     attachment = (
-        scoped_qs(ctx, VisitAttachment)
+        scoped_qs(ctx, RecordAttachment)
         .filter(blob_id=digest, deleted_at__isnull=True)
-        .select_related("visit")
+        .select_related("record")
         .first()
     )
     if attachment is None:
         raise AttachmentNotFound()
-    check_read_visit(ctx, attachment.visit)
+    check_read_record(ctx, attachment.record)
 
     blob = blob_registry().filter(pk=digest).first()
     if blob is None:
         # El adjunto existe pero su blob aún no se ha confirmado: el contrato
-        # admite ese estado (una visita se acepta con adjuntos pendientes), y
+        # admite ese estado (un registro se acepta con adjuntos pendientes), y
         # la respuesta correcta es la misma `404` — todavía no hay nada que
         # descargar.
         raise AttachmentNotFound()

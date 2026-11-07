@@ -28,7 +28,7 @@ __all__ = [
     "commit_url",
     "digest_of",
     "download_url",
-    "make_visit",
+    "make_record",
     "presign_body",
 ]
 
@@ -69,7 +69,7 @@ def digest_of(data: bytes) -> str:
 def presign_body(
     data: bytes = JPEG_BYTES,
     mime: str = JPEG_MIME,
-    visit_id: uuid.UUID | None = None,
+    record_id: uuid.UUID | None = None,
     **overrides: Any,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
@@ -77,8 +77,8 @@ def presign_body(
         "size": len(data),
         "mime": mime,
     }
-    if visit_id is not None:
-        body["visit_id"] = str(visit_id)
+    if record_id is not None:
+        body["record_id"] = str(record_id)
     body.update(overrides)
     return body
 
@@ -91,21 +91,21 @@ def download_url(sha256: str) -> str:
     return f"/v1/attachments/{sha256}/url"
 
 
-def make_visit(scenario: Scenario, visit_id: uuid.UUID | None = None):
-    """Una visita mínima de la organización del escenario, escrita directamente.
+def make_record(scenario: Scenario, record_id: uuid.UUID | None = None):
+    """Un registro mínima de la organización del escenario, escrita directamente.
 
     Se crea con el ORM en vez de por `POST /v1/sync/push` a propósito: lo que
     estos tests ejercitan es el carril de adjuntos, y hacerlo depender del
     formato del push convertiría cualquier cambio de aquel en un fallo de aquí.
     """
-    from suno.core.models import Device, Visit
+    from suno.core.models import Device, Record
 
     # El `login()` del escenario ya registró el dispositivo (`_register_device`
     # de authn/services.py), así que aquí se recupera; crearlo otra vez con
     # valores inventados haría divergir la fixture del alta real.
     device = Device.objects.get(pk=scenario.device_id)
-    return Visit.objects.create(
-        id=visit_id or uuid.uuid4(),
+    return Record.objects.create(
+        id=record_id or uuid.uuid4(),
         org=scenario.org,
         template_version=scenario.template_version,
         answers={"altura_cm": 10},

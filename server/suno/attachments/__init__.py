@@ -1,8 +1,8 @@
 """Adjuntos: puerto `BlobStore`, presign/commit verificado y descarga (Paso 17, ADR-007).
 
 **Paquete Python, no app de Django** — mismo criterio que `suno/forms/`
-(Paso 20): los modelos `Blob` y `VisitAttachment` ya viven en
-`core/models/visit.py` (Paso 5) y no se añade ninguna tabla nueva, así que no
+(Paso 20): los modelos `Blob` y `RecordAttachment` ya viven en
+`core/models/record.py` (Paso 5) y no se añade ninguna tabla nueva, así que no
 hay migraciones que registrar ni `AppConfig` que instalar. Lo único que este
 paquete aporta a `INSTALLED_APPS` sería ruido.
 

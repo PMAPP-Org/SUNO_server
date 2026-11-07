@@ -1,4 +1,4 @@
-"""Exportación de visitas a CSV y Excel (Paso 24).
+"""Exportación de registros a CSV y Excel (Paso 24).
 
 - **Síncrona y con límite**: hasta [MAX_EXPORT_ROWS] filas. Más que eso no se
   trunca en silencio ni se deja correr hasta el timeout: se rechaza con un
@@ -10,7 +10,7 @@
   interpretaría Excel como fórmula al abrir el archivo (`=HYPERLINK(...)`
   exfiltrando datos, por ejemplo). Esas celdas se prefijan con `'` y se
   exportan como texto. Los números se exportan como números.
-- **Columnas**: los datos de la visita, la última revisión y una columna por
+- **Columnas**: los datos del registro, la última revisión y una columna por
   respuesta (`answers.<clave>`), en orden estable.
 - **Excel sin dependencias nuevas**: `.xlsx` es un ZIP con XML. Se escribe la
   hoja mínima válida a mano en vez de añadir `openpyxl` (otra dependencia en
@@ -32,17 +32,17 @@ from typing import Any
 from django.db.models import OuterRef, QuerySet, Subquery
 
 from suno.core.context import RequestContext
-from suno.core.models import Visit, VisitReview
+from suno.core.models import Record, RecordReview
 from suno.core.scoping import scoped_qs
 
 __all__ = [
     "MAX_EXPORT_ROWS",
     "ExportTooLarge",
-    "exportable_visits",
+    "exportable_records",
     "safe_cell",
     "to_csv",
     "to_xlsx",
-    "visit_table",
+    "record_table",
 ]
 
 MAX_EXPORT_ROWS = 10_000
@@ -81,7 +81,7 @@ _BASE_COLUMNS = (
 class ExportTooLarge(Exception):
     def __init__(self, count: int) -> None:
         super().__init__(
-            f"La selección tiene {count} visitas y el máximo exportable es {MAX_EXPORT_ROWS}. "
+            f"La selección tiene {count} registros y el máximo exportable es {MAX_EXPORT_ROWS}. "
             "Filtra por fecha, plantilla u organización y vuelve a exportar."
         )
         self.count = count
@@ -101,8 +101,8 @@ def safe_cell(value: Any) -> Any:
     return f"'{text}" if text.startswith(_FORMULA_PREFIXES) else text
 
 
-def exportable_visits(ctx: RequestContext, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
-    """Las visitas vivas de [queryset] **de la organización de [ctx]** (las de
+def exportable_records(ctx: RequestContext, queryset: QuerySet[Record]) -> QuerySet[Record]:
+    """Los registros vivos de [queryset] **de la organización de [ctx]** (las de
     otra se ignoran: nunca salen en un archivo ajeno; las borradas tampoco),
     en orden estable. Lanza [ExportTooLarge]. Común a todos los formatos."""
     queryset = queryset.filter(org_id=ctx.org_id, deleted_at__isnull=True)
@@ -112,37 +112,37 @@ def exportable_visits(ctx: RequestContext, queryset: QuerySet[Visit]) -> QuerySe
     return queryset.select_related("template_version", "created_by").order_by("captured_at", "id")
 
 
-def visit_table(
-    ctx: RequestContext, queryset: QuerySet[Visit]
+def record_table(
+    ctx: RequestContext, queryset: QuerySet[Record]
 ) -> tuple[list[str], list[list[Any]]]:
-    """Cabecera y filas de [exportable_visits]. Lanza [ExportTooLarge]."""
+    """Cabecera y filas de [exportable_records]. Lanza [ExportTooLarge]."""
     latest_review = (
-        scoped_qs(ctx, VisitReview)
-        .filter(visit=OuterRef("pk"))
+        scoped_qs(ctx, RecordReview)
+        .filter(record=OuterRef("pk"))
         .order_by("-created_at")
         .values("status")[:1]
     )
-    visits = list(exportable_visits(ctx, queryset).annotate(review_status=Subquery(latest_review)))
-    answer_keys = sorted({key for visit in visits for key in (visit.answers or {})})
+    records = list(exportable_records(ctx, queryset).annotate(review_status=Subquery(latest_review)))
+    answer_keys = sorted({key for record in records for key in (record.answers or {})})
     header = [*_BASE_COLUMNS, *(f"answers.{key}" for key in answer_keys)]
     rows = [
         [
             safe_cell(value)
             for value in (
-                str(visit.pk),
-                visit.captured_at.isoformat(),
-                visit.template_version.name or str(visit.template_version.template_id),
-                visit.template_version.version_number,
-                visit.created_by.get_username(),
-                str(visit.device_id),
-                visit.lat,
-                visit.lon,
-                visit.accuracy_m,
-                visit.review_status,
-                *((visit.answers or {}).get(key) for key in answer_keys),
+                str(record.pk),
+                record.captured_at.isoformat(),
+                record.template_version.name or str(record.template_version.template_id),
+                record.template_version.version_number,
+                record.created_by.get_username(),
+                str(record.device_id),
+                record.lat,
+                record.lon,
+                record.accuracy_m,
+                record.review_status,
+                *((record.answers or {}).get(key) for key in answer_keys),
             )
         ]
-        for visit in visits
+        for record in records
     ]
     return header, rows
 
@@ -175,7 +175,7 @@ def _xlsx_cell(ref: str, value: Any) -> str:
 
 
 def to_xlsx(
-    header: Sequence[str], rows: Iterable[Sequence[Any]], *, sheet_name: str = "Visitas"
+    header: Sequence[str], rows: Iterable[Sequence[Any]], *, sheet_name: str = "Registros"
 ) -> bytes:
     """Libro `.xlsx` mínimo válido: una hoja (`sheet_name`), cadenas en línea y números."""
     name = _xml_text(sheet_name).replace('"', "&quot;")

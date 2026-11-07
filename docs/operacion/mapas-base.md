@@ -1,6 +1,6 @@
 # Mapas base offline
 
-Los agentes ven en el mapa de la app sus visitas y asignaciones sobre un **mapa base que se descarga una vez y funciona sin red**. Cada organización tiene sus propios paquetes. Los importa un administrador desde el servidor y los teléfonos los descargan con wifi.
+Los agentes ven en el mapa de la app sus registros y asignaciones sobre un **mapa base que se descarga una vez y funciona sin red**. Cada organización tiene sus propios paquetes. Los importa un administrador desde el servidor y los teléfonos los descargan con wifi.
 
 ## Qué archivo sirve
 

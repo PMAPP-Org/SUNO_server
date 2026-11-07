@@ -15,7 +15,7 @@ mínimas:
   publicada.
 - `Assignment`: la planificación completa (rutas, reasignación, estados)
   **no es alcance del MVP estricto**. Este modelo es el placeholder que el
-  brief autoriza: existe para que `Visit.assignment_id` sea una FK real y
+  brief autoriza: existe para que `Record.assignment_id` sea una FK real y
   para que el pull pueda entregar asignaciones, nada más. Ampliarlo es una
   migración aditiva, no un rediseño.
 """
@@ -65,8 +65,8 @@ class FormTemplate(OrgScopedModel):
 class FormTemplateVersion(SyncedModel):
     """Versión **inmutable** de una plantilla (ADR-012).
 
-    Cada visita referencia la versión exacta usada, de modo que las
-    visitas históricas siguen siendo interpretables tras cambios de
+    Cada registro referencia la versión exacta usada, de modo que las
+    registros históricos siguen siendo interpretables tras cambios de
     formulario. "Inmutable" es aquí una invariante de aplicación (no se
     reescribe una versión publicada, se publica otra): a diferencia de
     `Blob`, la fila sí participa del protocolo de sync y necesita
@@ -127,7 +127,7 @@ class FormTemplateVersion(SyncedModel):
         2. Una versión **ya publicada** no admite cambios en su definición ni
            en su identidad. Corregir un formulario es publicar otra versión;
            reescribir una versión en uso reinterpretaría en silencio las
-           visitas históricas que la referencian, que es exactamente lo que
+           registros históricos que la referencian, que es exactamente lo que
            ADR-012 existe para impedir.
 
         El import va dentro de la función a propósito: `suno.forms`
@@ -172,14 +172,14 @@ class FormTemplateVersion(SyncedModel):
 
 
 class Assignment(SyncedModel):
-    """Trabajo planificado que origina visitas (placeholder mínimo del MVP).
+    """Trabajo planificado que origina registros (placeholder mínimo del MVP).
 
     Campos tomados 1:1 del contrato `components.schemas.Assignment`. El
     cliente no la modifica: se descarga por el pull.
     """
 
     # UUID de servidor: las asignaciones las crea el back-office, no el
-    # dispositivo (a diferencia de `Visit`/`VisitAttachment`).
+    # dispositivo (a diferencia de `Record`/`RecordAttachment`).
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     template_version = models.ForeignKey(
         FormTemplateVersion,
@@ -195,7 +195,7 @@ class Assignment(SyncedModel):
     )
     title = models.CharField(max_length=256, null=True, blank=True)
     scheduled_for = models.DateTimeField(null=True, blank=True, default=None)
-    # Ubicación como columnas planas, igual que en `Visit` (ADR-005).
+    # Ubicación como columnas planas, igual que en `Record` (ADR-005).
     lat = models.FloatField(null=True, blank=True, default=None, validators=lat_validators())
     lon = models.FloatField(null=True, blank=True, default=None, validators=lon_validators())
 

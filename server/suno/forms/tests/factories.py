@@ -59,7 +59,7 @@ INSPECCION_V1: dict[str, Any] = {
 
 #: La versión siguiente de la **misma** plantilla: renombra el campo de altura
 #: a `altura_m` y hace obligatorio el estado. Sirve para el test de
-#: retrocompatibilidad: una visita capturada con `INSPECCION_V1` no cumple esta
+#: retrocompatibilidad: un registro capturado con `INSPECCION_V1` no cumple esta
 #: definición, y eso da igual — se valida contra la suya.
 INSPECCION_V2: dict[str, Any] = {
     "dsl": "suno/form@1",

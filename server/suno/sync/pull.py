@@ -16,11 +16,11 @@ módulo porque comparten la misma tabla de entidades sincronizables
   hace que "orden estricto ascendente de `change_seq`" (contrato) sea cierto
   aunque las cuatro entidades vivan en tablas distintas.
 
-**Autorización**: la misma que el push (`can_read_visit`/`check_read_visit`,
+**Autorización**: la misma que el push (`can_read_record`/`check_read_record`,
 `core/policies.py`) — "cualquier miembro de la organización", ya documentado
 ahí explícitamente para el pull ("el pull de sync entrega a cada dispositivo
 el conjunto de datos de su organización"). No hace falta una política nueva:
-las cuatro entidades del pull son visibles al mismo nivel que `visit`, no hay
+las cuatro entidades del pull son visibles al mismo nivel que `record`, no hay
 un control más fino que aplicar en el MVP.
 """
 
@@ -38,10 +38,10 @@ from suno.core.models import (
     Assignment,
     FormTemplateVersion,
     SyncedModel,
-    Visit,
-    VisitAttachment,
+    Record,
+    RecordAttachment,
 )
-from suno.core.policies import check_read_visit
+from suno.core.policies import check_read_record
 from suno.core.scoping import get_app_user, get_organization, scoped_qs
 from suno.sync.changeseq import highest_change_seq
 from suno.sync.cursor import encode_cursor
@@ -55,8 +55,8 @@ __all__ = ["CursorExpired", "PullPage", "bootstrap_state", "pull_page"]
 #: `tests/test_pull.py::EntityCoverageTests` lo verifica, igual que
 #: `test_changeseq.py` ya hace para `SYNCED_MODELS` por su cuenta.
 _ENTITY_MODELS: tuple[tuple[str, type[SyncedModel]], ...] = (
-    ("visit", Visit),
-    ("visit_attachment", VisitAttachment),
+    ("record", Record),
+    ("record_attachment", RecordAttachment),
     ("assignment", Assignment),
     ("form_template_version", FormTemplateVersion),
 )
@@ -103,7 +103,7 @@ def bootstrap_state(ctx: RequestContext) -> dict[str, Any]:
     una copia parcial usa `GET /v1/sync/pull` desde el `cursor` que este
     bootstrap devuelve, no el bootstrap otra vez.
     """
-    check_read_visit(ctx, _OrgResource(ctx.org_id))
+    check_read_record(ctx, _OrgResource(ctx.org_id))
 
     organization = get_organization(ctx)
     user = get_app_user(ctx)
@@ -131,8 +131,8 @@ def bootstrap_state(ctx: RequestContext) -> dict[str, Any]:
         },
         "form_template_versions": live_by_entity["form_template_version"],
         "assignments": live_by_entity["assignment"],
-        "visits": live_by_entity["visit"],
-        "visit_attachments": live_by_entity["visit_attachment"],
+        "records": live_by_entity["record"],
+        "record_attachments": live_by_entity["record_attachment"],
         "has_more": False,
     }
 
@@ -140,8 +140,8 @@ def bootstrap_state(ctx: RequestContext) -> dict[str, Any]:
 def _live_rows(ctx: RequestContext, entity: str, model: type[SyncedModel]) -> list[dict[str, Any]]:
     """Las filas vivas de `model` (`deleted_at IS NULL`), como `data` de su `*Record`.
 
-    El bootstrap emite `BootstrapResponse.visits`/`.assignments`/... como
-    arrays del tipo de entidad puro (`Visit`, `Assignment`…), no de
+    El bootstrap emite `BootstrapResponse.records`/`.assignments`/... como
+    arrays del tipo de entidad puro (`Record`, `Assignment`…), no de
     `EntityRecord` — el array ya dice de qué tipo es cada fila por su clave,
     envolver cada elemento sería redundante. Se reutiliza el mismo
     `RECORD_BUILDERS` que el pull y se descarta el envoltorio (`{entity,
@@ -149,7 +149,7 @@ def _live_rows(ctx: RequestContext, entity: str, model: type[SyncedModel]) -> li
     que podría divergir del primero. `entity` se recibe explícito —no se
     infiere de `model._meta.model_name`— porque ese nombre no coincide letra
     a letra con la clave del contrato para dos de las cuatro entidades
-    (`visitattachment`/`visit_attachment`, `formtemplateversion`/
+    (`recordattachment`/`record_attachment`, `formtemplateversion`/
     `form_template_version`).
     """
     builder = RECORD_BUILDERS[entity]
@@ -212,11 +212,11 @@ def pull_page(ctx: RequestContext, *, cursor_value: int, limit: int) -> PullPage
     argumento, la respuesta exacta a `has_more` — no una aproximación.
 
     `change_seq` es un contador **único por organización** entre las cuatro
-    entidades (`changeseq.py`: "el push asignaría `MAX(visit.change_seq)+1`,
+    entidades (`changeseq.py`: "el push asignaría `MAX(record.change_seq)+1`,
     podría repetir un número ya usado por un `assignment`"), así que dos filas
     de tablas distintas nunca empatan y el orden de la mezcla es total.
     """
-    check_read_visit(ctx, _OrgResource(ctx.org_id))
+    check_read_record(ctx, _OrgResource(ctx.org_id))
     if cursor_is_expired(ctx, cursor_value):
         raise CursorExpired
 

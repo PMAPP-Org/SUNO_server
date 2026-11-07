@@ -1,4 +1,4 @@
-"""Push de visitas con cantidades (costos, pieza 4). Requiere PostgreSQL."""
+"""Push de registros con cantidades (costos, pieza 4). Requiere PostgreSQL."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from django.utils import timezone
 from suno.authn.tests.factories import make_org, make_user
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import MERGED_ROWS, SPLIT_ROWS, V1_ROWS, V2_ROWS
-from suno.core.admin import VisitAdmin
+from suno.core.admin import RecordAdmin
 from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     AppUser,
@@ -24,9 +24,9 @@ from suno.core.models import (
     Role,
     Task,
     TaskResponsible,
-    Visit,
-    VisitReview,
-    VisitReviewStatus,
+    Record,
+    RecordReview,
+    RecordReviewStatus,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -38,7 +38,7 @@ from suno.projects.importer import apply_import, stage_import
 from suno.projects.tests.samples import v1
 from suno.sync.cursor import CURSOR_ZERO
 
-from .factories import build_scenario, create_op, pull, push, update_op, visit_of
+from .factories import build_scenario, create_op, pull, push, update_op, record_of
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -94,10 +94,10 @@ class QuantityPushTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()["results"][0]
 
-    def create(self, *rows: dict[str, Any], visit_id: uuid.UUID | None = None) -> dict[str, Any]:
+    def create(self, *rows: dict[str, Any], record_id: uuid.UUID | None = None) -> dict[str, Any]:
         return create_op(
             self.scenario,
-            visit_id=visit_id,
+            record_id=record_id,
             task_id=str(self.task(3).pk),
             progress_pct=None,
             quantities=list(rows),
@@ -109,19 +109,19 @@ class QuantityPushTests(TestCase):
         self.assertEqual(result["error"]["details"], {"field": "quantities", "reason": reason})
 
     def test_planned_item_with_refined_location(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self.push_one(
             self.create(
-                self.row(self.concrete, 4.5, location_id=str(self.pr.pk)), visit_id=visit_id
+                self.row(self.concrete, 4.5, location_id=str(self.pr.pk)), record_id=record_id
             )
         )
         self.assertEqual(result["status"], "applied", result)
-        visit = visit_of(visit_id)
-        self.assertEqual(visit.quantities[0]["quantity"], "4.5000")
-        self.assertEqual(visit.quantities[0]["location_id"], str(self.pr.pk))
-        self.assertIsNone(visit.progress_pct)
+        record = record_of(record_id)
+        self.assertEqual(record.quantities[0]["quantity"], "4.5000")
+        self.assertEqual(record.quantities[0]["location_id"], str(self.pr.pk))
+        self.assertIsNone(record.progress_pct)
         rows = pull(self.scenario, CURSOR_ZERO).json()["rows"]
-        data = next(r["data"] for r in rows if r["entity"] == "visit")
+        data = next(r["data"] for r in rows if r["entity"] == "record")
         self.assertEqual(
             data["quantities"],
             [
@@ -143,18 +143,18 @@ class QuantityPushTests(TestCase):
         )
         self.assertEqual(result["status"], "applied", result)
 
-    def warnings(self, visit_id: uuid.UUID) -> str:
-        return str(VisitAdmin(Visit, None).quantities_pretty(visit_of(visit_id)))
+    def warnings(self, record_id: uuid.UUID) -> str:
+        return str(RecordAdmin(Record, None).quantities_pretty(record_of(record_id)))
 
     def test_location_of_the_project_outside_the_task_is_accepted_and_flagged(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self.push_one(
             self.create(
-                self.row(self.concrete, 1, location_id=str(self.other.pk)), visit_id=visit_id
+                self.row(self.concrete, 1, location_id=str(self.other.pk)), record_id=record_id
             )
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
 
     def test_task_relocated_after_the_capture(self) -> None:
         """Se capturó en Tramo 2 > PR 1 y la oficina movió la tarea a Tramo 3: se acepta
@@ -162,23 +162,23 @@ class QuantityPushTests(TestCase):
         task = self.task(3)
         task.location = self.other
         task.save(update_fields=["location"])
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
 
     def test_task_location_cleared_after_the_capture(self) -> None:
         task = self.task(3)
         task.location = None
         task.save(update_fields=["location"])
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(visit_id))
+        self.assertIn("ubicación fuera de la ubicación actual de la tarea", self.warnings(record_id))
         # Un nodo de otro proyecto sigue siendo un error estructural.
         project, ctx = self._other_project()
         save_levels(ctx, project, [LevelSpec("Tramo")])
@@ -187,11 +187,11 @@ class QuantityPushTests(TestCase):
         self.assertRejected(result, "location_outside_task")
 
     def test_location_inside_the_task_is_not_flagged(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         self.push_one(
-            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), visit_id=visit_id)
+            self.create(self.row(self.concrete, 1, location_id=str(self.pr.pk)), record_id=record_id)
         )
-        self.assertNotIn("ubicación fuera", self.warnings(visit_id))
+        self.assertNotIn("ubicación fuera", self.warnings(record_id))
 
     def test_unknown_location(self) -> None:
         result = self.push_one(
@@ -207,15 +207,15 @@ class QuantityPushTests(TestCase):
         """La nota la exige la app al capturar (pieza 4b); el servidor no pierde lo
         registrado sin ella: lo acepta y la revisión lo ve resaltado."""
         unplanned, negative = uuid.uuid4(), uuid.uuid4()
-        result = self.push_one(self.create(self.row(self.steel, 3), visit_id=unplanned))
+        result = self.push_one(self.create(self.row(self.steel, 3), record_id=unplanned))
         self.assertEqual(result["status"], "applied", result)
         self.assertIn("no planeado y sin nota", self.warnings(unplanned))
-        result = self.push_one(self.create(self.row(self.concrete, -1), visit_id=negative))
+        result = self.push_one(self.create(self.row(self.concrete, -1), record_id=negative))
         self.assertEqual(result["status"], "applied", result)
         self.assertIn("ajuste negativo sin nota", self.warnings(negative))
         noted = uuid.uuid4()
         result = self.push_one(
-            self.create(self.row(self.steel, 3, note="no estaba en el plan"), visit_id=noted)
+            self.create(self.row(self.steel, 3, note="no estaba en el plan"), record_id=noted)
         )
         self.assertEqual(result["status"], "applied", result)
         self.assertNotIn("sin nota", self.warnings(noted))
@@ -224,25 +224,25 @@ class QuantityPushTests(TestCase):
         """El 2.1 estaba en el plan cuando se capturó sin nota; la oficina lo quitó antes
         de la sincronización."""
         QuantityPlan.objects.filter(task=self.task(3), item=self.concrete).delete()
-        visit_id = uuid.uuid4()
-        result = self.push_one(self.create(self.row(self.concrete, 4), visit_id=visit_id))
+        record_id = uuid.uuid4()
+        result = self.push_one(self.create(self.row(self.concrete, 4), record_id=record_id))
         self.assertEqual(result["status"], "applied", result)
-        self.assertIn("2.1", self.warnings(visit_id))
-        self.assertIn("no planeado y sin nota", self.warnings(visit_id))
+        self.assertIn("2.1", self.warnings(record_id))
+        self.assertIn("no planeado y sin nota", self.warnings(record_id))
 
-    def test_validated_visit_quantities_cannot_change(self) -> None:
-        visit_id = uuid.uuid4()
-        self.push_one(self.create(self.row(self.concrete, 4), visit_id=visit_id))
-        VisitReview.objects.create(
+    def test_validated_record_quantities_cannot_change(self) -> None:
+        record_id = uuid.uuid4()
+        self.push_one(self.create(self.row(self.concrete, 4), record_id=record_id))
+        RecordReview.objects.create(
             org=self.scenario.org,
-            visit=visit_of(visit_id),
-            status=str(VisitReviewStatus.APPROVED),
+            record=record_of(record_id),
+            status=str(RecordReviewStatus.APPROVED),
             reviewer=self.admin,
         )
-        version = visit_of(visit_id).version
+        version = record_of(record_id).version
         result = self.push_one(
             update_op(
-                visit_id,
+                record_id,
                 version,
                 task_id=str(self.task(3).pk),
                 progress_pct=None,
@@ -251,13 +251,13 @@ class QuantityPushTests(TestCase):
         )
         self.assertEqual(result["status"], "rejected", result)
         self.assertEqual(
-            result["error"]["details"], {"field": "quantities", "reason": "visit_validated"}
+            result["error"]["details"], {"field": "quantities", "reason": "record_validated"}
         )
-        self.assertEqual(visit_of(visit_id).quantities[0]["quantity"], "4.0000")
+        self.assertEqual(record_of(record_id).quantities[0]["quantity"], "4.0000")
 
         # Mandar las mismas cantidades no es un cambio.
         same = update_op(
-            visit_id,
+            record_id,
             version,
             task_id=str(self.task(3).pk),
             progress_pct=None,
@@ -265,37 +265,37 @@ class QuantityPushTests(TestCase):
         )
         self.assertEqual(self.push_one(same)["status"], "applied")
 
-    def test_validated_visit_quantities_cannot_be_cleared(self) -> None:
+    def test_validated_record_quantities_cannot_be_cleared(self) -> None:
         """Un cliente anterior manda tarea y % sin `quantities`: eso vaciaría la lista."""
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         op = create_op(
             self.scenario,
-            visit_id=visit_id,
+            record_id=record_id,
             task_id=str(self.task(3).pk),
             progress_pct=30,
             quantities=[self.row(self.concrete, 4)],
         )
         self.push_one(op)
-        VisitReview.objects.create(
+        RecordReview.objects.create(
             org=self.scenario.org,
-            visit=visit_of(visit_id),
-            status=str(VisitReviewStatus.APPROVED),
+            record=record_of(record_id),
+            status=str(RecordReviewStatus.APPROVED),
             reviewer=self.admin,
         )
-        version = visit_of(visit_id).version
+        version = record_of(record_id).version
         result = self.push_one(
-            update_op(visit_id, version, task_id=str(self.task(3).pk), progress_pct=30)
+            update_op(record_id, version, task_id=str(self.task(3).pk), progress_pct=30)
         )
         self.assertEqual(result["status"], "rejected", result)
-        self.assertEqual(result["error"]["details"]["reason"], "visit_validated")
+        self.assertEqual(result["error"]["details"]["reason"], "record_validated")
 
-    def test_unreviewed_visit_can_be_corrected(self) -> None:
-        visit_id = uuid.uuid4()
-        self.push_one(self.create(self.row(self.concrete, 4), visit_id=visit_id))
-        version = visit_of(visit_id).version
+    def test_unreviewed_record_can_be_corrected(self) -> None:
+        record_id = uuid.uuid4()
+        self.push_one(self.create(self.row(self.concrete, 4), record_id=record_id))
+        version = record_of(record_id).version
         result = self.push_one(
             update_op(
-                visit_id,
+                record_id,
                 version,
                 task_id=str(self.task(3).pk),
                 progress_pct=None,
@@ -303,19 +303,19 @@ class QuantityPushTests(TestCase):
             )
         )
         self.assertEqual(result["status"], "applied", result)
-        self.assertEqual(visit_of(visit_id).quantities[0]["quantity"], "6.0000")
+        self.assertEqual(record_of(record_id).quantities[0]["quantity"], "6.0000")
 
     def test_update_with_the_pair_alone_clears_the_quantities(self) -> None:
-        visit_id = uuid.uuid4()
-        self.push_one(self.create(self.row(self.concrete, 4), visit_id=visit_id))
-        version = visit_of(visit_id).version
+        record_id = uuid.uuid4()
+        self.push_one(self.create(self.row(self.concrete, 4), record_id=record_id))
+        version = record_of(record_id).version
         result = self.push_one(
-            update_op(visit_id, version, task_id=str(self.task(3).pk), progress_pct=25)
+            update_op(record_id, version, task_id=str(self.task(3).pk), progress_pct=25)
         )
         self.assertEqual(result["status"], "applied", result)
-        visit = visit_of(visit_id)
-        self.assertEqual(visit.quantities, [])
-        self.assertEqual(visit.progress_pct, Decimal("25.00"))
+        record = record_of(record_id)
+        self.assertEqual(record.quantities, [])
+        self.assertEqual(record.progress_pct, Decimal("25.00"))
 
     def _other_project(self, org: Organization | None = None) -> tuple[Project, Any]:
         """Otro proyecto con el presupuesto `V1_ROWS` aplicado, y su contexto."""
@@ -404,15 +404,15 @@ class QuantityPushTests(TestCase):
     def test_repeated_item_and_location_are_kept_as_separate_rows(self) -> None:
         """Dos filas con el mismo ítem y ubicación se aceptan tal cual: no se suman ni se
         deduplican al guardar; lo ejecutado las suma al leer."""
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self.push_one(
             self.create(
                 self.row(self.concrete, 1, location_id=str(self.pr.pk)),
                 self.row(self.concrete, 2, location_id=str(self.pr.pk)),
-                visit_id=visit_id,
+                record_id=record_id,
             )
         )
         self.assertEqual(result["status"], "applied", result)
-        rows = visit_of(visit_id).quantities
+        rows = record_of(record_id).quantities
         self.assertEqual([r["quantity"] for r in rows], ["1.0000", "2.0000"])
         self.assertEqual({r["location_id"] for r in rows}, {str(self.pr.pk)})

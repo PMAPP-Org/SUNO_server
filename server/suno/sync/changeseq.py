@@ -33,9 +33,9 @@ cualquier transacción anterior de la misma organización ya commiteó —soltó
 lock al hacerlo— y sus filas son visibles para la sentencia que lo lee.
 
 **Por qué el `MAX` recorre todas las entidades sincronizadas y no solo
-`visit`.** El cursor de pull es uno solo por organización y ordena filas de
+`record`.** El cursor de pull es uno solo por organización y ordena filas de
 las cuatro entidades juntas (contrato `PullResponse.rows`, "orden estricto
-ascendente de `change_seq`"). Si el push asignara `MAX(visit.change_seq) + 1`,
+ascendente de `change_seq`"). Si el push asignara `MAX(record.change_seq) + 1`,
 podría repetir un número ya usado por un `assignment`, y una página del pull
 que cortara justo ahí se saltaría una de las dos filas empatadas.
 
@@ -60,7 +60,7 @@ import uuid
 from django.db import connection, models, transaction
 
 from suno.core.context import RequestContext
-from suno.core.models import Assignment, FormTemplateVersion, Visit, VisitAttachment
+from suno.core.models import Assignment, FormTemplateVersion, Record, RecordAttachment
 from suno.core.scoping import scoped_qs
 
 __all__ = [
@@ -78,8 +78,8 @@ __all__ = [
 #: obligue a pasar por aquí; `tests/test_changeseq.py` comprueba que la lista
 #: coincide con las subclases reales, así que la fricción no puede olvidarse.
 SYNCED_MODELS: tuple[type[models.Model], ...] = (
-    Visit,
-    VisitAttachment,
+    Record,
+    RecordAttachment,
     Assignment,
     FormTemplateVersion,
 )

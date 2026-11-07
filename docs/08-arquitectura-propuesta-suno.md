@@ -15,7 +15,7 @@ SUNO se construye como **un único codebase móvil en Flutter/Dart** (Android + 
 
 La diferencia arquitectónica más importante respecto a la referencia es que **SUNO no encola la aplicación de los cambios**. QFieldCloud debe hacerlo porque aplicar un delta significa abrir un proyecto QGIS con un motor SIG headless dentro de un contenedor efímero ([02 §4](02-arquitectura-backend-qfieldcloud.md#4-procesamiento-asíncrono--jobs-sin-celery)); en SUNO aplicar un cambio es un `INSERT ... ON CONFLICT` sobre Postgres. Por lo tanto el push se resuelve **síncrona y transaccionalmente dentro de la propia request**, devolviendo el estado por operación (`applied` / `conflict` / `rejected` / `duplicate`) **y la fila autoritativa del servidor cuando hay conflicto**. Esto elimina de un plumazo: el job `DELTA_APPLY`, la máquina de estados `PENDING→QUEUED→STARTED`, el polling con backoff del cliente, la re-descarga completa del proyecto tras un conflicto, y toda la clase de bugs de "job atascado en QUEUED" documentada en [07 § jobs stuck QUEUED](07-hallazgos-revision-codigo.md). La cola sobre Postgres (`SELECT ... FOR UPDATE SKIP LOCKED`) **sí** se conserva, pero solo para lo que realmente es asíncrono: generación de PDF/reportes, exportaciones masivas, notificaciones y webhooks.
 
-En seguridad, los 16 hallazgos de [07-hallazgos-revision-codigo.md](07-hallazgos-revision-codigo.md) se tratan como **restricciones de diseño de primera clase** (§3, tabla RD-01…RD-16), no como notas al margen: validación TLS estricta siempre y sin excepción para self-hosted (pinning con consentimiento explícito), tokens de refresco almacenados **hasheados** con patrón selector/verificador, roles resueltos **una vez por request** en lugar de dentro del loop de operaciones, adjuntos **inmutables y direccionados por contenido** (lo que hace estructuralmente imposible el lost-update de `File.latest_version`), jobs con **lease + heartbeat + reaper**, deny-by-default en membresías, y *scrubbing* de secretos antes de persistir cualquier salida de job. El coste objetivo de operación en la fase MVP es del orden de **6–12 USD/mes** en total, y la arquitectura escala a "crecimiento moderado" (cientos de usuarios de campo, decenas de miles de visitas/año) sin cambiar de forma, solo de tamaño de máquina.
+En seguridad, los 16 hallazgos de [07-hallazgos-revision-codigo.md](07-hallazgos-revision-codigo.md) se tratan como **restricciones de diseño de primera clase** (§3, tabla RD-01…RD-16), no como notas al margen: validación TLS estricta siempre y sin excepción para self-hosted (pinning con consentimiento explícito), tokens de refresco almacenados **hasheados** con patrón selector/verificador, roles resueltos **una vez por request** en lugar de dentro del loop de operaciones, adjuntos **inmutables y direccionados por contenido** (lo que hace estructuralmente imposible el lost-update de `File.latest_version`), jobs con **lease + heartbeat + reaper**, deny-by-default en membresías, y *scrubbing* de secretos antes de persistir cualquier salida de job. El coste objetivo de operación en la fase MVP es del orden de **6–12 USD/mes** en total, y la arquitectura escala a "crecimiento moderado" (cientos de usuarios de campo, decenas de miles de registros/año) sin cambiar de forma, solo de tamaño de máquina.
 
 ---
 
@@ -26,8 +26,8 @@ Toda decisión de este documento se justifica contra estos supuestos. **Si un su
 | # | Supuesto | Valor asumido |
 |---|---|---|
 | S-01 | Usuarios de campo concurrentes | 10–200 (MVP: <20) |
-| S-02 | Visitas registradas | 10k–100k / año |
-| S-03 | Adjuntos por visita | 3–15 fotos, ~1–3 MB c/u tras compresión en dispositivo |
+| S-02 | Registros registrados | 10k–100k / año |
+| S-03 | Adjuntos por registro | 3–15 fotos, ~1–3 MB c/u tras compresión en dispositivo |
 | S-04 | Volumen de almacenamiento año 1 | 50 GB – 500 GB |
 | S-05 | Picos de sync | ráfagas al final de jornada (decenas de dispositivos drenando outbox en ~1h) |
 | S-06 | Componente geoespacial | **punto** de ubicación (lat/lon/altitud/precisión) + opcionalmente traza GPS ligera. **Sin edición vectorial, sin topología, sin capas raster, sin reproyección compleja** |
@@ -142,9 +142,9 @@ sequenceDiagram
     participant R2 as Object storage
 
     Note over U,LDB: FASE OFFLINE
-    U->>APP: Registra visita + 6 fotos
-    APP->>LDB: TX única: INSERT visit + INSERT outbox_op(uuid, base_version=null) + INSERT attachment(sha256, state=local)
-    LDB-->>APP: commit (UI optimista: la visita ya se ve)
+    U->>APP: Registra registro + 6 fotos
+    APP->>LDB: TX única: INSERT record + INSERT outbox_op(uuid, base_version=null) + INSERT attachment(sha256, state=local)
+    LDB-->>APP: commit (UI optimista: el registro ya se ve)
     Note over APP: La app funciona igual sin red. Cero llamadas bloqueantes.
 
     Note over APP,R2: FASE ONLINE — carril de adjuntos (independiente)
@@ -216,18 +216,18 @@ erDiagram
     ORGANIZATION ||--o{ APP_USER : "agrupa"
     ORGANIZATION ||--o{ FORM_TEMPLATE : "define"
     ORGANIZATION ||--o{ ASSIGNMENT : "planifica"
-    ORGANIZATION ||--o{ VISIT : "posee"
+    ORGANIZATION ||--o{ RECORD : "posee"
     APP_USER ||--o{ MEMBERSHIP : "tiene rol"
     ORGANIZATION ||--o{ MEMBERSHIP : "otorga"
     APP_USER ||--o{ DEVICE : "registra"
     DEVICE ||--o{ REFRESH_TOKEN : "familia rotada"
     DEVICE ||--o{ SYNC_OP_LOG : "envía"
     FORM_TEMPLATE ||--o{ FORM_TEMPLATE_VERSION : "versiona"
-    FORM_TEMPLATE_VERSION ||--o{ VISIT : "instancia"
-    ASSIGNMENT ||--o{ VISIT : "origina"
-    APP_USER ||--o{ VISIT : "ejecuta"
-    VISIT ||--o{ VISIT_ATTACHMENT : "adjunta"
-    BLOB ||--o{ VISIT_ATTACHMENT : "referencia por sha256"
+    FORM_TEMPLATE_VERSION ||--o{ RECORD : "instancia"
+    ASSIGNMENT ||--o{ RECORD : "origina"
+    APP_USER ||--o{ RECORD : "ejecuta"
+    RECORD ||--o{ RECORD_ATTACHMENT : "adjunta"
+    BLOB ||--o{ RECORD_ATTACHMENT : "referencia por sha256"
     ORGANIZATION ||--o{ JOB : "encola"
     ORGANIZATION ||--o{ AUDIT_EVENT : "registra"
 ```
@@ -236,10 +236,10 @@ Tablas y campos con intención arquitectónica (no exhaustivo):
 
 | Tabla | Campos clave | Razón de diseño |
 |---|---|---|
-| `visit` | `id UUID PK` (**generado en cliente**), `org_id`, `version INT`, `change_seq BIGINT`, `deleted_at`, `assignment_id`, `template_version_id`, `answers JSONB`, `lat`, `lon`, `accuracy_m`, `altitude_m`, `captured_at`, `device_id`, `created_by` | UUID cliente = idempotencia real ([04 §9.5](04-base-de-datos.md#9-patrón-a-replicar-en-suno)). `version` = CAS optimista. `change_seq` = cursor de pull. `answers` en JSONB validado contra el JSON Schema de `template_version_id` (evita una migración por formulario). Ubicación como **columnas planas**, no geometría (ADR-005). |
+| `record` | `id UUID PK` (**generado en cliente**), `org_id`, `version INT`, `change_seq BIGINT`, `deleted_at`, `assignment_id`, `template_version_id`, `answers JSONB`, `lat`, `lon`, `accuracy_m`, `altitude_m`, `captured_at`, `device_id`, `created_by` | UUID cliente = idempotencia real ([04 §9.5](04-base-de-datos.md#9-patrón-a-replicar-en-suno)). `version` = CAS optimista. `change_seq` = cursor de pull. `answers` en JSONB validado contra el JSON Schema de `template_version_id` (evita una migración por formulario). Ubicación como **columnas planas**, no geometría (ADR-005). |
 | `sync_op_log` | `op_uuid UUID PK`, `device_id`, `batch_uuid`, `received_at`, `result JSONB`, `entity`, `entity_id` | Idempotencia: reenvío del mismo `op_uuid` devuelve el resultado guardado sin re-aplicar. Equivale al `Delta` de QFieldCloud pero **sin máquina de estados asíncrona** (ADR-003). Retención 90 días. |
 | `blob` | `sha256 TEXT PK`, `size`, `mime`, `bucket_key`, `created_at` | **Inmutable, direccionado por contenido** ⇒ deduplicación gratis entre dispositivos y **RD-08 satisfecha por construcción** (no existe puntero mutable que perder). |
-| `visit_attachment` | `id UUID PK`, `visit_id`, `sha256 FK→blob`, `role` (`foto`/`firma`/`doc`), `caption`, `captured_at`, `order` | Separa "qué archivo" de "dónde se usa". Un mismo blob puede estar en varias visitas sin duplicar bytes. |
+| `record_attachment` | `id UUID PK`, `record_id`, `sha256 FK→blob`, `role` (`foto`/`firma`/`doc`), `caption`, `captured_at`, `order` | Separa "qué archivo" de "dónde se usa". Un mismo blob puede estar en varios registros sin duplicar bytes. |
 | `job` | `id`, `type`, `status`, `payload JSONB`, `attempts`, `max_attempts`, `run_after`, `locked_by`, `locked_until`, `output JSONB (scrubbed)` | Cola sobre Postgres con **lease** (RD-13). Sin Redis, sin Celery. |
 | `membership` | `(org_id, user_id) PK`, `role` | Plano y simple. Sin herencia multi-tabla, sin vistas SQL no gestionadas (§7). |
 | `audit_event` | `id`, `org_id`, `actor_id`, `action`, `target`, `metadata JSONB`, `created_at`, `ip_hash` | Trazabilidad: quién sincronizó qué, quién revocó qué token, quién exportó datos. |
@@ -291,7 +291,7 @@ Se requiere Android + iOS, fluidez en gama media/baja, un solo desarrollador (S-
 El almacén local debe soportar el patrón outbox: escribir **la fila de negocio y su operación de outbox en la misma transacción atómica**, sobrevivir a cierres abruptos (equivalente al `QgsGpkgFlusher` de QField, [01 §3](01-arquitectura-cliente-qfield.md#3-datos-geoespaciales-y-modo-offline)), soportar consultas de listado/filtro razonables, y cifrarse en reposo (los datos de campo y las coordenadas son sensibles y los teléfonos se pierden).
 
 **Decisión**
-**SQLite** vía **Drift** (`drift` + `sqlite3_flutter_libs`), con **SQLCipher** (`sqlcipher_flutter_libs`) y la clave de cifrado en Keychain/Keystore. Modo **WAL**, `synchronous=NORMAL`, **un único executor de escritura** (RD-04). El outbox es una tabla más, así que "guardar visita + encolar operación" es una transacción SQLite, no dos pasos con riesgo de divergencia.
+**SQLite** vía **Drift** (`drift` + `sqlite3_flutter_libs`), con **SQLCipher** (`sqlcipher_flutter_libs`) y la clave de cifrado en Keychain/Keystore. Modo **WAL**, `synchronous=NORMAL`, **un único executor de escritura** (RD-04). El outbox es una tabla más, así que "guardar registro + encolar operación" es una transacción SQLite, no dos pasos con riesgo de divergencia.
 
 **Alternativas consideradas**
 
@@ -299,7 +299,7 @@ El almacén local debe soportar el patrón outbox: escribir **la fila de negocio
 |---|---|---|---|
 | **Drift sobre SQLite** | SQL real con DSL tipado y migraciones versionadas; streams reactivos (la UI se actualiza sola al cambiar la tabla); transacciones multi-tabla explícitas; SQLCipher soportado; formato de archivo ubicuo (depurable con cualquier herramienta) | Algo de boilerplate/codegen; hay que escribir las migraciones a mano | **Elegida** |
 | `sqflite` / SQLite crudo | Cero abstracción, mínimo peso | Sin tipado ni migraciones asistidas; consultas como strings ⇒ superficie de error justo donde no se quiere (RD-02) | Descartada |
-| **PowerSync** | Resuelve el sync entero (Postgres ↔ SQLite) y es de altísima calidad | **Acopla la arquitectura a un servicio/licencia de terceros** y su modelo de reglas de sync; el conflicto se maneja según *su* modelo; coste recurrente; y el requisito explícito es una **plataforma propia**. La lógica de negocio de una visita (validación contra plantilla, reglas de asignación) no cabe bien en un replicador genérico | Descartada (reevaluable si el sync propio se volviera el cuello de botella) |
+| **PowerSync** | Resuelve el sync entero (Postgres ↔ SQLite) y es de altísima calidad | **Acopla la arquitectura a un servicio/licencia de terceros** y su modelo de reglas de sync; el conflicto se maneja según *su* modelo; coste recurrente; y el requisito explícito es una **plataforma propia**. La lógica de negocio de un registro (validación contra plantilla, reglas de asignación) no cabe bien en un replicador genérico | Descartada (reevaluable si el sync propio se volviera el cuello de botella) |
 | WatermelonDB | Excelente modelo de sync por lotes | Es del ecosistema React Native; irrelevante tras ADR-001 | Descartada |
 | ObjectBox | Muy rápido, API objetual agradable | Su Sync es comercial; formato propietario menos depurable; consultas ad-hoc/reportes locales más limitados que SQL | Descartada |
 | Realm / Atlas Device Sync | Fue el referente de offline-first | MongoDB **descontinuó Atlas Device Sync**; adoptar un SDK cuya funcionalidad estrella fue retirada es riesgo de plataforma inaceptable para un proyecto a 5 años | Descartada |
@@ -327,7 +327,7 @@ El almacén local debe soportar el patrón outbox: escribir **la fila de negocio
 3. **Concurrencia optimista con CAS**: cada operación lleva `base_version`; el UPSERT lleva `WHERE version = base_version`. Si no coincide → `conflict`.
 4. **Server-authoritative sin merge de 3 vías en el móvil** (se conserva la filosofía de [03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative)), **pero mejorado**: la respuesta de conflicto **incluye la fila autoritativa completa**, así que el cliente reemplaza esa fila y sigue — no re-descarga todo el proyecto.
 5. **Pull incremental por cursor** `change_seq`, en lugar de "empaquetar y descargar el proyecto entero" (`PACKAGE` job de QFieldCloud).
-6. **Carril de adjuntos independiente** con su propia cola y backoff exponencial (se conserva de [03 §6](03-integracion-sincronizacion.md#6-sincronización-de-adjuntos-fotos-archivos)), y **mejorado**: una visita se acepta aunque sus fotos aún no estén subidas (el adjunto queda `pending_upload`), de modo que un adjunto grande atascado nunca bloquea el dato estructurado.
+6. **Carril de adjuntos independiente** con su propia cola y backoff exponencial (se conserva de [03 §6](03-integracion-sincronizacion.md#6-sincronización-de-adjuntos-fotos-archivos)), y **mejorado**: un registro se acepta aunque sus fotos aún no estén subidas (el adjunto queda `pending_upload`), de modo que un adjunto grande atascado nunca bloquea el dato estructurado.
 7. **Contrato versionado** (`/v1/`, `schema_version` en el payload) validado con Pydantic v2 en servidor y parsers tipados en cliente (RD-03).
 
 **Alternativas consideradas**
@@ -336,11 +336,11 @@ El almacén local debe soportar el patrón outbox: escribir **la fila de negocio
 |---|---|---|---|
 | **Aplicación síncrona transaccional** | Latencia de confirmación ~100–400 ms; sin estados intermedios; sin jobs atascados (RD-13 no aplica al camino crítico); mucho menos código | Un push muy grande ocupa un worker web; hay que acotar el tamaño del lote (máx. 500 ops / 5 MB, con `413` y paginación del lado cliente) | **Elegida** |
 | Cola asíncrona + polling (como QFieldCloud) | Absorbe picos; aísla trabajo pesado | Innecesaria sin QGIS: añade una máquina de estados distribuida, polling con backoff, jobs zombis y latencia de minutos para lo que tarda milisegundos | Descartada |
-| CRDTs (Automerge/Yjs) | Merge automático, sin conflictos visibles | Sobredimensionado: no hay edición colaborativa concurrente sobre el mismo registro; una visita tiene **un** autor. Coste de tamaño de metadatos y de razonamiento muy alto para cero beneficio en este dominio | Descartada |
+| CRDTs (Automerge/Yjs) | Merge automático, sin conflictos visibles | Sobredimensionado: no hay edición colaborativa concurrente sobre el mismo registro; un registro tiene **un** autor. Coste de tamaño de metadatos y de razonamiento muy alto para cero beneficio en este dominio | Descartada |
 | Last-write-wins por timestamp | Trivial | Depende del reloj del dispositivo (que en campo va mal); pérdida silenciosa de datos. Inaceptable en un sistema de registro | Descartada |
 | Merge de 3 vías en el dispositivo | Conserva el trabajo del usuario en conflicto | Es "la parte más costosa y propensa a bugs de cualquier sistema offline-first" ([06 §1.4](06-recomendaciones-suno.md#1-patrón-central-a-adoptar-sync-offline-first-basado-en-deltas)) | Descartada, explícitamente |
 
-**Diseño del conflicto en la práctica**: en este dominio los conflictos son **raros por construcción** (cada visita la crea y edita un solo agente asignado). Cuando ocurren (p. ej. un supervisor cerró la visita desde el back-office mientras el agente la editaba offline), la política es: la fila del servidor gana, la versión local del agente se conserva en `quarantine` visible en la UI ("tu versión no se aplicó: [ver diferencias] [reenviar como corrección]"). **Nunca se descarta trabajo del usuario en silencio** — mejora explícita sobre `mDeltaFileWrapper->reset()` de QField ([03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative)).
+**Diseño del conflicto en la práctica**: en este dominio los conflictos son **raros por construcción** (cada registro la crea y edita un solo agente asignado). Cuando ocurren (p. ej. un supervisor cerró el registro desde el back-office mientras el agente la editaba offline), la política es: la fila del servidor gana, la versión local del agente se conserva en `quarantine` visible en la UI ("tu versión no se aplicó: [ver diferencias] [reenviar como corrección]"). **Nunca se descarta trabajo del usuario en silencio** — mejora explícita sobre `mDeltaFileWrapper->reset()` de QField ([03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative)).
 
 **Consecuencias**
 *Positivas*: ~60% menos superficie de código que el pipeline de referencia; confirmación inmediata al agente ("sincronizado" real, no "encolado"); depuración trivial (un log de request contiene todo el ciclo); pull incremental ahorra datos móviles.
@@ -355,7 +355,7 @@ El almacén local debe soportar el patrón outbox: escribir **la fila de negocio
 **Estado**: Aceptada · **Fecha**: 2026-07-30 · **Cierra**: [06 §6.2](06-recomendaciones-suno.md#6-decisiones-que-este-análisis-no-puede-resolver-por-ti)
 
 **Contexto**
-Un desarrollador (S-07), presupuesto limitado, volumen moderado (S-01/S-02). El backend necesita: API de sync, validación estricta de payloads, ORM con migraciones, autenticación, **un back-office para supervisar/validar visitas y exportar** (necesidad real que suele olvidarse al presupuestar), y una cola de jobs.
+Un desarrollador (S-07), presupuesto limitado, volumen moderado (S-01/S-02). El backend necesita: API de sync, validación estricta de payloads, ORM con migraciones, autenticación, **un back-office para supervisar/validar registros y exportar** (necesidad real que suele olvidarse al presupuestar), y una cola de jobs.
 
 **Decisión**
 **Django 5.x LTS + Django Ninja + Pydantic v2 + PostgreSQL**, servido por gunicorn con workers `uvicorn`. **Django Admin como back-office de fase 1** (personalizado, no un CRUD crudo). Sin DRF.
@@ -374,7 +374,7 @@ Un desarrollador (S-07), presupuesto limitado, volumen moderado (S-01/S-02). El 
 | Supabase / PocketBase como backend | Coste inicial casi nulo, auth+storage+realtime listos | La lógica **server-authoritative** (CAS, validación contra plantilla versionada, asignaciones, cursor con lock) acabaría repartida entre RLS, triggers y edge functions ⇒ difícil de testear y de mover. Acoplamiento fuerte del modelo de auth. Contradice "plataforma propia" | Descartada (ver ADR-010 para su uso como *proveedor de Postgres gestionado*, que sí es válido) |
 
 **Consecuencias**
-*Positivas*: el back-office existe desde el día 1 (validar visitas, ver adjuntos, revocar dispositivos, reintentar jobs, auditar) sin proyecto frontend; migraciones y test runner de serie; `manage.py check --deploy` en CI como red de seguridad de configuración (patrón tomado de [05 §3](05-infraestructura-despliegue.md#3-cicd--qfieldcloud)).
+*Positivas*: el back-office existe desde el día 1 (validar registros, ver adjuntos, revocar dispositivos, reintentar jobs, auditar) sin proyecto frontend; migraciones y test runner de serie; `manage.py check --deploy` en CI como red de seguridad de configuración (patrón tomado de [05 §3](05-infraestructura-despliegue.md#3-cicd--qfieldcloud)).
 *Negativas*: Ninja es un proyecto más pequeño que DRF → mitigación: el uso es conservador (schemas + router + auth propia), migrable a DRF/FastAPI en días si hiciera falta, porque **la lógica vive en la capa de servicios, no en las vistas** (regla de arquitectura: las vistas solo hacen parseo → `service` → serialización).
 
 **RD satisfechas**: RD-03, RD-07, RD-11, RD-16.
@@ -386,10 +386,10 @@ Un desarrollador (S-07), presupuesto limitado, volumen moderado (S-01/S-02). El 
 **Estado**: Aceptada · **Fecha**: 2026-07-30 · **Cierra**: [06 §6.3](06-recomendaciones-suno.md#6-decisiones-que-este-análisis-no-puede-resolver-por-ti)
 
 **Contexto**
-QFieldCloud usa PostGIS porque almacena geometrías vectoriales arbitrarias de QGIS, incluso en el modelo `Delta` (`old_geom`/`new_geom`, `GeometryField(srid=4326, dim=4)`, [04 §3](04-base-de-datos.md#3-sincronización--delta-y-job-coremodelspy)). SUNO, por S-06, guarda **un punto por visita** y, opcionalmente, una traza.
+QFieldCloud usa PostGIS porque almacena geometrías vectoriales arbitrarias de QGIS, incluso en el modelo `Delta` (`old_geom`/`new_geom`, `GeometryField(srid=4326, dim=4)`, [04 §3](04-base-de-datos.md#3-sincronización--delta-y-job-coremodelspy)). SUNO, por S-06, guarda **un punto por registro** y, opcionalmente, una traza.
 
 **Decisión**
-**PostgreSQL 16 puro.** La ubicación se modela como `lat double precision`, `lon double precision`, `accuracy_m real`, `altitude_m real`, `location_captured_at timestamptz`, con `CHECK` de rango e índice B-tree compuesto `(org_id, lat, lon)` para *bounding box*. Consultas "visitas a menos de X km" se resuelven con prefiltro por bounding box + Haversine en SQL. **PostGIS se habilita cuando y solo cuando** aparezca al menos uno de estos disparadores documentados: (a) consultas punto-en-polígono contra predios/veredas, (b) clustering espacial en el back-office con >100k puntos, (c) necesidad de exportar GeoPackage/Shapefile con geometrías reales.
+**PostgreSQL 16 puro.** La ubicación se modela como `lat double precision`, `lon double precision`, `accuracy_m real`, `altitude_m real`, `location_captured_at timestamptz`, con `CHECK` de rango e índice B-tree compuesto `(org_id, lat, lon)` para *bounding box*. Consultas "registros a menos de X km" se resuelven con prefiltro por bounding box + Haversine en SQL. **PostGIS se habilita cuando y solo cuando** aparezca al menos uno de estos disparadores documentados: (a) consultas punto-en-polígono contra predios/veredas, (b) clustering espacial en el back-office con >100k puntos, (c) necesidad de exportar GeoPackage/Shapefile con geometrías reales.
 
 **Alternativas consideradas**
 
@@ -399,7 +399,7 @@ QFieldCloud usa PostGIS porque almacena geometrías vectoriales arbitrarias de Q
 | Postgres + PostGIS desde el día 1 | Índices GiST, `ST_DWithin`, exportación geoespacial nativa | Encadena las actualizaciones de Postgres a la compatibilidad de PostGIS; imagen más pesada; **restringe qué proveedores gestionados puedes usar barato**; cero beneficio bajo S-06 | Descartada (pero **la migración futura es `CREATE EXTENSION postgis` + una columna generada**, sin cambio de motor — coste de opción muy bajo) |
 | `cube` + `earthdistance` | Extensiones en `contrib`, dan KNN indexado | Ergonomía pobre, poca gente lo conoce; si vas a instalar una extensión, instala PostGIS | Descartada |
 | SQLite/Litestream en servidor | Ultra barato | Concurrencia de escritura insuficiente para el patrón de ráfaga S-05; sin `SKIP LOCKED` real para la cola; pierde `JSONB`/GIN | Descartada |
-| MongoDB / Firestore | Esquema flexible para formularios | Sin transacciones multi-documento cómodas para el push atómico; el modelo relacional (asignación→visita→adjunto) es genuinamente relacional; Firestore acopla a Google | Descartada |
+| MongoDB / Firestore | Esquema flexible para formularios | Sin transacciones multi-documento cómodas para el push atómico; el modelo relacional (asignación→registro→adjunto) es genuinamente relacional; Firestore acopla a Google | Descartada |
 
 **Consecuencias**
 *Positivas*: portabilidad total del proveedor de BD (palanca real de coste, ADR-010); `JSONB` + GIN cubre la flexibilidad de formularios sin sacrificar integridad relacional donde importa; una sola tecnología de datos hace también de cola de jobs (ADR-006).
@@ -413,7 +413,7 @@ QFieldCloud usa PostGIS porque almacena geometrías vectoriales arbitrarias de Q
 **Estado**: Aceptada · **Fecha**: 2026-07-30
 
 **Contexto**
-Tras ADR-003, **el camino crítico de sync no necesita cola**. Lo que sí es asíncrono: generación de PDF/reportes de visita, exportaciones CSV/Excel masivas, envío de correo, notificaciones push, webhooks a sistemas del cliente, miniaturas de imágenes (si no se generan en el dispositivo) y tareas periódicas (reaper, purga de tombstones, backups, recálculo de métricas).
+Tras ADR-003, **el camino crítico de sync no necesita cola**. Lo que sí es asíncrono: generación de PDF/reportes de registro, exportaciones CSV/Excel masivas, envío de correo, notificaciones push, webhooks a sistemas del cliente, miniaturas de imágenes (si no se generan en el dispositivo) y tareas periódicas (reaper, purga de tombstones, backups, recálculo de métricas).
 
 **Decisión**
 Tabla `job` en Postgres, consumida por **un proceso `worker`** (mismo código, `python manage.py run_worker`) con `SELECT ... FOR UPDATE SKIP LOCKED` — el patrón sólido de `dequeue.py` señalado en [07 § Patrones sólidos a emular](07-hallazgos-revision-codigo.md#patrones-sólidos-a-emular) — **corregido con lease**:
@@ -456,7 +456,7 @@ Bajo S-03/S-04 los adjuntos son el 95%+ de los bytes y el principal riesgo de co
 2. **Direccionado por contenido**: la clave es `blobs/{sha256[0:2]}/{sha256[2:4]}/{sha256}`. Un blob **es inmutable**; nunca se sobrescribe. ⇒ **RD-08 satisfecha por construcción**, deduplicación gratis (la misma foto reenviada por dos dispositivos ocupa una vez), y reintentos idempotentes.
 3. **Subida directa del dispositivo a R2 con URL prefirmada** (`PUT`, expiración 15 min, `Content-Length` y `Content-Type` fijados en la firma). Los bytes **no pasan por el API** → el VPS no paga CPU ni ancho de banda por foto.
 4. **Commit verificado**: tras el PUT, el cliente llama a `POST /v1/attachments/{sha256}/commit`; el servidor hace `HEAD` sobre el objeto y **verifica tamaño y checksum** antes de registrar el `blob`. Sin verificación, la subida prefirmada sería una vía para inyectar contenido arbitrario.
-5. **Validación de entrada**: allow-list de MIME (`image/jpeg`, `image/png`, `image/webp`, `application/pdf`), tamaño máximo por archivo y por visita, *sniffing* de magic bytes en servidor, y **nombre de archivo generado localmente** — el nombre original solo es metadato (**RD-06**).
+5. **Validación de entrada**: allow-list de MIME (`image/jpeg`, `image/png`, `image/webp`, `application/pdf`), tamaño máximo por archivo y por registro, *sniffing* de magic bytes en servidor, y **nombre de archivo generado localmente** — el nombre original solo es metadato (**RD-06**).
 6. **Descarga** también por URL prefirmada de corta duración emitida tras comprobar permisos (nunca bucket público).
 7. **Sin versionado lógico de archivos**: si el agente reemplaza una foto, es un `blob` nuevo y una fila nueva; la anterior se marca borrada. Se elimina toda la complejidad `File`/`FileVersion`/`latest_version`.
 
@@ -601,9 +601,9 @@ QFieldCloud implementa `User`→`Person`/`Organization`/`Team` con **herencia mu
 **Shared-schema multi-tenant con `org_id NOT NULL` en toda tabla de negocio desde la primera migración**, aunque en el MVP solo exista **una** organización.
 
 - Modelo de identidad **plano**: `app_user` + `membership(org_id, user_id, role)`. **Sin herencia multi-tabla.**
-- Roles fase 1: `OWNER`, `ADMIN`, `SUPERVISOR`, `FIELD_AGENT`, `VIEWER`. Fase 2 añade `TEAM` como agrupación **opcional** que solo afecta a la asignación de visitas, no a la resolución de permisos.
+- Roles fase 1: `OWNER`, `ADMIN`, `SUPERVISOR`, `FIELD_AGENT`, `VIEWER`. Fase 2 añade `TEAM` como agrupación **opcional** que solo afecta a la asignación de registros, no a la resolución de permisos.
 - **Sin vistas SQL de roles** en fase 1: la membresía se resuelve con **una** query al inicio de la request hacia el `RequestContext` (**RD-07**). Si la jerarquía creciera (equipos anidados, delegaciones), se introduce una **tabla desnormalizada de permisos efectivos mantenida por trigger** — preferible a la vista no gestionada, porque es indexable y migrable con el ORM.
-- **Aislamiento**: todo acceso a datos pasa por `scoped_qs(ctx, Model)` que aplica `org_id = ctx.org_id`. Test de arquitectura que **falla la build** si un módulo de servicios usa `Model.objects` directamente sin scoping (**RD-11**). Un `CHECK`/FK compuesta refuerza que un `visit_attachment` no pueda cruzar organizaciones.
+- **Aislamiento**: todo acceso a datos pasa por `scoped_qs(ctx, Model)` que aplica `org_id = ctx.org_id`. Test de arquitectura que **falla la build** si un módulo de servicios usa `Model.objects` directamente sin scoping (**RD-11**). Un `CHECK`/FK compuesta refuerza que un `record_attachment` no pueda cruzar organizaciones.
 - **Deny-by-default en listados**: nada de `return True` sin comprobar pertenencia (**RD-11**, corrigiendo `can_read_members`).
 
 **Alternativas consideradas**
@@ -633,7 +633,7 @@ QField permite plugins **QML dinámicos** con permisos por plugin ([01 §5](01-a
 **Decisión**
 **`form_template` + `form_template_version`, con definición en JSON declarativo** (campos, tipos, etiquetas i18n, obligatoriedad, rangos, expresiones de visibilidad condicional de un **DSL restringido y sin efectos secundarios**, y reglas de validación). El renderizador de Flutter interpreta esa definición; **nunca** evalúa código remoto (`eval` prohibido, sin JS embebido, sin QML/Dart dinámico).
 
-- Cada `visit` referencia la **versión exacta** de plantilla usada ⇒ las visitas históricas siguen siendo interpretables tras cambios de formulario (problema real que suele descubrirse tarde).
+- Cada `record` referencia la **versión exacta** de plantilla usada ⇒ los registros históricos siguen siendo interpretables tras cambios de formulario (problema real que suele descubrirse tarde).
 - **Doble validación**: en el dispositivo (UX inmediata) y en el servidor contra el mismo JSON Schema (autoridad). El cliente no es fuente de verdad (**RD-03**).
 - Las plantillas viajan por el pull de sync como cualquier otro dato, firmadas implícitamente por venir del canal TLS autenticado; se cachean localmente y se validan estructuralmente antes de usarse.
 - **Mapa base**: fuera del MVP. Fase 2, `flutter_map` + teselas **PMTiles** locales descargadas por área — datos, no código, y sin motor SIG (coherente con S-06).
@@ -754,7 +754,7 @@ QField permite plugins **QML dinámicos** con permisos por plugin ([01 §5](01-a
 | N-05 | **Descartar los deltas locales del usuario en conflicto (`reset()`)** | [03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative) | Pérdida silenciosa de trabajo del agente. Se sustituye por `quarantine` visible con opción de reenviar como corrección |
 | N-06 | **Job `PACKAGE` / empaquetado por proyecto** | [02 §4](02-arquitectura-backend-qfieldcloud.md#4-procesamiento-asíncrono--jobs-sin-celery) | Existe para exportar proyectos QGIS a formato offline. Sin equivalente aquí |
 | N-07 | **Formato deltafile con `old`/`new` completos, WKT y JSON-merge-patch** | [03 §3](03-integracion-sincronizacion.md#3-formato-del-delta) | Genérico porque QGIS tiene esquemas arbitrarios. SUNO tiene entidades conocidas ⇒ operaciones tipadas + `base_version`: menos bytes, validación estática, menos ambigüedad |
-| N-08 | **PostGIS y geometrías en el log de cambios** | [04 §3](04-base-de-datos.md#3-sincronización--delta-y-job-coremodelspy) | Un punto por visita no justifica la extensión ni las restricciones de upgrade/proveedor que impone. ADR-005 |
+| N-08 | **PostGIS y geometrías en el log de cambios** | [04 §3](04-base-de-datos.md#3-sincronización--delta-y-job-coremodelspy) | Un punto por registro no justifica la extensión ni las restricciones de upgrade/proveedor que impone. ADR-005 |
 | N-09 | **Herencia multi-tabla `User`→`Person`/`Organization`/`Team`** | [04 §1](04-base-de-datos.md#1-usuarios-y-organizaciones-docker-appqfieldcloudcoremodelspy) | JOIN extra y complejidad conceptual sin beneficio. Modelo plano + `membership`. ADR-011 |
 | N-10 | **Vistas SQL no gestionadas para roles (`*_with_roles_vw`)** | [04 §1](04-base-de-datos.md#1-usuarios-y-organizaciones-docker-appqfieldcloudcoremodelspy) | Fuera del ORM, migraciones manuales, y aun así no evitó el N+1. Se sustituye por `RequestContext` (ADR-013); si crece, tabla desnormalizada por trigger, no vista |
 | N-11 | **Versionado lógico de archivos (`File`/`FileVersion`/`latest_version`)** | [04 §4](04-base-de-datos.md#4-almacenamiento-de-archivos-docker-appqfieldcloudfilestoragemodelspy) | Es la causa del **lost-update HIGH** de [07]. Blobs inmutables direccionados por contenido ⇒ el bug es inexpresable. **RD-08** |
@@ -783,7 +783,7 @@ Contratos y esqueleto antes que funcionalidad.
 - CI: `dart analyze` + `flutter test`, `ruff` + `mypy` + `pytest`, `check --deploy`, `makemigrations --check`, `check_envvars.sh`, y el **lint que prohíbe `badCertificateCallback`** (RD-01).
 - `docker compose up` funcional de punta a punta en local.
 
-**Criterio de salida**: una visita creada offline en un emulador aparece en el Django Admin tras reconectar.
+**Criterio de salida**: un registro creado offline en un emulador aparece en el Django Admin tras reconectar.
 
 ### Fase 1 — MVP (8–12 semanas)
 
@@ -792,10 +792,10 @@ Objetivo: un equipo real trabajando en campo.
 | Incluido | Diferido y por qué |
 |---|---|
 | Login + registro de dispositivo + rotación de tokens (ADR-008) | **SSO/OIDC y MFA** — ningún usuario inicial lo pide; añade flujo y superficie |
-| Captura de visita: formulario dinámico, punto GPS con precisión, fotos, firma | **Mapa base offline** — coordenadas + mapa online cuando hay red bastan para validar; PMTiles es fase 2 |
+| Captura de registro: formulario dinámico, punto GPS con precisión, fotos, firma | **Mapa base offline** — coordenadas + mapa online cuando hay red bastan para validar; PMTiles es fase 2 |
 | Outbox + push/pull + adjuntos con subida en segundo plano | **Traza GPS continua** — consume batería y no está en el alcance mínimo (fase 3) |
 | Conflictos con `quarantine` y reenvío | **Notificaciones push** — el pull periódico cubre la necesidad inicial (fase 2) |
-| Back-office = **Django Admin personalizado**: listar/filtrar visitas, ver adjuntos, validar/rechazar, gestionar plantillas y asignaciones, revocar dispositivos, ver jobs y dead-letters | **SPA web propia** — semanas de trabajo que el Admin ahorra; se construye cuando el Admin estorbe, no antes (ADR-004) |
+| Back-office = **Django Admin personalizado**: listar/filtrar registros, ver adjuntos, validar/rechazar, gestionar plantillas y asignaciones, revocar dispositivos, ver jobs y dead-letters | **SPA web propia** — semanas de trabajo que el Admin ahorra; se construye cuando el Admin estorbe, no antes (ADR-004) |
 | Exportación CSV/Excel síncrona con límite de filas | **Reportes PDF** — se pueden generar desde el Admin manualmente al principio |
 | Cola de jobs con lease + reaper (ADR-006), aunque con pocos tipos | **Escalado de workers** — uno basta |
 | Backups a R2 + **restauración probada** + runbook | **Alta disponibilidad / réplica** — S-10 no lo exige |
@@ -803,7 +803,7 @@ Objetivo: un equipo real trabajando en campo.
 | **Suite de seguridad**: aislamiento entre orgs, presupuesto de queries, `kill -9` al worker, traversal de nombres de archivo, spoof de `X-Forwarded-Proto`, checksum de adjunto no coincidente, reuso de refresh token | — |
 
 **Criterios de aceptación medibles**:
-- Jornada completa (8 h) sin red: ≥50 visitas con 10 fotos c/u sin degradación perceptible.
+- Jornada completa (8 h) sin red: ≥50 registros con 10 fotos c/u sin degradación perceptible.
 - Drenaje de esa outbox en <5 min con 4G decente.
 - p95 de `/sync/push` con 100 operaciones < 1.5 s.
 - Arranque en frío en dispositivo de gama baja (2 GB RAM, Android 10) < 3 s.

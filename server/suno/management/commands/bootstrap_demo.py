@@ -1,5 +1,5 @@
 """`python manage.py bootstrap_demo` — siembra el mínimo dato que un despliegue
-nuevo necesita para ejecutar el ciclo login -> capturar visita -> sincronizar.
+nuevo necesita para ejecutar el ciclo login -> capturar registro -> sincronizar.
 
 **Por qué existe (hallazgo Crítico de la revisión final de**
 `plans/visitacampo-despliegue-demo-implementacion.md`**)**: un VPS recién
@@ -82,10 +82,10 @@ __all__ = ["Command"]
 #: Ninguno de los dos campos es `required` a propósito -- la pantalla de
 #: captura permite guardar con `altura_cm` en 0
 #: (`int.tryParse(_alturaController.text) ?? 0`) y `notas` vacío, así que
-#: exigirlos aquí rechazaría exactamente la visita que la app real produce.
+#: exigirlos aquí rechazaría exactamente el registro que la app real produce.
 DEMO_FORM_DEFINITION: dict[str, Any] = {
     "dsl": DSL_VERSION,
-    "title": {"es": "Visita de campo (demo)"},
+    "title": {"es": "Registro de campo (demo)"},
     "fields": [
         {
             "key": "altura_cm",
@@ -117,7 +117,7 @@ class Command(BaseCommand):
         "Siembra una Organization, un AppUser (rol FIELD_AGENT), su Membership "
         "y una FormTemplateVersion publicada compatible con capture_screen.dart "
         "-- el minimo dato que un despliegue nuevo necesita para poder ejecutar "
-        "login -> capturar visita -> sincronizar. Falla si ya existen (idempotente "
+        "login -> capturar registro -> sincronizar. Falla si ya existen (idempotente "
         "por rechazo, no duplica)."
     )
 
@@ -147,7 +147,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--template-name",
-            default="Visita de campo (demo)",
+            default="Registro de campo (demo)",
             help="Nombre de la FormTemplate/FormTemplateVersion a publicar.",
         )
         parser.add_argument(

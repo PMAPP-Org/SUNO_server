@@ -25,7 +25,7 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase
 from django.utils import timezone
 
 from suno.core.context import Principal, resolve_request_context
-from suno.core.models import Role, Visit
+from suno.core.models import Role, Record
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -55,7 +55,7 @@ skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 #: `build_scenario()` (Paso 8) siempre crea una `FormTemplateVersion` con
 #: `change_seq=TEMPLATE_CHANGE_SEQ` — a propósito, para que el asignador de
 #: `change_seq` del push se pruebe contra una organización que ya tiene
-#: entidades no-`visit` (ver el docstring de la constante en `factories.py`).
+#: entidades no-`record` (ver el docstring de la constante en `factories.py`).
 #: Un pull real desde `CURSOR_ZERO` la incluiría con toda razón (es una
 #: entidad sincronizable más, con `change_seq > 0`); los tests de este
 #: archivo que solo quieren ver "lo que se acaba de pushear" arrancan
@@ -97,8 +97,8 @@ class PullOrderTests(TestCase):
         self.scenario = build_scenario()
 
     def test_rows_come_back_in_the_order_they_were_created(self) -> None:
-        visit_ids = [uuid.uuid4() for _ in range(3)]
-        response = push(self.scenario, [create_op(self.scenario, visit_id=v) for v in visit_ids])
+        record_ids = [uuid.uuid4() for _ in range(3)]
+        response = push(self.scenario, [create_op(self.scenario, record_id=v) for v in record_ids])
         self.assertEqual(response.status_code, 200, response.content)
 
         page = pull(self.scenario, BASELINE_CURSOR)
@@ -110,21 +110,21 @@ class PullOrderTests(TestCase):
             {"schema_version", "server_time", "rows", "tombstones", "next_cursor", "has_more"},
         )
         self.assertEqual(body["tombstones"], [])
-        self.assertEqual([row["data"]["id"] for row in body["rows"]], [str(v) for v in visit_ids])
+        self.assertEqual([row["data"]["id"] for row in body["rows"]], [str(v) for v in record_ids])
         seqs = [row["data"]["change_seq"] for row in body["rows"]]
         self.assertEqual(seqs, sorted(seqs))
         self.assertEqual(len(seqs), len(set(seqs)), "change_seq repetido")
         self.assertFalse(body["has_more"])
         self.assertEqual(decode_cursor(body["next_cursor"]), seqs[-1])
 
-    def test_every_row_matches_the_visit_record_shape_of_a_push_conflict(self) -> None:
-        """El pull y un `conflict` de push emiten la misma forma para `visit` (`records.py`)."""
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id, lat=4.6, lon=-74.1)])
+    def test_every_row_matches_the_record_row_shape_of_a_push_conflict(self) -> None:
+        """El pull y un `conflict` de push emiten la misma forma para `record` (`records.py`)."""
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id, lat=4.6, lon=-74.1)])
 
         body = pull(self.scenario, BASELINE_CURSOR).json()
         row = body["rows"][0]
-        self.assertEqual(row["entity"], "visit")
+        self.assertEqual(row["entity"], "record")
         data = row["data"]
         self.assertEqual(data["lat"], 4.6)
         self.assertEqual(data["lon"], -74.1)
@@ -137,11 +137,11 @@ class TombstoneTests(TestCase):
     def setUp(self) -> None:
         self.scenario = build_scenario()
 
-    def test_a_deleted_visit_appears_as_a_tombstone_not_a_row(self) -> None:
-        visit_id = uuid.uuid4()
+    def test_a_deleted_record_appears_as_a_tombstone_not_a_row(self) -> None:
+        record_id = uuid.uuid4()
         response = push(
             self.scenario,
-            [create_op(self.scenario, visit_id=visit_id), delete_op(visit_id, base_version=1)],
+            [create_op(self.scenario, record_id=record_id), delete_op(record_id, base_version=1)],
         )
         self.assertEqual(response.status_code, 200, response.content)
         statuses = [r["status"] for r in response.json()["results"]]
@@ -151,19 +151,19 @@ class TombstoneTests(TestCase):
         self.assertEqual(body["rows"], [])
         self.assertEqual(len(body["tombstones"]), 1)
         tombstone = body["tombstones"][0]
-        self.assertEqual(tombstone["entity"], "visit")
-        self.assertEqual(tombstone["id"], str(visit_id))
+        self.assertEqual(tombstone["entity"], "record")
+        self.assertEqual(tombstone["id"], str(record_id))
         self.assertIsNotNone(tombstone["deleted_at"])
 
     def test_a_tombstone_never_appears_in_a_bootstrap(self) -> None:
         """El bootstrap solo entrega estado vivo (doc 08 §6)."""
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         push(
             self.scenario,
-            [create_op(self.scenario, visit_id=visit_id), delete_op(visit_id, base_version=1)],
+            [create_op(self.scenario, record_id=record_id), delete_op(record_id, base_version=1)],
         )
         body = bootstrap(self.scenario).json()
-        self.assertEqual(body["visits"], [])
+        self.assertEqual(body["records"], [])
 
 
 @skip_without_db
@@ -173,13 +173,13 @@ class CursorExpiredTests(TestCase):
         self.ctx = _ctx_for(self.scenario)
 
     def test_a_cursor_older_than_a_purge_is_rejected_with_409(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         push(
             self.scenario,
-            [create_op(self.scenario, visit_id=visit_id), delete_op(visit_id, base_version=1)],
+            [create_op(self.scenario, record_id=record_id), delete_op(record_id, base_version=1)],
         )
         # Simula que el tombstone ya superó la ventana de retención de 90 días.
-        Visit.objects.filter(pk=visit_id).update(deleted_at=timezone.now() - timedelta(days=91))
+        Record.objects.filter(pk=record_id).update(deleted_at=timezone.now() - timedelta(days=91))
         purged = purge_expired_tombstones(self.ctx, cutoff=timezone.now() - timedelta(days=90))
         self.assertEqual(purged, 1)
 
@@ -190,25 +190,25 @@ class CursorExpiredTests(TestCase):
 
     def test_a_cursor_at_or_after_the_purge_floor_still_works(self) -> None:
         """El piso no rechaza de más: solo los cursores estrictamente anteriores."""
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         push(
             self.scenario,
-            [create_op(self.scenario, visit_id=visit_id), delete_op(visit_id, base_version=1)],
+            [create_op(self.scenario, record_id=record_id), delete_op(record_id, base_version=1)],
         )
-        purged_change_seq = Visit.objects.get(pk=visit_id).change_seq
-        Visit.objects.filter(pk=visit_id).update(deleted_at=timezone.now() - timedelta(days=91))
+        purged_change_seq = Record.objects.get(pk=record_id).change_seq
+        Record.objects.filter(pk=record_id).update(deleted_at=timezone.now() - timedelta(days=91))
         purge_expired_tombstones(self.ctx, cutoff=timezone.now() - timedelta(days=90))
 
         response = pull(self.scenario, encode_cursor(purged_change_seq))
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_bootstrap_after_a_cursor_expired_gives_a_full_state_and_a_usable_cursor(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         push(
             self.scenario,
-            [create_op(self.scenario, visit_id=visit_id), delete_op(visit_id, base_version=1)],
+            [create_op(self.scenario, record_id=record_id), delete_op(record_id, base_version=1)],
         )
-        Visit.objects.filter(pk=visit_id).update(deleted_at=timezone.now() - timedelta(days=91))
+        Record.objects.filter(pk=record_id).update(deleted_at=timezone.now() - timedelta(days=91))
         purge_expired_tombstones(self.ctx, cutoff=timezone.now() - timedelta(days=90))
         self.assertEqual(pull(self.scenario, CURSOR_ZERO).status_code, 409)
 
@@ -227,8 +227,8 @@ class PaginationTests(TestCase):
         self.scenario = build_scenario()
 
     def test_limit_splits_the_result_into_pages_without_losing_or_repeating_rows(self) -> None:
-        visit_ids = [uuid.uuid4() for _ in range(3)]
-        push(self.scenario, [create_op(self.scenario, visit_id=v) for v in visit_ids])
+        record_ids = [uuid.uuid4() for _ in range(3)]
+        push(self.scenario, [create_op(self.scenario, record_id=v) for v in record_ids])
 
         first = pull(self.scenario, BASELINE_CURSOR, limit=2).json()
         self.assertEqual(len(first["rows"]), 2)
@@ -239,7 +239,7 @@ class PaginationTests(TestCase):
         self.assertFalse(second["has_more"])
 
         seen_ids = [row["data"]["id"] for row in first["rows"] + second["rows"]]
-        self.assertEqual(seen_ids, [str(v) for v in visit_ids])
+        self.assertEqual(seen_ids, [str(v) for v in record_ids])
 
     def test_an_out_of_range_limit_is_a_422(self) -> None:
         response = pull(self.scenario, CURSOR_ZERO, limit=1001)
@@ -254,7 +254,7 @@ class PaginationTests(TestCase):
 @skip_without_db
 class AuthorizationTests(TestCase):
     def test_a_viewer_can_still_pull_and_bootstrap(self) -> None:
-        """`can_read_visit` admite cualquier rol miembro, incluido `VIEWER`."""
+        """`can_read_record` admite cualquier rol miembro, incluido `VIEWER`."""
         scenario = build_scenario(role=Role.VIEWER)
         self.assertEqual(pull(scenario, CURSOR_ZERO).status_code, 200)
         self.assertEqual(bootstrap(scenario).status_code, 200)
