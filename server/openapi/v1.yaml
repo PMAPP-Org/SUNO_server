@@ -1755,9 +1755,9 @@ components:
         schema_version:
           allOf:
             - $ref: '#/components/schemas/SchemaVersion'
-          const: 1
+          const: 2
           description: |
-            Versión de payload de este contrato (v1). Otra versión ⇒ `422 schema_unsupported`;
+            Versión de payload de este contrato (2). Otra versión ⇒ `422 schema_unsupported`;
             `GET /v1/server/info` publica el rango aceptado.
         device_id:
           $ref: '#/components/schemas/Uuid'
