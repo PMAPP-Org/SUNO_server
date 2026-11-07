@@ -4,6 +4,17 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.14.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.13.0...v0.14.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename the visitacampo package and infrastructure to suno ([#57](https://github.com/PMAPP-Org/SUNO_server/issues/57))
+
+### Refactorización
+
+* rename the visitacampo package and infrastructure to suno ([#57](https://github.com/PMAPP-Org/SUNO_server/issues/57)) ([5406bb1](https://github.com/PMAPP-Org/SUNO_server/commit/5406bb11b5f9ab9812bd8a201f36e8fda2b676c9))
+
 ## [0.13.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.12.0...v0.13.0) (2026-11-06)
 
 
