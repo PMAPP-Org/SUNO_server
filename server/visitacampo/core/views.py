@@ -18,8 +18,10 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
+from visitacampo.core.access import Section
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import AppUser, Assignment, Membership, Visit
+from visitacampo.core.navigation import platform_navigation
 from visitacampo.core.scoping import scoped_qs
 from visitacampo.projects.access import visible_projects
 
@@ -61,13 +63,16 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         return redirect("platform_login")
 
     visits = scoped_qs(request_context, Visit).filter(deleted_at__isnull=True)
+    if not request_context.has_section_access(Section.FIELD_RECORDS):
+        visits = visits.none()
     recent_visits = list(
         visits.select_related("template_version__template", "created_by")
         .annotate(review_count=Count("reviews"))
         .order_by("-captured_at")[:8]
     )
+    map_visits = visits if request_context.has_section_access(Section.GIS) else visits.none()
     located_visits = list(
-        visits.exclude(lat__isnull=True)
+        map_visits.exclude(lat__isnull=True)
         .exclude(lon__isnull=True)
         .select_related("template_version__template", "created_by")
         .order_by("-captured_at")[:80]
@@ -90,16 +95,20 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         .filter(visit_count=0)
         .count()
     )
+    projects = visible_projects(request_context)
+    if not request_context.has_section_access(Section.PROJECTS):
+        projects = projects.none()
     context = {
         "organization": user.org,
+        "navigation": platform_navigation(request_context),
         "recent_visits": recent_visits,
         "map_points": map_points,
         "visit_count": visits.count(),
         "pending_review_count": visits.filter(reviews__isnull=True).count(),
         "pending_assignment_count": pending_assignments,
         "member_count": scoped_qs(request_context, Membership).count(),
-        "projects": list(visible_projects(request_context).order_by("name")[:6]),
-        "project_count": visible_projects(request_context).count(),
+        "projects": list(projects.order_by("name")[:6]),
+        "project_count": projects.count(),
     }
     return render(request, "suno/platform.html", context)
 

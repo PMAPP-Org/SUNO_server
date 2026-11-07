@@ -8,8 +8,8 @@ Dos mitades, con el mismo criterio que `test_models.py`:
    entero en memoria.
 
 2. **Con PostgreSQL** (`TestCase`): lo que solo la BD puede demostrar — que
-   resolver el contexto cuesta **exactamente una query** (`assertNumQueries(1)`,
-   RD-07 / hallazgo H-07) y que autorizar N recursos después cuesta **cero**.
+   resolver el contexto cuesta un presupuesto constante de dos queries
+   (membresía y accesos), y que autorizar N recursos después cuesta **cero**.
 
 El arranque de la BD de test vive en `dbsupport.py` (mismo patrón que
 `test_models.py`: el proyecto no usa `pytest-django` y CI fija
@@ -60,7 +60,10 @@ class RequestContextShapeTests(SimpleTestCase):
 
     def test_has_the_documented_fields(self) -> None:
         names = {f.name for f in dataclasses.fields(RequestContext)}
-        self.assertEqual(names, {"user_id", "org_id", "roles", "device_id", "entities"})
+        self.assertEqual(
+            names,
+            {"user_id", "org_id", "roles", "device_id", "section_access", "entities"},
+        )
 
     def test_is_frozen(self) -> None:
         ctx = _ctx(Role.ADMIN)
@@ -169,7 +172,7 @@ class RequestAttachmentTests(SimpleTestCase):
 
 @unittest.skipUnless(_SKIP_REASON is None, _SKIP_REASON or "")
 class ContextResolutionTests(TestCase):
-    """H-07/RD-07: resolver roles cuesta **una** query, siempre."""
+    """H-07/RD-07: resolver autorización tiene coste constante."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -195,8 +198,8 @@ class ContextResolutionTests(TestCase):
     def _principal(self, user: AppUser, org: Organization) -> Principal:
         return Principal(user_id=user.pk, org_id=org.pk, device_id=self.device_id)
 
-    def test_resolution_costs_exactly_one_query(self) -> None:
-        with self.assertNumQueries(1):
+    def test_resolution_costs_exactly_two_queries_for_a_member(self) -> None:
+        with self.assertNumQueries(2):
             ctx = resolve_request_context(self._principal(self.user, self.org))
         # El presupuesto solo es significativo si la query hizo su trabajo:
         # el rol correcto, el de esta organización y no el de la otra.
@@ -266,7 +269,7 @@ class QueryBudgetTests(TestCase):
         # presupuesto de 0 queries lo delataría al instante.
         visits = [Visit(id=uuid.uuid4(), org_id=self.org.pk) for _ in range(self.BATCH_SIZE)]
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             ctx = resolve_request_context(principal)
             for visit in visits:
                 self.assertTrue(can_read_visit(ctx, visit))
@@ -306,7 +309,7 @@ class RequestContextAuthTests(TestCase):
         request = RequestFactory().post("/v1/sync/push")
         principal = Principal(user_id=self.user.pk, org_id=self.org.pk)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             ctx = self._auth(principal).authenticate(request, "token-opaco")
 
         assert ctx is not None  # para mypy; el aserto real es el de abajo
@@ -336,7 +339,7 @@ class RequestContextAuthTests(TestCase):
         )
         principal = Principal(user_id=self.user.pk, org_id=self.org.pk)
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             self._auth(principal)(request)
 
         self.assertEqual(get_request_context(request).roles, frozenset({Role.ADMIN}))

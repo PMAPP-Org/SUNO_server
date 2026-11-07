@@ -11,11 +11,13 @@ al del propio doc 08:
 - `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
 - `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
 - `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
+- `access`   — roles funcionales por sección y alcance de proyecto.
 
 Todos los modelos se reexportan aquí para que `from visitacampo.core.models
 import Visit` funcione igual que con un `models.py` plano.
 """
 
+from .access import SectionGrant, SectionProjectScope
 from .base import (
     ACTIVE_JOB_STATUSES,
     INITIAL_VERSION,
@@ -44,6 +46,19 @@ from .budget import (
     BudgetVersionStatus,
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
+from .equipment import (
+    Equipment,
+    EquipmentDocument,
+    EquipmentDocumentType,
+    EquipmentMeterUnit,
+    EquipmentOperatorAssignment,
+    EquipmentOwnership,
+    EquipmentProject,
+    EquipmentStatus,
+    EquipmentType,
+    EquipmentUsage,
+    EquipmentUsageStatus,
+)
 from .layer import ReferenceLayer
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
@@ -83,6 +98,17 @@ __all__ = [
     "AuditEvent",
     "Blob",
     "Device",
+    "Equipment",
+    "EquipmentDocument",
+    "EquipmentDocumentType",
+    "EquipmentMeterUnit",
+    "EquipmentOperatorAssignment",
+    "EquipmentOwnership",
+    "EquipmentProject",
+    "EquipmentStatus",
+    "EquipmentType",
+    "EquipmentUsage",
+    "EquipmentUsageStatus",
     "DependencyType",
     "FormTemplate",
     "FormTemplateVersion",
@@ -102,6 +128,8 @@ __all__ = [
     "Resource",
     "ScheduleImport",
     "ScheduleImportStatus",
+    "SectionGrant",
+    "SectionProjectScope",
     "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",

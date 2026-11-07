@@ -25,6 +25,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Model, QuerySet
 
 from visitacampo.backoffice.context import admin_context, is_platform_operator
+from visitacampo.core.access import Capability
 from visitacampo.core.context import RequestContext
 from visitacampo.core.models import Organization
 
@@ -36,6 +37,14 @@ class OrgScopedAdmin(admin.ModelAdmin):
 
     #: Campo por el que se aísla. `Organization` usa su propia `pk`.
     org_lookup = "org_id"
+    # Las subclases de dominio fijan su sección. ``None`` queda reservado
+    # para infraestructura de plataforma con una regla más específica.
+    domain_section: Any = None
+
+    def _has_domain_capability(self, request: Any, capability: Capability) -> bool:
+        if is_platform_operator(request) or self.domain_section is None:
+            return True
+        return admin_context(request).has_capability(self.domain_section, capability)
 
     def _org_of(self, obj: Model) -> Any:
         return getattr(obj, self.org_lookup)
@@ -75,19 +84,39 @@ class OrgScopedAdmin(admin.ModelAdmin):
         return readonly
 
     def has_module_permission(self, request: Any) -> bool:
-        return super().has_module_permission(request) and self._member_of_own_org(request)
+        return (
+            super().has_module_permission(request)
+            and self._member_of_own_org(request)
+            and self._has_domain_capability(request, Capability.READ)
+        )
 
     def has_view_permission(self, request: Any, obj: Model | None = None) -> bool:
-        return super().has_view_permission(request, obj) and self._can_touch(request, obj)
+        return (
+            super().has_view_permission(request, obj)
+            and self._can_touch(request, obj)
+            and self._has_domain_capability(request, Capability.READ)
+        )
 
     def has_change_permission(self, request: Any, obj: Model | None = None) -> bool:
-        return super().has_change_permission(request, obj) and self._can_touch(request, obj)
+        return (
+            super().has_change_permission(request, obj)
+            and self._can_touch(request, obj)
+            and self._has_domain_capability(request, Capability.UPDATE)
+        )
 
     def has_delete_permission(self, request: Any, obj: Model | None = None) -> bool:
-        return super().has_delete_permission(request, obj) and self._can_touch(request, obj)
+        return (
+            super().has_delete_permission(request, obj)
+            and self._can_touch(request, obj)
+            and self._has_domain_capability(request, Capability.DELETE)
+        )
 
     def has_add_permission(self, request: Any) -> bool:
-        return super().has_add_permission(request) and self._member_of_own_org(request)
+        return (
+            super().has_add_permission(request)
+            and self._member_of_own_org(request)
+            and self._has_domain_capability(request, Capability.CREATE)
+        )
 
     def formfield_for_foreignkey(self, db_field: Any, request: Any, **kwargs: Any) -> Any:
         field = super().formfield_for_foreignkey(db_field, request, **kwargs)

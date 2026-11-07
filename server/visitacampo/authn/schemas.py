@@ -22,6 +22,7 @@ from ninja import Schema
 from pydantic import AfterValidator, Field, PlainSerializer
 
 __all__ = [
+    "AccessProfile",
     "DeviceInfoSchema",
     "LoginRequest",
     "LoginResponse",
@@ -29,6 +30,7 @@ __all__ = [
     "NoNulStr",
     "RefreshRequest",
     "TokenPair",
+    "SectionAccessProfile",
     "UserProfile",
     "rfc3339_utc",
 ]
@@ -111,6 +113,22 @@ class UserProfile(Schema):
     display_name: str | None
     org_id: uuid.UUID
     roles: list[str]
+
+
+class SectionAccessProfile(Schema):
+    """Rol, capacidades y alcance efectivo de una sección."""
+
+    section: str
+    role: str
+    scope: Literal["organization", "projects"]
+    project_ids: list[uuid.UUID]
+    capabilities: list[str]
+
+
+class AccessProfile(Schema):
+    """Autorización funcional vigente; no se confía al JWT."""
+
+    sections: list[SectionAccessProfile]
 
 
 class LoginResponse(Schema):

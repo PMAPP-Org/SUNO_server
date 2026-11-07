@@ -26,6 +26,7 @@ from django.views.decorators.http import require_http_methods
 
 from visitacampo.backoffice.export import safe_cell, to_xlsx
 from visitacampo.core import audit
+from visitacampo.core.access import Section
 from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.download import ascii_filename
@@ -41,6 +42,7 @@ from visitacampo.core.models import (
     TaskResponsible,
     Visit,
 )
+from visitacampo.core.navigation import platform_navigation
 from visitacampo.core.policies import (
     can_assign_task_responsibles,
     can_export_schedule,
@@ -59,7 +61,7 @@ from .schedule import ScheduleRow, build_schedule, filter_rows
 def _ctx(request: HttpRequest) -> RequestContext:
     user = cast(AppUser, request.user)
     ctx = resolve_request_context(Principal(user_id=user.pk, org_id=user.org_id))
-    if not ctx.is_member:
+    if not ctx.is_member or not ctx.has_section_access(Section.PROJECTS):
         raise PermissionDenied
     return ctx
 
@@ -67,7 +69,15 @@ def _ctx(request: HttpRequest) -> RequestContext:
 def _render(
     request: HttpRequest, ctx: RequestContext, template: str, context: dict[str, object]
 ) -> HttpResponse:
-    return render(request, template, {"organization": get_organization(ctx), **context})
+    return render(
+        request,
+        template,
+        {
+            "organization": get_organization(ctx),
+            "navigation": platform_navigation(ctx),
+            **context,
+        },
+    )
 
 
 class ProjectForm(forms.Form):

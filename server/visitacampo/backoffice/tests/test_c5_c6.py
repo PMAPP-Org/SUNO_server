@@ -271,7 +271,7 @@ class FormsAndExportsTests(TestCase):
         supervisor_change = supervisor_client.get(
             f"/admin/core/formtemplate/{supervisor.version.template_id}/change/"
         )
-        self.assertNotContains(supervisor_change, "Importar XLSForm")
+        self.assertEqual(supervisor_change.status_code, 403)
 
     def test_import_command_validation_publication_and_denials(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,52 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Equipos{% endblock %}
+{% block content %}
+<section class="eq-heading">
+  <div>
+    <p class="editorial-label">Control operativo</p>
+    <h1>Equipos</h1>
+    <p>Ficha técnica, asignaciones y documentos en un solo lugar.</p>
+  </div>
+  <div class="eq-heading-actions">
+    <a class="eq-button" href="{% url 'equipment:usage_list' %}">Registros de uso</a>
+    {% if can_create %}<a class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
+  </div>
+</section>
+
+<form class="eq-filters" method="get" aria-label="Filtros de equipos">
+  <label class="eq-search"><span>Buscar</span><input type="search" name="q" value="{{ query }}" placeholder="Código, nombre, serie o placa"></label>
+  <label><span>Tipo</span><select name="type"><option value="">Todos</option>{% for type in types %}<option value="{{ type.pk }}"{% if selected_type == type.pk|stringformat:'s' %} selected{% endif %}>{{ type.name }}</option>{% endfor %}</select></label>
+  <label><span>Estado</span><select name="status"><option value="">Todos</option>{% for value, label in statuses %}<option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label><span>Proyecto</span><select name="project"><option value="">Todos</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label>
+  <button class="eq-button" type="submit">Aplicar</button>
+  {% if query or selected_type or selected_status or selected_project %}<a class="eq-clear" href="{% url 'equipment:list' %}">Limpiar</a>{% endif %}
+</form>
+
+<section class="eq-table-wrap" aria-label="Catálogo de equipos">
+  <table class="eq-table">
+    <thead><tr><th>Equipo</th><th>Tipo</th><th>Identificación</th><th>Proyecto actual</th><th>Estado</th><th><span class="sr-only">Abrir</span></th></tr></thead>
+    <tbody>
+    {% for item in items %}
+      <tr>
+        <td data-label="Equipo"><a class="eq-name" href="{% url 'equipment:detail' item.equipment.pk %}">{{ item.equipment.name }}</a><small>{{ item.equipment.code }}</small></td>
+        <td data-label="Tipo">{{ item.equipment.equipment_type.name }}</td>
+        <td data-label="Identificación">{% if item.equipment.license_plate %}{{ item.equipment.license_plate }}{% elif item.equipment.serial_number %}{{ item.equipment.serial_number }}{% else %}—{% endif %}</td>
+        <td data-label="Proyecto">{% if item.project %}{{ item.project.project.name }}{% else %}<span class="eq-muted">Sin asignar</span>{% endif %}</td>
+        <td data-label="Estado"><span class="eq-status eq-status-{{ item.equipment.status }}"><i></i>{{ item.equipment.get_status_display }}</span></td>
+        <td><a class="eq-open" href="{% url 'equipment:detail' item.equipment.pk %}" aria-label="Abrir {{ item.equipment.name }}">Abrir <span aria-hidden="true">→</span></a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="eq-empty"><strong>No hay equipos para mostrar.</strong><span>Prueba otros filtros o registra el primer equipo.</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if page.paginator.num_pages > 1 %}
+<nav class="eq-pagination" aria-label="Paginación">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query|urlencode }}&type={{ selected_type }}&status={{ selected_status }}&project={{ selected_project }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query|urlencode }}&type={{ selected_type }}&status={{ selected_status }}&project={{ selected_project }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

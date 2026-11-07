@@ -1,0 +1,22 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% if equipment %}{% url 'equipment:detail' equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">← Volver</a>
+<section class="eq-form-shell">
+  <header><p class="editorial-label">Equipos</p><h1>{{ title }}</h1>{% if equipment %}<p>{{ equipment.code }} · {{ equipment.name }}</p>{% endif %}</header>
+  <form method="post" class="eq-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <label{% if field.name == 'specifications' or field.name == 'notes' or field.name == 'description' %} class="eq-field-wide"{% endif %}>
+        <span>{{ field.label }}{% if field.field.required %}<b aria-hidden="true">*</b>{% endif %}</span>
+        {{ field }}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </label>
+    {% endfor %}
+    <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Guardar</button><a href="{% if equipment %}{% url 'equipment:detail' equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a></div>
+  </form>
+  {% if title == "Registrar equipo" %}<p class="eq-form-note">¿No aparece el tipo que necesitas? <a href="{% url 'equipment:type_create' %}">Crear tipo de equipo</a>.</p>{% endif %}
+</section>
+{% endblock %}

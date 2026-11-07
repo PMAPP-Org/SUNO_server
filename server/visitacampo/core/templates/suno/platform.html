@@ -39,6 +39,7 @@
         </section>
 
         <div class="workspace-primary">
+          {% if navigation.PROJECTS %}
           <section class="projects-module" id="proyectos" aria-labelledby="projects-title">
             <div class="module-heading"><div><p class="editorial-index">Operación</p><h2 id="projects-title">Proyectos</h2></div><span class="module-note">Datos reales</span></div>
             <div class="projects-table" role="table" aria-label="Proyectos de la organización">
@@ -50,12 +51,14 @@
               {% endfor %}
             </div>
             <div class="quick-links" aria-label="Accesos rápidos">
-              <a href="#mapa">Abrir mapa <span aria-hidden="true">→</span></a>
-              <a href="#actividad">Ver registros <span aria-hidden="true">→</span></a>
+              {% if navigation.GIS %}<a href="#mapa">Abrir mapa <span aria-hidden="true">→</span></a>{% endif %}
+              {% if navigation.FIELD_RECORDS %}<a href="#actividad">Ver registros <span aria-hidden="true">→</span></a>{% endif %}
               {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">Administrar información <span aria-hidden="true">→</span></a>{% endif %}
             </div>
           </section>
+          {% endif %}
 
+          {% if navigation.GIS %}
           <section class="map-module" id="mapa" aria-labelledby="map-title">
             <div class="map-module-head"><div><p class="editorial-index">Territorio</p><h2 id="map-title">Mapa de registros</h2></div><span>{{ map_points|length }} punto{{ map_points|length|pluralize:"s" }}</span></div>
             <div class="map-viewer" data-map-viewer>
@@ -65,8 +68,10 @@
               <aside class="record-panel" data-record-panel hidden><button type="button" data-record-close aria-label="Cerrar detalle">×</button><p class="editorial-label">Registro localizado</p><h3 data-record-title></h3><dl><div><dt>Responsable</dt><dd data-record-author></dd></div><div><dt>Capturado</dt><dd data-record-date></dd></div><div><dt>Coordenadas</dt><dd data-record-coordinates></dd></div></dl></aside>
             </div>
           </section>
+          {% endif %}
         </div>
 
+        {% if navigation.FIELD_RECORDS %}
         <section class="activity-module" id="actividad" aria-labelledby="activity-title">
           <div class="module-heading"><div><p class="editorial-index">Seguimiento</p><h2 id="activity-title">Actividad reciente</h2></div><span class="module-note">{{ recent_visits|length }} registro{{ recent_visits|length|pluralize:"s" }}</span></div>
           <div class="activity-table" role="table" aria-label="Actividad reciente">
@@ -82,6 +87,7 @@
             <p class="search-empty" data-search-empty hidden>No hay registros que coincidan con la búsqueda.</p>
           </div>
         </section>
+        {% endif %}
       </main>
     </div>
   </div>

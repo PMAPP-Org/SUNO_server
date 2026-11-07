@@ -1,0 +1,75 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ equipment.name }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-detail-head">
+  <div>
+    <p class="editorial-label">{{ equipment.equipment_type.name }}</p>
+    <h1>{{ equipment.name }}</h1>
+    <p>{{ equipment.code }}{% if equipment.manufacturer %} · {{ equipment.manufacturer }}{% endif %}{% if equipment.model %} {{ equipment.model }}{% endif %}</p>
+    <span class="eq-status eq-status-{{ equipment.status }}"><i></i>{{ equipment.get_status_display }}</span>
+  </div>
+  {% if can_edit %}<a class="eq-button" href="{% url 'equipment:edit' equipment.pk %}">Editar ficha</a>{% endif %}
+</section>
+
+<nav class="eq-tabs" aria-label="Secciones de la ficha">
+  <a href="?tab=technical"{% if tab == 'technical' %} aria-current="page"{% endif %}>Ficha técnica</a>
+  <a href="?tab=documents"{% if tab == 'documents' %} aria-current="page"{% endif %}>Documentos <span>{{ documents|length }}</span></a>
+  <a href="?tab=operators"{% if tab == 'operators' %} aria-current="page"{% endif %}>Operadores <span>{{ assignments|length }}</span></a>
+  <a href="?tab=usage"{% if tab == 'usage' %} aria-current="page"{% endif %}>Uso <span>{{ usage_records|length }}</span></a>
+  <a href="?tab=projects"{% if tab == 'projects' %} aria-current="page"{% endif %}>Proyectos <span>{{ project_links|length }}</span></a>
+  <a href="?tab=history"{% if tab == 'history' %} aria-current="page"{% endif %}>Historial</a>
+</nav>
+
+<div class="eq-detail-grid">
+  <section class="eq-detail-main">
+    {% if tab == 'technical' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Identificación</p><h2>Ficha técnica</h2></div></div>
+      <dl class="eq-specs">
+        <div><dt>Código interno</dt><dd>{{ equipment.code }}</dd></div>
+        <div><dt>Tipo</dt><dd>{{ equipment.equipment_type.name }}</dd></div>
+        <div><dt>Fabricante</dt><dd>{{ equipment.manufacturer|default:"—" }}</dd></div>
+        <div><dt>Modelo</dt><dd>{{ equipment.model|default:"—" }}</dd></div>
+        <div><dt>Serie</dt><dd>{{ equipment.serial_number|default:"—" }}</dd></div>
+        <div><dt>Placa</dt><dd>{{ equipment.license_plate|default:"—" }}</dd></div>
+        <div><dt>Año de fabricación</dt><dd>{{ equipment.manufacture_year|default:"—" }}</dd></div>
+        <div><dt>Propiedad</dt><dd>{{ equipment.get_ownership_display }}{% if equipment.owner_name %} · {{ equipment.owner_name }}{% endif %}</dd></div>
+      </dl>
+      {% if equipment.specifications %}<div class="eq-notes"><h3>Especificaciones</h3><pre>{{ equipment.specifications }}</pre></div>{% endif %}
+      {% if equipment.notes %}<div class="eq-notes"><h3>Observaciones</h3><p>{{ equipment.notes|linebreaksbr }}</p></div>{% endif %}
+    {% elif tab == 'documents' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Cumplimiento</p><h2>Documentos</h2></div>{% if can_edit %}<a href="{% url 'equipment:document_create' equipment.pk %}">Agregar documento</a>{% endif %}</div>
+      <div class="eq-records">
+        {% for document in documents %}<article><div><strong>{{ document.name }}</strong><span>{{ document.get_document_type_display }}{% if document.number %} · {{ document.number }}{% endif %}</span></div><div><small>Vencimiento</small><time>{{ document.expires_on|date:"d/m/Y"|default:"Sin vencimiento" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay documentos registrados.</p>{% endfor %}
+      </div>
+    {% elif tab == 'operators' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Trazabilidad</p><h2>Historial de operadores</h2></div>{% if can_assign %}<a href="{% url 'equipment:operator_create' equipment.pk %}">Asignar operador</a>{% endif %}</div>
+      <div class="eq-records">
+        {% for assignment in assignments %}<article><div><strong>{{ assignment.operator.display_name|default:assignment.operator.username }}</strong><span>{{ assignment.project.name }}</span></div><div><small>Vigencia</small><time>{{ assignment.valid_from|date:"d/m/Y" }} — {{ assignment.valid_until|date:"d/m/Y"|default:"Actual" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay operadores asignados.</p>{% endfor %}
+      </div>
+    {% elif tab == 'usage' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Operación</p><h2>Registros de uso</h2></div>{% if can_schedule %}<a href="{% url 'equipment:usage_create' %}?equipment={{ equipment.pk }}{% if current_project %}&project={{ current_project.project_id }}{% endif %}">Registrar uso</a>{% endif %}</div>
+      <div class="eq-records eq-usage-records">
+        {% for usage in usage_records %}<article><div><strong>{{ usage.usage_date|date:"d/m/Y" }} · {{ usage.start_time|time:"H:i" }}–{{ usage.end_time|time:"H:i" }}</strong><span>{{ usage.activity }} · {{ usage.project.name }}</span><small>{{ usage.equipment.code }} · {{ usage.get_status_display }}</small></div><div><small>Operador</small><strong>{{ usage.operator.display_name|default:usage.operator.username }}</strong>{% if usage.start_meter != None %}<span>{{ usage.start_meter }}{% if usage.end_meter != None %} → {{ usage.end_meter }}{% endif %} · {{ usage.get_meter_unit_display }}</span>{% endif %}</div></article>{% empty %}<p class="eq-empty-inline">No hay usos registrados para este equipo.</p>{% endfor %}
+      </div>
+    {% elif tab == 'projects' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Uso</p><h2>Historial de proyectos</h2></div>{% if can_assign %}<a href="{% url 'equipment:project_create' equipment.pk %}">Vincular proyecto</a>{% endif %}</div>
+      <div class="eq-records">
+        {% for link in project_links %}<article><div><strong>{{ link.project.name }}</strong><span>{{ link.project.code|default:"Proyecto" }}</span></div><div><small>Periodo</small><time>{{ link.started_on|date:"d/m/Y" }} — {{ link.ended_on|date:"d/m/Y"|default:"Actual" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay proyectos vinculados.</p>{% endfor %}
+      </div>
+    {% else %}
+      <div class="eq-section-head"><div><p class="editorial-label">Auditoría</p><h2>Historial de cambios</h2></div></div>
+      <div class="eq-timeline">
+        {% for event in history %}<article><i></i><div><strong>{{ event.action }}</strong><span>{% if event.actor %}{{ event.actor.display_name|default:event.actor.username }}{% else %}Sistema{% endif %}</span><time>{{ event.created_at|date:"d/m/Y · H:i" }}</time></div></article>{% empty %}<p class="eq-empty-inline">Todavía no hay eventos asociados.</p>{% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <aside class="eq-detail-rail">
+    <section><p class="editorial-label">Asignación actual</p><h3>Proyecto</h3>{% if current_project %}<strong>{{ current_project.project.name }}</strong><span>Desde {{ current_project.started_on|date:"d/m/Y" }}</span>{% else %}<span>Sin proyecto asignado</span>{% endif %}</section>
+    <section><h3>Operador</h3>{% if current_operator %}<strong>{{ current_operator.operator.display_name|default:current_operator.operator.username }}</strong><span>{{ current_operator.project.name }}</span>{% else %}<span>Sin operador vigente</span>{% endif %}</section>
+    <section><p class="editorial-label">Próximos vencimientos</p>{% for document in upcoming %}<div class="eq-expiry"><strong>{{ document.name }}</strong><time>{{ document.expires_on|date:"d/m/Y" }}</time></div>{% empty %}<span>Sin vencimientos en 60 días</span>{% endfor %}</section>
+    <section class="eq-qr"><div aria-hidden="true">QR</div><h3>Identificación móvil</h3><span>El código QR estará disponible en la siguiente fase.</span></section>
+  </aside>
+</div>
+{% endblock %}

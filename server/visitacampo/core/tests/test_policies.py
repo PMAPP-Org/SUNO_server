@@ -25,7 +25,8 @@ from django.test import SimpleTestCase
 from ninja.errors import HttpError
 
 from visitacampo.core import policies
-from visitacampo.core.context import RequestContext
+from visitacampo.core.access_services import LEGACY_GRANTS
+from visitacampo.core.context import RequestContext, SectionAccess
 from visitacampo.core.models import Device, FormTemplate, Job, Role, Visit
 from visitacampo.core.policies import (
     can_manage_device,
@@ -49,7 +50,17 @@ OTHER_USER = uuid.uuid4()
 
 
 def ctx(*roles: object, org_id: uuid.UUID = ORG, user_id: uuid.UUID = USER) -> RequestContext:
-    return RequestContext(user_id=user_id, org_id=org_id, roles=frozenset(roles))
+    section_access = tuple(
+        SectionAccess(section=section, role=section_role, scope=scope)
+        for role in roles
+        for section, section_role, scope in LEGACY_GRANTS.get(str(role), ())
+    )
+    return RequestContext(
+        user_id=user_id,
+        org_id=org_id,
+        roles=frozenset(roles),
+        section_access=section_access,
+    )
 
 
 def visit(org_id: uuid.UUID = ORG) -> Visit:

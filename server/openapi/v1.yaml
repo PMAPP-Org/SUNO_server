@@ -121,6 +121,26 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/auth/access:
+    get:
+      operationId: authAccess
+      tags: [auth]
+      summary: Accesos efectivos del usuario
+      description: |
+        Devuelve el rol, las capacidades y el alcance por proyecto de cada sección disponible.
+        El servidor resuelve estos datos desde la base de datos en cada solicitud: el cliente los
+        usa para navegación y operación offline, pero nunca como sustituto de la autorización del
+        servidor.
+      responses:
+        '200':
+          description: Autorización funcional vigente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessProfile'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/auth/refresh:
     post:
       operationId: authRefresh
@@ -972,6 +992,69 @@ components:
           $ref: '#/components/schemas/TokenPair'
         user:
           $ref: '#/components/schemas/UserProfile'
+
+    AccessProfile:
+      type: object
+      required: [sections]
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionAccessProfile'
+
+    SectionAccessProfile:
+      type: object
+      required: [section, role, scope, project_ids, capabilities]
+      properties:
+        section:
+          type: string
+          enum:
+            - FIELD_RECORDS
+            - PROJECTS
+            - BUDGETS
+            - FORMS
+            - EQUIPMENT
+            - GIS
+            - REPORTS
+            - USERS_ACCESS
+            - OPERATIONS
+        role:
+          type: string
+          enum:
+            - MANAGER
+            - REVIEWER
+            - CONTRIBUTOR
+            - VIEWER
+            - EQUIPMENT_OPERATOR
+            - SST_AUDITOR
+            - ACCESS_ADMIN
+        scope:
+          type: string
+          enum: [organization, projects]
+        project_ids:
+          type: array
+          description: Vacío para alcance organizacional o para un alcance de proyectos sin acceso.
+          items:
+            $ref: '#/components/schemas/Uuid'
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - create
+              - read
+              - update
+              - delete
+              - review
+              - approve
+              - reject
+              - assign
+              - import
+              - publish
+              - export
+              - schedule
+              - manage_access
 
     RefreshToken:
       type: string

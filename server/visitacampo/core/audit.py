@@ -93,6 +93,21 @@ class AuditAction:
     SCHEDULE_EXPORTED = "projects.schedule_exported"
     SCHEDULE_SOURCE_DOWNLOADED = "projects.schedule_source_downloaded"
 
+    # Administración de accesos por sección.
+    ACCESS_GRANTED = "access.granted"
+    ACCESS_CHANGED = "access.changed"
+    ACCESS_REVOKED = "access.revoked"
+
+    # Equipos y ficha técnica (Hito B).
+    EQUIPMENT_TYPE_CREATED = "equipment.type_created"
+    EQUIPMENT_CREATED = "equipment.created"
+    EQUIPMENT_UPDATED = "equipment.updated"
+    EQUIPMENT_PROJECT_LINKED = "equipment.project_linked"
+    EQUIPMENT_OPERATOR_ASSIGNED = "equipment.operator_assigned"
+    EQUIPMENT_DOCUMENT_ADDED = "equipment.document_added"
+    EQUIPMENT_USAGE_CREATED = "equipment.usage_created"
+    EQUIPMENT_USAGE_UPDATED = "equipment.usage_updated"
+
     # Presupuestos (costos, pieza 3).
     BUDGET_CREATED = "budgets.created"
     BUDGET_VERSION_APPLIED = "budgets.version_applied"

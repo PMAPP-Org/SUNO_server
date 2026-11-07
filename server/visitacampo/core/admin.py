@@ -56,6 +56,7 @@ from visitacampo.backoffice.spatial_export import (
 from visitacampo.backoffice.visit_pdf import visit_pdf
 from visitacampo.backoffice.xlsform_admin import import_view
 from visitacampo.basemaps.services import retire as retire_basemap
+from visitacampo.core.access import Section
 from visitacampo.core.audit import AuditAction, record
 from visitacampo.core.models import (
     AppUser,
@@ -113,6 +114,7 @@ class OrganizationAdmin(OrgScopedAdmin):
 
 @admin.register(AppUser)
 class AppUserAdmin(OrgScopedAdmin, UserAdmin):
+    domain_section = Section.USERS_ACCESS
     list_display = ("username", "display_name", "email", "is_active", "is_staff", "org")
     list_filter = ("is_active", "is_staff")
     search_fields = ("username", "display_name", "email")
@@ -192,6 +194,7 @@ class AppUserAdmin(OrgScopedAdmin, UserAdmin):
 
 @admin.register(Membership)
 class MembershipAdmin(OrgScopedAdmin):
+    domain_section = Section.USERS_ACCESS
     list_display = ("user", "role", "created_at")
     list_filter = ("role",)
     search_fields = ("user__username",)
@@ -199,6 +202,7 @@ class MembershipAdmin(OrgScopedAdmin):
 
 @admin.register(Device)
 class DeviceAdmin(ReadOnlyAdmin):
+    domain_section = Section.OPERATIONS
     list_display = ("id", "owner", "platform", "model", "app_version", "created_at")
     list_filter = ("platform",)
     search_fields = ("owner__username", "model")
@@ -313,6 +317,7 @@ class VisitReviewInline(admin.TabularInline):
 
 @admin.register(Visit)
 class VisitAdmin(ReadOnlyAdmin):
+    domain_section = Section.FIELD_RECORDS
     list_display = ("captured_at", "template", "created_by", "progress", "review", "version")
     list_filter = (
         ReviewStatusFilter,
@@ -495,6 +500,7 @@ class VisitAdmin(ReadOnlyAdmin):
 
 @admin.register(VisitAttachment)
 class VisitAttachmentAdmin(ReadOnlyAdmin):
+    domain_section = Section.FIELD_RECORDS
     list_display = ("id", "visit", "role", "captured_at")
     list_filter = ("role",)
     fields = ("id", "visit", "role", "caption", "captured_at", "order", "blob", "preview")
@@ -517,6 +523,7 @@ class VisitReviewForm(forms.ModelForm):
 
 @admin.register(VisitReview)
 class VisitReviewAdmin(OrgScopedAdmin):
+    domain_section = Section.FIELD_RECORDS
     """Historial de decisiones. Se añaden (con comentario); nunca se editan."""
 
     form = VisitReviewForm
@@ -550,6 +557,7 @@ class VisitReviewAdmin(OrgScopedAdmin):
 
 @admin.register(FormTemplate)
 class FormTemplateAdmin(OrgScopedAdmin):
+    domain_section = Section.FORMS
     change_form_template = "admin/core/formtemplate/change_form.html"
     list_display = ("name", "created_at")
     search_fields = ("name",)
@@ -602,6 +610,7 @@ class PublishVersionForm(forms.ModelForm):
 
 @admin.register(FormTemplateVersion)
 class FormTemplateVersionAdmin(OrgScopedAdmin):
+    domain_section = Section.FORMS
     """Versiones inmutables: se publica una nueva, nunca se edita una publicada."""
 
     form = PublishVersionForm
@@ -663,6 +672,7 @@ class AssignmentForm(forms.ModelForm):
 
 @admin.register(Assignment)
 class AssignmentAdmin(OrgScopedAdmin):
+    domain_section = Section.FIELD_RECORDS
     """Se crean por `create_assignment` (con `change_seq`); no se editan."""
 
     form = AssignmentForm
@@ -706,6 +716,7 @@ class AssignmentAdmin(OrgScopedAdmin):
 
 @admin.register(Job)
 class JobAdmin(ReadOnlyAdmin):
+    domain_section = Section.OPERATIONS
     list_display = ("type", "status", "attempts", "max_attempts", "created_at", "finished_at")
     list_filter = ("status", "type")
     actions = ("retry",)
@@ -736,6 +747,7 @@ class JobAdmin(ReadOnlyAdmin):
 
 @admin.register(SyncOpLog)
 class SyncOpLogAdmin(ReadOnlyAdmin):
+    domain_section = Section.OPERATIONS
     list_display = ("received_at", "entity", "entity_id", "device")
     list_filter = ("entity",)
     date_hierarchy = "received_at"
@@ -743,6 +755,7 @@ class SyncOpLogAdmin(ReadOnlyAdmin):
 
 @admin.register(AuditEvent)
 class AuditEventAdmin(ReadOnlyAdmin):
+    domain_section = Section.OPERATIONS
     """Traza de auditoría: consultable, nunca editable (ISO 27001 A.8.15).
 
     Un registro que el propio back-office puede corregir o borrar no prueba
@@ -759,6 +772,7 @@ class AuditEventAdmin(ReadOnlyAdmin):
 
 @admin.register(PrivacyConsent)
 class PrivacyConsentAdmin(ReadOnlyAdmin):
+    domain_section = Section.USERS_ACCESS
     """Prueba de la autorización de datos personales (Ley 1581, art. 9).
 
     Solo lectura, como la auditoría: una prueba que el back-office pudiera
@@ -774,6 +788,7 @@ class PrivacyConsentAdmin(ReadOnlyAdmin):
 
 @admin.register(BasemapPackage)
 class BasemapPackageAdmin(ReadOnlyAdmin):
+    domain_section = Section.GIS
     """Mapas base offline (Fase B). Se importan desde el servidor
     (`manage.py import_basemap`, archivos de cientos de MB que no deben pasar
     por la web); aquí se ven y se retiran."""
@@ -805,6 +820,7 @@ class BasemapPackageAdmin(ReadOnlyAdmin):
 
 @admin.register(ReferenceLayer)
 class ReferenceLayerAdmin(ReadOnlyAdmin):
+    domain_section = Section.GIS
     """Capas de referencia GeoJSON (Fase C). Se importan con `manage.py
     import_layer`; aquí se ven y se retiran."""
 
