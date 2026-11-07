@@ -14,7 +14,7 @@ cuenta.
 Uso (contra el stack de `infra/docker-compose.yml`, como en `.github/workflows/load.yml`):
 
     LOAD_PASSWORD=… python infra/load/push_load.py \
-        --base-url https://api.visitacampo.localhost --cafile caddy-root.crt \
+        --base-url https://api.suno.localhost --cafile caddy-root.crt \
         --username carga --devices 50 --ops 100 --rounds 3 --report load-report.json
 
 Los agentes los crea `manage.py bootstrap_demo --username carga --extra-agents 49`
@@ -45,7 +45,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-#: Debe coincidir con `visitacampo/serverinfo/capabilities.py::SCHEMA_VERSION`.
+#: Debe coincidir con `suno/serverinfo/capabilities.py::SCHEMA_VERSION`.
 SCHEMA_VERSION = 1
 
 

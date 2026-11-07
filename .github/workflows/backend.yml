@@ -33,14 +33,14 @@ jobs:
     runs-on: ubuntu-latest
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
-    # `VISITACAMPO_REQUIRE_DB=1` convierte ese salto en fallo
-    # (`visitacampo/core/tests/dbsupport.py`).
+    # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
+    # (`suno/core/tests/dbsupport.py`).
     services:
       postgres:
         image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
-          POSTGRES_DB: visitacampo
-          POSTGRES_USER: visitacampo
+          POSTGRES_DB: suno
+          POSTGRES_USER: suno
           POSTGRES_PASSWORD: ci_postgres_password
         ports:
           - 5432:5432
@@ -50,8 +50,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      POSTGRES_DB: visitacampo
-      POSTGRES_USER: visitacampo
+      POSTGRES_DB: suno
+      POSTGRES_USER: suno
       POSTGRES_PASSWORD: ci_postgres_password
       POSTGRES_HOST: localhost
       POSTGRES_PORT: "5432"
@@ -79,11 +79,16 @@ jobs:
       - name: Mapa hallazgo → test (H-01…H-21)
         run: python infra/scripts/check_findings_map.py --repo server
 
+      - name: Nombres (suno / registro)
+        run: |
+          python -m unittest infra/scripts/tests/test_check_naming.py
+          python infra/scripts/check_naming.py package
+
       # Cobertura de ramas del código de producción con suelo `fail_under`
       # (server/pyproject.toml, [tool.coverage.report]): bajar de ahí falla.
       - name: pytest + cobertura (contra PostgreSQL real)
         env:
-          VISITACAMPO_REQUIRE_DB: "1"
+          SUNO_REQUIRE_DB: "1"
         run: |
           pytest server/ --cov --cov-config=server/pyproject.toml \
             --cov-report=term --cov-report=xml:coverage-server.xml
@@ -133,7 +138,7 @@ jobs:
       # Los falsos positivos revisados se suprimen en el código por id exacto
       # (`# nosec B608`…), nunca desactivando reglas aquí.
       - name: bandit (SAST)
-        run: bandit -q -r server/visitacampo server/config -x '*/tests/*,*/migrations/*'
+        run: bandit -q -r server/suno server/config -x '*/tests/*,*/migrations/*'
 
       - name: pip-audit (advisories PyPA/OSV)
         run: |
@@ -218,7 +223,7 @@ jobs:
         run: ./hadolint --config .hadolint.yaml server/Dockerfile
 
       - name: docker build
-        run: docker build --pull -t visitacampo-api:ci server/
+        run: docker build --pull -t suno-api:ci server/
 
       # SBOM de la imagen completa (paquetes Debian + Python instalados), no
       # solo de requirements: es lo que realmente se despliega. CycloneDX y
@@ -226,7 +231,7 @@ jobs:
       # A.8.8, OWASP A03:2025).
       - name: SBOM de la imagen (syft)
         run: |
-          ./syft visitacampo-api:ci -q \
+          ./syft suno-api:ci -q \
             -o cyclonedx-json=sbom-api-image.cdx.json \
             -o spdx-json=sbom-api-image.spdx.json
 

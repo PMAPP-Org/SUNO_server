@@ -9,7 +9,7 @@
 - Tratamientos posibles: mitigar, aceptar (con firma de la dirección), transferir o evitar.
 - El registro se revisa al menos cada seis meses, tras cada incidente y ante cada cambio de arquitectura (ADR nuevo).
 
-**Origen:** los riesgos de la primera tabla (numeración R-01…R-16, reservada para ellos) vienen de la auditoría de código de la arquitectura de referencia ([`docs/07`](../07-hallazgos-revision-codigo.md)), convertidos en las restricciones de diseño RD-01…RD-16 ([`docs/08`](../08-arquitectura-propuesta-visitacampo.md) §3). Se listan aparte porque **su tratamiento está implementado y probado en CI**. Los riesgos R-17 y siguientes son los que siguen abiertos.
+**Origen:** los riesgos de la primera tabla (numeración R-01…R-16, reservada para ellos) vienen de la auditoría de código de la arquitectura de referencia ([`docs/07`](../07-hallazgos-revision-codigo.md)), convertidos en las restricciones de diseño RD-01…RD-16 ([`docs/08`](../08-arquitectura-propuesta-suno.md) §3). Se listan aparte porque **su tratamiento está implementado y probado en CI**. Los riesgos R-17 y siguientes son los que siguen abiertos.
 
 ## Riesgos de diseño ya tratados (RD-01…RD-16)
 

@@ -1,19 +1,19 @@
 # Contrato de API v1 — fuente de verdad
 
-`v1.yaml` es el **contrato OpenAPI 3.1 de VisitaCampo** y la fuente de verdad de la superficie
+`v1.yaml` es el **contrato OpenAPI 3.1 de SUNO** y la fuente de verdad de la superficie
 de acoplamiento entre el backend (Django 5 + Django Ninja + Pydantic v2, ADR-004) y el cliente
 móvil (Flutter, ADR-001). Se escribió **antes** que el código (doc 08 §8 Fase 0) y es la parte de
 definición de **RD-03** ("validación con OpenAPI 3.1 + JSON Schema, en ambos extremos").
 
 - Superficie: exactamente la enumerada en
-  [doc 08 §6](../../docs/08-arquitectura-propuesta-visitacampo.md#6-contrato-de-api-v1--superficie-mínima)
+  [doc 08 §6](../../docs/08-arquitectura-propuesta-suno.md#6-contrato-de-api-v1--superficie-mínima)
   — 13 operaciones, ni una más.
-- Semántica de sync: [ADR-003](../../docs/08-arquitectura-propuesta-visitacampo.md#adr-003--protocolo-de-sync-outbox--cas-por-versión-aplicación-síncrona-y-server-authoritative).
-- Entidades y campos: [doc 08 §4.4](../../docs/08-arquitectura-propuesta-visitacampo.md#44-modelo-de-datos-servidor).
+- Semántica de sync: [ADR-003](../../docs/08-arquitectura-propuesta-suno.md#adr-003--protocolo-de-sync-outbox--cas-por-versión-aplicación-síncrona-y-server-authoritative).
+- Entidades y campos: [doc 08 §4.4](../../docs/08-arquitectura-propuesta-suno.md#44-modelo-de-datos-servidor).
 
 ## Fixtures compartidos
 
-`fixtures/forms_parity.json` contiene los casos del DSL de formularios (ADR-012) que ejecutan **a la vez** el servidor (`visitacampo/forms/tests/test_parity.py`) y la app ([PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client), `test/core/forms/parity_test.dart`). Recoge qué plantillas son válidas, qué campos se ven con cada respuesta y qué violaciones produce cada una. Un caso nuevo se añade aquí, nunca en uno solo de los dos lados.
+`fixtures/forms_parity.json` contiene los casos del DSL de formularios (ADR-012) que ejecutan **a la vez** el servidor (`suno/forms/tests/test_parity.py`) y la app ([PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client), `test/core/forms/parity_test.dart`). Recoge qué plantillas son válidas, qué campos se ven con cada respuesta y qué violaciones produce cada una. Un caso nuevo se añade aquí, nunca en uno solo de los dos lados.
 
 **La app usa una copia fijada** de `v1.yaml` y `fixtures/` en su carpeta `contract/`, con el commit de este repositorio del que sale (`contract/SOURCE`). Su workflow `contract.yml` falla si la copia difiere de ese commit y avisa cuando `master` de este repositorio cambia el contrato. Por eso un cambio del contrato aquí lleva siempre un PR en PMAPP-Org/SUNO_client que actualice su copia ([`contract/README.md`](https://github.com/PMAPP-Org/SUNO_client/blob/master/contract/README.md)).
 

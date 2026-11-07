@@ -3,6 +3,8 @@
 # un secreto nuevo en el mismo archivo vuelve a fallar el CI.
 #
 # Fixture de test del scrubber: el valor que se comprueba que NO se filtra.
+# La huella cita la ruta que tenía el archivo en ese commit (antes del renombre
+# del paquete a `suno`); la línea actual lleva además `gitleaks:allow`.
 112986da4b85d7b04127286f1f10a99855d18c9f:server/visitacampo/jobs/tests/test_scrub.py:generic-api-key:53
 # Placeholders CAMBIAR_EN_PRODUCCION_* de la plantilla de entorno.
 5d691fdb98bfb60e99413f5949e506b70609b1e3:infra/.env.example:generic-api-key:46

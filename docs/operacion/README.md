@@ -1,4 +1,4 @@
-# Operación de VisitaCampo
+# Operación de SUNO
 
 Procedimientos documentados de operación (ISO/IEC 27001:2022 A.5.37). Cada runbook es una lista de pasos concretos para alguien con acceso al servidor y sin contexto previo.
 

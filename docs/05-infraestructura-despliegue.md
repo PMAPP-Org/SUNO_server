@@ -46,9 +46,9 @@ Agrupadas por dominio:
 - Permite versiones de QGIS en paralelo (3.44 LTR y 4.0) sin conflicto de dependencias.
 - Requiere que el host donde corre `worker_wrapper` tenga acceso al socket Docker — implicación de seguridad a considerar (el contenedor que procesa jobs puede, en teoría, lanzar cualquier imagen Docker en el host).
 
-## 6. Patrón a replicar en VisitaCampo
+## 6. Patrón a replicar en SUNO
 
 1. **Un solo `docker-compose.yml` base + overrides seleccionados por variable de entorno (`COMPOSE_FILE`)**, en vez de múltiples archivos compose completos e independientes por entorno — reduce duplicación y drift entre entornos.
 2. **`.env.example` exhaustivo y documentado línea por línea**, con un script de validación en CI que compare contra las variables realmente usadas en el código — evita variables "fantasma" o sin documentar.
-3. Si VisitaCampo no necesita QGIS headless, probablemente **no necesita el patrón docker-in-docker** — pero si hay procesamiento pesado análogo (generación de PDFs/reportes, procesamiento de imágenes de evidencias), el mismo patrón de "contenedor efímero lanzado por un worker" aplica igual de bien sin acoplarlo al proceso web.
-4. **Separar explícitamente "modo self-hosted todo-en-Docker" de "modo producción con servicios gestionados"** desde el diseño del compose, incluso si al inicio VisitaCampo corre todo en Docker — facilita migrar a RDS/S3 gestionado más adelante sin reescribir el compose base.
+3. Si SUNO no necesita QGIS headless, probablemente **no necesita el patrón docker-in-docker** — pero si hay procesamiento pesado análogo (generación de PDFs/reportes, procesamiento de imágenes de evidencias), el mismo patrón de "contenedor efímero lanzado por un worker" aplica igual de bien sin acoplarlo al proceso web.
+4. **Separar explícitamente "modo self-hosted todo-en-Docker" de "modo producción con servicios gestionados"** desde el diseño del compose, incluso si al inicio SUNO corre todo en Docker — facilita migrar a RDS/S3 gestionado más adelante sin reescribir el compose base.

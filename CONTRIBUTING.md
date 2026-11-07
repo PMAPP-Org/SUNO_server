@@ -1,6 +1,6 @@
 # Contribuir a SUNO_server
 
-Backend de VisitaCampo: API, panel de administración (Django Admin) e infraestructura. La app móvil está en [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client), con sus propias reglas de contribución.
+Backend de SUNO: API, panel de administración (Django Admin) e infraestructura. La app móvil está en [PMAPP-Org/SUNO_client](https://github.com/PMAPP-Org/SUNO_client), con sus propias reglas de contribución.
 
 ## Regla obligatoria: ningún paso del plan está completo sin su propio CI en verde
 
@@ -114,7 +114,7 @@ merge** y su título es el mensaje del commit; `pr-title.yml` lo exige.
 1. Cada push a `master` actualiza el PR `chore: release X.Y.Z` con el
    CHANGELOG y la versión nueva en `version.txt` y `server/pyproject.toml`.
 2. Mergear ese PR crea el tag `vX.Y.Z` y la GitHub Release.
-3. La release publica la imagen `ghcr.io/<owner>/visitacampo-api:X.Y.Z` con
+3. La release publica la imagen `ghcr.io/<owner>/suno-api:X.Y.Z` con
    SBOM y atestación de procedencia, y `deploy.yml` la despliega si el
    environment `production` está configurado
    ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)). El APK

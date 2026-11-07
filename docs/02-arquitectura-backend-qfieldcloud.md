@@ -115,7 +115,7 @@ Cola propia sobre PostgreSQL — patrón **"poll + SELECT FOR UPDATE SKIP LOCKED
 - **CI** (`.github/workflows/test.yml`): matriz por app Django + un job `__flaky__` separado para tests inestables con reintento tolerado. Pipeline: `pre-commit` (lint) → `docker compose up` (perfil test) → `makemigrations --check` → `migrate` → `collectstatic` → `manage.py test --keepdb`. Job separado `django_checks` corre `manage.py check --deploy`.
 - Lint: `pre-commit`, `ruff.toml`, `.flake8`, `.mypy.ini` (tipado estricto con `django-stubs`/`djangorestframework-stubs`).
 
-## 7. Patrones reutilizables para VisitaCampo
+## 7. Patrones reutilizables para SUNO
 
 1. **Cola de trabajos sin Celery** (`SELECT ... FOR UPDATE SKIP LOCKED` sobre Postgres) es viable y simple para volumen moderado — evita infra adicional (Redis/RabbitMQ).
 2. **Separar "app" de "procesamiento pesado"** en contenedores efímeros lanzados dinámicamente — aísla dependencias pesadas/inestables del proceso web principal.

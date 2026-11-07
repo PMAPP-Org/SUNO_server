@@ -1,4 +1,4 @@
-# Seguridad de la información — VisitaCampo
+# Seguridad de la información — SUNO
 
 Documentación del SGSI del proyecto, alineada con ISO/IEC 27001:2022 y OWASP Top 10:2025. Los documentos marcados **BORRADOR** esperan la aprobación de la dirección o la validación jurídica: técnicamente están completos, pero no tienen validez de SGSI hasta que se aprueben y se asignen los roles.
 

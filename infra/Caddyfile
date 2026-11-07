@@ -1,4 +1,4 @@
-# VisitaCampo — Caddyfile (docs/08 ADR-010, RD-15)
+# SUNO — Caddyfile (docs/08 ADR-010, RD-15)
 #
 # Caddy sustituye a nginx + certbot + mkcert (ADR-010, patrón N-17 evitado):
 # TLS automático (ACME) con una sola línea, HTTP/2 y HTTP/3, HSTS por defecto.

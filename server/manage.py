@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Utilidad de línea de comandos de Django (VisitaCampo backend).
+"""Utilidad de línea de comandos de Django (SUNO backend).
 
 Por defecto usa `config.settings.dev` (Paso 4: settings divididos en
 base/dev/prod, ver server/config/settings/). En despliegue, `DJANGO_SETTINGS_MODULE`

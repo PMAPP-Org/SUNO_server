@@ -49,7 +49,7 @@ jobs:
       - name: Sin llave pública no toca nada
         run: |
           if sudo bash infra/provision/provision.sh; then echo "debía fallar sin DEPLOY_SSH_PUBKEY"; exit 1; fi
-          test ! -f /etc/ssh/sshd_config.d/10-visitacampo.conf
+          test ! -f /etc/ssh/sshd_config.d/10-suno.conf
 
       # Solo en CI: el runner trae el firefox de Mozilla y el `apt-get upgrade` de
       # provision.sh lo cambiaría por el paquete de transición a snap, cuya descarga
@@ -97,7 +97,7 @@ jobs:
         run: |
           id -nG deploy | grep -qw docker
           sudo passwd -S deploy | grep -qE '^deploy (L|LK) '
-          test "$(sudo stat -c %a /opt/visitacampo)" = 750
+          test "$(sudo stat -c %a /opt/suno)" = 750
           ssh -i ci_deploy_key -o StrictHostKeyChecking=no -o BatchMode=yes deploy@127.0.0.1 'docker ps > /dev/null && echo ok-docker'
           # Sin llave (solo contraseña) el servidor ni siquiera ofrece el método.
           if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o PubkeyAuthentication=no \
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DAST_HOST: api.visitacampo.localhost
+      DAST_HOST: api.suno.localhost
       # El script se prueba entero salvo la red: tags e imágenes ya locales.
       DEPLOY_NO_FETCH: "1"
       DEPLOY_SKIP_PULL: "1"
@@ -133,29 +133,29 @@ jobs:
 
       - name: Imágenes buena y rota
         run: |
-          docker build -t visitacampo-api:good server/
+          docker build -t suno-api:good server/
           # La "release rota": la API no arranca.
-          printf 'FROM visitacampo-api:good\nENTRYPOINT ["false"]\n' | docker build -t visitacampo-api:broken -
+          printf 'FROM suno-api:good\nENTRYPOINT ["false"]\n' | docker build -t suno-api:broken -
 
       - name: Sin COMPOSE_FILE de producción, se niega
         run: |
           cp infra/.env env.bak
           sed -i 's|^COMPOSE_FILE=.*|COMPOSE_FILE=docker-compose.yml|' infra/.env
-          set +e; bash infra/scripts/deploy.sh v0.0.1-ci visitacampo-api:good; code=$?; set -e
+          set +e; bash infra/scripts/deploy.sh v0.0.1-ci suno-api:good; code=$?; set -e
           mv env.bak infra/.env
           test "$code" = 1
 
       - name: Desplegar v0.0.1-ci (buena) → 0
         run: |
-          bash infra/scripts/deploy.sh v0.0.1-ci visitacampo-api:good
-          test "$(cat .deploy-state)" = "v0.0.1-ci visitacampo-api:good"
+          bash infra/scripts/deploy.sh v0.0.1-ci suno-api:good
+          test "$(cat .deploy-state)" = "v0.0.1-ci suno-api:good"
 
       - name: Desplegar v0.0.2-ci (rota) → rollback (2) y servicio en pie
         run: |
-          set +e; bash infra/scripts/deploy.sh v0.0.2-ci visitacampo-api:broken; code=$?; set -e
+          set +e; bash infra/scripts/deploy.sh v0.0.2-ci suno-api:broken; code=$?; set -e
           test "$code" = 2 || { echo "esperado 2 (rollback correcto), fue $code"; exit 1; }
-          test "$(cat .deploy-state)" = "v0.0.1-ci visitacampo-api:good"
-          test "$(docker inspect --format '{{.Config.Image}}' "$(cd infra && docker compose ps -q api)")" = visitacampo-api:good
+          test "$(cat .deploy-state)" = "v0.0.1-ci suno-api:good"
+          test "$(docker inspect --format '{{.Config.Image}}' "$(cd infra && docker compose ps -q api)")" = suno-api:good
           curl -fsSk --resolve "${DAST_HOST}:443:127.0.0.1" "https://${DAST_HOST}/v1/readyz"
 
       - name: Logs si falla

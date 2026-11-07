@@ -4,12 +4,12 @@ Adaptado de `qfieldcloud/docker-app/wait_for_services.py` (mismo patrón de
 reintento con timeout), con dos diferencias deliberadas:
 
 1. Usa `psycopg` v3 (el driver que declara `server/requirements.txt`), no
-   `psycopg2` — VisitaCampo nunca instaló `psycopg2`.
+   `psycopg2` — SUNO nunca instaló `psycopg2`.
 2. `connect`/`operational_error` son inyectables: `entrypoint.sh` los deja en
    su valor por defecto (`psycopg.connect`/`psycopg.OperationalError`), pero
    `server/tests/test_wait_for_db.py` los sustituye por dobles sin red — el
    mismo principio de "dominio puro, transporte inyectado" que
-   `visitacampo/attachments/services.py` aplica con su parámetro `store`.
+   `suno/attachments/services.py` aplica con su parámetro `store`.
 """
 
 from __future__ import annotations

@@ -91,7 +91,7 @@ qfield_core (STATIC)  →  qfield_gui (STATIC, linka core)  →  qfield_app (STA
 - **Fastlane**: `upload_s3` (Windows/iOS sube artefactos a S3-compatible), `setup_signing`/`match` (certificados iOS), `upload_testflight`.
 - **Sentry** para crash reporting en producción.
 
-## 8. Patrones reutilizables para VisitaCampo
+## 8. Patrones reutilizables para SUNO
 
 1. **3 capas C++ estáticas** (`core` sin UI → `gui` presentación → `app` orquestación), cada una con su registro QML — facilita testear el core aislado y mantener la UI "tonta".
 2. **Offline-first con cola de cambios tipo outbox/delta**: ediciones locales se acumulan como operaciones versionadas (create/update/delete) con snapshot old/new, se aplican de inmediato (UI optimista) y se sincronizan en batch — aplicable directo a "visitas de campo" (cada visita/formulario = un delta).

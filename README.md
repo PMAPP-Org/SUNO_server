@@ -1,6 +1,6 @@
 # SUNO_server
 
-Backend de VisitaCampo, la aplicación offline-first de seguimiento de visitas de campo. Contiene:
+Backend de SUNO, la aplicación offline-first de seguimiento de visitas de campo. Contiene:
 - la **API** v1 de sincronización, autenticación y adjuntos (Django 5 + Django Ninja);
 - el **panel de administración** (Django Admin con MFA obligatorio);
 - la **infraestructura** de despliegue: Docker Compose, Caddy, backups cifrados, monitoreo, aprovisionamiento del VPS y despliegue con rollback.
@@ -9,7 +9,7 @@ La app móvil (Flutter) está en [`PMAPP-Org/SUNO_client`](https://github.com/PM
 
 ## Fuente de verdad
 
-- **Arquitectura:** [`docs/08-arquitectura-propuesta-visitacampo.md`](docs/08-arquitectura-propuesta-visitacampo.md). Ante cualquier duda de diseño, ese documento (y el resto de `docs/`) prevalece sobre supuestos ad hoc.
+- **Arquitectura:** [`docs/08-arquitectura-propuesta-suno.md`](docs/08-arquitectura-propuesta-suno.md). Ante cualquier duda de diseño, ese documento (y el resto de `docs/`) prevalece sobre supuestos ad hoc.
 - **Contrato de la API:** [`server/openapi/v1.yaml`](server/openapi/v1.yaml), más los casos de paridad de formularios en `server/openapi/fixtures/`. La app usa una copia fijada en su `contract/` ([`server/openapi/README.md`](server/openapi/README.md)).
 - **Plan de construcción y su seguimiento:** [`plans/`](plans/).
 - **SGSI ISO 27001** de todo el sistema (app incluida): [`docs/seguridad/`](docs/seguridad/README.md).
@@ -51,7 +51,7 @@ La regla completa está en [`CONTRIBUTING.md`](CONTRIBUTING.md): **ningún paso 
 
 ## Releases y despliegue
 
-release-please versiona a partir de Conventional Commits. Cada release publica la imagen `ghcr.io/<owner>/visitacampo-api` con SBOM y atestación de procedencia, y `deploy.yml` la despliega en producción si el environment `production` está configurado ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)).
+release-please versiona a partir de Conventional Commits. Cada release publica la imagen `ghcr.io/<owner>/suno-api` con SBOM y atestación de procedencia, y `deploy.yml` la despliega en producción si el environment `production` está configurado ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)).
 
 ## Convención de commits
 

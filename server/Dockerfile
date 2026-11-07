@@ -28,7 +28,7 @@ FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf22
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# tzdata: VisitaCampo fija TIME_ZONE="America/Bogota" (config/settings/base.py)
+# tzdata: SUNO fija TIME_ZONE="America/Bogota" (config/settings/base.py)
 # y necesita la base de datos de zonas horarias del sistema para resolverla.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \

@@ -53,7 +53,7 @@ Motor: **PostgreSQL + PostGIS** (`django.contrib.gis.db.backends.postgis`, `sett
 
 ## 6. Suscripciones/planes (`docker-app/qfieldcloud/subscription/models.py`)
 
-`Plan`, `Package`/`PackageType`, `Subscription`/`CurrentSubscription` — control de límites de storage, colaboradores y jobs según plan pagado. Solo relevante si VisitaCampo adopta un modelo de planes/tiers.
+`Plan`, `Package`/`PackageType`, `Subscription`/`CurrentSubscription` — control de límites de storage, colaboradores y jobs según plan pagado. Solo relevante si SUNO adopta un modelo de planes/tiers.
 
 ## 7. Diagrama entidad-relación (simplificado)
 
@@ -84,10 +84,10 @@ erDiagram
 
 Estándar Django, una carpeta `migrations/` por app (`core`, `project`, `filestorage`, `subscription`, `authentication`). CI valida `makemigrations --check` para evitar migraciones faltantes antes de mergear.
 
-## 9. Patrón a replicar en VisitaCampo
+## 9. Patrón a replicar en SUNO
 
 1. **Herencia multi-tabla para variantes de usuario** (`Person`/`Organization`/`Team` sobre un `User` base) evita duplicar campos comunes y permite tratar todos como el mismo FK (`owner`) donde se necesite.
 2. **Vistas SQL consolidadas para roles/permisos** (`*_with_roles_vw`) resuelven en una sola consulta lo que de otro modo requeriría joins repetidos o lógica Python dispersa — a cambio de mantener las vistas manualmente (no gestionadas por el ORM, requieren migraciones `RunSQL`).
 3. **Separación metadatos (Postgres) vs. contenido binario (storage abstraído)**, con versionado explícito (`File`/`FileVersion`) y checksums (md5/sha256/etag) — buen modelo para adjuntos de visitas de campo (fotos, PDFs, firmas).
-4. **Delta con geometría propia indexada** (`old_geom`/`new_geom` en PostGIS) permite auditoría espacial sin reabrir el dato original — trasladable a "dónde ocurrió cada visita" si VisitaCampo maneja ubicación.
+4. **Delta con geometría propia indexada** (`old_geom`/`new_geom` en PostGIS) permite auditoría espacial sin reabrir el dato original — trasladable a "dónde ocurrió cada visita" si SUNO maneja ubicación.
 5. **UUID generado en cliente como PK del cambio** (no autoincremental del servidor) es lo que habilita idempotencia real ante reintentos de red.

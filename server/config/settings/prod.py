@@ -80,7 +80,7 @@ SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
-# Cookies de sesión/CSRF solo por HTTPS. VisitaCampo autentica la API con
+# Cookies de sesión/CSRF solo por HTTPS. SUNO autentica la API con
 # JWT (ADR-008), no con cookies de sesión, pero Django Admin (back-office de
 # fase 1, ADR-004) sí las usa.
 SESSION_COOKIE_SECURE = True

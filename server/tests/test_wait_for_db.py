@@ -2,7 +2,7 @@
 
 Sin red real: `connect` se inyecta como función falsa, así que estos tests
 corren en cualquier entorno, con o sin PostgreSQL alcanzable — mismo criterio
-que el resto de la suite (`server/visitacampo/**/tests/`), que evita
+que el resto de la suite (`server/suno/**/tests/`), que evita
 dependencias de red salvo cuando prueban explícitamente contra Postgres.
 """
 
@@ -13,8 +13,8 @@ import unittest
 from wait_for_db import wait_for_postgres
 
 _CONNINFO: dict[str, object] = {
-    "dbname": "visitacampo",
-    "user": "visitacampo",
+    "dbname": "suno",
+    "user": "suno",
     "password": "x",
     "host": "db",
     "port": "5432",
@@ -50,7 +50,7 @@ class WaitForPostgresTests(unittest.TestCase):
 
         self.assertTrue(result)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["dbname"], "visitacampo")
+        self.assertEqual(calls[0]["dbname"], "suno")
 
     def test_retries_after_a_connection_failure_and_then_succeeds(self) -> None:
         attempts = {"count": 0}

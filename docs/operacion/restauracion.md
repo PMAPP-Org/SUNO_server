@@ -21,9 +21,9 @@ Cuándo: la BD de producción se perdió o se corrompió, o hay que volver a un 
 3. **Restaurar.** La llave se monta solo durante este comando:
    ```bash
    docker compose run --rm \
-     -v /ruta/segura/visitacampo-backup.key:/run/secrets/age-identity:ro \
+     -v /ruta/segura/suno-backup.key:/run/secrets/age-identity:ro \
      -e BACKUP_AGE_IDENTITY_FILE=/run/secrets/age-identity \
-     backup restore.sh latest      # o db/visitacampo-AAAAMMDDTHHMMSSZ.dump.age
+     backup restore.sh latest      # o db/suno-AAAAMMDDTHHMMSSZ.dump.age
    ```
 4. **Arrancar:** `docker compose up -d api worker`. La API aplica las migraciones pendientes al arrancar.
 5. **Verificar:**

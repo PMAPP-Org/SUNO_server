@@ -1,11 +1,11 @@
-# infra/ — Docker Compose de VisitaCampo
+# infra/ — Docker Compose de SUNO
 
 Este directorio contiene el entorno de contenedores del backend, siguiendo
-**ADR-010** (`docs/08-arquitectura-propuesta-visitacampo.md`): cuatro
+**ADR-010** (`docs/08-arquitectura-propuesta-suno.md`): cuatro
 servicios fijos (`caddy`, `api`, `worker`, `db`) definidos en un
 `docker-compose.yml` **base**, más overrides por entorno seleccionados con la
 variable de entorno `COMPOSE_FILE` (patrón C-16, heredado de
-[docs/05 §6.1–6.2](../docs/05-infraestructura-despliegue.md#6-patrón-a-replicar-en-visitacampo)).
+[docs/05 §6.1–6.2](../docs/05-infraestructura-despliegue.md#6-patrón-a-replicar-en-suno)).
 
 No se usan flags `-f` manuales: se combina todo mediante `COMPOSE_FILE` en
 `infra/.env`.

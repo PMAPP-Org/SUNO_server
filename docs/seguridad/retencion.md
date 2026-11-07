@@ -1,6 +1,6 @@
 # Retención y eliminación de datos
 
-Plazos de conservación de los datos que VisitaCampo guarda por razones de seguridad u operación, y el mecanismo **automático** que los aplica. Sirve de evidencia para ISO/IEC 27001:2022 A.8.10 (eliminación de información) y A.8.15 (registro), y para el principio de temporalidad de la Ley 1581 de 2012: no conservar datos personales más tiempo del necesario para su finalidad.
+Plazos de conservación de los datos que SUNO guarda por razones de seguridad u operación, y el mecanismo **automático** que los aplica. Sirve de evidencia para ISO/IEC 27001:2022 A.8.10 (eliminación de información) y A.8.15 (registro), y para el principio de temporalidad de la Ley 1581 de 2012: no conservar datos personales más tiempo del necesario para su finalidad.
 
 Los plazos se configuran con variables de entorno, con valor por defecto en `server/config/settings/base.py`. Cambiar un plazo es una decisión del responsable del tratamiento y se registra en un PR que actualiza este documento.
 
@@ -19,7 +19,7 @@ Los plazos se configuran con variables de entorno, con valor por defecto en `ser
 
 **Cómo se verifica**
 
-- `server/visitacampo/jobs/tests/test_retention.py` comprueba que la purga borra lo vencido, conserva lo vigente y nunca toca la traza de otra organización.
+- `server/suno/jobs/tests/test_retention.py` comprueba que la purga borra lo vencido, conserva lo vigente y nunca toca la traza de otra organización.
 - El periódico se ejecuta en el servicio `worker` (`infra/docker-compose.yml`). El DAST de CI comprueba que el worker procesa la cola contra el stack de producción. El worker vuelve a programar los periódicos cada `JOB_BOOTSTRAP_INTERVAL_SECONDS` (300 s), así que una organización nueva queda cubierta sin reiniciar nada.
 - El resultado de cada pasada (cuántas filas se borraron) queda en `job.output`, visible para ADMIN.
 

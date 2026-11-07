@@ -2,7 +2,7 @@
 
 > **BORRADOR — pendiente de aprobación por la dirección.** Preparado desde el repositorio el 2026-10-17. Las decisiones de aplicabilidad de los controles organizacionales, de personas y físicos las toma la organización; aquí se proponen y se marcan como tales.
 
-**Alcance propuesto del SGSI:** desarrollo, operación y soporte del sistema VisitaCampo, que comprende la app móvil Flutter, el backend Django, la infraestructura en VPS con Docker Compose y Caddy, y el almacenamiento S3/R2 de adjuntos y backups. También el ciclo de vida del código en GitHub y los datos de visitas de campo de las organizaciones cliente.
+**Alcance propuesto del SGSI:** desarrollo, operación y soporte del sistema SUNO, que comprende la app móvil Flutter, el backend Django, la infraestructura en VPS con Docker Compose y Caddy, y el almacenamiento S3/R2 de adjuntos y backups. También el ciclo de vida del código en GitHub y los datos de visitas de campo de las organizaciones cliente.
 
 **Leyenda de estado**
 
