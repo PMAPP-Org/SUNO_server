@@ -82,7 +82,7 @@ jobs:
       - name: Nombres (suno / registro)
         run: |
           python -m unittest infra/scripts/tests/test_check_naming.py
-          python infra/scripts/check_naming.py package
+          python infra/scripts/check_naming.py concept
 
       # Cobertura de ramas del código de producción con suelo `fail_under`
       # (server/pyproject.toml, [tool.coverage.report]): bajar de ahí falla.
