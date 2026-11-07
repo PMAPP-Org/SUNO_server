@@ -44,11 +44,11 @@ locales y certificados aprobados.
    (con `flutter test`, el DDS no llega a conectarse al emulador API 36), que:
    acepta el aviso de privacidad, hace login, **acepta el certificado
    (TOFU)**, sincroniza, espera a que el script active el modo avión,
-   captura un registro con una marca única, la vincula a la tarea 1.1 con 35 % de avance
+   captura un registro con una marca única, lo vincula a la tarea 1.1 con 35 % de avance
    acumulado (requiere la Parte B del cliente), comprueba que queda *Pendiente*,
    y tras reconectar espera a *Sincronizada*.
 5. Verifica en el servidor que el registro existe en su organización con
-   `version` y `change_seq` asignados, vinculada a la tarea 1.1 con `progress_pct` 35 (requiere la Parte B del cliente).
+   `version` y `change_seq` asignados, vinculado a la tarea 1.1 con `progress_pct` 35 (requiere la Parte B del cliente).
 6. Siempre, también si falla: desactiva el modo avión, hace `down -v` y borra
    `infra/.env.e2e`.
 

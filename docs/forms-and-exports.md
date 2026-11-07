@@ -36,7 +36,7 @@ Ejemplo:
 
 En `/admin`, abre una plantilla y selecciona **Importar XLSForm**. Adjunta el
 `.xlsx` y pulsa **Validar y publicar nueva versión**. Se exige rol OWNER o ADMIN;
-las versiones anteriores y sus registros quedan intactas. El resultado viaja por
+las versiones anteriores y sus registros quedan intactos. El resultado viaja por
 la sincronización normal y queda auditado. También está disponible:
 
 ```sh

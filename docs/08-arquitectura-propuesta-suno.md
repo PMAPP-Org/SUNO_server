@@ -26,7 +26,7 @@ Toda decisión de este documento se justifica contra estos supuestos. **Si un su
 | # | Supuesto | Valor asumido |
 |---|---|---|
 | S-01 | Usuarios de campo concurrentes | 10–200 (MVP: <20) |
-| S-02 | Registros registrados | 10k–100k / año |
+| S-02 | Registros capturados | 10k–100k / año |
 | S-03 | Adjuntos por registro | 3–15 fotos, ~1–3 MB c/u tras compresión en dispositivo |
 | S-04 | Volumen de almacenamiento año 1 | 50 GB – 500 GB |
 | S-05 | Picos de sync | ráfagas al final de jornada (decenas de dispositivos drenando outbox en ~1h) |
@@ -142,7 +142,7 @@ sequenceDiagram
     participant R2 as Object storage
 
     Note over U,LDB: FASE OFFLINE
-    U->>APP: Registra registro + 6 fotos
+    U->>APP: Captura un registro + 6 fotos
     APP->>LDB: TX única: INSERT record + INSERT outbox_op(uuid, base_version=null) + INSERT attachment(sha256, state=local)
     LDB-->>APP: commit (UI optimista: el registro ya se ve)
     Note over APP: La app funciona igual sin red. Cero llamadas bloqueantes.
@@ -340,7 +340,7 @@ El almacén local debe soportar el patrón outbox: escribir **la fila de negocio
 | Last-write-wins por timestamp | Trivial | Depende del reloj del dispositivo (que en campo va mal); pérdida silenciosa de datos. Inaceptable en un sistema de registro | Descartada |
 | Merge de 3 vías en el dispositivo | Conserva el trabajo del usuario en conflicto | Es "la parte más costosa y propensa a bugs de cualquier sistema offline-first" ([06 §1.4](06-recomendaciones-suno.md#1-patrón-central-a-adoptar-sync-offline-first-basado-en-deltas)) | Descartada, explícitamente |
 
-**Diseño del conflicto en la práctica**: en este dominio los conflictos son **raros por construcción** (cada registro la crea y edita un solo agente asignado). Cuando ocurren (p. ej. un supervisor cerró el registro desde el back-office mientras el agente la editaba offline), la política es: la fila del servidor gana, la versión local del agente se conserva en `quarantine` visible en la UI ("tu versión no se aplicó: [ver diferencias] [reenviar como corrección]"). **Nunca se descarta trabajo del usuario en silencio** — mejora explícita sobre `mDeltaFileWrapper->reset()` de QField ([03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative)).
+**Diseño del conflicto en la práctica**: en este dominio los conflictos son **raros por construcción** (cada registro lo crea y edita un solo agente asignado). Cuando ocurren (p. ej. un supervisor cerró el registro desde el back-office mientras el agente lo editaba offline), la política es: la fila del servidor gana, la versión local del agente se conserva en `quarantine` visible en la UI ("tu versión no se aplicó: [ver diferencias] [reenviar como corrección]"). **Nunca se descarta trabajo del usuario en silencio** — mejora explícita sobre `mDeltaFileWrapper->reset()` de QField ([03 §5](03-integracion-sincronizacion.md#5-resolución-de-conflictos--server-authoritative)).
 
 **Consecuencias**
 *Positivas*: ~60% menos superficie de código que el pipeline de referencia; confirmación inmediata al agente ("sincronizado" real, no "encolado"); depuración trivial (un log de request contiene todo el ciclo); pull incremental ahorra datos móviles.
