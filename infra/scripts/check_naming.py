@@ -7,17 +7,19 @@
 "visit"/"visita" en código, plantillas, contrato e infraestructura. No se revisan
 `plans/` (planes y registro de avance: son historia), el CHANGELOG, `.gitleaksignore` ni
 la propia guardia (que nombra lo que busca). Las citas a documentos de `plans/`
-(`plans/visitacampo-....md`) se permiten: esos archivos conservan su nombre.
+(`plans/visitacampo-....md`) se permiten si el archivo citado existe: esos documentos
+conservan su nombre. Corre siempre desde la raíz del repositorio.
 """
 
+import os
 import re
 import subprocess
 import sys
 
 _PACKAGE = re.compile(r"visitacampo", re.IGNORECASE)
-# Rutas a documentos históricos: se citan con su nombre real (el registro de avance
-# sí cambió de nombre: plans/suno-progreso.md).
-_PLAN_REF = re.compile(r"plans/(?!visitacampo-progreso\.md)[\w./-]+\.md")
+# Citas a documentos de plans/: se permiten solo si apuntan a un archivo versionado
+# (el registro de avance, por ejemplo, ya no se llama plans/visitacampo-progreso.md).
+_PLAN_REF = re.compile(r"plans/[\w./-]+\.md")
 _WORD = re.compile(r"[A-Za-z_]+")
 # Palabras que contienen "visit" pero no son el concepto.
 _ALLOWED = {
@@ -49,12 +51,7 @@ _HISTORY = {"CHANGELOG.md", ".gitleaksignore"}
 
 
 def skipped(path: str) -> bool:
-    return (
-        path in _HISTORY
-        or path in _SELF
-        or path.endswith(_BINARY)
-        or path.startswith("plans/")
-    )
+    return path in _HISTORY or path in _SELF or path.endswith(_BINARY) or path.startswith("plans/")
 
 
 def _is_concept(word: str) -> bool:
@@ -62,9 +59,12 @@ def _is_concept(word: str) -> bool:
     return "visit" in lower and not _PACKAGE.search(word) and lower not in _ALLOWED
 
 
-def offenders(text: str, mode: str) -> list[str]:
-    """Las apariciones del nombre viejo, en el orden del texto."""
-    text = _PLAN_REF.sub(" ", text)
+def offenders(text: str, mode: str, tracked: frozenset[str] = frozenset()) -> list[str]:
+    """Las apariciones del nombre viejo, en el orden del texto.
+
+    `tracked` son los archivos versionados: una cita `plans/....md` a uno de ellos no cuenta.
+    """
+    text = _PLAN_REF.sub(lambda m: " " if m.group(0) in tracked else m.group(0), text)
     found = [m.group(0) for m in _PACKAGE.finditer(text)]
     if mode == "concept":
         found += [w for w in _WORD.findall(text) if _is_concept(w)]
@@ -76,16 +76,21 @@ def main() -> int:
     if mode not in ("package", "concept"):
         print(f"modo desconocido: {mode} (package|concept)")
         return 2
+    top = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    os.chdir(top)  # `git ls-files` y `open` trabajan con rutas relativas a la raíz
     listing = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
     files = [p for p in listing.decode("utf-8").split("\0") if p]
+    tracked = frozenset(files)
     bad = 0
     for path in files:
         if skipped(path):
             continue
-        found = offenders(path + "\n", mode)
+        found = offenders(path + "\n", mode, tracked)
         try:
             with open(path, encoding="utf-8") as handle:
-                found += offenders(handle.read(), mode)
+                found += offenders(handle.read(), mode, tracked)
         except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
             pass
         if found:

@@ -85,6 +85,21 @@ else
 	fail "mypy server/"
 fi
 
+section "Nombres (suno / registro) — check_naming.py"
+# Mismo paso que backend.yml: las pruebas de la guardia y la guardia. El modo
+# pasa a `concept` cuando entre el renombre del concepto.
+if ! command_exists python && ! command_exists python3; then
+	skip "check_naming.py" "python no está instalado en este entorno"
+else
+	PY="$(command -v python || command -v python3)"
+	if "$PY" -m unittest infra/scripts/tests/test_check_naming.py &&
+		"$PY" "$SCRIPT_DIR/check_naming.py" package; then
+		pass "check_naming.py"
+	else
+		fail "check_naming.py"
+	fi
+fi
+
 section "Backend (server/) — pytest"
 if ! has_py_tests; then
 	skip "pytest server/" "server/ todavía no tiene tests (Paso 4+)"

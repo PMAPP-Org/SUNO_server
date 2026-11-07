@@ -160,7 +160,7 @@ Revisado paso a paso contra lo que hay de verdad en SUNO_server y SUNO_client, n
 
 ## Diagnóstico de estancamiento (2026-08-03)
 
-La ejecución se detuvo entre el cierre del Paso 13 (2026-08-03) y el Paso 14: hay un archivo sin commitear (`server/suno/core/admin.py`, la tarea 1 del Paso 14) pero ningún commit posterior. Causa raíz identificada: el Paso 14 original exige Docker completo + emulador Android + Flutter corriendo a la vez, y esta máquina tiene 7.4 GB de RAM totales con Docker limitado a ~900 MB/1 CPU y el AVD `suno_e2e` reservando 2 GB él solo — combinación que no cabe en la memoria disponible (coincide con los `Out of memory`/hangs ya registrados en los Pasos 11–13 más abajo). Detalle completo, regla de secuenciación nueva, el Paso 14 reescrito en checkpoints (14a–14e) y las metas intermedias A–D: [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias).
+La ejecución se detuvo entre el cierre del Paso 13 (2026-08-03) y el Paso 14: hay un archivo sin commitear (`server/suno/core/admin.py`, la tarea 1 del Paso 14) pero ningún commit posterior. Causa raíz identificada: el Paso 14 original exige Docker completo + emulador Android + Flutter corriendo a la vez, y esta máquina tiene 7.4 GB de RAM totales con Docker limitado a ~900 MB/1 CPU y el AVD `visitacampo_e2e` reservando 2 GB él solo — combinación que no cabe en la memoria disponible (coincide con los `Out of memory`/hangs ya registrados en los Pasos 11–13 más abajo). Detalle completo, regla de secuenciación nueva, el Paso 14 reescrito en checkpoints (14a–14e) y las metas intermedias A–D: [visitacampo-construccion.md §12](visitacampo-construccion.md#12-ajuste-post-diagnóstico-2026-08-03--restricción-de-entorno-resecuenciación-y-metas-intermedias).
 
 ### Checklist de entorno (correr antes de cualquier checkpoint que use Docker o el emulador)
 
@@ -198,7 +198,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 ### Track Infraestructura
 
 - [x] **Paso 0** — Inicialización del monorepo y control de versiones
-  `c98f177` Inicializa monorepo SUNO: estructura app/server/infra/docs
+  `c98f177` Inicializa monorepo VisitaCampo: estructura app/server/infra/docs
 - [x] **Paso 1** — Contrato de API v1 (OpenAPI 3.1 + esquemas Pydantic)
   `fccfe9d` Define el contrato de API v1 en OpenAPI 3.1 (Paso 1)
   `a39923e` Corrige hallazgos de revisión del Paso 1 (contrato API v1)
@@ -207,7 +207,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
 - [x] **Paso 3** — Pipelines de CI y gates de seguridad/calidad
   `07ff987` Añade pipelines de CI y gate RD-01 anti-bypass TLS (Paso 3)
   `e800a5c` Corrige alcance del allow-list de TrustStore en el lint RD-01 (Paso 3)
-  `2e349af` Exige postgres real en CI: services block + SUNO_REQUIRE_DB=1
+  `2e349af` Exige postgres real en CI: services block + VISITACAMPO_REQUIRE_DB=1
 
 ### Track Backend (Django)
 
@@ -246,7 +246,7 @@ El **orden de construcción vigente es Paso 20 → 17 → 19 → 15** (Grupo C c
   - [x] 14b — Backend solo, sin emulador
     `2a5ee36` Reduce memory_cost de Argon2 en dev.py para máquinas con RAM escasa (Paso 14, checkpoint 14b)
     Verificado con `manage.py runserver` (127.0.0.1:8000) contra el `db` de `docker compose` ya corriendo — **no** se activó el placeholder Docker del servicio `api` (sigue como placeholder de `infra/docker-compose.yml`, `sleep infinity`; construir su imagen es scope de un paso futuro si hace falta correrlo en contenedor, no bloqueante aquí). Flujo real por `curl`: `POST /v1/auth/login` → JWT real; `POST /v1/sync/push` de una visita → `status: applied`, `server_version: 1`; `GET /v1/sync/pull?cursor=c1:00…0` → devuelve la visita con `change_seq` correcto; confirmado en BD que `admin.site.is_registered(Visit)` es `True` y los datos persistidos coinciden. Bloqueo encontrado y resuelto en el camino: Argon2 fallaba con `HashingError: Memory allocation error` por falta de RAM real (~350-450 MB libres) — mitigado con `DevArgon2PasswordHasher` (memory_cost 19 MiB, solo dev.py, ver commit).
-  - [~] 14c — Cliente solo, sin backend — **diferido a la fase de testeo**: el emulador `suno_e2e` booteó correctamente (con Docker Desktop detenido para liberar RAM: ~290 MB → ~900 MB libres), pero no se insertó ninguna visita porque `app/lib/main.dart` sigue siendo el demo `flutter create` sin modificar (no existe el harness de debug que la tarea supone). Retomar en la fase de testeo, momento en el que ya debería existir código de dominio adicional (Meta B) que dar de alta ahí también.
+  - [~] 14c — Cliente solo, sin backend — **diferido a la fase de testeo**: el emulador `visitacampo_e2e` booteó correctamente (con Docker Desktop detenido para liberar RAM: ~290 MB → ~900 MB libres), pero no se insertó ninguna visita porque `app/lib/main.dart` sigue siendo el demo `flutter create` sin modificar (no existe el harness de debug que la tarea supone). Retomar en la fase de testeo, momento en el que ya debería existir código de dominio adicional (Meta B) que dar de alta ahí también.
   - [ ] 14d — Integración real (ambos a la vez) — diferido a la fase de testeo
   - [ ] 14e — Documentación y cierre — diferido a la fase de testeo
 
