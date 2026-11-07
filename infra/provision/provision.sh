@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aprovisionamiento endurecido del VPS de VisitaCampo (Ubuntu 24.04 LTS o Debian 12).
+# Aprovisionamiento endurecido del VPS de SUNO (Ubuntu 24.04 LTS o Debian 12).
 #
 # Idempotente: se puede ejecutar de nuevo para reaplicar la configuración. Se
 # prueba en CI ejecutándolo dos veces sobre una VM real (.github/workflows/provision.yml).
@@ -12,7 +12,7 @@
 #                       NO se desactiva el acceso por contraseña, para no dejarte
 #                       fuera del servidor)
 #   SSH_ALLOW_USERS     opcional: lista para `AllowUsers` (p. ej. "deploy admin")
-#   DEPLOY_DIR          directorio de despliegue (def. /opt/visitacampo)
+#   DEPLOY_DIR          directorio de despliegue (def. /opt/suno)
 #
 # Qué deja configurado (ISO 27001 A.8.9, A.8.17, A.8.19, A.8.20; OWASP A02):
 #   - usuario `deploy` sin contraseña, solo con llave, en el grupo docker;
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 DEPLOY_USER=deploy
-DEPLOY_DIR="${DEPLOY_DIR:-/opt/visitacampo}"
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/suno}"
 DOCKER_GPG_FINGERPRINT=9DC858229FC7DD38854AE2D88D81803C0EBFCD88
 
 log() { printf '\n== %s\n' "$*"; }
@@ -102,7 +102,7 @@ chmod 0600 "$keys"
 install -d -m 0750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$DEPLOY_DIR"
 
 log "SSH endurecido"
-conf=/etc/ssh/sshd_config.d/10-visitacampo.conf
+conf=/etc/ssh/sshd_config.d/10-suno.conf
 {
 	echo "# Gestionado por infra/provision/provision.sh: no editar a mano."
 	echo "PasswordAuthentication no"
@@ -132,7 +132,7 @@ ufw allow 443/udp comment 'http3'
 ufw --force enable
 
 log "fail2ban (SSH)"
-cat > /etc/fail2ban/jail.d/visitacampo.local << 'EOF'
+cat > /etc/fail2ban/jail.d/suno.local << 'EOF'
 # Gestionado por infra/provision/provision.sh.
 [sshd]
 enabled = true
@@ -155,7 +155,7 @@ EOF
 systemctl enable --now unattended-upgrades
 
 log "sysctl de red"
-cat > /etc/sysctl.d/90-visitacampo.conf << 'EOF'
+cat > /etc/sysctl.d/90-suno.conf << 'EOF'
 # Gestionado por infra/provision/provision.sh. No toca ip_forward (lo usa Docker).
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0

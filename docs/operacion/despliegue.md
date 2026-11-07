@@ -1,6 +1,6 @@
 # Runbook: despliegue y rollback
 
-Cómo poner una versión en producción y cómo volver a la anterior. Producción es **un VPS con Docker Compose** (ADR-010), con el código en `/opt/visitacampo` y el `.env` en `/opt/visitacampo/infra/.env` (permisos `600`, dueño `deploy`).
+Cómo poner una versión en producción y cómo volver a la anterior. Producción es **un VPS con Docker Compose** (ADR-010), con el código en `/opt/suno` y el `.env` en `/opt/suno/infra/.env` (permisos `600`, dueño `deploy`).
 
 En producción `api` y `worker` **no se construyen en el servidor**. Corren la imagen que publicó la release en GHCR, fijada por digest y con su atestación de procedencia verificada (`infra/docker-compose.prod.yml`).
 
@@ -46,7 +46,7 @@ En Settings → Environments, crear `production`, restringido a la rama `master`
 
 Mientras falten los secretos, `deploy.yml` termina en verde con un aviso de que no desplegó.
 
-La llave la genera quien administra el servidor, en su propio equipo: `ssh-keygen -t ed25519 -f visitacampo-deploy -C github-deploy`. La privada solo se pega en el secreto; nunca se envía por chat ni por correo.
+La llave la genera quien administra el servidor, en su propio equipo: `ssh-keygen -t ed25519 -f suno-deploy -C github-deploy`. La privada solo se pega en el secreto; nunca se envía por chat ni por correo.
 
 ## Primer despliegue (servidor nuevo)
 
@@ -67,13 +67,13 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
 2. Apuntar el DNS del dominio a la IP del VPS.
 3. Clonar el código, como `deploy`:
    ```bash
-   git clone https://github.com/PMAPP-Org/SUNO_server.git /opt/visitacampo
+   git clone https://github.com/PMAPP-Org/SUNO_server.git /opt/suno
    ```
    Si el repositorio es privado, clonar con una *deploy key* de solo lectura.
-4. Dar acceso a la imagen. Si el paquete `visitacampo-api` de GHCR es privado, ejecutar `docker login ghcr.io` como `deploy` con un token *fine-grained* que solo tenga `read:packages`. Si el paquete es público, no hace falta.
+4. Dar acceso a la imagen. Si el paquete `suno-api` de GHCR es privado, ejecutar `docker login ghcr.io` como `deploy` con un token *fine-grained* que solo tenga `read:packages`. Si el paquete es público, no hace falta.
 5. Crear el `.env` de producción a partir de `infra/.env.example`, con secretos **nuevos** (nunca los de la plantilla):
    ```bash
-   cd /opt/visitacampo
+   cd /opt/suno
    cp infra/.env.example infra/.env && chmod 600 infra/.env
    # DJANGO_SECRET_KEY:     python3 -c 'import secrets; print(secrets.token_urlsafe(64))'
    # JWT (Ed25519, base64): openssl genpkey -algorithm ed25519 | base64 -w0
@@ -84,9 +84,9 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
    No debe quedar ningún `CAMBIAR_EN_PRODUCCION`: `grep CAMBIAR infra/.env` no debe devolver nada.
 6. Arrancar. La forma normal es lanzar **Actions → Deploy** con el tag. A mano, se usa el digest que aparece en la release:
    ```bash
-   bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/visitacampo-api@sha256:<digest>
+   bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/suno-api@sha256:<digest>
    ```
-   Si lo haces a mano, verifica antes la procedencia desde tu equipo: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api@sha256:<digest> --repo PMAPP-Org/SUNO_server`.
+   Si lo haces a mano, verifica antes la procedencia desde tu equipo: `gh attestation verify oci://ghcr.io/<owner>/suno-api@sha256:<digest> --repo PMAPP-Org/SUNO_server`.
 7. Crear la organización y el primer usuario: `cd infra && docker compose exec api python manage.py bootstrap_demo --org-name "<cliente>" --username "<usuario>"`. La contraseña generada se muestra una sola vez.
 8. Crear el **usuario del back-office con MFA**. El Admin exige segundo factor, sin excepciones.
    ```bash
@@ -109,6 +109,6 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
 
 `deploy.sh` ya vuelve solo a la versión anterior si la nueva no arranca o no responde. Esto es para volver atrás después de un despliegue que salió bien, cuando el error aparece más tarde:
 
-1. **Si la versión fallida no trae migraciones nuevas** (míralo en el CHANGELOG o con `git diff vANTERIOR vNUEVA -- server/visitacampo/*/migrations`): lanza **Actions → Deploy** con `vANTERIOR`, o a mano `bash infra/scripts/deploy.sh vANTERIOR <su imagen@sha256:…>`.
+1. **Si la versión fallida no trae migraciones nuevas** (míralo en el CHANGELOG o con `git diff vANTERIOR vNUEVA -- server/suno/*/migrations`): lanza **Actions → Deploy** con `vANTERIOR`, o a mano `bash infra/scripts/deploy.sh vANTERIOR <su imagen@sha256:…>`.
 2. **Si trae migraciones nuevas**, el código anterior puede no funcionar sobre el esquema nuevo. Restaura el backup tomado justo antes del despliegue ([`restauracion.md`](restauracion.md)) y luego despliega `vANTERIOR`. Lo que cambió en el servidor después del backup se pierde, pero los teléfonos lo reenvían si aún no lo habían sincronizado.
 3. Anota el rollback y abre un issue con la causa. La versión fallida no se vuelve a desplegar hasta que haya una corrección con su propia release.

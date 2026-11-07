@@ -18,7 +18,7 @@ ENV_FILE="${ENV_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env}"
 # Nombre con punto bajo `.localhost`: Caddy le emite certificado con su CA
 # interna igual que a `localhost`, pero un cliente Java (ZAP) solo envía SNI
 # para nombres con punto, y sin SNI Caddy corta el handshake.
-DAST_HOST="${DAST_HOST:-api.visitacampo.localhost}"
+DAST_HOST="${DAST_HOST:-api.suno.localhost}"
 
 rand() { openssl rand -hex 32; }
 
@@ -28,8 +28,8 @@ JWT_KEY_B64="$(openssl genpkey -algorithm ed25519 | base64 -w0)"
 
 cat > "$ENV_FILE" <<EOF
 COMPOSE_FILE=docker-compose.yml
-POSTGRES_DB=visitacampo
-POSTGRES_USER=visitacampo
+POSTGRES_DB=suno
+POSTGRES_USER=suno
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
@@ -61,7 +61,7 @@ CADDY_ADMIN_ALLOWED_IPS=203.0.113.0/24
 JOB_BOOTSTRAP_INTERVAL_SECONDS=5
 # Backups: desactivados salvo que el workflow los configure (backup.yml).
 BACKUP_AGE_RECIPIENT=${BACKUP_AGE_RECIPIENT:-}
-BACKUP_REMOTE=${BACKUP_REMOTE:-backup:visitacampo-backups}
+BACKUP_REMOTE=${BACKUP_REMOTE:-backup:suno-backups}
 BACKUP_S3_PROVIDER=${BACKUP_S3_PROVIDER:-Minio}
 BACKUP_S3_ENDPOINT_URL=${BACKUP_S3_ENDPOINT_URL:-http://minio:9000}
 BACKUP_S3_REGION=us-east-1

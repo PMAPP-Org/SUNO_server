@@ -1,12 +1,12 @@
 {
-  "_comment": "Casos compartidos por server/visitacampo/forms/tests/test_parity.py y PMAPP-Org/SUNO_client: test/core/forms/parity_test.dart, que los lee de su copia fijada en contract/ (Paso 21). Servidor y cliente deben coincidir en qué plantillas son válidas, qué campos son visibles y qué violaciones produce cada respuesta (ADR-012). Un caso nuevo se añade aquí y luego se actualiza la copia del cliente.",
+  "_comment": "Casos compartidos por server/suno/forms/tests/test_parity.py y PMAPP-Org/SUNO_client: test/core/forms/parity_test.dart, que los lee de su copia fijada en contract/ (Paso 21). Servidor y cliente deben coincidir en qué plantillas son válidas, qué campos son visibles y qué violaciones produce cada respuesta (ADR-012). Un caso nuevo se añade aquí y luego se actualiza la copia del cliente.",
   "valid_definitions": [
     {"name": "repeat_qr_defaults", "definition": {"fields": [{"key": "enabled", "type": "boolean", "label": {"es": "enabled"}, "default": true}, {"key": "rows", "type": "repeat", "label": {"es": "rows"}, "min_rows": 1, "max_rows": 3, "visible_if": {"op": "eq", "field": "enabled", "value": true}, "fields": [{"key": "code", "type": "qr", "label": {"es": "code"}, "required": true, "max_length": 8}, {"key": "count", "type": "integer", "label": {"es": "count"}, "default": 2, "min": 0}, {"key": "note", "type": "text", "label": {"es": "note"}, "required": true, "visible_if": {"op": "gt", "field": "count", "value": 5}}]}]}, "cases": [{"name": "valid", "answers": {"enabled": true, "rows": [{"code": "QR-1", "count": 2}]}, "visible": ["enabled", "rows"], "violations": []}, {"name": "minimum", "answers": {"enabled": true}, "visible": ["enabled", "rows"], "violations": [["rows", "too_few_rows"]]}, {"name": "required child path", "answers": {"enabled": true, "rows": [{"count": 6}]}, "visible": ["enabled", "rows"], "violations": [["rows.0.code", "required"], ["rows.0.note", "required"]]}, {"name": "unknown child", "answers": {"enabled": true, "rows": [{"code": "ok", "other": 1}]}, "visible": ["enabled", "rows"], "violations": [["rows.0.other", "unknown_field"]]}, {"name": "hidden parent skips required", "answers": {"enabled": false, "rows": [{}]}, "visible": ["enabled"], "violations": []}, {"name": "hidden still typed", "answers": {"enabled": false, "rows": [{"code": 1}]}, "visible": ["enabled"], "violations": [["rows.0.code", "not_a_string"]]}, {"name": "row type", "answers": {"enabled": true, "rows": ["wrong"]}, "visible": ["enabled", "rows"], "violations": [["rows", "not_an_object"]]}, {"name": "rows type", "answers": {"enabled": true, "rows": {"unexpected": 1}}, "visible": ["enabled", "rows"], "violations": [["rows", "not_a_list"]]}, {"name": "maximum", "answers": {"enabled": true, "rows": [{}, {}, {}, {}]}, "visible": ["enabled", "rows"], "violations": [["rows", "too_many_rows"]]}, {"name": "code bound", "answers": {"enabled": true, "rows": [{"code": "123456789"}]}, "visible": ["enabled", "rows"], "violations": [["rows.0.code", "too_long"]]}]},
     {"name": "nested_repeat", "definition": {"fields": [{"key": "outer", "type": "repeat", "label": {"es": "outer"}, "max_rows": 3, "fields": [{"key": "inner", "type": "repeat", "label": {"es": "inner"}, "max_rows": 3, "fields": [{"key": "value", "type": "text", "label": {"es": "value"}, "required": true}]}]}]}, "cases": [{"name": "nested path", "answers": {"outer": [{"inner": [{}]}]}, "visible": ["outer"], "violations": [["outer.0.inner.0.value", "required"]]}, {"name": "nested valid", "answers": {"outer": [{"inner": [{"value": "ok"}]}]}, "visible": ["outer"], "violations": []}]},
     {
       "name": "catalogo_completo",
       "definition": {
-        "dsl": "visitacampo/form@1",
+        "dsl": "suno/form@1",
         "title": {"es": "Inspección de cultivo", "en": "Crop inspection"},
         "fields": [
           {"key": "tiene_planta", "type": "boolean", "label": {"es": "¿Hay planta?"}, "required": true},
@@ -200,7 +200,7 @@
     {"name": "numero_sobre_booleano", "definition": {"fields": [
       {"key": "a", "type": "boolean", "label": {"es": "A"}},
       {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if": {"op": "eq", "field": "a", "value": 1}}]}},
-    {"name": "dialecto_futuro", "definition": {"dsl": "visitacampo/form@2", "fields": []}},
+    {"name": "dialecto_futuro", "definition": {"dsl": "suno/form@2", "fields": []}},
     {"name": "expresion_demasiado_profunda", "definition": {"fields": [
       {"key": "a", "type": "boolean", "label": {"es": "A"}},
       {"key": "b", "type": "text", "label": {"es": "B"}, "visible_if":

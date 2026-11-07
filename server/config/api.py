@@ -19,21 +19,21 @@ lo deja cerrado (deny-by-default, ADR-013).
 
 from ninja import NinjaAPI
 
-from visitacampo.attachments.api import router as attachments_router
-from visitacampo.authn.api import router as auth_router
-from visitacampo.authn.auth import JwtAuth
-from visitacampo.basemaps.api import router as basemaps_router
-from visitacampo.core.api_errors import register_error_handlers
-from visitacampo.health.api import router as health_router
-from visitacampo.jobs.api import router as jobs_router
-from visitacampo.layers.api import router as layers_router
-from visitacampo.privacy.api import router as privacy_router
-from visitacampo.projects.api import router as projects_router
-from visitacampo.serverinfo.api import router as server_info_router
-from visitacampo.sync.api import router as sync_router
+from suno.attachments.api import router as attachments_router
+from suno.authn.api import router as auth_router
+from suno.authn.auth import JwtAuth
+from suno.basemaps.api import router as basemaps_router
+from suno.core.api_errors import register_error_handlers
+from suno.health.api import router as health_router
+from suno.jobs.api import router as jobs_router
+from suno.layers.api import router as layers_router
+from suno.privacy.api import router as privacy_router
+from suno.projects.api import router as projects_router
+from suno.serverinfo.api import router as server_info_router
+from suno.sync.api import router as sync_router
 
 api = NinjaAPI(
-    title="VisitaCampo API",
+    title="SUNO API",
     version="v1",
     # OpenAPI real ya vive versionado en server/openapi/v1.yaml (Paso 1);
     # el docs UI autogenerado de Ninja es solo una ayuda de desarrollo.

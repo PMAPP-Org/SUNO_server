@@ -3,7 +3,7 @@
 # Severidad: `critical` = el servicio está caído o a punto de perder datos;
 # `warning` = degradación que hay que atender en horario.
 groups:
-  - name: visitacampo-api
+  - name: suno-api
     rules:
       - alert: ApiDown
         expr: probe_success{job="api-probe", endpoint="healthz"} == 0
@@ -50,10 +50,10 @@ groups:
           summary: "El certificado TLS caduca en menos de 3 días"
           description: "Revisar los logs de Caddy (ACME) y el DNS del dominio."
 
-  - name: visitacampo-backup
+  - name: suno-backup
     rules:
       - alert: BackupStale
-        expr: time() - visitacampo_backup_last_success_timestamp_seconds > 26 * 3600
+        expr: time() - suno_backup_last_success_timestamp_seconds > 26 * 3600
         for: 10m
         labels:
           severity: critical
@@ -62,7 +62,7 @@ groups:
           description: "El último backup correcto es de hace más de 26 h (se esperan cada 24 h). Revisar `docker compose logs backup`."
 
       - alert: BackupMissing
-        expr: absent(visitacampo_backup_last_success_timestamp_seconds) and on() up{job="node"} == 1
+        expr: absent(suno_backup_last_success_timestamp_seconds) and on() up{job="node"} == 1
         for: 26h
         labels:
           severity: critical
@@ -70,7 +70,7 @@ groups:
           summary: "No existe ningún backup"
           description: "node-exporter funciona pero el servicio backup nunca ha publicado un backup correcto. ¿Falta BACKUP_AGE_RECIPIENT?"
 
-  - name: visitacampo-host
+  - name: suno-host
     rules:
       - alert: TargetDown
         expr: up == 0
@@ -122,7 +122,7 @@ groups:
           summary: "El disco {{ $labels.mountpoint }} se llenará en menos de 24 h"
           description: "Proyección lineal de las últimas 6 h. PostgreSQL deja de escribir con el disco lleno."
 
-  - name: visitacampo-postgres
+  - name: suno-postgres
     rules:
       - alert: PostgresDown
         expr: pg_up == 0

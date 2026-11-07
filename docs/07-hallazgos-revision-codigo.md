@@ -5,7 +5,7 @@
 
 ## Introducción
 
-Este documento sintetiza hallazgos derivados de análisis estático de código de QField y QFieldCloud — proyectos usados como referencia arquitectónica para VisitaCampo. Los hallazgos se organizan por **severidad** (CRITICAL, HIGH, MEDIUM, LOW) y por **repositorio** (QField, qfieldcloud). Cada uno incluye la referencia exacta en el código, descripción del riesgo, y recomendaciones explícitas sobre **qué hacer distinto en VisitaCampo** para evitar los mismos patrones.
+Este documento sintetiza hallazgos derivados de análisis estático de código de QField y QFieldCloud — proyectos usados como referencia arquitectónica para SUNO. Los hallazgos se organizan por **severidad** (CRITICAL, HIGH, MEDIUM, LOW) y por **repositorio** (QField, qfieldcloud). Cada uno incluye la referencia exacta en el código, descripción del riesgo, y recomendaciones explícitas sobre **qué hacer distinto en SUNO** para evitar los mismos patrones.
 
 **Nota importante**: estos hallazgos son observaciones derivadas del análisis estático, no CVEs confirmados ni reportados a los mantenedores de los proyectos. El hallazgo CRITICAL sobre validación TLS en QField es especialmente relevante porque describe una vulnerabilidad real no documentada previamente.
 
@@ -39,8 +39,8 @@ El código incluye un comentario `// TODO remove this!!! temporary SSL workaroun
 **Por qué no es solo "limitación conocida"**:  
 A diferencia del "master password fijo en Linux" (documentado en el código con un TODO visible), este bypass es silencioso — el usuario no recibe advertencia, no ve un diálogo de "certificado no confiable", simplemente la conexión "funciona". Un usuario que instala QField sin leer el código no sabe que su auto-hosted está inseguro.
 
-**Qué hacer distinto en VisitaCampo**:
-- **Nunca** llamar a `ignoreSslErrors()` de forma incondicional. Si VisitaCampo debe soportar servidores auto-hospedados, usar una de estas estrategias:
+**Qué hacer distinto en SUNO**:
+- **Nunca** llamar a `ignoreSslErrors()` de forma incondicional. Si SUNO debe soportar servidores auto-hospedados, usar una de estas estrategias:
   1. **Certificate/public-key pinning**: almacenar el certificado o su public key en el cliente, validar en cada conexión.
   2. **User trust decision**: mostrar un diálogo explícito: "¿Confiar en este certificado?" con detalles (fingerprint, CN, issuer) y guardar la decisión solo si el usuario confirma consciente y explícitamente. Nunca hacer esto automático.
   3. **Separate secure channel**: usar un servidor intermediario de confianza (proxy/reverse proxy con certificado válido conocido) para acceder a instancias auto-hospedadas detrás de NAT/DNS privado.
@@ -65,7 +65,7 @@ Q_ASSERT( vectorLayers.contains(layerId) );  // ← Validación DESPUÉS
 
 `QHash::operator[]` en Qt inserta silenciosamente un valor nulo-inicializado si la clave no existe. Si un delta referencia un `layerId` desconocido (capa eliminada, id corrompido, sincronización de multi-dispositivo con capas desalineadas), la app **crashea** en producción, en lugar de fallar gracefully.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Usar `QHash::value(key, defaultValue)` o validar con `contains()` **antes** de acceder.
 - Para datos serializados/sincronizados (como deltas), usar validación real con manejo de errores, nunca `Q_ASSERT` (que se optimiza en release).
 - Si un delta es corrupto, registrar error, alertar al usuario, y permitir reintento/sincronización completa, no crash.
@@ -84,7 +84,7 @@ Los deltas son **datos persistentes** que atraviesan sincronización entre dispo
 
 Todo acceso estructural (índices, acceso a claves JSON, iteración) se valida con `Q_ASSERT`, que es compilado fuera en builds release. Resultado: un deltafile corrupto puede desencadenar índices negativos (`mDeltas.at(-1)`), dereference nulo, o undefined behavior silencioso en producción.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - **Datos de sincronización**: validar con excepciones/error returns explícitos, nunca con `Q_ASSERT`.
 - Implementar schema validation (JSONSchema, Protobuf, etc.) en la serialización.
 - En caso de delta corrupto: log, telemetría, y oferta "re-sincronizar todo" al usuario.
@@ -109,7 +109,7 @@ sFileLocks.insert( path );  // ← Se poblam pero nunca se verifica
 
 La protección está **desactivada pero el set se sigue actualizando** (líneas 164, 170), dando la falsa apariencia de seguridad. El TODO admite que tanto el modelo read-only como el layer observer read/write pueden mantener punteros separados al mismo archivo. Acceso concurrente a escritura produce corrupción de deltas.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Si hay read/write concurrente sobre el mismo recurso, usar un lock real (mutex, file lock del SO).
 - No desactivar protecciones con `#if 0` — eliminarlas o reactivarlas, no dejarlas "latentes".
 - Considerar un modelo de sincronización más simple: una sola cola de escritura, un solo lector (patrón productor-consumidor), si es viable en el dominio.
@@ -134,7 +134,7 @@ multiPart->setParent(reply);  // ← Se llama solo si el loop completa
 
 Si cualquier `QFile::open()` falla en el loop, la función retorna sin liberar `multiPart` ni las partes ya append'adas.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Poner parent **inmediatamente** después de `new`:
   ```cpp
   auto multiPart = std::make_unique<QHttpMultiPart>(...);
@@ -167,9 +167,9 @@ QDir().mkpath(filePath);
 
 El mismo `fileName` se usa como raíz de extracción del zip. Impacto: un servidor malicioso o interceptado (vía MITM — ver CRITICAL #1) puede escribir fuera de `dataDir/plugins/`. Como los plugins son código arbitrario QML/JS ejecutado en-app, esto es equivalente a RCE.
 
-**Nota de alcance**: en QField, este endpoint no es accesible directamente vía deep-links (verificado en `qfieldurlhandler.cpp` — solo llama a `AppInterface::executeAction` con acciones limitadas), pero si VisitaCampo ofrece instalación de plugins, el riesgo es real.
+**Nota de alcance**: en QField, este endpoint no es accesible directamente vía deep-links (verificado en `qfieldurlhandler.cpp` — solo llama a `AppInterface::executeAction` con acciones limitadas), pero si SUNO ofrece instalación de plugins, el riesgo es real.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Validar nombres de archivo: rechazar `/`, `\`, `..`, rutas absolutas.
 - Canonicalizar la ruta final y verificar que está dentro del directorio esperado **antes** de escribir/descomprimir.
 - Si soportas instalación de plugins:
@@ -184,7 +184,7 @@ El mismo `fileName` se usa como raíz de extracción del zip. Impacto: un servid
 **Referencia**: `docker-app/qfieldcloud/core/views/deltas_views.py:116–118`, vista `ListCreateDeltasView.post`
 
 **Descripción del riesgo**:  
-Dentro del loop sobre deltas sincronizados (puede ser cientos, especialmente en VisitaCampo offline), se llama a `permissions_utils.can_create_delta(user, delta_obj)` que re-ejecuta la misma query de roles:
+Dentro del loop sobre deltas sincronizados (puede ser cientos, especialmente en SUNO offline), se llama a `permissions_utils.can_create_delta(user, delta_obj)` que re-ejecuta la misma query de roles:
 
 ```python
 for delta in deltas:
@@ -194,7 +194,7 @@ for delta in deltas:
 
 Internamente, `can_create_delta()` llama a `user_has_project_roles()` que accede a la vista SQL `projects_with_roles_vw`. Con 100+ deltas, son 100+ queries idénticas a la misma vista.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Hoisting: ejecutar la query de roles **una sola vez** fuera del loop, cachear el resultado.
   ```python
   user_roles = user.get_roles_for_project(project_id)  # 1 query
@@ -220,11 +220,11 @@ file.latest_version = file_version
 file.save(update_fields=['latest_version'])  # Lost update aquí
 ```
 
-El código tiene un TODO admitiendo esto: "probably we need to select_for_update the file object". Si dos dispositivos suben el mismo archivo casi simultáneamente (patrón real en VisitaCampo offline — dispositivos reconectando), puede:
+El código tiene un TODO admitiendo esto: "probably we need to select_for_update the file object". Si dos dispositivos suben el mismo archivo casi simultáneamente (patrón real en SUNO offline — dispositivos reconectando), puede:
 - Quedar `latest_version` apuntando a versión stale.
 - Desencadenar violación de constraint `unique_file_per_project_name_type_packagejob` sin recuperación.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Usar `select_for_update()` en la fila `File`:
   ```python
   file = File.objects.select_for_update().get_or_create(...)[0]
@@ -247,7 +247,7 @@ Se usa `static_cast<QgsVectorLayer*>(project->mapLayer(layerId))` en lugar de `q
 
 En el mismo repo, `layerobserver.cpp` usa `qobject_cast` (seguro) uniformemente. La inconsistencia es una "smell" de mantenibilidad.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Usar siempre `qobject_cast` o `dynamic_cast` para downcasts de objetos heredados en Qt.
 - Si es nulo, manejar error explícitamente, no asumir.
 
@@ -265,7 +265,7 @@ settings.setValue( QStringLiteral("/QFieldCloud/cookies/%1"), ... )
 
 Cada cookie sobrescribe la misma clave. Al reiniciar, solo la última cookie persiste.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Revisar todas las uses de `QString::arg()` en path construction.
 - Preferir `QStringBuilder` o construcción explícita de paths.
 - Test: guardar 3 cookies, reiniciar, verificar que todas persisten.
@@ -279,7 +279,7 @@ Cada cookie sobrescribe la misma clave. Al reiniciar, solo la última cookie per
 **Descripción del riesgo**:  
 Un `Q_GLOBAL_STATIC` cache keyed solo por `layerId`, nunca invalidado. Si dos proyectos comparten el mismo `layerId` (no es único a nivel de app), la cache retorna stale data.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Usar caches scoped: cache por `(projectId, layerId)`, no solo `layerId`.
 - Proporcionar invalidación explícita cuando la estructura de proyecto cambia.
 - Si tienes global state, documentar claramente cuándo es seguro (p.ej. después de load de proyecto, no durante sesión).
@@ -295,7 +295,7 @@ Si el worker muere entre `save(status=QUEUED)` y ejecutar el job, ese job queda 
 
 No hay comando reaper/timeout encontrado en el repo.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Implementar watchdog periódico: jobs `QUEUED` más de X minutos → resetear a `PENDING`.
 - Considerar enqueue timeout en la transacción inicial, p.ej. `QUEUED_AT` + `QUEUED_TIMEOUT`.
 - Test: matar el worker deliberadamente mid-job, verificar auto-recuperación.
@@ -311,7 +311,7 @@ La garantía de "solo un job PENDING/QUEUED/STARTED por proyecto" es un filtro s
 
 Mitigación conocida: `wrapper.py` tiene un check explícito "CONCURRENCY CHECK" que reset al perdedor a `PENDING` antes de ejecutar. Pero esto es bookkeeping en dos lugares (doble lógica de sincronización).
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Usar un lock único: `SELECT ... FOR UPDATE` en `Project`, o advisory lock en PostgreSQL keyed by `project_id`.
 - No depender de double-bookkeeping en dos archivos.
 
@@ -324,7 +324,7 @@ Mitigación conocida: `wrapper.py` tiene un check explícito "CONCURRENCY CHECK"
 **Descripción del riesgo**:  
 `AuthToken.key` se guarda raw y con `unique=True, db_index=True`. Exposición de backup/replica no cifrada = credenciales directamente usables.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Almacenar hash de tokens (p.ej. con `django-cacheops` o `django-otp`).
 - Comparar hash en lookup, nunca plaintext.
 - Considera `Fernet` (django-fernet) para cifrado de campos sensibles, como ya hace QFieldCloud con `Secret.value`.
@@ -338,7 +338,7 @@ Mitigación conocida: `wrapper.py` tiene un check explícito "CONCURRENCY CHECK"
 **Descripción del riesgo**:  
 Para tipos `single_token_clients`, se ejecuta un `filter().update()` sin lock. Logins simultáneos pueden dejar dos tokens vivos.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Envolver en `transaction.atomic()` con `select_for_update()` si el single-session invariant es importante.
 
 ---
@@ -359,7 +359,7 @@ def can_read_members(user, organization) -> bool:
 
 El campo `OrganizationMember.is_public` existe (defaults a `False`) pero nunca se filtra en `get_queryset()`. Exploit: enumeración de admins, org structure de competidores, social engineering targeting.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Requerir que el usuario sea miembro de la org o tenga rol ADMIN:
   ```python
   def can_read_members(user, organization) -> bool:
@@ -378,7 +378,7 @@ Roles REPORTER+ pueden leer `job.output` y `job.feedback["error_stack"]`, pero s
 
 Exploit: un REPORTER lee job output, obtiene credenciales DB, accede directo a PostgreSQL.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Scrubbing: antes de perseverar `job.output`/`feedback`, mascarar/redactar valores que coincidan con conocidos secrets.
 - Gate job-output visibility: si el job usó secrets, solo ADMIN puede leer output.
 - Test de errores: forzar fallos de conexión DB con un secret en el output, verificar que la salida perseverada no lo contiene.
@@ -392,7 +392,7 @@ Exploit: un REPORTER lee job output, obtiene credenciales DB, accede directo a P
 **Descripción del riesgo**:  
 `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")` asume que el nginx/reverse proxy sobrescribe este header incondicionalmente. Si no lo hace, un cliente en HTTP plano puede spoofar `X-Forwarded-Proto: https`, afectando CSRF/cookie flags sin cifrado real.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Verificar que el reverse proxy (nginx, etc.) **sobrescribe** headers `X-Forwarded-*` incondicionalmente.
 - Test: conectar en HTTP plano, intentar spoof `X-Forwarded-Proto`, verificar que Django lo rechaza o no lo confía.
 
@@ -415,7 +415,7 @@ Ya cubierto en MEDIUM (ítem 1 es esencialmente el mismo).
 
 **Impacto**: bajo (overhead menor), pero anti-patrón de optimización.
 
-**Qué hacer distinto en VisitaCampo**:
+**Qué hacer distinto en SUNO**:
 - Prefetch/select_related cuando sea posible.
 - Cache en el contexto de la request (`request.project = ...` después del primer fetch).
 
@@ -427,11 +427,11 @@ Ya cubierto en MEDIUM (ítem 1 es esencialmente el mismo).
 
 **Validación verificada**: rechaza componentes `.`, `..`, y caracteres prohibidos.
 
-**Recomendación para VisitaCampo**: mantener test unitario explícito de rechazo de traversal (`../`, `.`) como documentación de intent.
+**Recomendación para SUNO**: mantener test unitario explícito de rechazo de traversal (`../`, `.`) como documentación de intent.
 
 ---
 
-## Síntesis y priorización para VisitaCampo
+## Síntesis y priorización para SUNO
 
 | Hallazgo | Repo | Severidad | Acción inmediata |
 |----------|------|-----------|-----------------|
@@ -448,7 +448,7 @@ Ya cubierto en MEDIUM (ítem 1 es esencialmente el mismo).
 
 ## Patrones sólidos a emular
 
-De ambos proyectos, los siguientes patrones han demostrado ser seguros y valen la pena replicar en VisitaCampo:
+De ambos proyectos, los siguientes patrones han demostrado ser seguros y valen la pena replicar en SUNO:
 
 - **QField**: `src/core/qfieldcloud/layerobserver.*` — uso consistente de `qobject_cast`, `QPointer<>` para referencias débiles, reentrancy guard `isDeltaBeingApplied()`, disconnect-before-connect para señales.
 - **QField**: `src/core/positioning/abstractgnssreceiver.h` y `positioning.h` — abstracción limpia con `std::unique_ptr`/`QSharedPointer` para recursos, `friend`-restricted virtual hooks, `Q_FLAGS` para bitmasks de capacidades.

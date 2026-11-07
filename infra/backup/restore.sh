@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restaura un volcado cifrado sobre la BD de PG* (BORRA lo que haya).
-# Uso: restore.sh [latest | db/visitacampo-AAAAMMDDTHHMMSSZ.dump.age]
+# Uso: restore.sh [latest | db/suno-AAAAMMDDTHHMMSSZ.dump.age]
 #
 # Necesita la llave PRIVADA age en BACKUP_AGE_IDENTITY_FILE, montada solo
 # para restaurar (nunca vive en el servidor). Ver infra/backup/README.md.

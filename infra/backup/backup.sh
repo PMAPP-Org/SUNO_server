@@ -3,7 +3,7 @@
 # Ver infra/backup/README.md. Variables:
 #   PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE  conexión a PostgreSQL
 #   BACKUP_AGE_RECIPIENT    llave PÚBLICA age (age1…); la privada no está aquí
-#   BACKUP_REMOTE           destino rclone, p. ej. `backup:visitacampo-backups`
+#   BACKUP_REMOTE           destino rclone, p. ej. `backup:suno-backups`
 #   BACKUP_RETENTION_DAYS   días que se conservan los volcados (def. 30)
 #   BACKUP_BLOBS_SOURCE     origen de adjuntos: remoto rclone (`blobs:bucket`)
 #                           o ruta local (`/blobs`); vacío = no se copian
@@ -21,7 +21,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-object="db/visitacampo-${stamp}.dump.age"
+object="db/suno-${stamp}.dump.age"
 
 # 1. Volcado a disco y cifrado ANTES de subir: si pg_dump falla a medias, no
 #    llega al bucket un objeto truncado con aspecto de backup válido.
@@ -49,12 +49,12 @@ rclone delete --min-age "${RETENTION_DAYS}d" "${BACKUP_REMOTE}/db"
 if [ -d "$METRICS_DIR" ] && [ -w "$METRICS_DIR" ]; then
   tmp="$METRICS_DIR/.backup.prom.$$"
   {
-    echo '# HELP visitacampo_backup_last_success_timestamp_seconds Fin del último backup correcto.'
-    echo '# TYPE visitacampo_backup_last_success_timestamp_seconds gauge'
-    echo "visitacampo_backup_last_success_timestamp_seconds $(date +%s)"
-    echo '# HELP visitacampo_backup_last_size_bytes Tamaño cifrado del último volcado.'
-    echo '# TYPE visitacampo_backup_last_size_bytes gauge'
-    echo "visitacampo_backup_last_size_bytes $(stat -c %s "$work/db.dump.age")"
+    echo '# HELP suno_backup_last_success_timestamp_seconds Fin del último backup correcto.'
+    echo '# TYPE suno_backup_last_success_timestamp_seconds gauge'
+    echo "suno_backup_last_success_timestamp_seconds $(date +%s)"
+    echo '# HELP suno_backup_last_size_bytes Tamaño cifrado del último volcado.'
+    echo '# TYPE suno_backup_last_size_bytes gauge'
+    echo "suno_backup_last_size_bytes $(stat -c %s "$work/db.dump.age")"
   } > "$tmp"
   mv "$tmp" "$METRICS_DIR/backup.prom"
 fi

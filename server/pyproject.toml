@@ -1,7 +1,7 @@
 [project]
-name = "visitacampo-server"
+name = "suno-server"
 version = "0.13.0" # x-release-please-version
-description = "VisitaCampo backend — Django 5 + Django Ninja (ADR-004, sin DRF)"
+description = "SUNO backend — Django 5 + Django Ninja (ADR-004, sin DRF)"
 requires-python = ">=3.12"
 
 # --- ruff --------------------------------------------------------------
@@ -35,7 +35,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "visitacampo"]
+known-first-party = ["config", "suno"]
 
 [tool.ruff.lint.per-file-ignores]
 # settings/dev.py y prod.py reexportan base.py con `import *` a propósito
@@ -70,7 +70,7 @@ ignore_errors = true
 # sin una decisión explícita en el PR que lo cambie.
 [tool.coverage.run]
 branch = true
-source = ["visitacampo", "config"]
+source = ["suno", "config"]
 omit = [
     "*/tests/*",
     "*/migrations/*",

@@ -53,6 +53,6 @@ Un runner compartido de GitHub mide con ruido y tiene menos recursos que el VPS 
 |---|---|
 | Criterios 12, 13, 15 y la parte manual del 16 sin medir | Sesión en emulador Android de gama baja y en un teléfono real. Quien la haga anota aquí las cifras y el modelo de dispositivo |
 | Prueba de carga sin primera ejecución | Lanzar `Load test` desde Actions → Run workflow y copiar el resumen a la tarea 10 |
-| TLS contra un certificado real del dominio oficial | Al tener dominio: fijar los pines SPKI en el build (`VISITACAMPO_SPKI_PINS`, `VISITACAMPO_SPKI_PINS_EXPIRE`) y repetir el ítem 8 contra él |
+| TLS contra un certificado real del dominio oficial | Al tener dominio: fijar los pines SPKI en el build (`SUNO_SPKI_PINS`, `SUNO_SPKI_PINS_EXPIRE`) y repetir el ítem 8 contra él |
 
 El MVP no se declara cerrado mientras haya filas en esta tabla.

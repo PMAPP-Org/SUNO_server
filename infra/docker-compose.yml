@@ -1,4 +1,4 @@
-# VisitaCampo — Docker Compose base (ADR-010, docs/08 §5 "Hosting")
+# SUNO — Docker Compose base (ADR-010, docs/08 §5 "Hosting")
 #
 # Cuatro servicios fijos por ADR-010: caddy, api, worker, db.
 # Este archivo es el común a TODOS los entornos (dev/selfhosted/managed); lo que
@@ -17,7 +17,7 @@ x-server: &server
   build:
     context: ../server
     dockerfile: Dockerfile
-  image: visitacampo-api:local
+  image: suno-api:local
   restart: unless-stopped
   environment:
     DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -130,7 +130,7 @@ services:
     # monitoreo alerta si no hay backups recientes.
     build:
       context: ./backup
-    image: visitacampo-backup:local
+    image: suno-backup:local
     restart: unless-stopped
     read_only: true
     tmpfs:

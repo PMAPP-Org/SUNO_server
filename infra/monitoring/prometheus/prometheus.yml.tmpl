@@ -1,10 +1,10 @@
-# Prometheus de VisitaCampo (ADR-014). Plantilla: al arrancar, el contenedor
+# Prometheus de SUNO (ADR-014). Plantilla: al arrancar, el contenedor
 # sustituye __CADDY_DOMAIN__ por el dominio real (docker-compose.monitoring.yml).
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
   external_labels:
-    deployment: visitacampo
+    deployment: suno
 
 rule_files:
   - /etc/prometheus/alerts.yml

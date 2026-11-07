@@ -1,16 +1,16 @@
 openapi: 3.1.0
 
 info:
-  title: VisitaCampo API
+  title: SUNO API
   version: 1.0.0
-  summary: Contrato de API v1 (superficie mínima) de VisitaCampo.
+  summary: Contrato de API v1 (superficie mínima) de SUNO.
   description: |
-    Contrato **fuente de verdad** de la API v1 de VisitaCampo, escrito antes que el código
+    Contrato **fuente de verdad** de la API v1 de SUNO, escrito antes que el código
     (doc 08 §8 Fase 0). Ambos extremos —backend Django Ninja + Pydantic v2 y cliente Flutter—
     se validan contra este archivo (**RD-03**).
 
     Alcance: exactamente la superficie mínima enumerada en
-    [doc 08 §6](../../docs/08-arquitectura-propuesta-visitacampo.md#6-contrato-de-api-v1--superficie-mínima).
+    [doc 08 §6](../../docs/08-arquitectura-propuesta-suno.md#6-contrato-de-api-v1--superficie-mínima).
     No se añaden endpoints fuera de esa lista.
 
     ### Semántica de sincronización (ADR-003)
@@ -53,14 +53,14 @@ info:
   license:
     name: Propietario
   contact:
-    name: VisitaCampo
+    name: SUNO
 
 servers:
   - url: https://{host}
-    description: Instancia de VisitaCampo (self-hosted o gestionada). TLS estricto siempre (ADR-009).
+    description: Instancia de SUNO (self-hosted o gestionada). TLS estricto siempre (ADR-009).
     variables:
       host:
-        default: api.visitacampo.example
+        default: api.suno.example
         description: Host de la instancia.
 
 tags:
@@ -1392,7 +1392,7 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Definición declarativa del formulario (visitacampo/form@1). Nunca contiene código ejecutable.
+            Definición declarativa del formulario (suno/form@1). Nunca contiene código ejecutable.
             C5 añade `qr` (texto capturado o escaneado), `default` (literal validado al publicar,
             aplicado solo al crear un formulario o fila) y `repeat` (lista de objetos de respuestas).
             Un grupo declara `fields`, `min_rows` (0 por defecto) y `max_rows` (100 por defecto).

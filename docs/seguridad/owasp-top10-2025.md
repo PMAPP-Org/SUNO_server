@@ -2,7 +2,7 @@
 
 Qué control cubre cada riesgo del [OWASP Top 10:2025](https://owasp.org/Top10/2025/), qué prueba **automatizada** lo verifica en cada PR y qué queda pendiente. Es la evidencia de los controles de desarrollo del Anexo A de ISO/IEC 27001:2022 (tabla al final).
 
-Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arquitectura-propuesta-visitacampo.md`](../08-arquitectura-propuesta-visitacampo.md). Los workflows citados están en [`.github/workflows/`](../../.github/workflows/).
+Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arquitectura-propuesta-suno.md`](../08-arquitectura-propuesta-suno.md). Los workflows citados están en [`.github/workflows/`](../../.github/workflows/).
 
 **Regla de mantenimiento**: un PR que añade, quita o desactiva un gate actualiza este documento en el mismo PR.
 
@@ -88,7 +88,7 @@ Las decisiones de diseño (RD-01…RD-16, ADR-001…013) están en [`docs/08-arq
 
 - **Controles**: releases con atestación de procedencia SLSA y SBOM firmadas con Sigstore (`release.yml`); APK firmado con llave de subida fuera del repo; adjuntos inmutables direccionados por contenido con checksum certificado por el object storage (RD-08, ADR-007); sync con CAS por versión.
 - **Pruebas automatizadas**: job `android-release` (firma no debug); tests de presign/commit con checksum incorrecto; tests de idempotencia y conflicto del `SyncEngine`.
-- **Verificación manual de un artefacto**: `gh attestation verify oci://ghcr.io/<owner>/visitacampo-api:<versión> --repo PMAPP-Org/SUNO_server`.
+- **Verificación manual de un artefacto**: `gh attestation verify oci://ghcr.io/<owner>/suno-api:<versión> --repo PMAPP-Org/SUNO_server`.
 - **Pendiente**: protección de rama en `master` (revisión obligatoria + checks requeridos).
 
 ### A09:2025 Security Logging and Alerting Failures

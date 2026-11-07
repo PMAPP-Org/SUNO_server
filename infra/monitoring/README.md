@@ -1,6 +1,6 @@
 # Monitoreo de salud del servidor
 
-Decisión de diseño: **ADR-014** en [`docs/08-arquitectura-propuesta-visitacampo.md`](../../docs/08-arquitectura-propuesta-visitacampo.md). Control ISO/IEC 27001:2022 A.8.16 (actividades de monitorización).
+Decisión de diseño: **ADR-014** en [`docs/08-arquitectura-propuesta-suno.md`](../../docs/08-arquitectura-propuesta-suno.md). Control ISO/IEC 27001:2022 A.8.16 (actividades de monitorización).
 
 Son dos capas complementarias:
 
@@ -36,7 +36,7 @@ Nada se publica a internet: las interfaces escuchan solo en `127.0.0.1` del serv
 ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9093:localhost:9093 deploy@servidor
 ```
 
-- **Grafana**: http://localhost:3000, usuario `admin`. Abre directamente el panel *VisitaCampo — Salud del servidor*.
+- **Grafana**: http://localhost:3000, usuario `admin`. Abre directamente el panel *SUNO — Salud del servidor*.
 - **Prometheus**: http://localhost:9090 (targets, reglas, consultas).
 - **Alertmanager**: http://localhost:9093 (alertas activas, silencios durante mantenimientos).
 

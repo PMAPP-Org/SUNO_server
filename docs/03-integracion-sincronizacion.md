@@ -97,6 +97,6 @@ Flujo en `core/views/deltas_views.py` (`ListCreateDeltasView.post`):
 
 `/api/v1/server/info/`, `/api/v1/auth/providers|token|user|logout/`, `/api/v1/users/{user}/organizations/`, `/api/v1/subscriptions/{user}/current/`, `/api/v1/deltas/{projectId}/`, `/api/v1/files/{projectId}/{path}/`, `/api/v1/packages/{project_id}/latest/`, `/api/v1/jobs/`.
 
-## 10. Patrón a replicar en VisitaCampo
+## 10. Patrón a replicar en SUNO
 
 El patrón completo es: **outbox local con IDs generados en cliente (UUID) → subida idempotente → cola de jobs server-side → procesamiento asíncrono → polling de estado → si hay conflicto, el cliente descarta y re-sincroniza en vez de mergear localmente**. Es directamente aplicable a "visitas de campo": cada visita/formulario/evidencia completado offline se modela como un delta con `uuid`, snapshot y adjuntos referenciados por checksum, sin necesitar lógica de merge compleja en el dispositivo móvil.

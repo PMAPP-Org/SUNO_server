@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      LOAD_HOST: api.visitacampo.localhost
+      LOAD_HOST: api.suno.localhost
       COMPOSE: docker compose --project-directory infra --env-file infra/.env -f infra/docker-compose.yml
       DEVICES: ${{ inputs.devices || '50' }}
       OPS: ${{ inputs.ops || '100' }}

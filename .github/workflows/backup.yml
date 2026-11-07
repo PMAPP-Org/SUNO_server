@@ -96,7 +96,7 @@ jobs:
           test "$(head -c 21 "$f")" = "age-encryption.org/v1"
           if grep -a -q PGDMP "$f"; then echo "El volcado contiene la firma de pg_dump en claro"; exit 1; fi
           $COMPOSE run --rm --no-deps --entrypoint cat backup /metrics/backup.prom \
-            | grep -E '^visitacampo_backup_last_success_timestamp_seconds [0-9]+$'
+            | grep -E '^suno_backup_last_success_timestamp_seconds [0-9]+$'
 
       - name: Desastre — se borra toda la BD
         run: |

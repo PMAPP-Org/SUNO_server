@@ -1,4 +1,4 @@
-# VisitaCampo — override de DESARROLLO (docs/08 ADR-010: "override.dev.yml
+# SUNO — override de DESARROLLO (docs/08 ADR-010: "override.dev.yml
 # (hot reload, MinIO local, MailHog)").
 #
 # Se activa vía la variable de entorno COMPOSE_FILE (ver infra/README.md):

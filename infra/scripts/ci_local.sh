@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VisitaCampo — ejecuta localmente el mismo conjunto de checks que
+# SUNO — ejecuta localmente el mismo conjunto de checks que
 # .github/workflows/backend.yml (Paso 3 del plan), sin
 # depender de tener un remoto de GitHub configurado. Ver CONTRIBUTING.md /
 # infra/README.md: ningún paso posterior del plan se considera completo si
@@ -126,7 +126,7 @@ fi
 section "Backend (server/) — bandit (SAST)"
 if ! command_exists bandit; then
 	skip "bandit" "bandit no está instalado (pip install --require-hashes -r server/requirements-dev.lock)"
-elif bandit -q -r server/visitacampo server/config -x '*/tests/*,*/migrations/*'; then
+elif bandit -q -r server/suno server/config -x '*/tests/*,*/migrations/*'; then
 	pass "bandit"
 else
 	fail "bandit"

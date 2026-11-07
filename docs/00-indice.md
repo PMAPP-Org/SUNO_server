@@ -1,6 +1,6 @@
 # Documentación de arquitectura de referencia — QField / QFieldCloud
 
-Este directorio documenta la arquitectura, el funcionamiento interno y el modelo de integración de **QField** (cliente móvil/desktop) y **QFieldCloud** (backend Django), los dos proyectos analizados como referencia antes de iniciar **VisitaCampo**.
+Este directorio documenta la arquitectura, el funcionamiento interno y el modelo de integración de **QField** (cliente móvil/desktop) y **QFieldCloud** (backend Django), los dos proyectos analizados como referencia antes de iniciar **SUNO**.
 
 El objetivo no es documentar QField/QFieldCloud por sí mismos, sino extraer **patrones de diseño probados en producción** para una app de seguimiento/visitas de campo con backend propio: sincronización offline-first, manejo de adjuntos, colas de trabajo, modelo de datos geoespacial/no geoespacial, permisos, despliegue con Docker.
 
@@ -11,9 +11,9 @@ El objetivo no es documentar QField/QFieldCloud por sí mismos, sino extraer **p
 3. [03-integracion-sincronizacion.md](03-integracion-sincronizacion.md) — Protocolo de sincronización delta, autenticación, adjuntos, resolución de conflictos, diagramas de flujo end-to-end.
 4. [04-base-de-datos.md](04-base-de-datos.md) — Modelo de datos PostgreSQL/PostGIS, entidades, relaciones, migraciones, almacenamiento de archivos.
 5. [05-infraestructura-despliegue.md](05-infraestructura-despliegue.md) — Servicios Docker Compose, entornos (local/standalone/test/prod/staging), variables de entorno, CI/CD.
-6. [06-recomendaciones-visitacampo.md](06-recomendaciones-visitacampo.md) — Síntesis de patrones a adoptar, decisiones de stack sugeridas y preguntas abiertas para arrancar VisitaCampo.
-7. [07-hallazgos-revision-codigo.md](07-hallazgos-revision-codigo.md) — Hallazgos de auditorías de código (calidad y seguridad) de QField y QFieldCloud, organizados por severidad, con recomendaciones específicas para VisitaCampo.
-8. [08-arquitectura-propuesta-visitacampo.md](08-arquitectura-propuesta-visitacampo.md) — Arquitectura propuesta y cerrada para VisitaCampo (no solo referencia): stack móvil y backend, ADRs, modelo de datos, plan por fases y costo estimado, diseñada evitando explícitamente los hallazgos del documento 07.
+6. [06-recomendaciones-suno.md](06-recomendaciones-suno.md) — Síntesis de patrones a adoptar, decisiones de stack sugeridas y preguntas abiertas para arrancar SUNO.
+7. [07-hallazgos-revision-codigo.md](07-hallazgos-revision-codigo.md) — Hallazgos de auditorías de código (calidad y seguridad) de QField y QFieldCloud, organizados por severidad, con recomendaciones específicas para SUNO.
+8. [08-arquitectura-propuesta-suno.md](08-arquitectura-propuesta-suno.md) — Arquitectura propuesta y cerrada para SUNO (no solo referencia): stack móvil y backend, ADRs, modelo de datos, plan por fases y costo estimado, diseñada evitando explícitamente los hallazgos del documento 07.
 
 ## Resumen de una línea de cada proyecto
 

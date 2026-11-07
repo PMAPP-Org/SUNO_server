@@ -3,8 +3,8 @@
 > **BORRADOR — pendiente de validación jurídica.** Marco: Ley Estatutaria 1581 de 2012 y Decreto 1377 de 2013 (Colombia), e ISO/IEC 27001:2022 A.5.34. **Este documento no es asesoría legal.** Identifica qué datos personales trata el sistema para que el responsable del tratamiento y su asesor jurídico definan las bases, los avisos y los plazos.
 
 **Roles (por confirmar en cada contrato):**
-- Cada **organización cliente** que usa VisitaCampo es, en principio, *responsable del tratamiento* de los datos de sus agentes y de lo que estos capturan en campo.
-- El operador de VisitaCampo actúa como *encargado del tratamiento*.
+- Cada **organización cliente** que usa SUNO es, en principio, *responsable del tratamiento* de los datos de sus agentes y de lo que estos capturan en campo.
+- El operador de SUNO actúa como *encargado del tratamiento*.
 
 ## Tratamientos
 
@@ -32,7 +32,7 @@
 
 ## Derechos del titular en el back-office (Paso 24)
 
-Los atiende la **administración de la organización** del titular (rol OWNER o ADMIN; supervisión no basta) desde Django Admin → Usuarios → acciones. Ver `server/visitacampo/backoffice/personal_data.py`.
+Los atiende la **administración de la organización** del titular (rol OWNER o ADMIN; supervisión no basta) desde Django Admin → Usuarios → acciones. Ver `server/suno/backoffice/personal_data.py`.
 
 | Derecho | Cómo | Qué cubre |
 |---|---|---|

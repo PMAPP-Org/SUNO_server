@@ -1,6 +1,6 @@
 """Configuración base de Django, compartida por `dev.py` y `prod.py`.
 
-VisitaCampo backend — Paso 4 del plan (esqueleto Django 5 + Django Ninja).
+SUNO backend — Paso 4 del plan (esqueleto Django 5 + Django Ninja).
 Variables de entorno leídas aquí consistentes con `infra/.env.example`
 (Paso 2): mismos nombres, no se inventan variables nuevas.
 """
@@ -31,8 +31,8 @@ ALLOWED_HOSTS: list[str] = []
 
 # --- Apps ----------------------------------------------------------------
 INSTALLED_APPS = [
-    # Admin con MFA obligatorio (OTPAdminSite): ver visitacampo/core/apps.py.
-    "visitacampo.core.apps.OtpAdminConfig",
+    # Admin con MFA obligatorio (OTPAdminSite): ver suno/core/apps.py.
+    "suno.core.apps.OtpAdminConfig",
     "django.contrib.auth",
     # MFA del back-office (TOTP + códigos de respaldo): ver `ADMIN_REQUIRE_OTP`.
     "django_otp",
@@ -43,13 +43,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # App principal de dominio (Paso 4: solo aloja el endpoint de salud).
-    "visitacampo.apps.VisitaCampoConfig",
+    "suno.apps.SunoConfig",
     # Modelo de datos núcleo: doc 08 §4.4 + ADR-011 (Paso 5).
-    "visitacampo.core.apps.CoreConfig",
+    "suno.core.apps.CoreConfig",
     # Autenticación: login + JWT Ed25519 + refresh hasheado (ADR-008, Paso 7).
     # Se llama `authn` y no `auth` para no colisionar con `django.contrib.auth`
-    # (ver el docstring de visitacampo.authn.apps.AuthnConfig).
-    "visitacampo.authn.apps.AuthnConfig",
+    # (ver el docstring de suno.authn.apps.AuthnConfig).
+    "suno.authn.apps.AuthnConfig",
     # 3rd-party — rate limiting de login (ADR-004). Reutiliza el hook de
     # `django.contrib.auth.authenticate()` que `authn/services.py::log_in`
     # ya invoca (ver el bloque `AXES_*` más abajo para los dos ajustes que
@@ -61,7 +61,7 @@ INSTALLED_APPS = [
 # ADR-011 (modelo de identidad plano): `AppUser` extiende `AbstractUser`, así
 # que es UNA tabla (`app_user`), no una jerarquía. El swap se hace aquí, antes
 # de la primera migración aplicada, que es el único momento barato de hacerlo.
-# La justificación completa está en el docstring de `visitacampo.core.models.
+# La justificación completa está en el docstring de `suno.core.models.
 # tenancy.AppUser`.
 AUTH_USER_MODEL = "core.AppUser"
 
@@ -92,7 +92,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "visitacampo" / "core" / "templates"],
+        "DIRS": [BASE_DIR / "suno" / "core" / "templates"],
         # Requerido por django.contrib.admin (back-office de fase 1, ADR-004).
         "APP_DIRS": True,
         "OPTIONS": {
@@ -116,8 +116,8 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "visitacampo"),
-        "USER": os.environ.get("POSTGRES_USER", "visitacampo"),
+        "NAME": os.environ.get("POSTGRES_DB", "suno"),
+        "USER": os.environ.get("POSTGRES_USER", "suno"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
@@ -134,7 +134,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Tamaño máximo de cuerpo (ADR-003, Paso 8) -----------------------------
 # El contrato admite lotes de push de hasta **5 MiB** descomprimidos
-# (`visitacampo.serverinfo.capabilities.SYNC_PUSH_MAX_BYTES`). El valor por
+# (`suno.serverinfo.capabilities.SYNC_PUSH_MAX_BYTES`). El valor por
 # defecto de Django son 2,5 MiB, así que sin esto un lote perfectamente
 # legítimo de 3 MiB moriría con el `400` de `RequestDataTooBig` antes de
 # llegar a la vista, y el cliente no recibiría el `413 payload_too_large` que
@@ -143,11 +143,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Se deja **exactamente** en el límite del contrato, no por encima: así el
 # corte de Django y el del endpoint son el mismo número, y un cuerpo mayor se
 # rechaza sin llegar a leerse entero en memoria. `RequestDataTooBig` se
-# traduce a `413` en `visitacampo/core/api_errors.py`, de modo que los dos
+# traduce a `413` en `suno/core/api_errors.py`, de modo que los dos
 # caminos dan la misma respuesta.
 #
 # El literal se repite aquí porque los settings se cargan **antes** que las
-# apps y no pueden importar `visitacampo.*`. `visitacampo/sync/tests/
+# apps y no pueden importar `suno.*`. `suno/sync/tests/
 # test_limits.py` comprueba que ambos números siguen coincidiendo.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
@@ -247,12 +247,12 @@ SILENCED_SYSTEM_CHECKS = ["axes.W002"]
 # además del contador que decide el bloqueo. Es la traza de los fallos de
 # contraseña, que `AuditEvent` no registra a propósito (sin organización a la
 # que atribuirlos y con riesgo de oráculo de enumeración; ver
-# `visitacampo/core/audit.py`). ISO 27001 A.8.15.
+# `suno/core/audit.py`). ISO 27001 A.8.15.
 AXES_ENABLE_ACCESS_FAILURE_LOG = True
 
 # --- MFA del back-office (django-otp; riesgo R-20, ISO 27001 A.8.5) ----------
 # Django Admin exige usuario + contraseña + código TOTP (o un código de
-# respaldo); lo impone `OtpAdminConfig` (visitacampo/core/apps.py).
+# respaldo); lo impone `OtpAdminConfig` (suno/core/apps.py).
 # Alta del segundo factor en el servidor: `python manage.py enroll_admin_totp <usuario>`.
 #
 # EXC-003 (docs/seguridad/excepciones.md): mientras dura el desarrollo se
@@ -264,9 +264,9 @@ ADMIN_REQUIRE_OTP = os.environ.get("DJANGO_ADMIN_REQUIRE_OTP", "true").strip().l
     "false",
     "no",
 }
-OTP_TOTP_ISSUER = "VisitaCampo"
+OTP_TOTP_ISSUER = "SUNO"
 
-# --- Rate limiting de la API (visitacampo/core/ratelimit.py, Paso 15) -------
+# --- Rate limiting de la API (suno/core/ratelimit.py, Paso 15) -------
 # ámbito → (máximo de peticiones, ventana en segundos). Por IP, holgado: una
 # cuadrilla comparte IP detrás del NAT del operador móvil. Por token/usuario,
 # estricto: un dispositivo refresca cada ~15 min y pide una URL por foto.
@@ -288,13 +288,13 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
 #
 # **Sin valor por defecto a propósito**: una clave constante en el repositorio
 # permitiría a cualquiera firmar un token válido para cualquier usuario. Sin
-# clave, `visitacampo.authn.keys` falla en producción y genera una clave
+# clave, `suno.authn.keys` falla en producción y genera una clave
 # efímera en memoria (con aviso) solo cuando DEBUG=True.
 JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY", "")
 JWT_SIGNING_KEY_FILE = os.environ.get("JWT_SIGNING_KEY_FILE", "")
 # Rotación (ADR-008): la clave **anterior**, que solo verifica (nunca firma)
 # mientras quedan access tokens suyos vivos. Basta su clave pública. Vacía
-# fuera de una rotación. Ver `visitacampo/authn/keys.py`.
+# fuera de una rotación. Ver `suno/authn/keys.py`.
 JWT_PREVIOUS_KEY = os.environ.get("JWT_PREVIOUS_KEY", "")
 JWT_PREVIOUS_KEY_FILE = os.environ.get("JWT_PREVIOUS_KEY_FILE", "")
 
@@ -351,7 +351,7 @@ ATTACHMENT_DOWNLOAD_URL_TTL_SECONDS = 300
 
 # ADR-007 (consecuencias): un objeto subido pero nunca confirmado es basura
 # pasadas 24 h. El job que lo aplica lo engancha el Paso 19; la lógica vive en
-# `visitacampo/attachments/services.py::collect_unconfirmed_uploads`.
+# `suno/attachments/services.py::collect_unconfirmed_uploads`.
 ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS = 24
 
 # Mapas base offline (Fase B). La URL de descarga dura más que la de un
@@ -396,7 +396,7 @@ JOB_MAX_ATTEMPTS = 5
 JOB_BACKOFF_BASE_SECONDS = 5
 JOB_BACKOFF_MAX_SECONDS = 900
 
-# Cadencia de los tres periódicos (`visitacampo/jobs/periodic.py`). El reaper
+# Cadencia de los tres periódicos (`suno/jobs/periodic.py`). El reaper
 # es el más frecuente porque es la red de seguridad de todos los demás; la
 # purga de tombstones y el GC de blobs miden ventanas de 90 días y 24 h
 # respectivamente, así que correrlos más a menudo no adelantaría nada.
@@ -423,7 +423,7 @@ AXES_LOG_RETENTION_DAYS = int(os.environ.get("AXES_LOG_RETENTION_DAYS", "90"))
 # cualquier librería que emita por `logging`.
 #
 # Dos piezas y no una, porque hay dos momentos en los que se puede escapar un
-# secreto (ver `visitacampo/core/scrub.py`): el filtro redacta el mensaje y sus
+# secreto (ver `suno/core/scrub.py`): el filtro redacta el mensaje y sus
 # argumentos antes de que lo vea ningún handler; el formatter redacta el texto
 # ya renderizado, que es lo único que ve el **traceback** de una excepción.
 #
@@ -435,11 +435,11 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {
-        "scrub": {"()": "visitacampo.core.scrub.ScrubbingFilter"},
+        "scrub": {"()": "suno.core.scrub.ScrubbingFilter"},
     },
     "formatters": {
         "scrubbed": {
-            "()": "visitacampo.core.scrub.ScrubbingFormatter",
+            "()": "suno.core.scrub.ScrubbingFormatter",
             "format": "{asctime} {levelname} {name}: {message}",
             "style": "{",
         },
@@ -456,7 +456,7 @@ LOGGING = {
     # sobre todo) se declaran uno a uno.
     "root": {"handlers": ["console"], "level": "WARNING"},
     "loggers": {
-        "visitacampo": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "suno": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 }
 
