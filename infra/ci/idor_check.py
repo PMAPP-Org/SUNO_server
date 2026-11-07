@@ -33,7 +33,7 @@ import urllib.request
 import uuid
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CAPTURED_AT = "2026-07-30T14:05:09.123Z"
 
 
