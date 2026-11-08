@@ -8,6 +8,7 @@
   </div>
   <div class="eq-heading-actions">
     <a class="eq-button" href="{% url 'equipment:usage_list' %}">Registros de uso</a>
+    {% if items %}<a class="eq-button" href="{% url 'equipment:labels' %}?{% for item in items %}ids={{ item.equipment.pk }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Etiquetas QR de esta página</a>{% endif %}
     {% if can_create %}<a class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
   </div>
 </section>
@@ -41,6 +42,11 @@
     {% endif %}
   </div>
 </section>
+
+<form class="eq-identify" method="get" action="{% url 'equipment:identify' %}" aria-label="Identificar equipo">
+  <label><span>Identificar equipo</span><input type="text" name="q" placeholder="Escanea el QR o escribe código, serie o placa" autocomplete="off" required></label>
+  <button class="eq-button" type="submit">Abrir ficha</button>
+</form>
 
 <form class="eq-filters" method="get" aria-label="Filtros de equipos">
   <label class="eq-search"><span>Buscar</span><input type="search" name="q" value="{{ query }}" placeholder="Código, nombre, serie o placa"></label>

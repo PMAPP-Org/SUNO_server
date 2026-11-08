@@ -1,6 +1,6 @@
 # Equipos, preoperacionales y soporte SST — plan maestro
 
-**Estado:** Hito A implementado; Hito B en curso con EQ-01 a EQ-04 terminados; MNT-01 iniciado con registro y listado de uso en la rama `feat/section-access-rbac`.
+**Estado:** Hito A implementado; Hito B en curso con EQ-01 a EQ-05 terminados; MNT-01 iniciado con registro y listado de uso en la rama `feat/section-access-rbac`.
 
 **Objetivo:** incorporar a SUNO un módulo de equipos que cubra ficha técnica, documentos, operadores, uso, mantenimiento y preoperacionales móviles revisables, con trazabilidad y salidas para entregables SST. Antes se implementará autorización por sección y proyecto.
 
@@ -158,7 +158,10 @@ Depende de ACC-01 a ACC-07.
 - [x] **EQ-02 — Modelos y migración.** Implementar tipos, equipos, documentos, proyectos y asignaciones de operador.
 - [x] **EQ-03 — Servicios y políticas.** Aplicar scoping, capacidades de Equipos y auditoría.
 - [x] **EQ-04 — Interfaz web.** Listado, ficha, documentos, historial, filtros y estados.
-- [ ] **EQ-05 — Identificación QR.** Generar código estable sin incluir secretos y admitir búsqueda manual.
+- [x] **EQ-05 — Identificación QR.** Generar código estable sin incluir secretos y admitir búsqueda manual.
+  - Payload `suno:eq:<uuid>` (solo el UUID; escanear no concede acceso, se exige sesión y alcance vigente).
+  - Generador propio de la plataforma (`segno`, nivel Q, tinta/papel de marca): SVG/PNG descargables, etiqueta imprimible individual y hoja por lote.
+  - `equipos/identificar/` resuelve QR escaneado (también lector USB/Bluetooth), código, serie o placa; sin filtrar existencia fuera del alcance.
 - [ ] **EQ-06 — API y sincronización de lectura.** Entregar al móvil solo equipos y asignaciones dentro del alcance.
 - [ ] **EQ-07 — Pruebas.** Organización, proyecto, vigencias, permisos y archivos.
 

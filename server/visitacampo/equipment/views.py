@@ -11,9 +11,13 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Count, Prefetch, Q
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.dateparse import parse_date
+from django.utils.http import urlencode
+from django.utils.safestring import mark_safe
+from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
 from visitacampo.core.access import Capability, Section, SectionRole
@@ -40,6 +44,12 @@ from visitacampo.equipment.forms import (
     EquipmentProjectForm,
     EquipmentTypeForm,
     EquipmentUsageForm,
+)
+from visitacampo.equipment.qr import (
+    equipment_payload,
+    parse_identifier,
+    render_png,
+    render_svg,
 )
 from visitacampo.equipment.services import (
     add_document,
@@ -656,4 +666,98 @@ def operator_create(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
         title="Asignar operador",
         capability=Capability.ASSIGN,
         submit=_submit_operator,
+    )
+
+
+MAX_LABELS = 60
+
+
+def _label_context(equipment: Equipment) -> dict[str, Any]:
+    payload = equipment_payload(equipment.pk)
+    svg = render_svg(payload, scale=8, title=f"QR de {equipment.code}").decode("ascii")
+    return {
+        "equipment": equipment,
+        "payload": payload,
+        # SVG generado localmente a partir del UUID: no incluye entrada del usuario.
+        "qr_svg": mark_safe(svg),
+    }
+
+
+@login_required(login_url="platform_login")
+def equipment_identify(request: HttpRequest) -> HttpResponse:
+    """Resuelve un QR escaneado o una búsqueda manual (código, serie, placa) a la ficha."""
+
+    ctx = _ctx(request)
+    raw = request.GET.get("q", "").strip()
+    if not raw:
+        return redirect("equipment:list")
+    queryset = visible_equipment(ctx)
+    identifier = parse_identifier(raw)
+    if identifier is not None:
+        match = queryset.filter(pk=identifier).first()
+        if match is None:
+            messages.error(request, "El código no corresponde a un equipo al que tengas acceso.")
+            return redirect("equipment:list")
+        return redirect("equipment:detail", equipment_id=match.pk)
+    exact = list(
+        queryset.filter(
+            Q(code__iexact=raw) | Q(serial_number__iexact=raw) | Q(license_plate__iexact=raw)
+        )[:2]
+    )
+    if len(exact) == 1:
+        return redirect("equipment:detail", equipment_id=exact[0].pk)
+    return redirect(f"{reverse('equipment:list')}?{urlencode({'q': raw})}")
+
+
+@login_required(login_url="platform_login")
+def equipment_qr(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    equipment = get_visible_equipment(ctx, equipment_id)
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/qr_label.html",
+        {"labels": [_label_context(equipment)], "single": True},
+    )
+
+
+@login_required(login_url="platform_login")
+def equipment_qr_image(request: HttpRequest, equipment_id: UUID, fmt: str) -> HttpResponse:
+    ctx = _ctx(request)
+    equipment = get_visible_equipment(ctx, equipment_id)
+    payload = equipment_payload(equipment.pk)
+    if fmt not in ("svg", "png"):
+        raise Http404
+    if fmt == "png":
+        body, content_type = render_png(payload), "image/png"
+    else:
+        body = render_svg(payload, title=f"QR de {equipment.code}")
+        content_type = "image/svg+xml"
+    response = HttpResponse(body, content_type=content_type)
+    response["Cache-Control"] = "private, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    if request.GET.get("download"):
+        name = slugify(equipment.code) or "equipo"
+        response["Content-Disposition"] = f'attachment; filename="qr-{name}.{fmt}"'
+    return response
+
+
+@login_required(login_url="platform_login")
+def equipment_labels(request: HttpRequest) -> HttpResponse:
+    """Hoja imprimible con las etiquetas QR de los equipos indicados en `ids`."""
+
+    ctx = _ctx(request)
+    ids: list[UUID] = []
+    for value in request.GET.getlist("ids"):
+        try:
+            ids.append(UUID(value))
+        except ValueError:
+            continue
+    ids = list(dict.fromkeys(ids))[:MAX_LABELS]
+    equipment = visible_equipment(ctx).select_related("equipment_type").filter(pk__in=ids)
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/qr_label.html",
+        {"labels": [_label_context(item) for item in equipment.order_by("code")], "single": False},
     )
