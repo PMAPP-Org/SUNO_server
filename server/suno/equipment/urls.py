@@ -5,6 +5,7 @@ from django.urls import path
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from suno.equipment import (
+    field_views,
     fuel_views,
     inspection_views,
     maintenance_views,
@@ -23,6 +24,12 @@ def _framed(route: str, view: Callable[..., Any], name: str) -> Any:
 urlpatterns = [
     _framed("", views.equipment_list, name="list"),
     _framed("usos/", views.usage_list, name="usage_list"),
+    _framed("uso/reportar/", field_views.usage_report_create, name="usage_report"),
+    _framed(
+        "<uuid:equipment_id>/preoperacional/nuevo/",
+        field_views.preoperational_create,
+        name="preoperational_create",
+    ),
     _framed("transporte/", transport_views.transport_panel, name="transport"),
     _framed("transporte/viajes/nuevo/", transport_views.trip_create, name="transport_trip_create"),
     _framed(

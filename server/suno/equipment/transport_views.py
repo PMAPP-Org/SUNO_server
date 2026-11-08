@@ -35,7 +35,7 @@ from suno.equipment.forms import (
     TransportVehicleForm,
     TripForm,
 )
-from suno.equipment.fuel_views import _can_manage, _form_view
+from suno.equipment.fuel_views import _can_manage, _equipment_initial, _form_view
 from suno.equipment.inspections import is_operator
 from suno.equipment.services import can_view_costs
 from suno.equipment.transport import (
@@ -233,6 +233,7 @@ def trip_create(request: HttpRequest) -> HttpResponse:
         submit=submit,
         success="Viaje registrado.",
         manage_only=False,
+        initial=_equipment_initial(request),
         redirect_to=HOME,
     )
 

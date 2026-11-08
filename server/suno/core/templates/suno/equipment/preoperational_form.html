@@ -1,0 +1,28 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Preoperacional · {{ equipment.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:detail' equipment.pk %}">← {{ equipment.code }}</a>
+<section class="eq-form-shell">
+  <header><p class="editorial-label">Equipos</p><h1>Preoperacional</h1><p>{{ equipment.code }} · {{ equipment.name }}</p></header>
+  {% if not checklist %}
+    <p class="eq-empty-inline">La tipología de este equipo no tiene lista de chequeo: pídele a un gestor que la defina para poder enviar preoperacionales.</p>
+  {% else %}
+  <form method="post" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {% if needs_meter %}
+    <label><span>Lectura inicial de {{ meter_label|lower }}<b aria-hidden="true">*</b></span><input type="text" inputmode="decimal" name="meter_value" value="{{ answers.meter_value }}" required></label>
+    {% endif %}
+    {% for row in rows %}
+    <fieldset class="eq-field-wide">
+      <legend>{{ row.item.label }}{% if row.item.critical %} · crítico{% endif %}</legend>
+      <label><input type="radio" name="ok_{{ row.item.pk }}" value="yes"{% if row.ok == 'yes' %} checked{% endif %} required> Cumple</label>
+      <label><input type="radio" name="ok_{{ row.item.pk }}" value="no"{% if row.ok == 'no' %} checked{% endif %}> Novedad</label>
+      <input type="text" name="note_{{ row.item.pk }}" maxlength="500" value="{{ row.note }}" placeholder="Describe la novedad (obligatorio si hay novedad)">
+    </fieldset>
+    {% endfor %}
+    <label class="eq-field-wide"><span>Observaciones generales</span><textarea name="notes" rows="3">{{ answers.notes }}</textarea></label>
+    <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Enviar preoperacional</button><a data-peek-close href="{% url 'equipment:detail' equipment.pk %}">Cancelar</a></div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

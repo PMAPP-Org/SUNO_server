@@ -9,6 +9,7 @@
   </div>
   <div class="eq-heading-actions">
     <a class="eq-button" href="{% url 'equipment:list' %}">Ver equipos</a>
+    {% if can_report %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:usage_report' %}">Reportar mi uso</a>{% endif %}
     {% if can_create %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:usage_create' %}">Registrar uso</a>{% endif %}
   </div>
 </section>

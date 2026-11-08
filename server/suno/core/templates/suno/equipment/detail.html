@@ -12,6 +12,19 @@
   {% if can_edit %}<a data-peek class="eq-button" href="{% url 'equipment:edit' equipment.pk %}">Editar ficha</a>{% endif %}
 </section>
 
+{% if can_record %}
+<section class="eq-detail-actions" aria-label="Nuevo registro">
+  <p class="editorial-label">Nuevo registro</p>
+  <div class="eq-heading-actions">
+    {% if is_operator %}<a class="eq-button eq-button-primary" href="{% url 'equipment:usage_report' %}?equipment={{ equipment.pk }}">Reportar mi uso</a>{% endif %}
+    {% if has_checklist %}<a class="eq-button" href="{% url 'equipment:preoperational_create' equipment.pk %}">Preoperacional</a>{% endif %}
+    {% if equipment.primary_meter_unit %}<a class="eq-button" href="{% url 'equipment:meter_create' equipment.pk %}">Lectura de medidor</a>{% endif %}
+    <a class="eq-button" href="{% url 'equipment:fuel_fill_create' %}?equipment={{ equipment.pk }}">Tanqueo</a>
+    <a class="eq-button" href="{% url 'equipment:transport_trip_create' %}?equipment={{ equipment.pk }}">Viaje</a>
+  </div>
+</section>
+{% endif %}
+
 <section class="eq-kpis" aria-label="Indicadores del equipo">
   <article><small>Horas del mes</small><strong>{{ kpis.hours_month|floatformat:"1g" }} h</strong><span>{{ kpis.days_used_month }} día{{ kpis.days_used_month|pluralize }} con uso</span></article>
   <article><small>Utilización del mes</small><strong>{% if kpis.utilization_month != None %}{{ kpis.utilization_month }} %{% else %}—{% endif %}</strong><span>sobre días hábiles × 8 h</span></article>

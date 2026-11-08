@@ -13,6 +13,7 @@ from suno.core.models import (
     EquipmentFieldDefinition,
     EquipmentFieldType,
     EquipmentMeterUnit,
+    EquipmentOperatorAssignment,
     EquipmentOwnership,
     EquipmentStatus,
     EquipmentType,
@@ -35,6 +36,7 @@ from suno.core.models import (
     WorkOrderLineKind,
 )
 from suno.core.scoping import scoped_qs
+from suno.equipment.services import visible_equipment
 
 
 class MembershipChoiceField(forms.ModelChoiceField):
@@ -656,7 +658,7 @@ class FuelFillForm(forms.Form):
     def __init__(self, ctx: RequestContext, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.fields["equipment"] = forms.ModelChoiceField(
-            queryset=scoped_qs(ctx, Equipment).exclude(status=EquipmentStatus.RETIRED),
+            queryset=visible_equipment(ctx).exclude(status=EquipmentStatus.RETIRED),
             label="Equipo",
         )
         self.fields["station"] = forms.ModelChoiceField(
@@ -779,7 +781,7 @@ class TripForm(forms.Form):
     def __init__(self, ctx: RequestContext, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.fields["equipment"] = forms.ModelChoiceField(
-            queryset=scoped_qs(ctx, Equipment).exclude(status=EquipmentStatus.RETIRED),
+            queryset=visible_equipment(ctx).exclude(status=EquipmentStatus.RETIRED),
             required=False,
             label="Equipo propio",
         )
@@ -850,3 +852,67 @@ class TransportSettlementForm(forms.Form):
             queryset=scoped_qs(ctx, TransportContractor).filter(active=True), label="Empresa"
         )
         self.order_fields(["contractor", "date_from", "date_to"])
+
+
+class UsageReportForm(forms.Form):
+    """Reporte de uso del propio operador sobre un equipo que tiene asignado."""
+
+    usage_date = forms.DateField(label="Fecha", widget=_today_input())
+    start_time = forms.TimeField(
+        label="Hora de inicio", widget=forms.TimeInput(attrs={"type": "time"})
+    )
+    end_time = forms.TimeField(label="Hora de fin", widget=forms.TimeInput(attrs={"type": "time"}))
+    activity = forms.CharField(max_length=200, label="Actividad realizada")
+    location = forms.CharField(max_length=200, required=False, label="Ubicación o frente de obra")
+    start_meter = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=12,
+        decimal_places=2,
+        label="Lectura inicial",
+        help_text="Obligatoria en equipos controlados por medidor.",
+    )
+    end_meter = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=12,
+        decimal_places=2,
+        label="Lectura final",
+        help_text="Obligatoria en equipos controlados por medidor.",
+    )
+    notes = forms.CharField(
+        max_length=500,
+        required=False,
+        label="Observaciones",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def __init__(self, ctx: RequestContext, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["equipment"] = forms.ModelChoiceField(
+            queryset=visible_equipment(ctx).exclude(status=EquipmentStatus.RETIRED), label="Equipo"
+        )
+        mine = (
+            scoped_qs(ctx, EquipmentOperatorAssignment)
+            .filter(operator_id=ctx.user_id)
+            .values("project_id")
+        )
+        self.fields["project"] = forms.ModelChoiceField(
+            queryset=scoped_qs(ctx, Project).filter(pk__in=mine).order_by("name"),
+            label="Proyecto",
+            help_text="Solo aparecen los proyectos donde tienes equipos asignados.",
+        )
+        self.order_fields(
+            [
+                "equipment",
+                "project",
+                "usage_date",
+                "start_time",
+                "end_time",
+                "activity",
+                "location",
+                "start_meter",
+                "end_meter",
+                "notes",
+            ]
+        )

@@ -61,6 +61,13 @@ from suno.equipment.views import _ctx, _message_validation, _render
 PAGE_SIZE = 50
 
 
+def _equipment_initial(request: HttpRequest) -> dict[str, Any]:
+    """Preselecciona el equipo cuando se llega desde su ficha (`?equipment=`)."""
+
+    value = request.GET.get("equipment")
+    return {"equipment": value} if value else {}
+
+
 def _can_manage(ctx: RequestContext) -> bool:
     return ctx.has_capability(Section.EQUIPMENT, Capability.CREATE) and not is_operator(ctx)
 
@@ -134,11 +141,16 @@ def _form_view(
     needs_ctx: bool = True,
     redirect_to: str = "equipment:fuel",
     equipment: Any = None,
+    initial: dict[str, Any] | None = None,
 ) -> HttpResponse:
     ctx = _ctx(request)
     if manage_only:
         _require_manage(ctx)
-    form = form_class(ctx, request.POST or None) if needs_ctx else form_class(request.POST or None)
+    form = (
+        form_class(ctx, request.POST or None, initial=initial)
+        if needs_ctx
+        else form_class(request.POST or None, initial=initial)
+    )
     if request.method == "POST" and form.is_valid():
         try:
             submit(ctx, form.cleaned_data)
@@ -146,6 +158,8 @@ def _form_view(
             _message_validation(request, exc)
         except IntegrityError:
             form.add_error(None, "El registro entra en conflicto con otro existente.")
+        except (Http404, PermissionDenied):
+            form.add_error(None, "No tienes acceso a ese equipo para registrar esto.")
         else:
             messages.success(request, success)
             return redirect(redirect_to)
@@ -254,6 +268,7 @@ def fill_create(request: HttpRequest) -> HttpResponse:
         submit=submit,
         success="Tanqueo registrado.",
         manage_only=False,
+        initial=_equipment_initial(request),
     )
 
 

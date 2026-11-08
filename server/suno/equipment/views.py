@@ -307,6 +307,7 @@ def usage_list(request: HttpRequest) -> HttpResponse:
             ),
             "statuses": EquipmentUsageStatus.choices,
             "can_create": _can_schedule_any(ctx),
+            "can_report": is_operator(ctx),
             "can_view_costs": can_view_costs(ctx),
         },
     )
@@ -605,6 +606,11 @@ def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
             "can_set_rates": show_costs
             and ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
             "can_edit": _can(ctx, equipment, Capability.UPDATE),
+            "can_record": _can(ctx, equipment, Capability.CREATE),
+            "is_operator": is_operator(ctx),
+            "has_checklist": equipment.equipment_type.preoperational_items.filter(
+                active=True
+            ).exists(),
             "can_assign": _can(ctx, equipment, Capability.ASSIGN),
             "can_schedule": _can(ctx, equipment, Capability.SCHEDULE),
         },
