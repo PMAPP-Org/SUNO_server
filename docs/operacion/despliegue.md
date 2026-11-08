@@ -48,6 +48,7 @@ En Settings → Environments, crear `production`, restringido a la rama `master`
 | `DEPLOY_SSH_KEY` | secreto | llave **privada** ed25519 dedicada solo a esto (su pública es la `DEPLOY_SSH_PUBKEY` del aprovisionamiento) |
 | `DEPLOY_KNOWN_HOSTS` | secreto | salida de `ssh-keyscan -t ed25519 <host>`, **comparada a mano** con `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` en la consola del proveedor |
 | `PRODUCTION_URL` | variable | `https://<dominio>` |
+| `CADDY_ADMIN_ALLOWED_IPS` | variable | CIDR autorizados para `/admin/`, separados por espacio; incluir `127.0.0.1/32` para el túnel SSH |
 
 Si falta cualquiera de estos valores, `deploy.yml` falla: producción nunca puede aparecer en verde sin haber desplegado y verificado la URL externa.
 

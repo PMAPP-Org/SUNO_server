@@ -70,6 +70,9 @@ jobs:
       # EXC-003 (docs/seguridad/excepciones.md): `false` apaga el segundo factor
       # del Admin; `true` lo reactiva; sin definir no se toca `infra/.env`.
       ADMIN_REQUIRE_OTP: ${{ vars.DJANGO_ADMIN_REQUIRE_OTP }}
+      # CIDR separados por un espacio. Se persisten en el VPS en cada deploy
+      # para que la allowlist no dependa de una edición manual del servidor.
+      ADMIN_ALLOWED_IPS: ${{ vars.CADDY_ADMIN_ALLOWED_IPS }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Validar configuración de producción
@@ -91,6 +94,17 @@ jobs:
             || { echo "Versión/SHA inválido: $VERSION"; exit 1; }
           [[ "$SCRIPT_REVISION" =~ ^[0-9a-f]{40}$ ]] \
             || { echo "SHA del workflow inválido: $SCRIPT_REVISION"; exit 1; }
+          if [ -n "$ADMIN_ALLOWED_IPS" ]; then
+            [[ "$ADMIN_ALLOWED_IPS" =~ ^[0-9A-Fa-f:./]+(\ [0-9A-Fa-f:./]+)*$ ]] \
+              || { echo "CADDY_ADMIN_ALLOWED_IPS contiene caracteres inválidos"; exit 1; }
+            python3 - "$ADMIN_ALLOWED_IPS" <<'PY'
+          import ipaddress
+          import sys
+
+          for value in sys.argv[1].split(" "):
+              ipaddress.ip_network(value, strict=False)
+          PY
+          fi
 
       - name: Resolver la imagen objetivo (por digest)
         id: image
@@ -138,10 +152,16 @@ jobs:
               ;;
             *) echo "::error::vars.DJANGO_ADMIN_REQUIRE_OTP debe ser true o false"; exit 1 ;;
           esac
+          admin_ips_cmd=":"
+          if [ -n "$ADMIN_ALLOWED_IPS" ]; then
+            line="CADDY_ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS}"
+            admin_ips_cmd="if grep -q '^CADDY_ADMIN_ALLOWED_IPS=' infra/.env; then sed -i 's|^CADDY_ADMIN_ALLOWED_IPS=.*|${line}|' infra/.env; else { echo; echo '${line}'; } >> infra/.env; fi"
+            echo "Admin allowlist: ${ADMIN_ALLOWED_IPS}" >> "$GITHUB_STEP_SUMMARY"
+          fi
           set +e
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes \
             "deploy@${DEPLOY_HOST}" \
-            "if [ -d /opt/suno/.git ]; then repo_dir=/opt/suno; elif [ -d /opt/visitacampo/.git ]; then repo_dir=/opt/visitacampo; else echo \"No existe un clon de SUNO en /opt/suno ni en la ruta heredada\" >&2; exit 1; fi; cd \"\$repo_dir\" && ${otp_cmd} && git fetch --quiet --tags origin master:refs/remotes/origin/master && script=\$(mktemp) && git show '${SCRIPT_REVISION}:infra/scripts/deploy.sh' > \"\$script\" && chmod 700 \"\$script\" && DEPLOY_SH_DETACHED=1 REPO_DIR=\"\$repo_dir\" bash \"\$script\" '${VERSION}' '${REF}'; code=\$?; rm -f \"\${script:-}\"; exit \$code"
+            "if [ -d /opt/suno/.git ]; then repo_dir=/opt/suno; elif [ -d /opt/visitacampo/.git ]; then repo_dir=/opt/visitacampo; else echo \"No existe un clon de SUNO en /opt/suno ni en la ruta heredada\" >&2; exit 1; fi; cd \"\$repo_dir\" && ${otp_cmd} && ${admin_ips_cmd} && git fetch --quiet --tags origin master:refs/remotes/origin/master && script=\$(mktemp) && git show '${SCRIPT_REVISION}:infra/scripts/deploy.sh' > \"\$script\" && chmod 700 \"\$script\" && DEPLOY_SH_DETACHED=1 REPO_DIR=\"\$repo_dir\" bash \"\$script\" '${VERSION}' '${REF}'; code=\$?; rm -f \"\${script:-}\"; exit \$code"
           code=$?
           set -e
           rm -f ~/.ssh/deploy_key
