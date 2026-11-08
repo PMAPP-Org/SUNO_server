@@ -313,7 +313,7 @@ def _collection_types(
 
 
 def _replace_collection_types(
-    collection: EquipmentCollection, equipment_types: list[EquipmentType]
+    ctx: RequestContext, collection: EquipmentCollection, equipment_types: list[EquipmentType]
 ) -> None:
     collection.type_links.all().delete()
     links = [
@@ -326,7 +326,7 @@ def _replace_collection_types(
     ]
     for link in links:
         link.full_clean()
-    EquipmentCollectionType.objects.bulk_create(links)
+    scoped_qs(ctx, EquipmentCollectionType).bulk_create(links)
 
 
 @transaction.atomic
@@ -348,7 +348,7 @@ def create_equipment_collection(
     )
     collection.full_clean()
     collection.save()
-    _replace_collection_types(collection, equipment_types)
+    _replace_collection_types(ctx, collection, equipment_types)
     audit.record(
         ctx,
         action=AuditAction.EQUIPMENT_COLLECTION_CREATED,
@@ -385,7 +385,7 @@ def update_equipment_collection(
     collection.updated_by_id = ctx.user_id
     collection.full_clean()
     collection.save()
-    _replace_collection_types(collection, equipment_types)
+    _replace_collection_types(ctx, collection, equipment_types)
     audit.record(
         ctx,
         action=AuditAction.EQUIPMENT_COLLECTION_UPDATED,
