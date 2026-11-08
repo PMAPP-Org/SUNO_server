@@ -64,9 +64,7 @@ class EquipmentServiceTests(TestCase):
             name="Proyecto Norte",
             created_by=self.admin,
         )
-        self.ctx = resolve_request_context(
-            Principal(user_id=self.admin.pk, org_id=self.org.pk)
-        )
+        self.ctx = resolve_request_context(Principal(user_id=self.admin.pk, org_id=self.org.pk))
         self.equipment_type = create_equipment_type(
             self.ctx,
             code="EXC",
@@ -130,19 +128,13 @@ class EquipmentServiceTests(TestCase):
             set(updated.equipment_types.values_list("pk", flat=True)),
             {self.equipment_type.pk, vehicle_type.pk},
         )
-        self.assertTrue(
-            AuditEvent.objects.filter(action="equipment.collection_created").exists()
-        )
-        self.assertTrue(
-            AuditEvent.objects.filter(action="equipment.collection_updated").exists()
-        )
+        self.assertTrue(AuditEvent.objects.filter(action="equipment.collection_created").exists())
+        self.assertTrue(AuditEvent.objects.filter(action="equipment.collection_updated").exists())
 
     def test_collection_tags_cannot_cross_organizations(self) -> None:
         other_org = make_org("Colecciones externas")
         other_admin = make_user(other_org, username="gestor-colecciones", role=Role.ADMIN)
-        other_ctx = resolve_request_context(
-            Principal(user_id=other_admin.pk, org_id=other_org.pk)
-        )
+        other_ctx = resolve_request_context(Principal(user_id=other_admin.pk, org_id=other_org.pk))
         other_type = create_equipment_type(other_ctx, code="EXT", name="Externo")
 
         with self.assertRaisesMessage(ValidationError, "no existen"):
@@ -320,9 +312,7 @@ class EquipmentServiceTests(TestCase):
         )
 
         self.assertEqual(usage.activity, "Excavación de material común")
-        self.assertTrue(
-            AuditEvent.objects.filter(action="equipment.usage_created").exists()
-        )
+        self.assertTrue(AuditEvent.objects.filter(action="equipment.usage_created").exists())
 
     def test_usage_rejects_overlapping_equipment_or_operator(self) -> None:
         self.grant_operator()
@@ -457,9 +447,7 @@ class EquipmentServiceTests(TestCase):
     def test_other_organization_is_never_visible(self) -> None:
         other = make_org("Otra")
         other_admin = make_user(other, username="otra-admin", role=Role.ADMIN)
-        other_ctx = resolve_request_context(
-            Principal(user_id=other_admin.pk, org_id=other.pk)
-        )
+        other_ctx = resolve_request_context(Principal(user_id=other_admin.pk, org_id=other.pk))
         self.assertFalse(visible_equipment(other_ctx).filter(pk=self.equipment.pk).exists())
 
     def test_open_assignment_is_unique_at_database_level(self) -> None:

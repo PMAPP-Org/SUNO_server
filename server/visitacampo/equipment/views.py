@@ -97,8 +97,7 @@ def _project_ids(equipment: Equipment) -> list[UUID]:
 def _can(ctx: RequestContext, equipment: Equipment, capability: Capability) -> bool:
     project_ids = _project_ids(equipment)
     return ctx.has_capability(Section.EQUIPMENT, capability) or any(
-        ctx.has_capability(Section.EQUIPMENT, capability, project_id)
-        for project_id in project_ids
+        ctx.has_capability(Section.EQUIPMENT, capability, project_id) for project_id in project_ids
     )
 
 
@@ -194,9 +193,7 @@ def equipment_list(request: HttpRequest) -> HttpResponse:
             "statuses": Equipment._meta.get_field("status").choices,
             "projects": scoped_qs(ctx, Project).order_by("name"),
             "can_create": ctx.has_capability(Section.EQUIPMENT, Capability.CREATE),
-            "can_update_collections": ctx.has_capability(
-                Section.EQUIPMENT, Capability.UPDATE
-            ),
+            "can_update_collections": ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
         },
     )
 
@@ -404,9 +401,7 @@ def collection_detail(request: HttpRequest, collection_id: UUID) -> HttpResponse
         .select_related("equipment_type")
         .order_by("code")
     )
-    page = Paginator(_with_current_projects(ctx, queryset), 25).get_page(
-        request.GET.get("page")
-    )
+    page = Paginator(_with_current_projects(ctx, queryset), 25).get_page(request.GET.get("page"))
     return _render(
         request,
         ctx,
@@ -602,23 +597,17 @@ def _related_form(
     )
 
 
-def _submit_document(
-    ctx: RequestContext, equipment: Equipment, data: dict[str, Any]
-) -> object:
+def _submit_document(ctx: RequestContext, equipment: Equipment, data: dict[str, Any]) -> object:
     return add_document(ctx, equipment_id=equipment.pk, **data)
 
 
-def _submit_project(
-    ctx: RequestContext, equipment: Equipment, data: dict[str, Any]
-) -> object:
+def _submit_project(ctx: RequestContext, equipment: Equipment, data: dict[str, Any]) -> object:
     values = data.copy()
     project = values.pop("project")
     return link_project(ctx, equipment_id=equipment.pk, project_id=project.pk, **values)
 
 
-def _submit_operator(
-    ctx: RequestContext, equipment: Equipment, data: dict[str, Any]
-) -> object:
+def _submit_operator(ctx: RequestContext, equipment: Equipment, data: dict[str, Any]) -> object:
     values = data.copy()
     operator = values.pop("operator")
     project = values.pop("project")

@@ -36,9 +36,7 @@ class EquipmentWebTests(TestCase):
         self.org = make_org("Equipos Web")
         self.admin = make_user(self.org, username="gestor-web", role=Role.ADMIN)
         self.viewer = make_user(self.org, username="consulta-web", role=Role.VIEWER)
-        self.ctx = resolve_request_context(
-            Principal(user_id=self.admin.pk, org_id=self.org.pk)
-        )
+        self.ctx = resolve_request_context(Principal(user_id=self.admin.pk, org_id=self.org.pk))
         self.equipment_type = create_equipment_type(
             self.ctx,
             code="RET",
@@ -112,9 +110,7 @@ class EquipmentWebTests(TestCase):
             },
         )
 
-        collection = EquipmentCollection.objects.get(
-            org=self.org, name="Maquinaria amarilla"
-        )
+        collection = EquipmentCollection.objects.get(org=self.org, name="Maquinaria amarilla")
         self.assertRedirects(
             response,
             f"/plataforma/equipos/colecciones/{collection.pk}/",
@@ -122,9 +118,7 @@ class EquipmentWebTests(TestCase):
         catalog = self.client.get("/plataforma/equipos/")
         self.assertContains(catalog, "Colecciones")
         self.assertContains(catalog, "Maquinaria amarilla")
-        detail = self.client.get(
-            f"/plataforma/equipos/colecciones/{collection.pk}/"
-        )
+        detail = self.client.get(f"/plataforma/equipos/colecciones/{collection.pk}/")
         self.assertContains(detail, "Retroexcavadora principal")
         self.assertContains(detail, "Retroexcavadora")
         self.assertContains(detail, "Editar colección")
@@ -214,9 +208,7 @@ class EquipmentWebTests(TestCase):
     def test_other_organization_equipment_is_not_visible(self) -> None:
         other_org = make_org("Equipos Externos")
         other_admin = make_user(other_org, username="gestor-externo", role=Role.ADMIN)
-        other_ctx = resolve_request_context(
-            Principal(user_id=other_admin.pk, org_id=other_org.pk)
-        )
+        other_ctx = resolve_request_context(Principal(user_id=other_admin.pk, org_id=other_org.pk))
         other_type = create_equipment_type(other_ctx, code="GRU", name="Grúa")
         other_equipment = create_equipment(
             other_ctx,
@@ -245,9 +237,7 @@ class EquipmentWebTests(TestCase):
         )
 
         self.assertContains(response, "Información agregada")
-        documents = self.client.get(
-            f"/plataforma/equipos/{self.equipment.pk}/?tab=documents"
-        )
+        documents = self.client.get(f"/plataforma/equipos/{self.equipment.pk}/?tab=documents")
         self.assertContains(documents, "Póliza todo riesgo")
 
     def test_manager_registers_and_lists_equipment_usage(self) -> None:

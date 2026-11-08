@@ -62,13 +62,9 @@ def visible_collections(ctx: RequestContext) -> QuerySet[EquipmentCollection]:
     return queryset
 
 
-def get_visible_collection(
-    ctx: RequestContext, collection_id: UUID
-) -> EquipmentCollection:
+def get_visible_collection(ctx: RequestContext, collection_id: UUID) -> EquipmentCollection:
     try:
-        return visible_collections(ctx).prefetch_related("equipment_types").get(
-            pk=collection_id
-        )
+        return visible_collections(ctx).prefetch_related("equipment_types").get(pk=collection_id)
     except EquipmentCollection.DoesNotExist as exc:
         raise Http404 from exc
 
@@ -110,9 +106,7 @@ def get_visible_equipment(ctx: RequestContext, equipment_id: UUID) -> Equipment:
 def visible_usage(ctx: RequestContext) -> QuerySet[EquipmentUsage]:
     """Registros visibles por alcance y, para operadores, solo los propios."""
 
-    queryset = scoped_qs(ctx, EquipmentUsage).filter(
-        equipment__in=visible_equipment(ctx)
-    )
+    queryset = scoped_qs(ctx, EquipmentUsage).filter(equipment__in=visible_equipment(ctx))
     access = ctx.access_for(Section.EQUIPMENT)
     if access is not None and access.role == SectionRole.EQUIPMENT_OPERATOR:
         queryset = queryset.filter(operator_id=ctx.user_id)
@@ -142,8 +136,7 @@ def _require_for_equipment(
         "project_id", flat=True
     )
     if any(
-        ctx.has_capability(Section.EQUIPMENT, capability, project_id)
-        for project_id in project_ids
+        ctx.has_capability(Section.EQUIPMENT, capability, project_id) for project_id in project_ids
     ):
         return
     raise PermissionDenied("No tienes permiso para esta operación de equipos.")
@@ -181,9 +174,7 @@ def _check_usage_context(
     if not linked:
         raise ValidationError("El equipo no está vinculado al proyecto en esa fecha.")
 
-    operator_ctx = resolve_request_context(
-        Principal(user_id=operator.pk, org_id=ctx.org_id)
-    )
+    operator_ctx = resolve_request_context(Principal(user_id=operator.pk, org_id=ctx.org_id))
     operator_access = operator_ctx.access_for(Section.EQUIPMENT)
     if (
         operator_access is None
@@ -227,12 +218,7 @@ def create_equipment_usage(
     try:
         equipment = visible_equipment(ctx).get(pk=equipment_id)
         project = scoped_qs(ctx, Project).get(pk=project_id)
-        operator = (
-            scoped_qs(ctx, Membership)
-            .select_related("user")
-            .get(user_id=operator_id)
-            .user
-        )
+        operator = scoped_qs(ctx, Membership).select_related("user").get(user_id=operator_id).user
     except (Equipment.DoesNotExist, Project.DoesNotExist, Membership.DoesNotExist) as exc:
         raise Http404 from exc
 
@@ -255,9 +241,7 @@ def create_equipment_usage(
             .exists()
         )
         if conflict:
-            raise ValidationError(
-                "El equipo o el operador ya tiene otro uso en ese horario."
-            )
+            raise ValidationError("El equipo o el operador ya tiene otro uso en ese horario.")
 
     usage = EquipmentUsage(
         org_id=ctx.org_id,
@@ -546,21 +530,22 @@ def assign_operator(
     try:
         equipment = visible_equipment(ctx).select_for_update().get(pk=equipment_id)
         project = scoped_qs(ctx, Project).get(pk=project_id)
-        operator = (
-            scoped_qs(ctx, Membership).select_related("user").get(user_id=operator_id).user
-        )
+        operator = scoped_qs(ctx, Membership).select_related("user").get(user_id=operator_id).user
     except (Equipment.DoesNotExist, Project.DoesNotExist, Membership.DoesNotExist) as exc:
         raise Http404 from exc
-    if not scoped_qs(ctx, EquipmentProject).filter(
-        equipment=equipment,
-        project=project,
-        started_on__lte=valid_from,
-    ).filter(Q(ended_on__isnull=True) | Q(ended_on__gte=valid_from)).exists():
+    if (
+        not scoped_qs(ctx, EquipmentProject)
+        .filter(
+            equipment=equipment,
+            project=project,
+            started_on__lte=valid_from,
+        )
+        .filter(Q(ended_on__isnull=True) | Q(ended_on__gte=valid_from))
+        .exists()
+    ):
         raise ValidationError("El equipo no está vinculado al proyecto en esa fecha.")
 
-    operator_ctx = resolve_request_context(
-        Principal(user_id=operator.pk, org_id=ctx.org_id)
-    )
+    operator_ctx = resolve_request_context(Principal(user_id=operator.pk, org_id=ctx.org_id))
     operator_access = operator_ctx.access_for(Section.EQUIPMENT)
     if (
         operator_access is None

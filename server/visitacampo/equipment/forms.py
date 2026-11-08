@@ -220,19 +220,11 @@ class EquipmentUsageForm(forms.Form):
             label="Proyecto",
         )
         self.fields["equipment"] = forms.ModelChoiceField(
-            queryset=(
-                scoped_qs(ctx, Equipment)
-                .select_related("equipment_type")
-                .order_by("code")
-            ),
+            queryset=(scoped_qs(ctx, Equipment).select_related("equipment_type").order_by("code")),
             label="Equipo",
         )
         self.fields["operator"] = MembershipChoiceField(
-            queryset=(
-                scoped_qs(ctx, Membership)
-                .select_related("user")
-                .order_by("user__username")
-            ),
+            queryset=(scoped_qs(ctx, Membership).select_related("user").order_by("user__username")),
             label="Operador",
         )
         self.order_fields(

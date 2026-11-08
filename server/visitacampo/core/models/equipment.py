@@ -174,12 +174,8 @@ class EquipmentCollectionType(OrgScopedModel):
             ),
         ]
         indexes = [
-            models.Index(
-                fields=["org", "collection"], name="equipment_coll_type_c_idx"
-            ),
-            models.Index(
-                fields=["org", "equipment_type"], name="equipment_coll_type_t_idx"
-            ),
+            models.Index(fields=["org", "collection"], name="equipment_coll_type_c_idx"),
+            models.Index(fields=["org", "equipment_type"], name="equipment_coll_type_t_idx"),
         ]
 
     def clean(self) -> None:
@@ -187,11 +183,7 @@ class EquipmentCollectionType(OrgScopedModel):
         errors: dict[str, str] = {}
         if self.collection_id and self.org_id and self.collection.org_id != self.org_id:
             errors["collection"] = "La colección debe pertenecer a la organización."
-        if (
-            self.equipment_type_id
-            and self.org_id
-            and self.equipment_type.org_id != self.org_id
-        ):
+        if self.equipment_type_id and self.org_id and self.equipment_type.org_id != self.org_id:
             errors["equipment_type"] = "La tipología debe pertenecer a la organización."
         if errors:
             raise ValidationError(errors)
