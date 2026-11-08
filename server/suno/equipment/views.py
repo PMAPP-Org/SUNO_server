@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from base64 import b64encode
 from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
@@ -17,7 +18,6 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
 from django.utils.http import urlencode
-from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
@@ -707,12 +707,12 @@ MAX_LABELS = 60
 
 def _label_context(equipment: Equipment) -> dict[str, Any]:
     payload = equipment_payload(equipment)
-    svg = render_svg(payload, scale=8, title=f"QR de {equipment.code}").decode("ascii")
+    svg = render_svg(payload, scale=8, title=f"QR de {equipment.code}")
     return {
         "equipment": equipment,
         "payload": payload,
-        # SVG generado localmente a partir del UUID: no incluye entrada del usuario.
-        "qr_svg": mark_safe(svg),
+        # Un data URI evita insertar marcado sin escapar en la plantilla.
+        "qr_data_uri": f"data:image/svg+xml;base64,{b64encode(svg).decode('ascii')}",
     }
 
 

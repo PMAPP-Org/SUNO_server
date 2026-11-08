@@ -4,7 +4,7 @@
 <a class="eq-back" href="{% if equipment %}{% url 'equipment:detail' equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">← Volver</a>
 <section class="eq-form-shell">
   <header><p class="editorial-label">Equipos</p><h1>{{ title }}</h1>{% if equipment %}<p>{{ equipment.code }} · {{ equipment.name }}</p>{% endif %}</header>
-  <form method="post" class="eq-form">
+  <form method="post" class="eq-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}

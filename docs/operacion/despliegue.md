@@ -20,6 +20,10 @@ En producción `api` y `worker` **no se construyen en el servidor**. Corren la i
 3. En el servidor, `deploy.sh` comprueba que el SHA pertenece a `origin/master`, hace checkout, toma el backup previo, ejecuta `docker compose up --wait` con la imagen nueva y comprueba `/v1/readyz` a través de Caddy. **Si algo falla, vuelve solo a la versión anterior** (guardada en `.deploy-state`) y el workflow falla con el motivo.
 4. `release.yml` sigue generando tags, CHANGELOG, SBOM e imágenes semánticas, pero no bloquea ni duplica el despliegue continuo de `master`.
 
+Durante la transición desde v0.13, el workflow busca primero el clon en
+`/opt/suno` y, si todavía no existe, usa la ruta heredada del VPS. Esto permite
+desplegar y hacer rollback antes de migrar físicamente el directorio.
+
 | Código de `deploy.sh` | Significado | Qué hacer |
 |---|---|---|
 | 0 | desplegado | hacer las comprobaciones manuales de abajo |

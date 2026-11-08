@@ -58,21 +58,21 @@
     </ul>
     <div class="cx">
       <div class="cx-title cx-title-left">Costo mensual ({{ combo.left.unit }})</div>
-      <div class="cx-ticks cx-ticks-left" aria-hidden="true">{% for pos, label in combo.left.ticks %}<span style="bottom: {{ pos|stringformat:"s" }}%">{{ label }}</span>{% endfor %}</div>
+      <div class="cx-ticks cx-ticks-left" aria-hidden="true">{% for pos, label in combo.left.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
       <div class="cx-plot" role="img" aria-label="Figura 1: columnas de costo mensual y línea de costo acumulado">
-        {% for pos, label in combo.left.ticks %}<i class="cx-grid" style="bottom: {{ pos|stringformat:"s" }}%"></i>{% endfor %}
+        {% for pos, label in combo.left.ticks %}<i class="cx-grid" style="bottom: {{ pos|stringformat:'s' }}%"></i>{% endfor %}
         <div class="cx-cols">
           {% for p in combo.points %}
-          <div class="cx-col" title="{{ p.label }}: ${{ p.cost|floatformat:"2g" }} · {{ p.hours|floatformat:"1g" }} h · acumulado ${{ p.cumulative|floatformat:"2g" }}{% if p.scheduled %} (programado ${{ p.scheduled|floatformat:"2g" }}){% endif %}">
-            <span class="cx-bar"><i class="is-done" style="height: {{ p.completed_h|stringformat:"s" }}%"></i>{% if p.scheduled %}<i class="is-scheduled" style="height: {{ p.scheduled_h|stringformat:"s" }}%"></i>{% endif %}</span>
-            <b class="cx-val {% if p.low_bar or p.scheduled %}is-out{% else %}is-in{% endif %}" style="bottom: {{ p.total_h|stringformat:"s" }}%">{{ p.cost_label }}</b>
+          <div class="cx-col" title="{{ p.label }}: ${{ p.cost|floatformat:'2g' }} · {{ p.hours|floatformat:'1g' }} h · acumulado ${{ p.cumulative|floatformat:'2g' }}{% if p.scheduled %} (programado ${{ p.scheduled|floatformat:'2g' }}){% endif %}">
+            <span class="cx-bar"><i class="is-done" style="height: {{ p.completed_h|stringformat:'s' }}%"></i>{% if p.scheduled %}<i class="is-scheduled" style="height: {{ p.scheduled_h|stringformat:'s' }}%"></i>{% endif %}</span>
+            <b class="cx-val {% if p.low_bar or p.scheduled %}is-out{% else %}is-in{% endif %}" style="bottom: {{ p.total_h|stringformat:'s' }}%">{{ p.cost_label }}</b>
           </div>
           {% endfor %}
         </div>
         <svg class="cx-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ combo.polyline }}" /></svg>
-        {% for p in combo.points %}<span class="cx-pt{% if p.label_below %} is-below{% endif %}" style="left: {{ p.x|stringformat:"s" }}%; bottom: {{ p.cumulative_y|stringformat:"s" }}%" title="Acumulado a {{ p.label }}: ${{ p.cumulative|floatformat:"2g" }}"><i></i><b>{{ p.cumulative_label }}</b></span>{% endfor %}
+        {% for p in combo.points %}<span class="cx-pt{% if p.label_below %} is-below{% endif %}" style="left: {{ p.x|stringformat:'s' }}%; bottom: {{ p.cumulative_y|stringformat:'s' }}%" title="Acumulado a {{ p.label }}: ${{ p.cumulative|floatformat:'2g' }}"><i></i><b>{{ p.cumulative_label }}</b></span>{% endfor %}
       </div>
-      <div class="cx-ticks cx-ticks-right" aria-hidden="true">{% for pos, label in combo.right.ticks %}<span style="bottom: {{ pos|stringformat:"s" }}%">{{ label }}</span>{% endfor %}</div>
+      <div class="cx-ticks cx-ticks-right" aria-hidden="true">{% for pos, label in combo.right.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
       <div class="cx-title cx-title-right">Acumulado ({{ combo.right.unit }})</div>
       <div class="cx-xlabels">{% for p in combo.points %}<span>{{ p.label }}</span>{% endfor %}</div>
     </div>
@@ -102,15 +102,15 @@
       {% if hbars.items %}
       <div class="hb">
         <div class="hb-body">
-          <div class="hb-lines" aria-hidden="true">{% for pos, label in hbars.axis.ticks %}<i style="left: {{ pos|stringformat:"s" }}%"></i>{% endfor %}</div>
+          <div class="hb-lines" aria-hidden="true">{% for pos, label in hbars.axis.ticks %}<i style="left: {{ pos|stringformat:'s' }}%"></i>{% endfor %}</div>
           {% for bar in hbars.items %}
           <div class="hb-row">
-            <a data-peek href="{% url 'equipment:detail' bar.ident %}">{{ bar.label }}<small>{{ bar.code }} · {{ bar.hours|floatformat:"1g" }} h · {{ bar.share|stringformat:"s" }} %</small></a>
-            <span class="hb-track" title="{{ bar.label }}: ${{ bar.value|floatformat:"2g" }}"><i style="width: {{ bar.width|stringformat:"s" }}%"></i><b class="{% if bar.width >= 34 %}is-in{% else %}is-out{% endif %}" style="{% if bar.width >= 34 %}width: {{ bar.width|stringformat:"s" }}%{% else %}left: {{ bar.width|stringformat:"s" }}%{% endif %}">{{ bar.value_label }}</b></span>
+            <a data-peek href="{% url 'equipment:detail' bar.ident %}">{{ bar.label }}<small>{{ bar.code }} · {{ bar.hours|floatformat:'1g' }} h · {{ bar.share|stringformat:'s' }} %</small></a>
+            <span class="hb-track" title="{{ bar.label }}: ${{ bar.value|floatformat:'2g' }}"><i style="width: {{ bar.width|stringformat:'s' }}%"></i><b class="{% if bar.width >= 34 %}is-in{% else %}is-out{% endif %}" style="{% if bar.width >= 34 %}width: {{ bar.width|stringformat:'s' }}%{% else %}left: {{ bar.width|stringformat:'s' }}%{% endif %}">{{ bar.value_label }}</b></span>
           </div>
           {% endfor %}
         </div>
-        <div class="hb-axis" aria-hidden="true"><div class="hb-ticks">{% for pos, label in hbars.axis.ticks %}<span style="left: {{ pos|stringformat:"s" }}%">{{ label }}</span>{% endfor %}</div></div>
+        <div class="hb-axis" aria-hidden="true"><div class="hb-ticks">{% for pos, label in hbars.axis.ticks %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div></div>
         <p class="hb-axis-title">Costo acumulado ({{ hbars.axis.unit }})</p>
       </div>
       {% else %}<p class="dash-empty">Registra usos de equipos y define sus tarifas por hora.</p>{% endif %}
@@ -126,15 +126,15 @@
       <li><i class="lg-over"></i> Excede el presupuesto</li>
       <li><i class="lg-marker"></i> 100 % de la partida</li>
     </ul>
-    <div class="bl" style="--step: {{ bullets.step|stringformat:"s" }}%; --marker: {{ bullets.marker|stringformat:"s" }}%">
+    <div class="bl" style="--step: {{ bullets.step|stringformat:'s' }}%; --marker: {{ bullets.marker|stringformat:'s' }}%">
       {% for item in bullets.items %}
       <div class="bl-row">
         <div class="bl-head"><strong>{{ item.code }}</strong><span>{{ item.description|truncatechars:70 }}</span></div>
-        <div class="bl-track"><i class="{% if item.over %}is-over{% endif %}" style="width: {{ item.width|stringformat:"s" }}%"></i>{% if item.pct != None %}<b class="{% if item.width >= 80 %}is-in{% else %}is-out{% endif %}" style="{% if item.width >= 80 %}width: {{ item.width|stringformat:"s" }}%{% else %}left: {{ item.width|stringformat:"s" }}%{% endif %}">{{ item.pct|stringformat:"s" }} %</b>{% endif %}</div>
+        <div class="bl-track"><i class="{% if item.over %}is-over{% endif %}" style="width: {{ item.width|stringformat:'s' }}%"></i>{% if item.pct != None %}<b class="{% if item.width >= 80 %}is-in{% else %}is-out{% endif %}" style="{% if item.width >= 80 %}width: {{ item.width|stringformat:'s' }}%{% else %}left: {{ item.width|stringformat:'s' }}%{% endif %}">{{ item.pct|stringformat:'s' }} %</b>{% endif %}</div>
         <small>{{ item.imputed_label }} imputados{% if item.pct != None %} de {{ item.budget_label }} presupuestados{% else %} · {{ item.budget_label }} vigente{% endif %}</small>
       </div>
       {% endfor %}
-      <div class="bl-axis" aria-hidden="true">{% for pos, label in bullets.axis.ticks %}<span style="left: {{ pos|stringformat:"s" }}%">{{ label }}</span>{% endfor %}</div>
+      <div class="bl-axis" aria-hidden="true">{% for pos, label in bullets.axis.ticks %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
       <p class="hb-axis-title">Consumo ({{ bullets.axis.unit }})</p>
     </div>
     {% else %}<p class="dash-empty">Indica el código de la partida al registrar un uso para ver su consumo.</p>{% endif %}

@@ -141,7 +141,7 @@ jobs:
           set +e
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes \
             "deploy@${DEPLOY_HOST}" \
-            "cd /opt/suno && ${otp_cmd} && git fetch --quiet --tags origin master:refs/remotes/origin/master && script=\$(mktemp) && git show '${SCRIPT_REVISION}:infra/scripts/deploy.sh' > \"\$script\" && chmod 700 \"\$script\" && DEPLOY_SH_DETACHED=1 REPO_DIR=/opt/suno bash \"\$script\" '${VERSION}' '${REF}'; code=\$?; rm -f \"\${script:-}\"; exit \$code"
+            "if [ -d /opt/suno/.git ]; then repo_dir=/opt/suno; elif [ -d /opt/visitacampo/.git ]; then repo_dir=/opt/visitacampo; else echo \"No existe un clon de SUNO en /opt/suno ni en la ruta heredada\" >&2; exit 1; fi; cd \"\$repo_dir\" && ${otp_cmd} && git fetch --quiet --tags origin master:refs/remotes/origin/master && script=\$(mktemp) && git show '${SCRIPT_REVISION}:infra/scripts/deploy.sh' > \"\$script\" && chmod 700 \"\$script\" && DEPLOY_SH_DETACHED=1 REPO_DIR=\"\$repo_dir\" bash \"\$script\" '${VERSION}' '${REF}'; code=\$?; rm -f \"\${script:-}\"; exit \$code"
           code=$?
           set -e
           rm -f ~/.ssh/deploy_key

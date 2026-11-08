@@ -139,7 +139,8 @@ class Command(BaseCommand):
 
         today = date.today()
         start = today - timedelta(days=HISTORY_DAYS)
-        rng = random.Random(20261108)
+        # Semilla fija para que los datos demo sean reproducibles; no genera secretos.
+        rng = random.Random(20261108)  # nosec B311
         ctx = resolve_request_context(Principal(user_id=admin.pk, org_id=org.pk))
 
         equipment = self._equipment(org, admin)

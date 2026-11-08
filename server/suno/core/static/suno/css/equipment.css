@@ -105,7 +105,7 @@
 .eq-label-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
 .eq-label-single { grid-template-columns: minmax(360px, 440px); }
 .eq-label { display: grid; grid-template-columns: 172px 1fr; gap: 14px; align-items: center; padding: 12px; border: 1.5px solid var(--suno-ink); border-radius: var(--suno-radius-lg); background: var(--suno-white); break-inside: avoid; }
-.eq-label-qr svg { display: block; width: 172px; height: 172px; }
+.eq-label-qr img { display: block; width: 172px; height: 172px; }
 .eq-label-text { display: grid; gap: 4px; min-width: 0; }
 .eq-label-text strong { font: 700 20px/1.1 var(--suno-mono); overflow-wrap: anywhere; }
 .eq-label-text span { font-size: 12px; overflow-wrap: anywhere; }

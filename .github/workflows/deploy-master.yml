@@ -58,7 +58,8 @@ jobs:
   deploy:
     name: Publicar SHA en producción
     needs: image
-    uses: ./.github/workflows/deploy.yml
+    # GitHub Actions y actionlint 1.7.12 solo aceptan la ruta relativa `./`.
+    uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository]
     permissions:
       contents: read
       packages: read

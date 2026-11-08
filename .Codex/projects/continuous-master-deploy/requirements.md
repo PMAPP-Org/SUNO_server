@@ -11,7 +11,7 @@ Mantener producción en el último commit desplegable de `master` sin depender d
 - El servidor hace checkout del mismo SHA que produjo la imagen.
 - El despliegue conserva backup previo, healthcheck y rollback automático.
 - Un error de configuración de producción falla de forma visible; no puede terminar en verde sin desplegar.
-- La transición entre `VISITACAMPO_API_IMAGE` y `SUNO_API_IMAGE` permite desplegar y revertir entre versiones antiguas y nuevas.
+- La variable de imagen heredada de v0.13 y `SUNO_API_IMAGE` permiten desplegar y revertir entre versiones antiguas y nuevas.
 - Las releases y tags continúan existiendo para versionado, CHANGELOG, SBOM y rollback manual.
 
 ## Criterios de éxito

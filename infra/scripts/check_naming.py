@@ -48,6 +48,15 @@ _SELF = {"infra/scripts/check_naming.py", "infra/scripts/tests/test_check_naming
 # Historia que cita los nombres de entonces: el CHANGELOG publicado y las huellas de
 # gitleaks (`commit:ruta:regla:línea`, con la ruta que tenía el archivo en ese commit).
 _HISTORY = {"CHANGELOG.md", ".gitleaksignore"}
+# Compatibilidad de despliegue estrictamente acotada. La primera actualización
+# desde v0.13 necesita reconocer su ruta y variable de imagen para poder hacer
+# rollback; cualquier aparición del nombre anterior fuera de estos literales
+# sigue fallando.
+_PACKAGE_COMPATIBILITY: dict[str, tuple[str, ...]] = {
+    ".github/workflows/deploy.yml": ("/opt/visitacampo",),
+    ".github/workflows/infra.yml": ("VISITACAMPO_API_IMAGE",),
+    "infra/scripts/deploy.sh": ("VISITACAMPO_API_IMAGE", "VISITACAMPO_*"),
+}
 
 
 def skipped(path: str) -> bool:
@@ -59,12 +68,19 @@ def _is_concept(word: str) -> bool:
     return "visit" in lower and not _PACKAGE.search(word) and lower not in _ALLOWED
 
 
-def offenders(text: str, mode: str, tracked: frozenset[str] = frozenset()) -> list[str]:
+def offenders(
+    text: str,
+    mode: str,
+    tracked: frozenset[str] = frozenset(),
+    allowed_literals: tuple[str, ...] = (),
+) -> list[str]:
     """Las apariciones del nombre viejo, en el orden del texto.
 
     `tracked` son los archivos versionados: una cita `plans/....md` a uno de ellos no cuenta.
     """
     text = _PLAN_REF.sub(lambda m: " " if m.group(0) in tracked else m.group(0), text)
+    for literal in allowed_literals:
+        text = text.replace(literal, "")
     found = [m.group(0) for m in _PACKAGE.finditer(text)]
     if mode == "concept":
         found += [w for w in _WORD.findall(text) if _is_concept(w)]
@@ -87,10 +103,11 @@ def main() -> int:
     for path in files:
         if skipped(path):
             continue
-        found = offenders(path + "\n", mode, tracked)
+        allowed_literals = _PACKAGE_COMPATIBILITY.get(path, ())
+        found = offenders(path + "\n", mode, tracked, allowed_literals)
         try:
             with open(path, encoding="utf-8") as handle:
-                found += offenders(handle.read(), mode, tracked)
+                found += offenders(handle.read(), mode, tracked, allowed_literals)
         except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
             pass
         if found:

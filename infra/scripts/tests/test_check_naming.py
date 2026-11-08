@@ -32,6 +32,17 @@ class OffendersTests(unittest.TestCase):
             check_naming.offenders("VISITACAMPO_API_IMAGE=x\n", "concept"), ["VISITACAMPO"]
         )
 
+    def test_allows_only_an_explicit_legacy_deploy_literal(self):
+        text = "VISITACAMPO_API_IMAGE=x\nimport visitacampo.core\n"
+        self.assertEqual(
+            check_naming.offenders(
+                text,
+                "package",
+                allowed_literals=("VISITACAMPO_API_IMAGE",),
+            ),
+            ["visitacampo"],
+        )
+
     def test_flags_the_old_concept_in_code_and_text(self):
         found = check_naming.offenders(
             "class Visit(Model):\n    visit_id = 1  # la visita\n", "concept"

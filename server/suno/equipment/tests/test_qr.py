@@ -144,8 +144,8 @@ class QrWebTests(TestCase):
     def test_label_page_embeds_qr_and_downloads_work(self) -> None:
         self.client.force_login(self.admin)
         page = self.client.get(f"{self.base}{self.equipment.pk}/qr/")
-        self.assertContains(page, "<svg")
-        self.assertContains(page, "viewBox=")
+        self.assertContains(page, "data:image/svg+xml;base64,")
+        self.assertContains(page, f'alt="Código QR de {self.equipment.code}"')
         self.assertContains(page, "VQ-01")
         svg = self.client.get(f"{self.base}{self.equipment.pk}/qr.svg?download=1")
         self.assertEqual(svg["Content-Type"], "image/svg+xml")

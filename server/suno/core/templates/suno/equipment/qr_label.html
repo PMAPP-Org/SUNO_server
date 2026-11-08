@@ -19,7 +19,7 @@
 <section class="eq-label-sheet{% if single %} eq-label-single{% endif %}" aria-label="Etiquetas">
   {% for label in labels %}
     <article class="eq-label">
-      <div class="eq-label-qr">{{ label.qr_svg }}</div>
+      <div class="eq-label-qr"><img src="{{ label.qr_data_uri }}" alt="Código QR de {{ label.equipment.code }}"></div>
       <div class="eq-label-text">
         <span class="eq-label-brand">SUNO</span>
         <strong>{{ label.equipment.code }}</strong>

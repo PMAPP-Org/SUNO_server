@@ -142,9 +142,12 @@ jobs:
 
       - name: pip-audit (advisories PyPA/OSV)
         run: |
-          pip-audit --require-hashes --disable-pip --progress-spinner off \
-            -r server/requirements.lock -r server/requirements-dev.lock \
-            -r server/requirements-dast.lock
+          # Los locks comparten paquetes y pueden fijarlos a versiones distintas;
+          # pip-audit rechaza requisitos duplicados si se pasan juntos.
+          for lock in requirements.lock requirements-dev.lock requirements-dast.lock; do
+            pip-audit --require-hashes --disable-pip --progress-spinner off \
+              -r "server/${lock}"
+          done
 
       # Aparte, para que las excepciones EXC-001 y EXC-004
       # (docs/seguridad/excepciones.md) solo cubran el lock de Semgrep, y
