@@ -10,8 +10,13 @@
   --suno-red: #a42730;
   --suno-accent: #ed4248;
   --suno-red-dark: #7f1d25;
-  --suno-cream: #faf9f2;
-  --suno-paper: #f2f0e9;
+  /* Referencias digitales PANTONE para la paleta 2026. */
+  --suno-cloud-dancer: #f0eee9;
+  --suno-marshmallow: #f0eee4;
+  /* Cloud Dancer exacto para el lienzo principal. */
+  --suno-cream: var(--suno-cloud-dancer);
+  /* Marshmallow puro identifica las superficies de énfasis. */
+  --suno-paper: var(--suno-marshmallow);
   --suno-line: #dedcd3;
   --suno-white: #ffffff;
   --suno-ink: #171717;

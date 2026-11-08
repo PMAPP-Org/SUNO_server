@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
 from typing import Any
 from uuid import UUID
@@ -18,6 +19,8 @@ from visitacampo.core.context import Principal, RequestContext, resolve_request_
 from visitacampo.core.models import (
     AppUser,
     Equipment,
+    EquipmentCollection,
+    EquipmentCollectionType,
     EquipmentDocument,
     EquipmentOperatorAssignment,
     EquipmentProject,
@@ -32,18 +35,42 @@ from visitacampo.core.scoping import scoped_qs
 __all__ = [
     "add_document",
     "assign_operator",
+    "create_equipment_collection",
     "create_equipment",
     "create_equipment_type",
     "create_equipment_usage",
     "get_visible_usage",
+    "get_visible_collection",
     "get_visible_equipment",
     "link_project",
     "update_equipment",
+    "update_equipment_collection",
+    "visible_collections",
     "visible_equipment",
     "visible_usage",
 ]
 
 _USAGE_LOCK_NAMESPACE = "equipment-usage"
+
+
+def visible_collections(ctx: RequestContext) -> QuerySet[EquipmentCollection]:
+    """Colecciones activas de la organización visibles en el módulo de equipos."""
+
+    queryset = scoped_qs(ctx, EquipmentCollection).filter(active=True)
+    if not ctx.has_section_access(Section.EQUIPMENT):
+        return queryset.none()
+    return queryset
+
+
+def get_visible_collection(
+    ctx: RequestContext, collection_id: UUID
+) -> EquipmentCollection:
+    try:
+        return visible_collections(ctx).prefetch_related("equipment_types").get(
+            pk=collection_id
+        )
+    except EquipmentCollection.DoesNotExist as exc:
+        raise Http404 from exc
 
 
 def visible_equipment(ctx: RequestContext, *, on_date: date | None = None) -> QuerySet[Equipment]:
@@ -287,6 +314,104 @@ def create_equipment_type(
         target=f"equipment-type:{equipment_type.pk}",
     )
     return equipment_type
+
+
+def _collection_types(
+    ctx: RequestContext, equipment_type_ids: Iterable[UUID]
+) -> list[EquipmentType]:
+    ids = list(dict.fromkeys(equipment_type_ids))
+    equipment_types = list(
+        scoped_qs(ctx, EquipmentType).filter(pk__in=ids, active=True).order_by("name")
+    )
+    if len(equipment_types) != len(ids):
+        raise ValidationError("Una o más tipologías no existen o están inactivas.")
+    return equipment_types
+
+
+def _replace_collection_types(
+    collection: EquipmentCollection, equipment_types: list[EquipmentType]
+) -> None:
+    collection.type_links.all().delete()
+    links = [
+        EquipmentCollectionType(
+            org_id=collection.org_id,
+            collection=collection,
+            equipment_type=equipment_type,
+        )
+        for equipment_type in equipment_types
+    ]
+    for link in links:
+        link.full_clean()
+    EquipmentCollectionType.objects.bulk_create(links)
+
+
+@transaction.atomic
+def create_equipment_collection(
+    ctx: RequestContext,
+    *,
+    name: str,
+    description: str = "",
+    equipment_type_ids: Iterable[UUID] = (),
+) -> EquipmentCollection:
+    _require(ctx, Capability.CREATE)
+    equipment_types = _collection_types(ctx, equipment_type_ids)
+    collection = EquipmentCollection(
+        org_id=ctx.org_id,
+        name=name.strip(),
+        description=description.strip(),
+        created_by_id=ctx.user_id,
+        updated_by_id=ctx.user_id,
+    )
+    collection.full_clean()
+    collection.save()
+    _replace_collection_types(collection, equipment_types)
+    audit.record(
+        ctx,
+        action=AuditAction.EQUIPMENT_COLLECTION_CREATED,
+        target=f"equipment-collection:{collection.pk}",
+        metadata={"equipment_types": [str(item.pk) for item in equipment_types]},
+    )
+    return collection
+
+
+@transaction.atomic
+def update_equipment_collection(
+    ctx: RequestContext,
+    collection_id: UUID,
+    *,
+    name: str,
+    description: str = "",
+    equipment_type_ids: Iterable[UUID] = (),
+) -> EquipmentCollection:
+    try:
+        collection = visible_collections(ctx).select_for_update().get(pk=collection_id)
+    except EquipmentCollection.DoesNotExist as exc:
+        raise Http404 from exc
+    _require(ctx, Capability.UPDATE)
+    equipment_types = _collection_types(ctx, equipment_type_ids)
+    before = {
+        "name": collection.name,
+        "description": collection.description,
+        "equipment_types": [
+            str(pk) for pk in collection.equipment_types.values_list("pk", flat=True)
+        ],
+    }
+    collection.name = name.strip()
+    collection.description = description.strip()
+    collection.updated_by_id = ctx.user_id
+    collection.full_clean()
+    collection.save()
+    _replace_collection_types(collection, equipment_types)
+    audit.record(
+        ctx,
+        action=AuditAction.EQUIPMENT_COLLECTION_UPDATED,
+        target=f"equipment-collection:{collection.pk}",
+        metadata={
+            "before": before,
+            "equipment_types": [str(item.pk) for item in equipment_types],
+        },
+    )
+    return collection
 
 
 @transaction.atomic

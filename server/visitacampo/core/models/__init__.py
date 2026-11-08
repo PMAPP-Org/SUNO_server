@@ -48,6 +48,8 @@ from .budget import (
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
 from .equipment import (
     Equipment,
+    EquipmentCollection,
+    EquipmentCollectionType,
     EquipmentDocument,
     EquipmentDocumentType,
     EquipmentMeterUnit,
@@ -99,6 +101,8 @@ __all__ = [
     "Blob",
     "Device",
     "Equipment",
+    "EquipmentCollection",
+    "EquipmentCollectionType",
     "EquipmentDocument",
     "EquipmentDocumentType",
     "EquipmentMeterUnit",

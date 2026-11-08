@@ -88,6 +88,115 @@ class EquipmentType(OrgScopedModel):
         return self.name
 
 
+class EquipmentCollection(OrgScopedModel):
+    """Colección navegable de tipos de equipo, similar a una página de catálogo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=120, verbose_name="nombre")
+    description = models.TextField(blank=True, verbose_name="descripción")
+    equipment_types = models.ManyToManyField(
+        EquipmentType,
+        through="EquipmentCollectionType",
+        related_name="collections",
+        verbose_name="tipologías",
+    )
+    active = models.BooleanField(default=True, verbose_name="activa")
+    created_by = models.ForeignKey(
+        "core.AppUser",
+        on_delete=models.PROTECT,
+        related_name="equipment_collections_created",
+        verbose_name="creada por",
+    )
+    updated_by = models.ForeignKey(
+        "core.AppUser",
+        on_delete=models.PROTECT,
+        related_name="equipment_collections_updated",
+        verbose_name="actualizada por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "equipment_collection"
+        ordering = ["created_at", "name"]
+        verbose_name = "colección de equipos"
+        verbose_name_plural = "colecciones de equipos"
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"), "org", name="equipment_collection_org_name_ci_uq"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["org", "active", "name"], name="equipment_coll_scope_idx"),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        for field in ("created_by", "updated_by"):
+            user = getattr(self, field, None)
+            if user is not None and self.org_id and user.org_id != self.org_id:
+                errors[field] = "El usuario debe pertenecer a la organización."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class EquipmentCollectionType(OrgScopedModel):
+    """Etiqueta que vincula una colección con una tipología real del catálogo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    collection = models.ForeignKey(
+        EquipmentCollection,
+        on_delete=models.PROTECT,
+        related_name="type_links",
+        verbose_name="colección",
+    )
+    equipment_type = models.ForeignKey(
+        EquipmentType,
+        on_delete=models.PROTECT,
+        related_name="collection_links",
+        verbose_name="tipología",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "equipment_collection_type"
+        ordering = ["equipment_type__name"]
+        verbose_name = "etiqueta de colección"
+        verbose_name_plural = "etiquetas de colecciones"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["org", "collection", "equipment_type"],
+                name="equipment_collection_type_uq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["org", "collection"], name="equipment_coll_type_c_idx"
+            ),
+            models.Index(
+                fields=["org", "equipment_type"], name="equipment_coll_type_t_idx"
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.collection_id and self.org_id and self.collection.org_id != self.org_id:
+            errors["collection"] = "La colección debe pertenecer a la organización."
+        if (
+            self.equipment_type_id
+            and self.org_id
+            and self.equipment_type.org_id != self.org_id
+        ):
+            errors["equipment_type"] = "La tipología debe pertenecer a la organización."
+        if errors:
+            raise ValidationError(errors)
+
+
 class Equipment(OrgScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, verbose_name="código interno")

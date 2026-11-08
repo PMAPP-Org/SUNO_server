@@ -11,7 +11,7 @@ from visitacampo.authn.tests.factories import make_org, make_user
 from visitacampo.core.access import AccessScope, Section, SectionRole
 from visitacampo.core.access_services import revoke_section_grant, set_section_grant
 from visitacampo.core.context import Principal, resolve_request_context
-from visitacampo.core.models import Equipment, EquipmentUsage, Project, Role
+from visitacampo.core.models import Equipment, EquipmentCollection, EquipmentUsage, Project, Role
 from visitacampo.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -101,6 +101,34 @@ class EquipmentWebTests(TestCase):
         self.assertContains(detail, "Editar ficha")
         self.assertContains(detail, "Identificación móvil")
 
+    def test_manager_creates_and_opens_collection_page(self) -> None:
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            "/plataforma/equipos/colecciones/nueva/",
+            {
+                "name": "Maquinaria amarilla",
+                "description": "Equipos para movimiento de tierra.",
+                "equipment_types": [str(self.equipment_type.pk)],
+            },
+        )
+
+        collection = EquipmentCollection.objects.get(
+            org=self.org, name="Maquinaria amarilla"
+        )
+        self.assertRedirects(
+            response,
+            f"/plataforma/equipos/colecciones/{collection.pk}/",
+        )
+        catalog = self.client.get("/plataforma/equipos/")
+        self.assertContains(catalog, "Colecciones")
+        self.assertContains(catalog, "Maquinaria amarilla")
+        detail = self.client.get(
+            f"/plataforma/equipos/colecciones/{collection.pk}/"
+        )
+        self.assertContains(detail, "Retroexcavadora principal")
+        self.assertContains(detail, "Retroexcavadora")
+        self.assertContains(detail, "Editar colección")
+
     def test_catalog_filters_by_query_status_type_and_project(self) -> None:
         self.client.force_login(self.admin)
         response = self.client.get(
@@ -151,6 +179,10 @@ class EquipmentWebTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertNotContains(detail, "Editar ficha")
         self.assertEqual(self.client.get("/plataforma/equipos/nuevo/").status_code, 403)
+        self.assertEqual(
+            self.client.get("/plataforma/equipos/colecciones/nueva/").status_code,
+            403,
+        )
         self.assertEqual(
             self.client.get(
                 f"/plataforma/equipos/{self.equipment.pk}/documentos/nuevo/"

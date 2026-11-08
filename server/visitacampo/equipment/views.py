@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.db.models import Q
+from django.db.models import Count, Prefetch, Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils.dateparse import parse_date
@@ -33,6 +33,7 @@ from visitacampo.core.models import (
 from visitacampo.core.navigation import platform_navigation
 from visitacampo.core.scoping import get_organization, scoped_qs
 from visitacampo.equipment.forms import (
+    EquipmentCollectionForm,
     EquipmentDocumentForm,
     EquipmentForm,
     EquipmentOperatorForm,
@@ -44,11 +45,15 @@ from visitacampo.equipment.services import (
     add_document,
     assign_operator,
     create_equipment,
+    create_equipment_collection,
     create_equipment_type,
     create_equipment_usage,
+    get_visible_collection,
     get_visible_equipment,
     link_project,
     update_equipment,
+    update_equipment_collection,
+    visible_collections,
     visible_equipment,
     visible_usage,
 )
@@ -111,6 +116,31 @@ def _can_schedule_any(ctx: RequestContext) -> bool:
     )
 
 
+def _with_current_projects(ctx: RequestContext, queryset: Any) -> Any:
+    return queryset.prefetch_related(
+        Prefetch(
+            "project_links",
+            queryset=(
+                scoped_qs(ctx, EquipmentProject)
+                .filter(ended_on__isnull=True)
+                .select_related("project")
+                .order_by("-started_on")
+            ),
+            to_attr="current_project_links",
+        )
+    )
+
+
+def _equipment_items(page: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "equipment": equipment,
+            "project": next(iter(equipment.current_project_links), None),
+        }
+        for equipment in page.object_list
+    ]
+
+
 @login_required(login_url="platform_login")
 def equipment_list(request: HttpRequest) -> HttpResponse:
     ctx = _ctx(request)
@@ -133,24 +163,29 @@ def equipment_list(request: HttpRequest) -> HttpResponse:
     if selected_project:
         queryset = queryset.filter(project_links__project_id=selected_project).distinct()
 
-    page = Paginator(queryset.order_by("code"), 25).get_page(request.GET.get("page"))
-    items = []
-    for equipment in page.object_list:
-        current_project = (
-            scoped_qs(ctx, EquipmentProject)
-            .filter(equipment=equipment, ended_on__isnull=True)
-            .select_related("project")
-            .order_by("-started_on")
-            .first()
+    page = Paginator(_with_current_projects(ctx, queryset.order_by("code")), 25).get_page(
+        request.GET.get("page")
+    )
+    collections = list(
+        visible_collections(ctx)
+        .prefetch_related("equipment_types")
+        .annotate(
+            equipment_count=Count(
+                "equipment_types__equipment",
+                filter=Q(equipment_types__equipment__in=visible_equipment(ctx)),
+                distinct=True,
+            )
         )
-        items.append({"equipment": equipment, "project": current_project})
+        .order_by("created_at", "name")
+    )
     return _render(
         request,
         ctx,
         "suno/equipment/list.html",
         {
-            "items": items,
+            "items": _equipment_items(page),
             "page": page,
+            "collections": collections,
             "query": query,
             "selected_type": selected_type,
             "selected_status": selected_status,
@@ -159,6 +194,9 @@ def equipment_list(request: HttpRequest) -> HttpResponse:
             "statuses": Equipment._meta.get_field("status").choices,
             "projects": scoped_qs(ctx, Project).order_by("name"),
             "can_create": ctx.has_capability(Section.EQUIPMENT, Capability.CREATE),
+            "can_update_collections": ctx.has_capability(
+                Section.EQUIPMENT, Capability.UPDATE
+            ),
         },
     )
 
@@ -323,6 +361,98 @@ def equipment_type_create(request: HttpRequest) -> HttpResponse:
         ctx,
         "suno/equipment/form.html",
         {"form": form, "title": "Nuevo tipo de equipo"},
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def collection_create(request: HttpRequest) -> HttpResponse:
+    ctx = _ctx(request)
+    if not ctx.has_capability(Section.EQUIPMENT, Capability.CREATE):
+        raise PermissionDenied
+    form = EquipmentCollectionForm(ctx, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        data = form.cleaned_data.copy()
+        equipment_types = data.pop("equipment_types")
+        try:
+            collection = create_equipment_collection(
+                ctx,
+                equipment_type_ids=[item.pk for item in equipment_types],
+                **data,
+            )
+        except (ValidationError, IntegrityError):
+            form.add_error(None, "Ya existe una colección con ese nombre.")
+        else:
+            messages.success(request, "Colección creada.")
+            return redirect("equipment:collection_detail", collection.pk)
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/collection_form.html",
+        {"form": form, "title": "Nueva colección"},
+    )
+
+
+@login_required(login_url="platform_login")
+def collection_detail(request: HttpRequest, collection_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    collection = get_visible_collection(ctx, collection_id)
+    type_ids = collection.equipment_types.values_list("pk", flat=True)
+    queryset = (
+        visible_equipment(ctx)
+        .filter(equipment_type_id__in=type_ids)
+        .select_related("equipment_type")
+        .order_by("code")
+    )
+    page = Paginator(_with_current_projects(ctx, queryset), 25).get_page(
+        request.GET.get("page")
+    )
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/collection_detail.html",
+        {
+            "collection": collection,
+            "items": _equipment_items(page),
+            "page": page,
+            "can_edit": ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def collection_edit(request: HttpRequest, collection_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    collection = get_visible_collection(ctx, collection_id)
+    if not ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE):
+        raise PermissionDenied
+    initial = {
+        "name": collection.name,
+        "description": collection.description,
+        "equipment_types": list(collection.equipment_types.values_list("pk", flat=True)),
+    }
+    form = EquipmentCollectionForm(ctx, request.POST or None, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        data = form.cleaned_data.copy()
+        equipment_types = data.pop("equipment_types")
+        try:
+            collection = update_equipment_collection(
+                ctx,
+                collection.pk,
+                equipment_type_ids=[item.pk for item in equipment_types],
+                **data,
+            )
+        except (ValidationError, IntegrityError):
+            form.add_error(None, "No fue posible guardar la colección.")
+        else:
+            messages.success(request, "Colección actualizada.")
+            return redirect("equipment:collection_detail", collection.pk)
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/collection_form.html",
+        {"form": form, "title": "Editar colección", "collection": collection},
     )
 
 

@@ -33,6 +33,26 @@ class EquipmentTypeForm(forms.Form):
     )
 
 
+class EquipmentCollectionForm(forms.Form):
+    name = forms.CharField(max_length=120, label="Nombre")
+    description = forms.CharField(
+        required=False,
+        label="Descripción",
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def __init__(self, ctx: RequestContext, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["equipment_types"] = forms.ModelMultipleChoiceField(
+            queryset=scoped_qs(ctx, EquipmentType).filter(active=True).order_by("name"),
+            required=False,
+            label="Etiquetas de tipología",
+            help_text="Selecciona los tipos de equipo que deben aparecer dentro de esta colección.",
+            widget=forms.CheckboxSelectMultiple,
+        )
+        self.order_fields(["name", "description", "equipment_types"])
+
+
 class EquipmentForm(forms.Form):
     code = forms.CharField(max_length=50, label="Código interno")
     name = forms.CharField(max_length=160, label="Nombre")

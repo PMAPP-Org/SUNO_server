@@ -99,6 +99,8 @@ class AuditAction:
     ACCESS_REVOKED = "access.revoked"
 
     # Equipos y ficha técnica (Hito B).
+    EQUIPMENT_COLLECTION_CREATED = "equipment.collection_created"
+    EQUIPMENT_COLLECTION_UPDATED = "equipment.collection_updated"
     EQUIPMENT_TYPE_CREATED = "equipment.type_created"
     EQUIPMENT_CREATED = "equipment.created"
     EQUIPMENT_UPDATED = "equipment.updated"

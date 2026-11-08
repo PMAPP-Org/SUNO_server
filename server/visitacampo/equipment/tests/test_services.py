@@ -16,6 +16,7 @@ from visitacampo.core.context import Principal, resolve_request_context
 from visitacampo.core.models import (
     AuditEvent,
     Equipment,
+    EquipmentCollection,
     EquipmentDocumentType,
     EquipmentOperatorAssignment,
     EquipmentOwnership,
@@ -34,10 +35,13 @@ from visitacampo.equipment.services import (
     add_document,
     assign_operator,
     create_equipment,
+    create_equipment_collection,
     create_equipment_type,
     create_equipment_usage,
     link_project,
     update_equipment,
+    update_equipment_collection,
+    visible_collections,
     visible_equipment,
     visible_usage,
 )
@@ -105,6 +109,51 @@ class EquipmentServiceTests(TestCase):
         self.assertEqual(updated.status, EquipmentStatus.MAINTENANCE)
         self.assertTrue(AuditEvent.objects.filter(action="equipment.created").exists())
         self.assertTrue(AuditEvent.objects.filter(action="equipment.updated").exists())
+
+    def test_manager_creates_and_updates_collection_tags(self) -> None:
+        vehicle_type = create_equipment_type(self.ctx, code="VEH", name="Vehículo")
+        collection = create_equipment_collection(
+            self.ctx,
+            name="Operación en obra",
+            description="Activos disponibles en el frente.",
+            equipment_type_ids=[self.equipment_type.pk],
+        )
+
+        updated = update_equipment_collection(
+            self.ctx,
+            collection.pk,
+            name="Operación y transporte",
+            equipment_type_ids=[self.equipment_type.pk, vehicle_type.pk],
+        )
+
+        self.assertEqual(
+            set(updated.equipment_types.values_list("pk", flat=True)),
+            {self.equipment_type.pk, vehicle_type.pk},
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(action="equipment.collection_created").exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(action="equipment.collection_updated").exists()
+        )
+
+    def test_collection_tags_cannot_cross_organizations(self) -> None:
+        other_org = make_org("Colecciones externas")
+        other_admin = make_user(other_org, username="gestor-colecciones", role=Role.ADMIN)
+        other_ctx = resolve_request_context(
+            Principal(user_id=other_admin.pk, org_id=other_org.pk)
+        )
+        other_type = create_equipment_type(other_ctx, code="EXT", name="Externo")
+
+        with self.assertRaisesMessage(ValidationError, "no existen"):
+            create_equipment_collection(
+                self.ctx,
+                name="Colección inválida",
+                equipment_type_ids=[other_type.pk],
+            )
+
+        self.assertFalse(EquipmentCollection.objects.filter(org=self.org).exists())
+        self.assertFalse(visible_collections(self.ctx).filter(name="Colección inválida").exists())
 
     def test_code_serial_and_plate_are_unique_case_insensitively(self) -> None:
         with self.assertRaises(ValidationError):

@@ -1,0 +1,31 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ collection.name }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Volver a equipos</a>
+<section class="eq-collection-page-head">
+  <div class="eq-collection-page-cover" aria-hidden="true"></div>
+  <div class="eq-collection-page-title">
+    <div>
+      <p class="editorial-label">Colección</p>
+      <h1>{{ collection.name }}</h1>
+      {% if collection.description %}<p>{{ collection.description }}</p>{% endif %}
+    </div>
+    {% if can_edit %}<a class="eq-button" href="{% url 'equipment:collection_edit' collection.pk %}">Editar colección</a>{% endif %}
+  </div>
+  <div class="eq-collection-properties">
+    <span>Tipologías</span>
+    <div class="eq-tags">{% for type in collection.equipment_types.all %}<span>{{ type.name }}</span>{% empty %}<span>Sin etiquetas</span>{% endfor %}</div>
+  </div>
+</section>
+
+<div class="eq-collection-list-heading"><h2>Equipos</h2><span>{{ page.paginator.count }} resultado{{ page.paginator.count|pluralize:"s" }}</span></div>
+{% include "suno/equipment/_equipment_table.html" %}
+
+{% if page.paginator.num_pages > 1 %}
+<nav class="eq-pagination" aria-label="Paginación">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

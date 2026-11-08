@@ -10,6 +10,17 @@ urlpatterns = [
     path("usos/nuevo/", views.usage_create, name="usage_create"),
     path("nuevo/", views.equipment_create, name="create"),
     path("tipos/nuevo/", views.equipment_type_create, name="type_create"),
+    path("colecciones/nueva/", views.collection_create, name="collection_create"),
+    path(
+        "colecciones/<uuid:collection_id>/",
+        views.collection_detail,
+        name="collection_detail",
+    ),
+    path(
+        "colecciones/<uuid:collection_id>/editar/",
+        views.collection_edit,
+        name="collection_edit",
+    ),
     path("<uuid:equipment_id>/", views.equipment_detail, name="detail"),
     path("<uuid:equipment_id>/editar/", views.equipment_edit, name="edit"),
     path("<uuid:equipment_id>/documentos/nuevo/", views.document_create, name="document_create"),
