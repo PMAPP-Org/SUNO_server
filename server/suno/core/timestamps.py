@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, AwareDatetime
+from pydantic import AfterValidator, AwareDatetime, BeforeValidator
 
 __all__ = ["UtcDatetime"]
 
@@ -22,5 +22,17 @@ def _to_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+def _require_rfc3339_string(value: object) -> str:
+    """Evita la coerción de números Unix que no permite el contrato JSON."""
+
+    if not isinstance(value, str):
+        raise ValueError("timestamp must be an RFC 3339 string")
+    return value
+
+
 #: Fecha y hora con zona obligatoria (sin zona ⇒ `422`), normalizada a UTC.
-UtcDatetime = Annotated[AwareDatetime, AfterValidator(_to_utc)]
+UtcDatetime = Annotated[
+    AwareDatetime,
+    BeforeValidator(_require_rfc3339_string),
+    AfterValidator(_to_utc),
+]

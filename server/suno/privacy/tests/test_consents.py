@@ -103,6 +103,7 @@ class ConsentTests(TestCase):
             ("versión vacía", body(self.device_id, notice_version="")),
             ("versión con espacios", body(self.device_id, notice_version="v 1")),
             ("fecha sin zona horaria", body(self.device_id, accepted_at="2026-10-18T09:30:00")),
+            ("fecha numérica", body(self.device_id, accepted_at=0)),
         ):
             with self.subTest(case=label):
                 self.assertEqual(self.post(payload).status_code, 422)
