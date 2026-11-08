@@ -142,9 +142,7 @@ class AccessMatrixWebTests(TestCase):
 
     def test_last_access_administrator_cannot_be_revoked(self) -> None:
         second_admin = make_user(self.org, username="admin-2", role=Role.ADMIN)
-        ctx = resolve_request_context(
-            Principal(user_id=self.admin.pk, org_id=self.org.pk)
-        )
+        ctx = resolve_request_context(Principal(user_id=self.admin.pk, org_id=self.org.pk))
         SectionGrant.objects.filter(
             user=self.admin,
             section=Section.USERS_ACCESS,

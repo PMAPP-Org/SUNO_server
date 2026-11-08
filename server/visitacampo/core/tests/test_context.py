@@ -125,7 +125,7 @@ class ContextEntityCacheTests(SimpleTestCase):
         self.assertEqual(ctx.resolve_entity("a", lambda: 99), 1)
 
     def test_a_cached_none_is_not_re_resolved(self) -> None:
-        """"No existe" también es una respuesta que no debe re-consultarse."""
+        """ "No existe" también es una respuesta que no debe re-consultarse."""
         ctx = _ctx(Role.ADMIN)
         calls: list[int] = []
 

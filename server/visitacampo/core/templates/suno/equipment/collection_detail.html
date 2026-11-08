@@ -10,7 +10,7 @@
       <h1>{{ collection.name }}</h1>
       {% if collection.description %}<p>{{ collection.description }}</p>{% endif %}
     </div>
-    {% if can_edit %}<a class="eq-button" href="{% url 'equipment:collection_edit' collection.pk %}">Editar colección</a>{% endif %}
+    {% if can_edit %}<a data-peek class="eq-button" href="{% url 'equipment:collection_edit' collection.pk %}">Editar colección</a>{% endif %}
   </div>
   <div class="eq-collection-properties">
     <span>Tipologías</span>

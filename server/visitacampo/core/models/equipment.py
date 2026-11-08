@@ -516,6 +516,34 @@ class EquipmentUsage(OrgScopedModel):
         blank=True,
         verbose_name="lectura final",
     )
+    # Costeo por hora: instantánea calculada al registrar el uso. Una tarifa posterior
+    # o corregida no reescribe el histórico; `recalculate_usage_costs` solo rellena
+    # los usos que quedaron sin tarifa.
+    budget_item = models.ForeignKey(
+        "core.BudgetItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="equipment_usage_records",
+        verbose_name="partida del presupuesto",
+    )
+    rate = models.ForeignKey(
+        "core.EquipmentRate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="usage_records",
+        verbose_name="tarifa aplicada",
+    )
+    billable_hours = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True, verbose_name="horas costeadas"
+    )
+    hourly_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, verbose_name="tarifa por hora"
+    )
+    cost = models.DecimalField(
+        max_digits=16, decimal_places=2, null=True, blank=True, verbose_name="costo"
+    )
     notes = models.TextField(blank=True, verbose_name="observaciones")
     created_by = models.ForeignKey(
         "core.AppUser",
@@ -581,6 +609,12 @@ class EquipmentUsage(OrgScopedModel):
             value = getattr(self, field, None)
             if value is not None and self.org_id and value.org_id != self.org_id:
                 errors[field] = "Debe pertenecer a la organización."
+        if (
+            self.budget_item_id
+            and self.project_id
+            and self.budget_item.budget.project_id != self.project_id
+        ):
+            errors["budget_item"] = "La partida debe pertenecer a un presupuesto del proyecto."
         if self.start_time and self.end_time and self.end_time <= self.start_time:
             errors["end_time"] = "La hora final debe ser posterior a la hora de inicio."
         if (
@@ -594,3 +628,91 @@ class EquipmentUsage(OrgScopedModel):
 
     def __str__(self) -> str:
         return f"{self.usage_date}:{self.equipment.code}:{self.start_time}"
+
+
+class EquipmentRate(OrgScopedModel):
+    """Tarifa por hora de un equipo, vigente desde una fecha (histórico inmutable).
+
+    La tarifa aplicable a un uso es la de mayor `valid_from` menor o igual a su fecha.
+    Una tarifa registrada no se edita: para cambiarla se registra otra con una fecha
+    efectiva posterior. La combinación equipo + fecha es única.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipment = models.ForeignKey(
+        Equipment,
+        on_delete=models.PROTECT,
+        related_name="rates",
+        verbose_name="equipo",
+    )
+    valid_from = models.DateField(verbose_name="vigente desde")
+    # Componentes que define el gestor a mano; `hourly_rate` es su suma (la calcula el
+    # servicio y la restricción de abajo la garantiza).
+    ownership_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, verbose_name="propiedad"
+    )
+    operation_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, verbose_name="operación"
+    )
+    maintenance_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, verbose_name="mantenimiento"
+    )
+    labor_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, verbose_name="operador"
+    )
+    hourly_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, verbose_name="tarifa total por hora"
+    )
+    notes = models.CharField(max_length=300, blank=True, verbose_name="criterio o nota")
+    created_by = models.ForeignKey(
+        "core.AppUser",
+        on_delete=models.PROTECT,
+        related_name="equipment_rates_created",
+        verbose_name="registrada por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "equipment_rate"
+        ordering = ["-valid_from"]
+        verbose_name = "tarifa de equipo"
+        verbose_name_plural = "tarifas de equipos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["equipment", "valid_from"], name="equipment_rate_equipment_date_uq"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    ownership_rate__gte=0,
+                    operation_rate__gte=0,
+                    maintenance_rate__gte=0,
+                    labor_rate__gte=0,
+                ),
+                name="equipment_rate_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    hourly_rate=models.F("ownership_rate")
+                    + models.F("operation_rate")
+                    + models.F("maintenance_rate")
+                    + models.F("labor_rate")
+                ),
+                name="equipment_rate_total_is_sum",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["org", "equipment", "valid_from"], name="equipment_rate_idx")
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        for field in ("equipment", "created_by"):
+            value = getattr(self, field, None)
+            if value is not None and self.org_id and value.org_id != self.org_id:
+                errors[field] = "Debe pertenecer a la organización."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"{self.equipment_id}:{self.valid_from}:{self.hourly_rate}"

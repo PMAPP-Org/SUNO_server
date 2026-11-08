@@ -191,6 +191,14 @@ Puede comenzar después de EQ-03; converge con preoperacionales en novedades y m
   - [x] Validación de asignación vigente y conflictos de horario por equipo u operador.
   - [x] Lecturas inicial/final de horómetro o kilometraje y trazabilidad de creación.
   - [ ] Indisponibilidades, edición/cancelación y vista calendario.
+- [x] **COS-01 — Costeo por hora e imputación al presupuesto.** (Añadida al ampliar el valor del módulo.)
+  - `EquipmentRate`: valores por hora definidos a mano en la ficha del equipo (propiedad, operación, mantenimiento y operador); la tarifa total es su suma. Vigencia desde una fecha; inmutable (se cambia registrando otra posterior), única por equipo y fecha.
+  - Cada uso guarda una instantánea (horas, tarifa, costo) con la tarifa vigente en su fecha; una tarifa posterior no reescribe el histórico. Los usos sin tarifa se señalan y se costean después con «Costear usos sin tarifa».
+  - Imputación opcional a una partida (`BudgetItem`) del presupuesto del proyecto, por código.
+  - Pantalla `equipos/costos/`: costo y horas por equipo, y por partida contra el total de la versión vigente del presupuesto; filtros por proyecto y fechas; opción de incluir programados (proyección). Cancelados nunca cuentan.
+  - Permisos: ver tarifas y costos exige `export` de Equipos a nivel organización; registrar tarifas, `update` a nivel organización. Operadores y consulta no ven valores.
+  - KPIs del equipo en su ficha, recalculados desde los registros de uso (completados o en curso): horas del mes y acumuladas, horas programadas, días con uso, utilización del mes (horas / días hábiles × 8 h), último uso y lectura de medidor, y —solo con permiso de costos— costo acumulado y del mes, costo real por hora y desglose por componente.
+  - Pendiente: combustible por tanqueo, tarifa en espera (standby), jornada disponible configurable por equipo, KPIs comparativos entre equipos, exportación Excel y costo de mantenimiento (MNT-05).
 - [ ] **MNT-02 — Historial de operadores.** Vigencias sin solapamientos inválidos y consulta por equipo/persona/proyecto.
 - [ ] **MNT-03 — Lecturas.** Horómetro/kilometraje manual o derivado de inspecciones.
 - [ ] **MNT-04 — Planes preventivos.** Intervalos por fecha o medidor y próxima fecha/lectura.

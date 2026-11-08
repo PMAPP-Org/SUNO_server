@@ -4,12 +4,12 @@
     <tbody>
     {% for item in items %}
       <tr>
-        <td data-label="Equipo"><a class="eq-name" href="{% url 'equipment:detail' item.equipment.pk %}">{{ item.equipment.name }}</a><small>{{ item.equipment.code }}</small></td>
+        <td data-label="Equipo"><a data-peek class="eq-name" href="{% url 'equipment:detail' item.equipment.pk %}">{{ item.equipment.name }}</a><small>{{ item.equipment.code }}</small></td>
         <td data-label="Tipo">{{ item.equipment.equipment_type.name }}</td>
         <td data-label="Identificación">{% if item.equipment.license_plate %}{{ item.equipment.license_plate }}{% elif item.equipment.serial_number %}{{ item.equipment.serial_number }}{% else %}—{% endif %}</td>
         <td data-label="Proyecto">{% if item.project %}{{ item.project.project.name }}{% else %}<span class="eq-muted">Sin asignar</span>{% endif %}</td>
         <td data-label="Estado"><span class="eq-status eq-status-{{ item.equipment.status }}"><i></i>{{ item.equipment.get_status_display }}</span></td>
-        <td><a class="eq-open" href="{% url 'equipment:detail' item.equipment.pk %}" aria-label="Abrir {{ item.equipment.name }}">Abrir <span aria-hidden="true">→</span></a></td>
+        <td><a data-peek class="eq-open" href="{% url 'equipment:detail' item.equipment.pk %}" aria-label="Abrir {{ item.equipment.name }}">Abrir <span aria-hidden="true">→</span></a></td>
       </tr>
     {% empty %}
       <tr><td colspan="6" class="eq-empty"><strong>No hay equipos para mostrar.</strong><span>{% if collection %}Esta colección no tiene equipos asociados a sus etiquetas.{% else %}Prueba otros filtros o registra el primer equipo.{% endif %}</span></td></tr>

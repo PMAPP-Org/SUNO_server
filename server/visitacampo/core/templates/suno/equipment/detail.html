@@ -9,7 +9,18 @@
     <p>{{ equipment.code }}{% if equipment.manufacturer %} · {{ equipment.manufacturer }}{% endif %}{% if equipment.model %} {{ equipment.model }}{% endif %}</p>
     <span class="eq-status eq-status-{{ equipment.status }}"><i></i>{{ equipment.get_status_display }}</span>
   </div>
-  {% if can_edit %}<a class="eq-button" href="{% url 'equipment:edit' equipment.pk %}">Editar ficha</a>{% endif %}
+  {% if can_edit %}<a data-peek class="eq-button" href="{% url 'equipment:edit' equipment.pk %}">Editar ficha</a>{% endif %}
+</section>
+
+<section class="eq-kpis" aria-label="Indicadores del equipo">
+  <article><small>Horas del mes</small><strong>{{ kpis.hours_month|floatformat:"1g" }} h</strong><span>{{ kpis.days_used_month }} día{{ kpis.days_used_month|pluralize }} con uso</span></article>
+  <article><small>Utilización del mes</small><strong>{% if kpis.utilization_month != None %}{{ kpis.utilization_month }} %{% else %}—{% endif %}</strong><span>sobre días hábiles × 8 h</span></article>
+  <article><small>Horas acumuladas</small><strong>{{ kpis.hours_total|floatformat:"1g" }} h</strong><span>{{ kpis.usages_total }} uso{{ kpis.usages_total|pluralize }}{% if kpis.hours_scheduled %} · {{ kpis.hours_scheduled|floatformat:"1g" }} h programadas{% endif %}</span></article>
+  <article><small>Último uso</small><strong>{% if kpis.last_used_on %}{{ kpis.last_used_on|date:"d/m/Y" }}{% else %}—{% endif %}</strong><span>{% if kpis.last_meter != None %}{{ kpis.last_meter|floatformat:"1g" }} · {{ kpis.last_meter_unit }}{% else %}sin lectura de medidor{% endif %}</span></article>
+  {% if can_view_costs %}
+  <article><small>Costo acumulado</small><strong>${{ kpis.cost_total|floatformat:"2g" }}</strong><span>${{ kpis.cost_month|floatformat:"2g" }} este mes</span></article>
+  <article{% if kpis.unpriced %} class="eq-warn"{% endif %}><small>Costo real por hora</small><strong>{% if kpis.cost_per_hour != None %}${{ kpis.cost_per_hour|floatformat:"2g" }}{% else %}—{% endif %}</strong><span>{% if kpis.unpriced %}{{ kpis.unpriced }} uso{{ kpis.unpriced|pluralize }} sin tarifa{% else %}según tarifas vigentes{% endif %}</span></article>
+  {% endif %}
 </section>
 
 <nav class="eq-tabs" aria-label="Secciones de la ficha">
@@ -17,6 +28,7 @@
   <a href="?tab=documents"{% if tab == 'documents' %} aria-current="page"{% endif %}>Documentos <span>{{ documents|length }}</span></a>
   <a href="?tab=operators"{% if tab == 'operators' %} aria-current="page"{% endif %}>Operadores <span>{{ assignments|length }}</span></a>
   <a href="?tab=usage"{% if tab == 'usage' %} aria-current="page"{% endif %}>Uso <span>{{ usage_records|length }}</span></a>
+  {% if can_view_costs %}<a href="?tab=rates"{% if tab == 'rates' %} aria-current="page"{% endif %}>Tarifas <span>{{ rates|length }}</span></a>{% endif %}
   <a href="?tab=projects"{% if tab == 'projects' %} aria-current="page"{% endif %}>Proyectos <span>{{ project_links|length }}</span></a>
   <a href="?tab=history"{% if tab == 'history' %} aria-current="page"{% endif %}>Historial</a>
 </nav>
@@ -38,22 +50,36 @@
       {% if equipment.specifications %}<div class="eq-notes"><h3>Especificaciones</h3><pre>{{ equipment.specifications }}</pre></div>{% endif %}
       {% if equipment.notes %}<div class="eq-notes"><h3>Observaciones</h3><p>{{ equipment.notes|linebreaksbr }}</p></div>{% endif %}
     {% elif tab == 'documents' %}
-      <div class="eq-section-head"><div><p class="editorial-label">Cumplimiento</p><h2>Documentos</h2></div>{% if can_edit %}<a href="{% url 'equipment:document_create' equipment.pk %}">Agregar documento</a>{% endif %}</div>
+      <div class="eq-section-head"><div><p class="editorial-label">Cumplimiento</p><h2>Documentos</h2></div>{% if can_edit %}<a data-peek href="{% url 'equipment:document_create' equipment.pk %}">Agregar documento</a>{% endif %}</div>
       <div class="eq-records">
         {% for document in documents %}<article><div><strong>{{ document.name }}</strong><span>{{ document.get_document_type_display }}{% if document.number %} · {{ document.number }}{% endif %}</span></div><div><small>Vencimiento</small><time>{{ document.expires_on|date:"d/m/Y"|default:"Sin vencimiento" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay documentos registrados.</p>{% endfor %}
       </div>
     {% elif tab == 'operators' %}
-      <div class="eq-section-head"><div><p class="editorial-label">Trazabilidad</p><h2>Historial de operadores</h2></div>{% if can_assign %}<a href="{% url 'equipment:operator_create' equipment.pk %}">Asignar operador</a>{% endif %}</div>
+      <div class="eq-section-head"><div><p class="editorial-label">Trazabilidad</p><h2>Historial de operadores</h2></div>{% if can_assign %}<a data-peek href="{% url 'equipment:operator_create' equipment.pk %}">Asignar operador</a>{% endif %}</div>
       <div class="eq-records">
         {% for assignment in assignments %}<article><div><strong>{{ assignment.operator.display_name|default:assignment.operator.username }}</strong><span>{{ assignment.project.name }}</span></div><div><small>Vigencia</small><time>{{ assignment.valid_from|date:"d/m/Y" }} — {{ assignment.valid_until|date:"d/m/Y"|default:"Actual" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay operadores asignados.</p>{% endfor %}
       </div>
     {% elif tab == 'usage' %}
-      <div class="eq-section-head"><div><p class="editorial-label">Operación</p><h2>Registros de uso</h2></div>{% if can_schedule %}<a href="{% url 'equipment:usage_create' %}?equipment={{ equipment.pk }}{% if current_project %}&project={{ current_project.project_id }}{% endif %}">Registrar uso</a>{% endif %}</div>
+      <div class="eq-section-head"><div><p class="editorial-label">Operación</p><h2>Registros de uso</h2></div>{% if can_schedule %}<a data-peek href="{% url 'equipment:usage_create' %}?equipment={{ equipment.pk }}{% if current_project %}&project={{ current_project.project_id }}{% endif %}">Registrar uso</a>{% endif %}</div>
       <div class="eq-records eq-usage-records">
-        {% for usage in usage_records %}<article><div><strong>{{ usage.usage_date|date:"d/m/Y" }} · {{ usage.start_time|time:"H:i" }}–{{ usage.end_time|time:"H:i" }}</strong><span>{{ usage.activity }} · {{ usage.project.name }}</span><small>{{ usage.equipment.code }} · {{ usage.get_status_display }}</small></div><div><small>Operador</small><strong>{{ usage.operator.display_name|default:usage.operator.username }}</strong>{% if usage.start_meter != None %}<span>{{ usage.start_meter }}{% if usage.end_meter != None %} → {{ usage.end_meter }}{% endif %} · {{ usage.get_meter_unit_display }}</span>{% endif %}</div></article>{% empty %}<p class="eq-empty-inline">No hay usos registrados para este equipo.</p>{% endfor %}
+        {% for usage in usage_records %}<article><div><strong>{{ usage.usage_date|date:"d/m/Y" }} · {{ usage.start_time|time:"H:i" }}–{{ usage.end_time|time:"H:i" }}</strong><span>{{ usage.activity }} · {{ usage.project.name }}</span><small>{{ usage.equipment.code }} · {{ usage.get_status_display }}</small></div><div><small>Operador</small><strong>{{ usage.operator.display_name|default:usage.operator.username }}</strong>{% if can_view_costs and usage.cost != None %}<span>{{ usage.billable_hours }} h · ${{ usage.cost|floatformat:"2g" }}</span>{% elif can_view_costs %}<span>Sin tarifa</span>{% endif %}{% if usage.start_meter != None %}<span>{{ usage.start_meter }}{% if usage.end_meter != None %} → {{ usage.end_meter }}{% endif %} · {{ usage.get_meter_unit_display }}</span>{% endif %}</div></article>{% empty %}<p class="eq-empty-inline">No hay usos registrados para este equipo.</p>{% endfor %}
+      </div>
+    {% elif tab == 'rates' and can_view_costs %}
+      <div class="eq-section-head"><div><p class="editorial-label">Costeo</p><h2>Tarifas por hora</h2></div>{% if can_set_rates %}<a data-peek href="{% url 'equipment:rate_create' equipment.pk %}">Registrar tarifa</a>{% endif %}</div>
+      <p class="eq-form-note">Cada uso se costea con la tarifa vigente en su fecha (horas × tarifa). Las tarifas no se editan: para cambiar el valor registra una nueva con fecha posterior.</p>
+      {% if kpis.breakdown and kpis.cost_total %}
+      <div class="eq-breakdown" aria-label="Costo acumulado por componente">
+        <div><small>Propiedad</small><strong>${{ kpis.breakdown.ownership|floatformat:"2g" }}</strong></div>
+        <div><small>Operación</small><strong>${{ kpis.breakdown.operation|floatformat:"2g" }}</strong></div>
+        <div><small>Mantenimiento</small><strong>${{ kpis.breakdown.maintenance|floatformat:"2g" }}</strong></div>
+        <div><small>Operador</small><strong>${{ kpis.breakdown.labor|floatformat:"2g" }}</strong></div>
+      </div>
+      {% endif %}
+      <div class="eq-records">
+        {% for rate in rates %}<article><div><strong>${{ rate.hourly_rate|floatformat:"2g" }} / hora</strong><span>Propiedad ${{ rate.ownership_rate|floatformat:"2g" }} · Operación ${{ rate.operation_rate|floatformat:"2g" }} · Mantenimiento ${{ rate.maintenance_rate|floatformat:"2g" }} · Operador ${{ rate.labor_rate|floatformat:"2g" }}</span>{% if rate.notes %}<small>{{ rate.notes }}</small>{% endif %}</div><div><small>Vigente desde</small><time>{{ rate.valid_from|date:"d/m/Y" }}</time></div></article>{% empty %}<p class="eq-empty-inline">Este equipo no tiene tarifa: sus usos quedan sin costo hasta que registres una.</p>{% endfor %}
       </div>
     {% elif tab == 'projects' %}
-      <div class="eq-section-head"><div><p class="editorial-label">Uso</p><h2>Historial de proyectos</h2></div>{% if can_assign %}<a href="{% url 'equipment:project_create' equipment.pk %}">Vincular proyecto</a>{% endif %}</div>
+      <div class="eq-section-head"><div><p class="editorial-label">Uso</p><h2>Historial de proyectos</h2></div>{% if can_assign %}<a data-peek href="{% url 'equipment:project_create' equipment.pk %}">Vincular proyecto</a>{% endif %}</div>
       <div class="eq-records">
         {% for link in project_links %}<article><div><strong>{{ link.project.name }}</strong><span>{{ link.project.code|default:"Proyecto" }}</span></div><div><small>Periodo</small><time>{{ link.started_on|date:"d/m/Y" }} — {{ link.ended_on|date:"d/m/Y"|default:"Actual" }}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay proyectos vinculados.</p>{% endfor %}
       </div>

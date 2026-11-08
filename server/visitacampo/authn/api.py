@@ -60,8 +60,7 @@ def access_profile(request):
                 "scope": access.scope,
                 "project_ids": sorted(access.project_ids, key=str),
                 "capabilities": sorted(
-                    str(capability)
-                    for capability in capabilities_for(access.section, access.role)
+                    str(capability) for capability in capabilities_for(access.section, access.role)
                 ),
             }
             for access in ctx.section_access

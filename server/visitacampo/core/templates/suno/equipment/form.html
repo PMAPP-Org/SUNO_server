@@ -15,8 +15,8 @@
         {{ field.errors }}
       </label>
     {% endfor %}
-    <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Guardar</button><a href="{% if equipment %}{% url 'equipment:detail' equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a></div>
+    <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Guardar</button><a data-peek-close href="{% if equipment %}{% url 'equipment:detail' equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a></div>
   </form>
-  {% if title == "Registrar equipo" %}<p class="eq-form-note">¿No aparece el tipo que necesitas? <a href="{% url 'equipment:type_create' %}">Crear tipo de equipo</a>.</p>{% endif %}
+  {% if title == "Registrar equipo" %}<p class="eq-form-note">¿No aparece el tipo que necesitas? <a data-peek href="{% url 'equipment:type_create' %}">Crear tipo de equipo</a>.</p>{% endif %}
 </section>
 {% endblock %}

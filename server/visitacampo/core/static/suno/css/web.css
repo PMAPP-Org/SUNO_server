@@ -181,3 +181,37 @@ h1, h2, h3, p { margin-top: 0; }
 .project-row { display: grid; grid-template-columns: 2fr 1fr 1fr .5fr; gap: 12px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--suno-line); font-size: 12px; }
 .project-row strong { font-weight: 600; }
 .project-row .text-link { min-height: 0; padding: 0; }
+
+/* Superficie estilo Notion: lienzo blanco, barra lateral gris cálida, acento rojo. */
+body.workspace-page { background: var(--suno-white); color: var(--suno-ink); }
+.sidebar { background: var(--suno-paper); border-right-color: var(--suno-line); }
+.sidebar-brand { border-bottom: 0; }
+.sidebar-user { border-top-color: var(--suno-line); }
+.sidebar-nav a, .nav-disabled { border-left: 0; border-radius: var(--suno-radius-sm); margin-inline: 2px; }
+.sidebar-nav a:hover { background: var(--suno-hover-soft); }
+.sidebar-nav a.active { background: var(--suno-hover); border-left: 0; font-weight: 600; }
+.sidebar-nav a.active .ui-icon { color: var(--suno-red); }
+.workspace-topbar { background: var(--suno-white); border-bottom-color: var(--suno-line); }
+
+/* Vista rápida: panel flotante lateral con opción de expandir. */
+html.peek-open { overflow: hidden; }
+.peek-root { position: fixed; inset: 0; z-index: 100; }
+.peek-root[hidden] { display: none; }
+.peek-backdrop { position: absolute; inset: 0; background: rgb(15 15 15 / 24%); opacity: 0; transition: opacity .18s ease; }
+.peek-panel { position: absolute; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: min(820px, 100vw); background: var(--suno-white); box-shadow: var(--suno-shadow-popover); transform: translateX(24px); opacity: 0; transition: transform .2s ease, opacity .2s ease; }
+.peek-root.is-visible .peek-backdrop { opacity: 1; }
+.peek-root.is-visible .peek-panel { transform: none; opacity: 1; }
+.peek-bar { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 10px; border-bottom: 1px solid var(--suno-line); }
+.peek-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; border-radius: var(--suno-radius-sm); background: transparent; color: var(--suno-muted); font: 500 12px var(--suno-font); cursor: pointer; }
+.peek-btn:hover { background: var(--suno-hover); color: var(--suno-ink); }
+.peek-btn:focus-visible { outline: 2px solid var(--suno-red); outline-offset: 1px; }
+.peek-expand:hover { color: var(--suno-red); }
+.peek-title { margin-left: 8px; overflow: hidden; color: var(--suno-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.peek-frame { flex: 1; width: 100%; border: 0; background: var(--suno-white); }
+@media (max-width: 720px) { .peek-btn span { display: none; } }
+
+/* Páginas mostradas dentro del panel: sin barra lateral ni cabecera. */
+html.is-peek body { background: var(--suno-white); }
+html.is-peek .sidebar, html.is-peek .workspace-topbar, html.is-peek .skip-link, html.is-peek .eq-back { display: none !important; }
+html.is-peek .app-shell { display: block; }
+html.is-peek .workspace-content { max-width: none; padding: 28px 36px 56px; }

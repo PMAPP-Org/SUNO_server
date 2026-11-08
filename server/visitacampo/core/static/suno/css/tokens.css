@@ -12,17 +12,17 @@
   --suno-red-dark: #7f1d25;
   --suno-action: var(--suno-red);
   /* Referencias digitales PANTONE para la paleta 2026. */
-  --suno-cloud-dancer: #f0eee9;
-  --suno-marshmallow: #f0eee4;
+  --suno-cloud-dancer: #ffffff;
+  --suno-marshmallow: #f7f7f5;
   /* Cloud Dancer exacto para el lienzo principal. */
   --suno-cream: var(--suno-cloud-dancer);
   /* Marshmallow puro identifica las superficies de énfasis. */
   --suno-paper: var(--suno-marshmallow);
-  --suno-line: #dedcd3;
-  --suno-line-strong: #cbc8bf;
+  --suno-line: #e9e9e7;
+  --suno-line-strong: #d3d1cb;
   --suno-white: #ffffff;
-  --suno-ink: #171717;
-  --suno-muted: #666760;
+  --suno-ink: #37352f;
+  --suno-muted: #787774;
   --suno-green: #5f715f;
   --suno-amber: #9a6a25;
   --suno-topography: #a29968;
@@ -33,9 +33,18 @@
   --suno-radius-sm: 6px;
   --suno-radius: 6px;
   --suno-radius-lg: 8px;
+  --suno-hover: rgb(55 53 47 / 8%);
+  --suno-hover-soft: rgb(55 53 47 / 5%);
   --suno-control-height: 38px;
-  --suno-shadow-popover: 0 14px 38px rgb(23 23 23 / 12%);
+  --suno-shadow-popover: 0 0 0 1px rgb(15 15 15 / 5%), 0 3px 6px rgb(15 15 15 / 10%), 0 9px 24px rgb(15 15 15 / 20%);
   --suno-content: 1360px;
+  /* Paleta predeterminada de los dashboards (orden de uso en series categóricas). */
+  --chart-red: #9e2b2f;       /* rojo corporativo: serie principal y alertas */
+  --chart-graphite: #3b3b46;  /* grafito: líneas, acumulados y texto de ejes */
+  --chart-petrol: #007a99;    /* azul petróleo: avance normal, segunda serie */
+  --chart-steel: #6787b7;     /* azul acero */
+  --chart-turquoise: #19b7c6; /* turquesa vivo */
+  --chart-amber: #f28c28;     /* naranja ámbar: advertencias */
 }
 
 .suno-wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }

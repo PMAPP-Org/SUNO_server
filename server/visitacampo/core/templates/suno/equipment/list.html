@@ -8,8 +8,9 @@
   </div>
   <div class="eq-heading-actions">
     <a class="eq-button" href="{% url 'equipment:usage_list' %}">Registros de uso</a>
+    {% if can_view_costs %}<a class="eq-button" href="{% url 'equipment:costs' %}">Costos de equipos</a>{% endif %}
     {% if items %}<a class="eq-button" href="{% url 'equipment:labels' %}?{% for item in items %}ids={{ item.equipment.pk }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Etiquetas QR de esta página</a>{% endif %}
-    {% if can_create %}<a class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
+    {% if can_create %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
   </div>
 </section>
 
@@ -19,11 +20,11 @@
       <h2 id="collections-title">Colecciones</h2>
       <p>Organiza el catálogo por tipología.</p>
     </div>
-    {% if can_create %}<a href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span> Nueva colección</a>{% endif %}
+    {% if can_create %}<a data-peek href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span> Nueva colección</a>{% endif %}
   </div>
   <div class="eq-collection-grid">
     {% for collection in collections %}
-      <a class="eq-collection-card" href="{% url 'equipment:collection_detail' collection.pk %}">
+      <a data-peek class="eq-collection-card" href="{% url 'equipment:collection_detail' collection.pk %}">
         <span class="eq-collection-cover" aria-hidden="true"></span>
         <span class="eq-collection-body">
           <strong>{{ collection.name }}</strong>
@@ -36,7 +37,7 @@
       </a>
     {% endfor %}
     {% if can_create %}
-      <a class="eq-collection-card eq-collection-new" href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span><strong>Nueva colección</strong></a>
+      <a data-peek class="eq-collection-card eq-collection-new" href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span><strong>Nueva colección</strong></a>
     {% elif not collections %}
       <p class="eq-empty-inline">Todavía no hay colecciones creadas.</p>
     {% endif %}

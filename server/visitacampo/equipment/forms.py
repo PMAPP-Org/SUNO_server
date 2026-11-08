@@ -207,6 +207,12 @@ class EquipmentUsageForm(forms.Form):
         decimal_places=2,
         label="Lectura final",
     )
+    budget_item_code = forms.CharField(
+        max_length=50,
+        required=False,
+        label="Partida del presupuesto",
+        help_text="Código de la partida a la que se imputa el costo (opcional).",
+    )
     notes = forms.CharField(
         required=False,
         label="Observaciones",
@@ -256,3 +262,34 @@ class EquipmentUsageForm(forms.Form):
         if start_meter is not None and end_meter is not None and end_meter < start_meter:
             self.add_error("end_meter", "La lectura final no puede ser menor que la inicial.")
         return cleaned
+
+
+def _rate_field(label: str, help_text: str) -> forms.DecimalField:
+    return forms.DecimalField(
+        min_value=0,
+        max_digits=14,
+        decimal_places=2,
+        initial=0,
+        label=label,
+        help_text=help_text,
+    )
+
+
+class EquipmentRateForm(forms.Form):
+    """Valores por hora definidos a mano; la tarifa total es su suma."""
+
+    valid_from = forms.DateField(
+        label="Vigente desde",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    ownership_rate = _rate_field(
+        "Propiedad ($/h)", "Depreciación, seguro, financiación o canon de alquiler."
+    )
+    operation_rate = _rate_field(
+        "Operación ($/h)", "Combustible, lubricantes, llantas y consumibles."
+    )
+    maintenance_rate = _rate_field("Mantenimiento ($/h)", "Mantenimiento preventivo y repuestos.")
+    labor_rate = _rate_field(
+        "Operador ($/h)", "Costo horario del operador, si se imputa al equipo."
+    )
+    notes = forms.CharField(max_length=300, required=False, label="Criterio o nota")

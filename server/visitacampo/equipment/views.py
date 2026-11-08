@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
@@ -29,6 +30,7 @@ from visitacampo.core.models import (
     EquipmentDocument,
     EquipmentOperatorAssignment,
     EquipmentProject,
+    EquipmentRate,
     EquipmentType,
     EquipmentUsageStatus,
     Membership,
@@ -36,12 +38,23 @@ from visitacampo.core.models import (
 )
 from visitacampo.core.navigation import platform_navigation
 from visitacampo.core.scoping import get_organization, scoped_qs
+from visitacampo.equipment.charts import (
+    CURRENCY,
+    build_bullets,
+    build_combo,
+    build_hbars,
+    donut_gradient,
+    month_label,
+    segments,
+    short_money,
+)
 from visitacampo.equipment.forms import (
     EquipmentCollectionForm,
     EquipmentDocumentForm,
     EquipmentForm,
     EquipmentOperatorForm,
     EquipmentProjectForm,
+    EquipmentRateForm,
     EquipmentTypeForm,
     EquipmentUsageForm,
 )
@@ -54,13 +67,18 @@ from visitacampo.equipment.qr import (
 from visitacampo.equipment.services import (
     add_document,
     assign_operator,
+    can_view_costs,
     create_equipment,
     create_equipment_collection,
     create_equipment_type,
     create_equipment_usage,
+    equipment_cost_summary,
+    equipment_kpis,
     get_visible_collection,
     get_visible_equipment,
     link_project,
+    recalculate_usage_costs,
+    set_equipment_rate,
     update_equipment,
     update_equipment_collection,
     visible_collections,
@@ -204,6 +222,7 @@ def equipment_list(request: HttpRequest) -> HttpResponse:
             "projects": scoped_qs(ctx, Project).order_by("name"),
             "can_create": ctx.has_capability(Section.EQUIPMENT, Capability.CREATE),
             "can_update_collections": ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
+            "can_view_costs": can_view_costs(ctx),
         },
     )
 
@@ -266,6 +285,7 @@ def usage_list(request: HttpRequest) -> HttpResponse:
             ),
             "statuses": EquipmentUsageStatus.choices,
             "can_create": _can_schedule_any(ctx),
+            "can_view_costs": can_view_costs(ctx),
         },
     )
 
@@ -488,6 +508,12 @@ def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
         .select_related("project", "operator")
         .order_by("-usage_date", "-start_time")[:50]
     )
+    show_costs = can_view_costs(ctx)
+    rates = (
+        list(scoped_qs(ctx, EquipmentRate).filter(equipment=equipment).order_by("-valid_from"))
+        if show_costs
+        else []
+    )
     current_project = next((link for link in project_links if link.ended_on is None), None)
     current_operator = next(
         (
@@ -521,6 +547,11 @@ def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
             "upcoming": upcoming,
             "history": history,
             "today": today,
+            "can_view_costs": show_costs,
+            "kpis": equipment_kpis(ctx, equipment, today=today),
+            "rates": rates,
+            "can_set_rates": show_costs
+            and ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
             "can_edit": _can(ctx, equipment, Capability.UPDATE),
             "can_assign": _can(ctx, equipment, Capability.ASSIGN),
             "can_schedule": _can(ctx, equipment, Capability.SCHEDULE),
@@ -579,6 +610,7 @@ def _related_form(
     title: str,
     capability: Capability,
     submit: Callable[[RequestContext, Equipment, dict[str, Any]], object],
+    redirect_tab: str = "",
 ) -> HttpResponse:
     ctx = _ctx(request)
     equipment = get_visible_equipment(ctx, equipment_id)
@@ -598,7 +630,8 @@ def _related_form(
                 messages.error(request, "El registro entra en conflicto con otro vigente.")
         else:
             messages.success(request, "Información agregada.")
-            return redirect("equipment:detail", equipment.pk)
+            target = reverse("equipment:detail", args=[equipment.pk])
+            return redirect(f"{target}?tab={redirect_tab}" if redirect_tab else target)
     return _render(
         request,
         ctx,
@@ -673,7 +706,7 @@ MAX_LABELS = 60
 
 
 def _label_context(equipment: Equipment) -> dict[str, Any]:
-    payload = equipment_payload(equipment.pk)
+    payload = equipment_payload(equipment)
     svg = render_svg(payload, scale=8, title=f"QR de {equipment.code}").decode("ascii")
     return {
         "equipment": equipment,
@@ -725,7 +758,7 @@ def equipment_qr(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
 def equipment_qr_image(request: HttpRequest, equipment_id: UUID, fmt: str) -> HttpResponse:
     ctx = _ctx(request)
     equipment = get_visible_equipment(ctx, equipment_id)
-    payload = equipment_payload(equipment.pk)
+    payload = equipment_payload(equipment)
     if fmt not in ("svg", "png"):
         raise Http404
     if fmt == "png":
@@ -761,3 +794,126 @@ def equipment_labels(request: HttpRequest) -> HttpResponse:
         "suno/equipment/qr_label.html",
         {"labels": [_label_context(item) for item in equipment.order_by("code")], "single": False},
     )
+
+
+def _submit_rate(ctx: RequestContext, equipment: Equipment, data: dict[str, Any]) -> object:
+    return set_equipment_rate(ctx, equipment_id=equipment.pk, **data)
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def rate_create(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    if not can_view_costs(ctx) or not ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE):
+        raise PermissionDenied
+    return _related_form(
+        request,
+        equipment_id,
+        form_class=EquipmentRateForm,
+        title="Registrar tarifa por hora",
+        capability=Capability.UPDATE,
+        submit=_submit_rate,
+        redirect_tab="rates",
+    )
+
+
+@login_required(login_url="platform_login")
+def equipment_costs(request: HttpRequest) -> HttpResponse:
+    """Horas y costo de equipos por equipo y por partida, contra el presupuesto vigente."""
+
+    ctx = _ctx(request)
+    if not can_view_costs(ctx):
+        raise PermissionDenied
+    selected_project = request.GET.get("project", "")
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    include_scheduled = request.GET.get("scheduled") == "1"
+    try:
+        project_id = UUID(selected_project) if selected_project else None
+    except ValueError:
+        project_id = None
+    summary = equipment_cost_summary(
+        ctx,
+        project_id=project_id,
+        date_from=parse_date(date_from),
+        date_to=parse_date(date_to),
+        include_scheduled=include_scheduled,
+    )
+    top = summary.rows[:8]
+    hbars = build_hbars(
+        [(r.name, r.code, r.cost, r.hours, r.equipment_id) for r in top], summary.total_cost
+    )
+    combo = build_combo(
+        [(month_label(p.month), p.cost, p.scheduled_cost, p.hours) for p in summary.monthly]
+    )
+    parts = segments(
+        [
+            ("Propiedad", summary.breakdown.ownership),
+            ("Operación", summary.breakdown.operation),
+            ("Mantenimiento", summary.breakdown.maintenance),
+            ("Operador", summary.breakdown.labor),
+        ]
+    )
+    bullets = build_bullets(
+        [(r.code, r.description, r.imputed, r.budgeted) for r in summary.budget_rows]
+    )
+    project_name = (
+        scoped_qs(ctx, Project).filter(pk=project_id).values_list("name", flat=True).first() or ""
+        if project_id
+        else ""
+    )
+    period_label = (
+        f"{month_label(summary.monthly[0].month)} a {month_label(summary.monthly[-1].month)}"
+        if summary.monthly
+        else "sin registros"
+    )
+    if date_from or date_to:
+        period_label += f" (filtro: {date_from or 'inicio'} a {date_to or 'hoy'})"
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/costs.html",
+        {
+            "summary": summary,
+            "hbars": hbars,
+            "bullets": bullets,
+            "currency": CURRENCY,
+            "total_label": short_money(summary.total_cost),
+            "scope_label": f"Proyecto: {project_name}" if project_name else "Todos los proyectos",
+            "period_label": period_label,
+            "status_label": (
+                "Incluye usos completados, en curso y programados; excluye cancelados."
+                if include_scheduled
+                else "Incluye usos completados o en curso; excluye programados y cancelados."
+            ),
+            "combo": combo,
+            "scheduled_total": sum((p.scheduled_cost for p in summary.monthly), Decimal("0")),
+            "donut_parts": parts,
+            "donut_gradient": donut_gradient(parts),
+            "average_cost_per_hour": (
+                (summary.total_cost / summary.total_hours).quantize(Decimal("0.01"))
+                if summary.total_hours
+                else None
+            ),
+            "projects": scoped_qs(ctx, Project).order_by("name"),
+            "selected_project": selected_project,
+            "date_from": date_from,
+            "date_to": date_to,
+            "include_scheduled": include_scheduled,
+            "can_recalculate": ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE),
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["POST"])
+def costs_recalculate(request: HttpRequest) -> HttpResponse:
+    ctx = _ctx(request)
+    if not can_view_costs(ctx):
+        raise PermissionDenied
+    updated = recalculate_usage_costs(ctx)
+    if updated:
+        messages.success(request, f"Se costearon {updated} uso(s) que no tenían tarifa.")
+    else:
+        messages.info(request, "No había usos pendientes con tarifa aplicable.")
+    return redirect("equipment:costs")

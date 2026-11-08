@@ -19,7 +19,7 @@
       </div>
       {{ form.equipment_types.errors }}
     </fieldset>
-    <div class="eq-form-actions"><a href="{% if collection %}{% url 'equipment:collection_detail' collection.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a><button class="eq-button eq-button-primary" type="submit">Guardar colección</button></div>
+    <div class="eq-form-actions"><a data-peek-close href="{% if collection %}{% url 'equipment:collection_detail' collection.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a><button class="eq-button eq-button-primary" type="submit">Guardar colección</button></div>
   </form>
 </section>
 {% endblock %}

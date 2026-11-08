@@ -205,13 +205,11 @@ class Assignment(SyncedModel):
         verbose_name_plural = "asignaciones"
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(lat__isnull=True)
-                | models.Q(lat__gte=LAT_MIN, lat__lte=LAT_MAX),
+                condition=models.Q(lat__isnull=True) | models.Q(lat__gte=LAT_MIN, lat__lte=LAT_MAX),
                 name="assignment_lat_range",
             ),
             models.CheckConstraint(
-                condition=models.Q(lon__isnull=True)
-                | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
+                condition=models.Q(lon__isnull=True) | models.Q(lon__gte=LON_MIN, lon__lte=LON_MAX),
                 name="assignment_lon_range",
             ),
         ]

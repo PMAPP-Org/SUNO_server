@@ -66,9 +66,7 @@ class SecurityLogRetentionTests(TestCase):
         return reload_job(job_id)
 
     def test_is_a_registered_periodic(self) -> None:
-        self.assertIn(
-            periodic.PURGE_SECURITY_LOGS, {p.type for p in periodic.PERIODIC_JOBS}
-        )
+        self.assertIn(periodic.PURGE_SECURITY_LOGS, {p.type for p in periodic.PERIODIC_JOBS})
 
     def test_purges_only_audit_events_past_retention(self) -> None:
         expired = _audit(self.org, age_days=400)

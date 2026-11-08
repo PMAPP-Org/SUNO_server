@@ -64,9 +64,7 @@ class Command(BaseCommand):
                 TOTPDevice.objects.filter(user=user).delete()
                 StaticDevice.objects.filter(user=user).delete()
 
-            totp = TOTPDevice.objects.create(
-                user=user, name="App de autenticación", confirmed=True
-            )
+            totp = TOTPDevice.objects.create(user=user, name="App de autenticación", confirmed=True)
             static = StaticDevice.objects.create(
                 user=user, name="Códigos de respaldo", confirmed=True
             )

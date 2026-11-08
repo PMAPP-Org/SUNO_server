@@ -305,9 +305,7 @@ class Worker:
                 record.id,
             )
             return
-        if not queue.succeed(
-            job_id=record.id, worker_id=self.config.worker_id, output=output
-        ):
+        if not queue.succeed(job_id=record.id, worker_id=self.config.worker_id, output=output):
             logger.warning("El resultado del job %s no se pudo escribir (lease ajeno).", record.id)
 
     def _record_failure(self, record: JobRecord, exc: Exception, *, lease_lost: bool) -> None:

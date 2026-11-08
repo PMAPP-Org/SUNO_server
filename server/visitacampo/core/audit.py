@@ -109,6 +109,8 @@ class AuditAction:
     EQUIPMENT_DOCUMENT_ADDED = "equipment.document_added"
     EQUIPMENT_USAGE_CREATED = "equipment.usage_created"
     EQUIPMENT_USAGE_UPDATED = "equipment.usage_updated"
+    EQUIPMENT_RATE_SET = "equipment.rate_set"
+    EQUIPMENT_COSTS_RECALCULATED = "equipment.costs_recalculated"
 
     # Presupuestos (costos, pieza 3).
     BUDGET_CREATED = "budgets.created"

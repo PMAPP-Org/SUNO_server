@@ -42,12 +42,8 @@ class InMemorySectionAccessTests(SimpleTestCase):
         )
 
     def test_project_scoped_capability_requires_the_project(self) -> None:
-        self.assertTrue(
-            self.ctx.has_capability(Section.PROJECTS, Capability.READ, self.project_id)
-        )
-        self.assertFalse(
-            self.ctx.has_capability(Section.PROJECTS, Capability.READ, uuid.uuid4())
-        )
+        self.assertTrue(self.ctx.has_capability(Section.PROJECTS, Capability.READ, self.project_id))
+        self.assertFalse(self.ctx.has_capability(Section.PROJECTS, Capability.READ, uuid.uuid4()))
         self.assertFalse(self.ctx.has_capability(Section.PROJECTS, Capability.READ))
 
     def test_section_visibility_does_not_grant_org_wide_access(self) -> None:
@@ -114,9 +110,7 @@ class SectionGrantPersistenceTests(TestCase):
         )
         with self.assertNumQueries(2):
             ctx = resolve_request_context(Principal(user_id=self.user.pk, org_id=self.org.pk))
-        self.assertTrue(
-            ctx.has_capability(Section.PROJECTS, Capability.READ, self.project.pk)
-        )
+        self.assertTrue(ctx.has_capability(Section.PROJECTS, Capability.READ, self.project.pk))
 
     def test_user_without_membership_does_not_load_grants(self) -> None:
         outsider = make_user(

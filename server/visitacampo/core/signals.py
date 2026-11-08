@@ -32,13 +32,17 @@ def add_responsible_project_scope(
     if not created:
         return
     ctx = system_context(instance.org_id)
-    grant = scoped_qs(ctx, SectionGrant).filter(
-        org_id=instance.org_id,
-        user_id=instance.user_id,
-        section=Section.PROJECTS,
-        scope=AccessScope.PROJECTS,
-        active=True,
-    ).first()
+    grant = (
+        scoped_qs(ctx, SectionGrant)
+        .filter(
+            org_id=instance.org_id,
+            user_id=instance.user_id,
+            section=Section.PROJECTS,
+            scope=AccessScope.PROJECTS,
+            active=True,
+        )
+        .first()
+    )
     if grant is not None:
         scoped_qs(ctx, SectionProjectScope).get_or_create(
             org_id=instance.org_id,
@@ -57,12 +61,16 @@ def remove_responsible_project_scope(
 ) -> None:
     project_id = instance.task.project_id
     ctx = system_context(instance.org_id)
-    still_responsible = scoped_qs(ctx, TaskResponsible).filter(
-        org_id=instance.org_id,
-        user_id=instance.user_id,
-        task__project_id=project_id,
-        task__retired_in__isnull=True,
-    ).exists()
+    still_responsible = (
+        scoped_qs(ctx, TaskResponsible)
+        .filter(
+            org_id=instance.org_id,
+            user_id=instance.user_id,
+            task__project_id=project_id,
+            task__retired_in__isnull=True,
+        )
+        .exists()
+    )
     if not still_responsible:
         scoped_qs(ctx, SectionProjectScope).filter(
             org_id=instance.org_id,

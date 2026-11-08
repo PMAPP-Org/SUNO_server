@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection, transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Max, Q, QuerySet, Sum
+from django.db.models.functions import TruncMonth
 from django.http import Http404
 
 from visitacampo.core import audit
@@ -18,12 +21,19 @@ from visitacampo.core.audit import AuditAction
 from visitacampo.core.context import Principal, RequestContext, resolve_request_context
 from visitacampo.core.models import (
     AppUser,
+    Budget,
+    BudgetItem,
+    BudgetItemVersion,
+    BudgetVersion,
+    BudgetVersionStatus,
     Equipment,
     EquipmentCollection,
     EquipmentCollectionType,
     EquipmentDocument,
+    EquipmentMeterUnit,
     EquipmentOperatorAssignment,
     EquipmentProject,
+    EquipmentRate,
     EquipmentType,
     EquipmentUsage,
     EquipmentUsageStatus,
@@ -31,9 +41,24 @@ from visitacampo.core.models import (
     Project,
 )
 from visitacampo.core.scoping import scoped_qs
+from visitacampo.equipment.costing import (
+    pct_of,
+    usage_cost,
+    usage_hours,
+    utilization_pct,
+)
 
 __all__ = [
+    "CostBreakdown",
+    "MonthlyCost",
+    "EquipmentKpis",
+    "ProjectCostSummary",
+    "equipment_kpis",
     "add_document",
+    "can_view_costs",
+    "equipment_cost_summary",
+    "recalculate_usage_costs",
+    "set_equipment_rate",
     "assign_operator",
     "create_equipment_collection",
     "create_equipment",
@@ -210,9 +235,14 @@ def create_equipment_usage(
     end_time: Any,
     activity: str,
     status: str = "scheduled",
+    budget_item_code: str = "",
     **details: Any,
 ) -> EquipmentUsage:
-    """Registra una jornada sin solapar equipo ni operador."""
+    """Registra una jornada sin solapar equipo ni operador.
+
+    Si el equipo tiene tarifa vigente en la fecha, guarda las horas, la tarifa y el
+    costo; `budget_item_code` imputa el costo a una partida del presupuesto del proyecto.
+    """
 
     _require(ctx, Capability.SCHEDULE, project_id)
     try:
@@ -243,8 +273,16 @@ def create_equipment_usage(
         if conflict:
             raise ValidationError("El equipo o el operador ya tiene otro uso en ese horario.")
 
+    budget_item = _resolve_budget_item(ctx, project, budget_item_code)
+    hours = usage_hours(start_time, end_time)
+    rate = _rate_on(ctx, equipment.pk, usage_date)
     usage = EquipmentUsage(
         org_id=ctx.org_id,
+        budget_item=budget_item,
+        rate=rate,
+        billable_hours=hours,
+        hourly_rate=rate.hourly_rate if rate else None,
+        cost=usage_cost(hours, rate.hourly_rate) if rate else None,
         equipment=equipment,
         project=project,
         operator=operator,
@@ -268,6 +306,7 @@ def create_equipment_usage(
             "project": str(project.pk),
             "operator": str(operator.pk),
             "usage_date": usage_date.isoformat(),
+            **({"budget_item": budget_item.code} if budget_item else {}),
         },
     )
     return usage
@@ -617,3 +656,408 @@ def add_document(
         metadata={"equipment": str(equipment.pk), "type": document.document_type},
     )
     return document
+
+
+# ---------------------------------------------------------------------------
+# Costeo por hora
+# ---------------------------------------------------------------------------
+
+
+def can_view_costs(ctx: RequestContext) -> bool:
+    """Ver tarifas y costos exige `export` de Equipos a nivel organizacional."""
+
+    return ctx.has_capability(Section.EQUIPMENT, Capability.EXPORT)
+
+
+def _rate_on(ctx: RequestContext, equipment_id: UUID, on_date: date) -> EquipmentRate | None:
+    return (
+        scoped_qs(ctx, EquipmentRate)
+        .filter(equipment_id=equipment_id, valid_from__lte=on_date)
+        .order_by("-valid_from")
+        .first()
+    )
+
+
+def _resolve_budget_item(ctx: RequestContext, project: Project, code: str) -> BudgetItem | None:
+    code = code.strip()
+    if not code:
+        return None
+    items = list(scoped_qs(ctx, BudgetItem).filter(budget__project=project, code__iexact=code)[:2])
+    if not items:
+        raise ValidationError(f"No existe la partida «{code}» en los presupuestos del proyecto.")
+    if len(items) > 1:
+        raise ValidationError(
+            f"La partida «{code}» existe en más de un presupuesto del proyecto; "
+            "usa un código único."
+        )
+    return items[0]
+
+
+@transaction.atomic
+def set_equipment_rate(
+    ctx: RequestContext,
+    *,
+    equipment_id: UUID,
+    valid_from: date,
+    ownership_rate: Decimal = Decimal("0"),
+    operation_rate: Decimal = Decimal("0"),
+    maintenance_rate: Decimal = Decimal("0"),
+    labor_rate: Decimal = Decimal("0"),
+    notes: str = "",
+) -> EquipmentRate:
+    """Registra la tarifa por hora (suma de sus componentes) vigente desde `valid_from`.
+
+    No edita las anteriores: el histórico es inmutable.
+    """
+
+    _require(ctx, Capability.UPDATE)
+    equipment = get_visible_equipment(ctx, equipment_id)
+    if scoped_qs(ctx, EquipmentRate).filter(equipment=equipment, valid_from=valid_from).exists():
+        raise ValidationError("Ya existe una tarifa con esa fecha de vigencia; usa una posterior.")
+    components = (ownership_rate, operation_rate, maintenance_rate, labor_rate)
+    if any(value < 0 for value in components):
+        raise ValidationError("Los componentes de la tarifa no pueden ser negativos.")
+    rate = EquipmentRate(
+        org_id=ctx.org_id,
+        equipment=equipment,
+        valid_from=valid_from,
+        ownership_rate=ownership_rate,
+        operation_rate=operation_rate,
+        maintenance_rate=maintenance_rate,
+        labor_rate=labor_rate,
+        hourly_rate=sum(components, Decimal("0")),
+        notes=notes.strip(),
+        created_by_id=ctx.user_id,
+    )
+    rate.full_clean()
+    rate.save()
+    audit.record(
+        ctx,
+        action=AuditAction.EQUIPMENT_RATE_SET,
+        target=f"equipment-rate:{rate.pk}",
+        metadata={
+            "equipment": str(equipment.pk),
+            "valid_from": valid_from.isoformat(),
+            "hourly_rate": str(rate.hourly_rate),
+        },
+    )
+    return rate
+
+
+@transaction.atomic
+def recalculate_usage_costs(ctx: RequestContext, *, equipment_id: UUID | None = None) -> int:
+    """Costea los usos que quedaron sin tarifa; no toca los ya costeados."""
+
+    _require(ctx, Capability.UPDATE)
+    pending = scoped_qs(ctx, EquipmentUsage).filter(cost__isnull=True)
+    if equipment_id is not None:
+        pending = pending.filter(equipment_id=equipment_id)
+    updated = 0
+    for usage in pending.select_for_update():
+        rate = _rate_on(ctx, usage.equipment_id, usage.usage_date)
+        if rate is None:
+            continue
+        hours = usage_hours(usage.start_time, usage.end_time)
+        usage.rate = rate
+        usage.billable_hours = hours
+        usage.hourly_rate = rate.hourly_rate
+        usage.cost = usage_cost(hours, rate.hourly_rate)
+        usage.save(update_fields=["rate", "billable_hours", "hourly_rate", "cost", "updated_at"])
+        updated += 1
+    if updated:
+        audit.record(
+            ctx,
+            action=AuditAction.EQUIPMENT_COSTS_RECALCULATED,
+            target="equipment-usage:costs",
+            metadata={"updated": updated},
+        )
+    return updated
+
+
+@dataclass(frozen=True)
+class EquipmentCostRow:
+    equipment_id: UUID
+    code: str
+    name: str
+    hours: Decimal
+    cost: Decimal
+    usages: int
+    unpriced: int
+
+
+@dataclass(frozen=True)
+class BudgetItemCostRow:
+    code: str
+    description: str
+    imputed: Decimal
+    budgeted: Decimal | None
+    pct_consumed: Decimal | None
+
+
+@dataclass(frozen=True)
+class MonthlyCost:
+    month: date
+    hours: Decimal
+    cost: Decimal
+    scheduled_cost: Decimal = Decimal("0.00")
+
+
+@dataclass(frozen=True)
+class ProjectCostSummary:
+    rows: list[EquipmentCostRow]
+    budget_rows: list[BudgetItemCostRow]
+    monthly: list[MonthlyCost]
+    breakdown: CostBreakdown
+    total_hours: Decimal
+    total_cost: Decimal
+    unpriced: int
+    unassigned_cost: Decimal
+
+
+ZERO = Decimal("0.00")
+
+
+@dataclass(frozen=True)
+class CostBreakdown:
+    ownership: Decimal
+    operation: Decimal
+    maintenance: Decimal
+    labor: Decimal
+
+
+def _component_sum(field: str) -> Sum:
+    return Sum(
+        ExpressionWrapper(
+            F("billable_hours") * F(f"rate__{field}"),
+            output_field=DecimalField(max_digits=22, decimal_places=4),
+        )
+    )
+
+
+def equipment_cost_summary(
+    ctx: RequestContext,
+    *,
+    project_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    include_scheduled: bool = False,
+) -> ProjectCostSummary:
+    """Horas y costo de equipos por equipo y por partida del presupuesto.
+
+    Cuenta usos completados o en curso; con `include_scheduled` suma también lo
+    programado (proyección). Los cancelados nunca cuentan. La comparación por partida
+    usa el total de la versión vigente (aplicada más reciente) del presupuesto.
+    """
+
+    if not can_view_costs(ctx):
+        raise PermissionDenied
+    statuses = [EquipmentUsageStatus.COMPLETED, EquipmentUsageStatus.IN_PROGRESS]
+    if include_scheduled:
+        statuses.append(EquipmentUsageStatus.SCHEDULED)
+    usage = visible_usage(ctx).filter(status__in=statuses)
+    if project_id is not None:
+        usage = usage.filter(project_id=project_id)
+    if date_from:
+        usage = usage.filter(usage_date__gte=date_from)
+    if date_to:
+        usage = usage.filter(usage_date__lte=date_to)
+
+    per_equipment = (
+        usage.values("equipment_id", "equipment__code", "equipment__name")
+        .annotate(
+            sum_hours=Sum("billable_hours"),
+            sum_cost=Sum("cost"),
+            usages=Count("id"),
+            unpriced=Count("id", filter=Q(cost__isnull=True)),
+        )
+        .order_by("equipment__code")
+    )
+    rows = [
+        EquipmentCostRow(
+            equipment_id=row["equipment_id"],
+            code=row["equipment__code"],
+            name=row["equipment__name"],
+            hours=row["sum_hours"] or ZERO,
+            cost=row["sum_cost"] or ZERO,
+            usages=row["usages"],
+            unpriced=row["unpriced"],
+        )
+        for row in per_equipment
+    ]
+    rows.sort(key=lambda r: (-r.cost, r.code))
+
+    per_item = list(
+        usage.filter(budget_item__isnull=False)
+        .values("budget_item_id", "budget_item__code")
+        .annotate(imputed=Sum("cost"))
+        .order_by("budget_item__code")
+    )
+    item_ids = [row["budget_item_id"] for row in per_item]
+    budgeted: dict[UUID, tuple[str, Decimal]] = {}
+    if item_ids:
+        for value in scoped_qs(ctx, BudgetItemVersion).filter(
+            item_id__in=item_ids, version_id__in=_current_version_ids(ctx, item_ids)
+        ):
+            budgeted[value.item_id] = (value.description, value.total)
+    budget_rows = []
+    for row in per_item:
+        description, total = budgeted.get(row["budget_item_id"], ("", None))
+        imputed = row["imputed"] or ZERO
+        budget_rows.append(
+            BudgetItemCostRow(
+                code=row["budget_item__code"],
+                description=description,
+                imputed=imputed,
+                budgeted=total,
+                pct_consumed=pct_of(imputed, total) if total is not None else None,
+            )
+        )
+
+    monthly = [
+        MonthlyCost(
+            month=row["month"],
+            hours=row["sum_hours"] or ZERO,
+            cost=row["sum_cost"] or ZERO,
+            scheduled_cost=row["sum_scheduled"] or ZERO,
+        )
+        for row in usage.annotate(month=TruncMonth("usage_date"))
+        .values("month")
+        .annotate(
+            sum_hours=Sum("billable_hours"),
+            sum_cost=Sum("cost"),
+            sum_scheduled=Sum("cost", filter=Q(status=EquipmentUsageStatus.SCHEDULED)),
+        )
+        .order_by("month")
+    ]
+    parts = usage.filter(rate__isnull=False).aggregate(
+        ownership=_component_sum("ownership_rate"),
+        operation=_component_sum("operation_rate"),
+        maintenance=_component_sum("maintenance_rate"),
+        labor=_component_sum("labor_rate"),
+    )
+    breakdown = CostBreakdown(
+        **{key: (value or ZERO).quantize(Decimal("0.01")) for key, value in parts.items()}
+    )
+
+    no_item = usage.filter(budget_item__isnull=True).aggregate(total=Sum("cost"))["total"]
+    return ProjectCostSummary(
+        rows=rows,
+        budget_rows=budget_rows,
+        monthly=monthly,
+        breakdown=breakdown,
+        total_hours=sum((r.hours for r in rows), ZERO),
+        total_cost=sum((r.cost for r in rows), ZERO),
+        unpriced=sum(r.unpriced for r in rows),
+        unassigned_cost=no_item or ZERO,
+    )
+
+
+def _current_version_ids(ctx: RequestContext, item_ids: list[UUID]) -> list[UUID]:
+    """Id de la versión aplicada más reciente de cada presupuesto de las partidas."""
+
+    budget_ids = set(
+        scoped_qs(ctx, BudgetItem).filter(pk__in=item_ids).values_list("budget_id", flat=True)
+    )
+    current: list[UUID] = []
+    for budget in scoped_qs(ctx, Budget).filter(pk__in=budget_ids):
+        version = (
+            scoped_qs(ctx, BudgetVersion)
+            .filter(budget=budget, status=BudgetVersionStatus.APPLIED)
+            .order_by("-number")
+            .first()
+        )
+        if version is not None:
+            current.append(version.pk)
+    return current
+
+
+@dataclass(frozen=True)
+class EquipmentKpis:
+    """Indicadores del equipo, calculados al vuelo desde sus registros de uso."""
+
+    month_start: date
+    hours_total: Decimal
+    hours_month: Decimal
+    hours_scheduled: Decimal
+    usages_total: int
+    days_used_month: int
+    utilization_month: Decimal | None
+    last_used_on: date | None
+    last_meter: Decimal | None
+    last_meter_unit: str
+    # Solo con permiso de costos (`can_view_costs`); `None` si no se calcularon.
+    cost_total: Decimal | None = None
+    cost_month: Decimal | None = None
+    cost_per_hour: Decimal | None = None
+    breakdown: CostBreakdown | None = None
+    unpriced: int = 0
+
+
+def equipment_kpis(
+    ctx: RequestContext, equipment: Equipment, *, today: date | None = None
+) -> EquipmentKpis:
+    """KPIs del equipo a partir de sus usos completados o en curso.
+
+    Utilización del mes: horas usadas entre el día 1 y hoy sobre las horas disponibles
+    (días de lunes a viernes × jornada estándar de 8 h). Los costos solo se calculan
+    si quien consulta puede verlos.
+    """
+
+    today = today or date.today()
+    month_start = today.replace(day=1)
+    counted = [EquipmentUsageStatus.COMPLETED, EquipmentUsageStatus.IN_PROGRESS]
+    usage = visible_usage(ctx).filter(equipment=equipment)
+    done = usage.filter(status__in=counted)
+    month = done.filter(usage_date__gte=month_start, usage_date__lte=today)
+
+    totals = done.aggregate(hours=Sum("billable_hours"), usages=Count("id"), last=Max("usage_date"))
+    month_totals = month.aggregate(hours=Sum("billable_hours"))
+    scheduled = usage.filter(
+        status=EquipmentUsageStatus.SCHEDULED, usage_date__gte=today
+    ).aggregate(hours=Sum("billable_hours"))
+    last_meter_row = (
+        done.filter(end_meter__isnull=False)
+        .order_by("-usage_date", "-end_time")
+        .values("end_meter", "meter_unit")
+        .first()
+    )
+    hours_total = totals["hours"] or ZERO
+    hours_month = month_totals["hours"] or ZERO
+    values: dict[str, Any] = {}
+    if can_view_costs(ctx):
+        cost_total = done.aggregate(total=Sum("cost"))["total"] or ZERO
+        priced_hours = done.filter(cost__isnull=False).aggregate(hours=Sum("billable_hours"))[
+            "hours"
+        ]
+        parts = done.filter(rate__isnull=False).aggregate(
+            ownership=_component_sum("ownership_rate"),
+            operation=_component_sum("operation_rate"),
+            maintenance=_component_sum("maintenance_rate"),
+            labor=_component_sum("labor_rate"),
+        )
+        values = {
+            "cost_total": cost_total,
+            "cost_month": month.aggregate(total=Sum("cost"))["total"] or ZERO,
+            "cost_per_hour": (
+                (cost_total / priced_hours).quantize(Decimal("0.01")) if priced_hours else None
+            ),
+            "breakdown": CostBreakdown(
+                **{key: (value or ZERO).quantize(Decimal("0.01")) for key, value in parts.items()}
+            ),
+            "unpriced": done.filter(cost__isnull=True).count(),
+        }
+    return EquipmentKpis(
+        month_start=month_start,
+        hours_total=hours_total,
+        hours_month=hours_month,
+        hours_scheduled=scheduled["hours"] or ZERO,
+        usages_total=totals["usages"],
+        days_used_month=month.values("usage_date").distinct().count(),
+        utilization_month=utilization_pct(hours_month, month_start, today),
+        last_used_on=totals["last"],
+        last_meter=last_meter_row["end_meter"] if last_meter_row else None,
+        last_meter_unit=(
+            EquipmentMeterUnit(last_meter_row["meter_unit"]).label if last_meter_row else ""
+        ),
+        **values,
+    )

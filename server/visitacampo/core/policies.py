@@ -247,9 +247,7 @@ def can_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
     Sirve igual para un alta: basta con pasar la instancia candidata sin
     guardar, porque lo único que se lee es su `org_id`.
     """
-    return user_has_section_capability(
-        ctx, visit.org_id, Section.FIELD_RECORDS, Capability.CREATE
-    )
+    return user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.CREATE)
 
 
 def can_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> bool:
@@ -261,9 +259,7 @@ def can_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> bool:
     mínimo privilegio; antes la app lo impedía solo en pantalla). Supervisión
     y administración sí, porque corregir es parte de revisar.
     """
-    if user_has_section_capability(
-        ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW
-    ):
+    if user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW):
         return True
     return visit.created_by_id == ctx.user_id and user_has_section_capability(
         ctx, visit.org_id, Section.FIELD_RECORDS, Capability.UPDATE
@@ -378,9 +374,7 @@ def can_review_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
     Supervisión de la organización de la visita. Un agente no valida su propio
     trabajo ni el de otros (segregación de funciones, ISO 27001 A.5.3).
     """
-    return user_has_section_capability(
-        ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW
-    )
+    return user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW)
 
 
 def can_assign_work(ctx: RequestContext, org_id: UUID) -> bool:
@@ -468,9 +462,7 @@ def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
     Solo administración: suprimir es irreversible, y exportar entrega todos los
     datos de una persona.
     """
-    return user_has_section_capability(
-        ctx, org_id, Section.USERS_ACCESS, Capability.MANAGE_ACCESS
-    )
+    return user_has_section_capability(ctx, org_id, Section.USERS_ACCESS, Capability.MANAGE_ACCESS)
 
 
 def check_read_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:

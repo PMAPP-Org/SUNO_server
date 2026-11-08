@@ -79,6 +79,9 @@ ALLOWED = {
     # que haya contexto, y escribe en las tablas de django-otp, que no tienen
     # `org_id` (son del back-office, no datos de negocio de un tenant).
     "visitacampo/management/commands/enroll_admin_totp.py": "alta offline del 2.º factor del Admin",
+    # Datos de ejemplo del panel de costos: siembra offline para desarrollo y demos,
+    # fuera de una request y con una organización ya existente (sin `ctx` que scopear).
+    "visitacampo/management/commands/seed_equipment_demo.py": "siembra offline de datos de ejemplo",
 }
 
 
@@ -236,6 +239,7 @@ class WalkerTests(SimpleTestCase):
                 "visitacampo/authn/lookups.py",
                 "visitacampo/management/commands/bootstrap_demo.py",
                 "visitacampo/management/commands/enroll_admin_totp.py",
+                "visitacampo/management/commands/seed_equipment_demo.py",
             },
         )
 

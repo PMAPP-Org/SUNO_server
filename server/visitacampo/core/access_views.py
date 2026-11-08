@@ -84,9 +84,7 @@ def access_matrix(request: HttpRequest) -> HttpResponse:
             messages.error(request, _error_text(exc))
         return redirect(f"/plataforma/accesos/?usuario={selected_id}")
 
-    memberships = list(
-        scoped_qs(ctx, Membership).select_related("user").order_by("user__username")
-    )
+    memberships = list(scoped_qs(ctx, Membership).select_related("user").order_by("user__username"))
     member_ids = {membership.user_id for membership in memberships}
     if selected_id is None and memberships:
         selected_id = memberships[0].user_id
@@ -105,10 +103,7 @@ def access_matrix(request: HttpRequest) -> HttpResponse:
         {
             "value": section,
             "label": Section(section).label,
-            "roles": [
-                {"value": role, "label": role.label}
-                for role in CAPABILITY_MATRIX[section]
-            ],
+            "roles": [{"value": role, "label": role.label} for role in CAPABILITY_MATRIX[section]],
         }
         for section in Section.values
     ]

@@ -147,8 +147,7 @@ def _snapshot(grant: SectionGrant | None) -> dict[str, Any] | None:
         "scope": grant.scope,
         "active": grant.active,
         "projects": sorted(
-            str(value)
-            for value in grant.project_scopes.values_list("project_id", flat=True)
+            str(value) for value in grant.project_scopes.values_list("project_id", flat=True)
         ),
     }
 
