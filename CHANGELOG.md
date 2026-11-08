@@ -4,6 +4,38 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.14.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.13.0...v0.14.0) (2026-11-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename the visitacampo package and infrastructure to suno ([#57](https://github.com/PMAPP-Org/SUNO_server/issues/57))
+
+### Agregado
+
+* add section access and equipment management ([103fb31](https://github.com/PMAPP-Org/SUNO_server/commit/103fb31c1418d3a3416f03265b247bfb4a0f0010))
+* **brand:** integrate cartographic visual system ([afe4d0f](https://github.com/PMAPP-Org/SUNO_server/commit/afe4d0f14c405f8c483347d4079bbca044a18fa8))
+* **equipment:** add catalog collections ([26484ed](https://github.com/PMAPP-Org/SUNO_server/commit/26484ed10b9e3c527cd341b5da3848128f4f6716))
+* **equipment:** peek panels, QR payload, hourly costing and cost dashboard ([5bcbbf2](https://github.com/PMAPP-Org/SUNO_server/commit/5bcbbf2f2dc5e1533b8075f66d7016f0c9ccce4d))
+* **equipment:** QR identification with printable labels and manual lookup (EQ-05) ([3822611](https://github.com/PMAPP-Org/SUNO_server/commit/38226117d420c640c334d31a80b32610cdaaa5ae))
+
+
+### Corregido
+
+* **equipment:** scope collection type links through scoped_qs ([a1fcc11](https://github.com/PMAPP-Org/SUNO_server/commit/a1fcc11022e88b98715c3e637555b8ec05db8388))
+
+
+### Dependencias y build
+
+* **deps:** bump prom/blackbox-exporter from v0.29.0 to v0.29.1 in /infra ([#51](https://github.com/PMAPP-Org/SUNO_server/issues/51)) ([c5ac960](https://github.com/PMAPP-Org/SUNO_server/commit/c5ac9604fda7177850dbcedbbd5a8a28fa045d2f))
+* **deps:** bump prom/prometheus from v3.15.0 to v3.15.1 in /infra ([#50](https://github.com/PMAPP-Org/SUNO_server/issues/50)) ([d9ea585](https://github.com/PMAPP-Org/SUNO_server/commit/d9ea5855d2724de80ee1b9e44756c6f2473dd1ce))
+* **deps:** bump the actions group with 4 updates ([#52](https://github.com/PMAPP-Org/SUNO_server/issues/52)) ([96a858a](https://github.com/PMAPP-Org/SUNO_server/commit/96a858accd4b6045a6a86e2157a933c64068e1e1))
+
+
+### Refactorización
+
+* rename the visitacampo package and infrastructure to suno ([#57](https://github.com/PMAPP-Org/SUNO_server/issues/57)) ([5406bb1](https://github.com/PMAPP-Org/SUNO_server/commit/5406bb11b5f9ab9812bd8a201f36e8fda2b676c9))
+
 ## [0.13.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.12.0...v0.13.0) (2026-11-06)
 
 
