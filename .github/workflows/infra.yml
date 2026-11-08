@@ -149,6 +149,14 @@ jobs:
         run: |
           bash infra/scripts/deploy.sh v0.0.1-ci suno-api:good
           test "$(cat .deploy-state)" = "v0.0.1-ci suno-api:good"
+          grep -qx 'SUNO_API_IMAGE=suno-api:good' infra/.env
+          grep -qx 'VISITACAMPO_API_IMAGE=suno-api:good' infra/.env
+
+      - name: Desplegar el SHA de master → 0
+        run: |
+          sha="$(git rev-parse HEAD)"
+          bash infra/scripts/deploy.sh "$sha" suno-api:good
+          test "$(cat .deploy-state)" = "$sha suno-api:good"
 
       - name: Desplegar v0.0.2-ci (rota) → rollback (2) y servicio en pie
         run: |

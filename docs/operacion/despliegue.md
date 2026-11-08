@@ -2,22 +2,23 @@
 
 Cómo poner una versión en producción y cómo volver a la anterior. Producción es **un VPS con Docker Compose** (ADR-010), con el código en `/opt/suno` y el `.env` en `/opt/suno/infra/.env` (permisos `600`, dueño `deploy`).
 
-En producción `api` y `worker` **no se construyen en el servidor**. Corren la imagen que publicó la release en GHCR, fijada por digest y con su atestación de procedencia verificada (`infra/docker-compose.prod.yml`).
+En producción `api` y `worker` **no se construyen en el servidor**. Corren la imagen que publicó GitHub Actions en GHCR para el SHA exacto de `master`, fijada por digest y con su atestación de procedencia verificada (`infra/docker-compose.prod.yml`).
 
 ## Reglas
 
-- Solo se despliega una **release** (tag `vX.Y.Z` creado por release-please), nunca una rama.
+- Cada commit que entra a **`master`** se despliega automáticamente por su SHA exacto. Los tags `vX.Y.Z` quedan disponibles para releases y rollback manual.
 - Antes de cada despliegue hay un **backup**: `deploy.sh` lo hace solo si los backups están configurados y, si el backup falla, no despliega.
 - Cada despliegue queda registrado en el run de GitHub Actions (quién, qué versión, qué imagen). Si se hace a mano, se anota en el issue de la release.
 
 ## Cómo funciona el despliegue automático
 
-1. Al mergear el PR de release, `release.yml` publica la imagen en GHCR con SBOM y procedencia firmada.
+1. Cada push a `master` activa `deploy-master.yml`, que construye y publica una imagen inmutable `master-<SHA>` con procedencia firmada.
 2. Después llama a `deploy.yml`, que:
    - resuelve la imagen por digest y **verifica su atestación** (`gh attestation verify`), así que una imagen que no construyó este repositorio no se despliega;
-   - entra por SSH como `deploy` y ejecuta `infra/scripts/deploy.sh vX.Y.Z <imagen@sha256:…>`;
+   - entra por SSH como `deploy`, obtiene el `deploy.sh` del SHA del workflow y ejecuta `deploy.sh <SHA> <imagen@sha256:…>`;
    - comprueba `PRODUCTION_URL/v1/readyz` desde fuera.
-3. En el servidor, `deploy.sh` hace checkout del tag, toma el backup previo, ejecuta `docker compose up --wait` con la imagen nueva y comprueba `/v1/readyz` a través de Caddy. **Si algo falla, vuelve solo a la versión anterior** (guardada en `.deploy-state`) y el workflow falla con el motivo.
+3. En el servidor, `deploy.sh` comprueba que el SHA pertenece a `origin/master`, hace checkout, toma el backup previo, ejecuta `docker compose up --wait` con la imagen nueva y comprueba `/v1/readyz` a través de Caddy. **Si algo falla, vuelve solo a la versión anterior** (guardada en `.deploy-state`) y el workflow falla con el motivo.
+4. `release.yml` sigue generando tags, CHANGELOG, SBOM e imágenes semánticas, pero no bloquea ni duplica el despliegue continuo de `master`.
 
 | Código de `deploy.sh` | Significado | Qué hacer |
 |---|---|---|
@@ -31,11 +32,11 @@ Los dos scripts se prueban de verdad en CI (`.github/workflows/infra.yml`):
 - `provision.sh` se ejecuta dos veces sobre una VM Ubuntu 24.04;
 - `deploy.sh` despliega una versión buena, después una rota, y el CI exige que haga el rollback.
 
-Para volver a una versión anterior a propósito: **Actions → Deploy → Run workflow** con el tag. Si el environment `production` tiene revisores, pedirá aprobación.
+Para volver a una versión anterior a propósito: **Actions → Deploy → Run workflow** con el tag.
 
 ## Configuración en GitHub (una vez, la hace un admin)
 
-En Settings → Environments, crear `production`, restringido a la rama `master`. Si se quiere aprobar a mano cada despliegue, añadirle revisores requeridos.
+En Settings → Environments, crear `production`, restringido a la rama `master`. No debe tener revisores requeridos: una aprobación manual impediría que producción siguiera automáticamente a `master`.
 
 | Nombre | Tipo | Valor |
 |---|---|---|
@@ -44,7 +45,7 @@ En Settings → Environments, crear `production`, restringido a la rama `master`
 | `DEPLOY_KNOWN_HOSTS` | secreto | salida de `ssh-keyscan -t ed25519 <host>`, **comparada a mano** con `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` en la consola del proveedor |
 | `PRODUCTION_URL` | variable | `https://<dominio>` |
 
-Mientras falten los secretos, `deploy.yml` termina en verde con un aviso de que no desplegó.
+Si falta cualquiera de estos valores, `deploy.yml` falla: producción nunca puede aparecer en verde sin haber desplegado y verificado la URL externa.
 
 La llave la genera quien administra el servidor, en su propio equipo: `ssh-keygen -t ed25519 -f suno-deploy -C github-deploy`. La privada solo se pega en el secreto; nunca se envía por chat ni por correo.
 
@@ -82,7 +83,7 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
    bash infra/scripts/check_envvars.sh infra/.env infra/.env.example
    ```
    No debe quedar ningún `CAMBIAR_EN_PRODUCCION`: `grep CAMBIAR infra/.env` no debe devolver nada.
-6. Arrancar. La forma normal es lanzar **Actions → Deploy** con el tag. A mano, se usa el digest que aparece en la release:
+6. Arrancar. La forma normal es hacer push a `master`; para un despliegue inicial o rollback manual puede lanzarse **Actions → Deploy** con un tag. A mano, se usa el digest que aparece en la release:
    ```bash
    bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/suno-api@sha256:<digest>
    ```
