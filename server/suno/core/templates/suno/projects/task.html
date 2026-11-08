@@ -1,0 +1,142 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{{ task.name }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="" %}
+
+{% if retired %}<p class="pj-message pj-message-warning" role="status">Tarea retirada en la versión v{{ retired_version }}</p>{% endif %}
+<section class="pj-panel">
+  <h2>{{ task.wbs }} {{ task.name }}{% if task.is_critical %} <span class="pj-badge">crítica</span>{% endif %}</h2>
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <tbody>
+      <tr><th>Etapa</th><td>{{ task.stage.name|default:"—" }}</td></tr>
+      <tr><th>Inicio / fin</th><td>{{ task.start|date:"d/m/Y"|default:"—" }} → {{ task.finish|date:"d/m/Y"|default:"—" }}</td></tr>
+      <tr><th>Línea base</th><td>{{ task.baseline_start|date:"d/m/Y"|default:"—" }} → {{ task.baseline_finish|date:"d/m/Y"|default:"—" }}</td></tr>
+      <tr><th>% Project / % físico Project</th><td>{{ task.project_pct|floatformat:1|default:"—" }} / {{ task.project_physical_pct|floatformat:1|default:"—" }}</td></tr>
+      <tr><th>Holgura total / libre (días)</th><td>{{ task.total_slack_days|floatformat:1|default:"—" }} / {{ task.free_slack_days|floatformat:1|default:"—" }}</td></tr>
+      <tr><th>Ejecutores (Project)</th><td>{{ executors|join:", "|default:"—" }}</td></tr>
+      <tr><th>Predecesoras</th><td>{% for link in predecessors %}{{ link.predecessor.wbs }} {{ link.predecessor.name }} ({{ link.type }}){% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="pj-panel">
+  <h2>Responsables</h2>
+  <ul>
+    {% for link in direct %}
+      <li>{{ link.user.display_name|default:link.user.username }}
+        {% if can_assign %}<form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="user" value="{{ link.user.pk }}"><button type="submit" class="text-link" aria-label="Quitar a {{ link.user.display_name|default:link.user.username }}">Quitar</button></form>{% endif %}
+      </li>
+    {% endfor %}
+    {% for user in inherited %}<li>{{ user.display_name|default:user.username }} <small class="pj-muted">(por la rama superior)</small></li>{% endfor %}
+    {% if not direct and not inherited %}<li class="pj-muted">Sin responsables.</li>{% endif %}
+  </ul>
+  {% if error %}<p class="pj-late" role="alert">{{ error }}</p>{% endif %}
+  {% if can_assign and not retired %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <label>Asignar a <select name="user">{% for member in members %}<option value="{{ member.pk }}">{{ member.display_name|default:member.username }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Asignar</button>
+    {% if task.is_summary %}<small class="pj-muted">Asignar en una tarea resumen cubre toda su rama.</small>{% endif %}
+  </form>
+  {% endif %}
+</section>
+<section class="pj-panel">
+  <h2>Avance de campo</h2>
+  <p>% SUNO ({% if measured_by_quantities %}por cantidades{% else %}última visita validada{% endif %}): <strong>{{ suno_pct_text }}</strong></p>
+  {% if field_visits %}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Fecha</th><th>Autor</th><th>% acumulado</th><th>Revisión</th><th>Aviso</th></tr></thead>
+    <tbody>
+      {% for row in field_visits %}
+      <tr>
+        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.pct_text }}</td>
+        <td>{% if perms.core.view_visit %}<a href="{% url 'admin:core_visit_change' row.visit.pk %}">{{ row.status_label }}</a>{% else %}{{ row.status_label }}{% endif %}</td>
+        <td>{% if row.regression %}<span class="pj-late">Menor que el último validado ({{ row.previous_text }})</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="pj-muted">Sin visitas vinculadas.</p>
+  {% endif %}
+</section>
+{% if not task.is_summary %}
+<section class="pj-panel">
+  <h2>Cantidades planeadas</h2>
+  <p>Ubicación: <strong>{{ location_label|default:"sin ubicación" }}</strong>
+  {% if can_edit_plan and location_editable and not retired %}
+  </p>
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="location_set">
+    <label>Ruta ({{ location_hint }}) <input type="text" name="location" value="{{ location_label }}" list="mx-locations" size="40"></label>
+    <datalist id="mx-locations">{% for label in location_choices %}<option value="{{ label }}">{% endfor %}</datalist>
+    <button class="button" type="submit">Cambiar ubicación</button>
+  </form>
+  {% else %}</p>{% endif %}
+  {% if plan_rows %}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Ítem</th><th>Descripción</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th><th class="num">%</th>{% if show_amounts %}<th class="num">Valor planeado</th>{% endif %}{% if can_edit_plan %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for row in plan_rows %}
+      <tr>
+        <td>{{ row.code }}</td><td class="pj-name">{{ row.description }}</td><td>{{ row.unit }}</td>
+        <td class="num">{{ row.planned|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.executed|floatformat:"-4g" }}</td>
+        <td class="num">{{ row.pct_text }}</td>
+        {% if show_amounts %}<td class="num">{{ row.value|floatformat:"2g"|default:"—" }}</td>{% endif %}
+        {% if can_edit_plan %}<td><form method="post">{% csrf_token %}<input type="hidden" name="action" value="plan_remove"><input type="hidden" name="item" value="{{ row.item_id }}"><button class="text-link" type="submit" aria-label="Quitar {{ row.code }}">Quitar</button></form></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de las visitas.</p>{% endif %}
+  {% if unplanned_executed %}<p class="pj-warning">Cantidades registradas en ítems fuera del plan (no suman al %): {% for f in unplanned_executed %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  {% if chapter_plans %}<p class="pj-warning">Ítems del plan que hoy son capítulos del presupuesto (no suman al %): {% for f in chapter_plans %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}. Lo registrado en ellos se conserva.</p>{% endif %}
+  {% for f in retired_plans %}<p class="pj-warning">Ítem retirado del presupuesto: {{ f.code }} {{ f.description }}. Sigue en el plan con el precio de la última versión que lo tenía.</p>{% endfor %}
+  {% if quantity_history %}
+  <h3>Registros validados</h3>
+  <div class="pj-scroll">
+  <table class="pj-table" id="mx-history">
+    <thead><tr><th>Fecha</th><th>Agente</th><th>Ítem</th><th>Ubicación</th><th class="num">Cantidad</th><th>Nota</th>{% if perms.core.view_visit %}<th>Visita</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for row in quantity_history %}
+      <tr>
+        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.code }}</td>
+        <td class="pj-wrap">{{ row.location|default:"—" }}</td>
+        <td class="num">{{ row.quantity|floatformat:"-4g" }} {{ row.unit }}</td>
+        <td class="pj-wrap">{{ row.note|default:"" }}</td>
+        {% if perms.core.view_visit %}<td><a href="{% url 'admin:core_visit_change' row.visit.pk %}">Ver visita</a></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if history_truncated %}<p class="pj-muted">Se muestran las {{ history_visits }} visitas validadas más recientes.</p>{% endif %}
+  {% endif %}
+  {% if plan_error %}<p class="pj-late" role="alert">{{ plan_error }}</p>{% endif %}
+  {% if can_edit_plan and not retired %}
+  <form method="post" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="plan_set">
+    <label>Presupuesto <select name="budget">{% for b in budget_choices %}<option value="{{ b.pk }}"{% if plan_input.budget == b.pk|stringformat:"s" %} selected{% endif %}>{{ b.name|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <label>Código <input type="text" name="code" value="{{ plan_input.code }}" maxlength="50" size="10" required></label>
+    <label>Cantidad <input type="text" name="quantity" value="{{ plan_input.quantity }}" inputmode="decimal" size="10" required></label>
+    <button class="button" type="submit">Agregar ítem</button>
+    <small class="pj-muted">Si el ítem ya está, se cambia su cantidad.</small>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -66,14 +66,14 @@ jobs:
 
       - name: Dashboard JSON válido y con su uid
         run: |
-          python3 -c "import json; d = json.load(open('infra/monitoring/grafana/dashboards/visitacampo-salud.json')); assert d['uid'] == 'visitacampo-salud' and d['panels']"
+          python3 -c "import json; d = json.load(open('infra/monitoring/grafana/dashboards/suno-salud.json')); assert d['uid'] == 'suno-salud' and d['panels']"
 
   integration:
     name: stack + monitoreo, y ApiDown dispara de verdad
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DAST_HOST: api.visitacampo.localhost
+      DAST_HOST: api.suno.localhost
       COMPOSE: >-
         docker compose --project-directory infra --env-file infra/.env
         -f infra/docker-compose.yml -f infra/docker-compose.monitoring.yml
@@ -145,9 +145,9 @@ jobs:
           curl -sf -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
             http://127.0.0.1:3000/api/datasources/uid/prometheus/health | grep -q '"status":"OK"'
           curl -sf -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
-            http://127.0.0.1:3000/api/dashboards/uid/visitacampo-salud > /dev/null
+            http://127.0.0.1:3000/api/dashboards/uid/suno-salud > /dev/null
           # Sin credenciales, nada.
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/dashboards/uid/visitacampo-salud)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/dashboards/uid/suno-salud)" = 401
 
       - name: Se detiene la API → ApiDown llega a Alertmanager
         run: |

@@ -1,4 +1,4 @@
-# VisitaCampo backend — dependencias de runtime (Paso 4).
+# SUNO backend — dependencias de runtime (Paso 4).
 # Versiones ancladas a lo verificado en este paso; se actualizan
 # deliberadamente en pasos posteriores, no con floats sin techo.
 # ADR-004: Django 5.x LTS + Django Ninja (Pydantic v2) + PostgreSQL, sin DRF.
@@ -14,7 +14,7 @@ psycopg[binary]==3.3.6
 # esta última es una dependencia directa y no transitiva: se ancla aquí
 # explícitamente en vez de confiar en que PyJWT la arrastre.
 # La justificación de elegir PyJWT frente a python-jose / authlib /
-# djangorestframework-simplejwt está en visitacampo/authn/tokens.py.
+# djangorestframework-simplejwt está en suno/authn/tokens.py.
 PyJWT==2.15.1
 cryptography==50.0.2
 
@@ -31,7 +31,7 @@ cryptography==50.0.2
 # cliente canónico de la API S3, R2 lo documenta como el recomendado, y
 # —decisivo para este proyecto— **firma sin red**: `generate_presigned_url` es
 # cálculo local, así que los tests de `S3BlobStore` corren offline de verdad
-# (ver visitacampo/attachments/s3.py).
+# (ver suno/attachments/s3.py).
 #
 # Se ancla solo `boto3`: `botocore`, `jmespath` y `s3transfer` llegan como
 # dependencias suyas y las resuelve pip con las versiones que boto3 declara.
@@ -40,7 +40,7 @@ boto3==1.43.111
 # ADR-004: rate limiting de login (Paso de endurecimiento del demo — ver
 # plans/visitacampo-despliegue-demo-implementacion.md). Se instala y
 # configura la librería en vez de escribir rate limiting a mano: el login
-# (visitacampo/authn/services.py::log_in) ya llama a
+# (suno/authn/services.py::log_in) ya llama a
 # django.contrib.auth.authenticate(), el mismo hook que axes necesita.
 django-axes==7.1.0
 

@@ -8,10 +8,10 @@ Cada `BACKUP_INTERVAL_HOURS` (24 h por defecto) y una vez al arrancar, `backup.s
 
 1. Hace un `pg_dump` en formato *custom* y comprueba que se puede leer.
 2. Lo **cifra con [age](https://age-encryption.org) usando una llave pública**. El servidor no tiene la llave privada: quien comprometa el servidor o el bucket no puede leer los backups.
-3. Lo sube a `BACKUP_REMOTE` como `db/visitacampo-AAAAMMDDTHHMMSSZ.dump.age`. Primero se cifra en disco y solo después se sube, así que un `pg_dump` que falle a medias nunca deja en el bucket un archivo truncado que parezca válido.
+3. Lo sube a `BACKUP_REMOTE` como `db/suno-AAAAMMDDTHHMMSSZ.dump.age`. Primero se cifra en disco y solo después se sube, así que un `pg_dump` que falle a medias nunca deja en el bucket un archivo truncado que parezca válido.
 4. Copia los adjuntos desde `BACKUP_BLOBS_SOURCE` a `blobs/`. Usa `copy` y no `sync`: los adjuntos son inmutables (ADR-007), y un borrado en origen no se propaga al backup.
 5. Borra los volcados de más de `BACKUP_RETENTION_DAYS` (30 por defecto). Los adjuntos no rotan.
-6. Escribe la métrica `visitacampo_backup_last_success_timestamp_seconds` para el monitoreo. Si no avanza, se dispara la alerta `BackupStale`; si nunca existió, `BackupMissing`.
+6. Escribe la métrica `suno_backup_last_success_timestamp_seconds` para el monitoreo. Si no avanza, se dispara la alerta `BackupStale`; si nunca existió, `BackupMissing`.
 
 Sin `BACKUP_AGE_RECIPIENT` el servicio queda **desactivado**, que es lo normal en desarrollo, y lo indica en su log.
 
@@ -22,8 +22,8 @@ El contenedor corre sin root (UID 999), con el sistema de archivos de solo lectu
 1. **Generar el par de llaves** en un equipo de confianza, nunca en el servidor:
 
    ```bash
-   docker run --rm -it visitacampo-backup:local age-keygen
-   # o, con age instalado: age-keygen -o visitacampo-backup.key
+   docker run --rm -it suno-backup:local age-keygen
+   # o, con age instalado: age-keygen -o suno-backup.key
    ```
 
    - La línea `# public key: age1…` va a `BACKUP_AGE_RECIPIENT` en el `.env` del servidor.
@@ -41,12 +41,12 @@ Hace falta la llave privada. Se monta solo durante la restauración y se borra d
 cd infra
 # Restaura el volcado más reciente sobre la BD configurada. BORRA su contenido actual.
 docker compose run --rm \
-  -v /ruta/segura/visitacampo-backup.key:/run/secrets/age-identity:ro \
+  -v /ruta/segura/suno-backup.key:/run/secrets/age-identity:ro \
   -e BACKUP_AGE_IDENTITY_FILE=/run/secrets/age-identity \
   backup restore.sh latest
 
 # O un volcado concreto:
-#   ... backup restore.sh db/visitacampo-20261017T060000Z.dump.age
+#   ... backup restore.sh db/suno-20261017T060000Z.dump.age
 ```
 
 Después de restaurar: `docker compose restart api worker`.

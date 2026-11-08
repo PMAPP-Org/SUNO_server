@@ -2,7 +2,7 @@
 
 ## Formularios
 
-El catálogo `visitacampo/form@1` incorpora `qr`, `repeat` y la propiedad `default`.
+El catálogo `suno/form@1` incorpora `qr`, `repeat` y la propiedad `default`.
 Hay que actualizar primero servidor y app antes de publicar plantillas que los
 usen: los clientes antiguos rechazan explícitamente tipos desconocidos.
 

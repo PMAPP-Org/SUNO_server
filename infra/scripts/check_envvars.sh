@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VisitaCampo — valida que `.env` defina todas las variables documentadas en
+# SUNO — valida que `.env` defina todas las variables documentadas en
 # `.env.example` (patrón C-16, docs/08 §7.1, heredado de docs/05 §6.2).
 #
 # Falla (exit 1) con un mensaje claro si `.env` no existe o si le falta

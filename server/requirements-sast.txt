@@ -1,4 +1,4 @@
-# VisitaCampo — SAST multi-lenguaje (.github/workflows/security.yml, job
+# SUNO — SAST multi-lenguaje (.github/workflows/security.yml, job
 # semgrep). Aparte de requirements-dev.txt porque arrastra muchas dependencias
 # y solo lo usa ese job. Se instala `requirements-sast.lock` (con hashes).
 #

@@ -1,6 +1,6 @@
 # Políticas de seguridad de desarrollo y operación
 
-> **BORRADOR — pendiente de aprobación por la dirección.** Políticas temáticas (ISO/IEC 27001:2022 A.5.1) del proyecto VisitaCampo. No sustituyen la política general del SGSI de la organización, que debe aprobar la dirección y a la que estas quedan subordinadas. Donde una regla ya la hace cumplir el CI, se indica: la política describe la intención y el CI verifica que se cumple.
+> **BORRADOR — pendiente de aprobación por la dirección.** Políticas temáticas (ISO/IEC 27001:2022 A.5.1) del proyecto SUNO. No sustituyen la política general del SGSI de la organización, que debe aprobar la dirección y a la que estas quedan subordinadas. Donde una regla ya la hace cumplir el CI, se indica: la política describe la intención y el CI verifica que se cumple.
 
 ## 1. Roles y responsabilidades (A.5.2, A.5.3)
 

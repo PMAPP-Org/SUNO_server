@@ -1,6 +1,6 @@
 # Prueba E2E de la Fase 0
 
-Demuestra el criterio de salida de la Fase 0 ([doc 08 §8](../08-arquitectura-propuesta-visitacampo.md#8-plan-de-evolución-por-fases)): una visita creada
+Demuestra el criterio de salida de la Fase 0 ([doc 08 §8](../08-arquitectura-propuesta-suno.md#8-plan-de-evolución-por-fases)): una visita creada
 **en modo avión** en un emulador Android llega al servidor al reconectar.
 Cierra el Paso 14 del plan de construcción.
 

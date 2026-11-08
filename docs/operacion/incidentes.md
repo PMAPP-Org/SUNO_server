@@ -8,7 +8,7 @@ Acceso común a todas las secciones:
 
 ```bash
 ssh deploy@<servidor>                     # solo con llave
-cd /opt/visitacampo/infra                 # ruta de despliegue (ver despliegue.md)
+cd /opt/suno/infra                 # ruta de despliegue (ver despliegue.md)
 docker compose ps                         # estado y healthchecks de los servicios
 docker compose logs --since 30m api worker caddy
 ```
@@ -77,7 +77,7 @@ Caddy renueva solo a 30 días del vencimiento; si la alerta salta, la renovació
 
 ## Rotar la llave JWT (planificado, sin cortar sesiones)
 
-Rotación periódica o preventiva, con la llave **no** comprometida (si lo está, sección anterior). Dos claves vivas durante 15 minutos: la nueva firma y la anterior solo verifica los tokens que ya emitió (ADR-008, `server/visitacampo/authn/keys.py`).
+Rotación periódica o preventiva, con la llave **no** comprometida (si lo está, sección anterior). Dos claves vivas durante 15 minutos: la nueva firma y la anterior solo verifica los tokens que ya emitió (ADR-008, `server/suno/authn/keys.py`).
 
 1. Genera la llave nueva (base64 en una línea, como `JWT_SIGNING_KEY`):
    ```bash

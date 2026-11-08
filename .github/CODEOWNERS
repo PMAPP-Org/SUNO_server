@@ -14,7 +14,7 @@
 /.github/                               @Victor-Pulido @gabriel0820gs-dev
 /infra/                                 @Victor-Pulido @gabriel0820gs-dev
 /server/config/settings/                @Victor-Pulido @gabriel0820gs-dev
-/server/visitacampo/authn/              @Victor-Pulido @gabriel0820gs-dev
-/server/visitacampo/core/scoping.py     @Victor-Pulido @gabriel0820gs-dev
-/server/visitacampo/core/audit.py       @Victor-Pulido @gabriel0820gs-dev
+/server/suno/authn/                     @Victor-Pulido @gabriel0820gs-dev
+/server/suno/core/scoping.py            @Victor-Pulido @gabriel0820gs-dev
+/server/suno/core/audit.py              @Victor-Pulido @gabriel0820gs-dev
 /docs/seguridad/                        @Victor-Pulido @gabriel0820gs-dev

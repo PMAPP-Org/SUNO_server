@@ -2,7 +2,7 @@
 # Despliega una release en el servidor, con rollback automático.
 #
 # Uso (como `deploy`, desde el clon del repositorio en el servidor):
-#   bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/visitacampo-api@sha256:<digest>
+#   bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/suno-api@sha256:<digest>
 #
 # Lo invoca .github/workflows/deploy.yml por SSH tras verificar la atestación
 # de procedencia de la imagen; también vale a mano (docs/operacion/despliegue.md).
@@ -90,15 +90,15 @@ ready() {
 # La imagen en marcha queda también en infra/.env, para que un operador pueda
 # usar `docker compose ps|logs|exec` en el servidor sin exportarla a mano.
 record_image() { # $1 = imagen
-	if grep -q '^VISITACAMPO_API_IMAGE=' "$ENV_FILE"; then
-		sed -i "s|^VISITACAMPO_API_IMAGE=.*|VISITACAMPO_API_IMAGE=$1|" "$ENV_FILE"
+	if grep -q '^SUNO_API_IMAGE=' "$ENV_FILE"; then
+		sed -i "s|^SUNO_API_IMAGE=.*|SUNO_API_IMAGE=$1|" "$ENV_FILE"
 	else
-		printf 'VISITACAMPO_API_IMAGE=%s\n' "$1" >> "$ENV_FILE"
+		printf 'SUNO_API_IMAGE=%s\n' "$1" >> "$ENV_FILE"
 	fi
 }
 
 start() { # $1 = imagen
-	export VISITACAMPO_API_IMAGE="$1"
+	export SUNO_API_IMAGE="$1"
 	record_image "$1"
 	[ "${DEPLOY_SKIP_PULL:-0}" = 1 ] || compose pull api worker
 	compose up -d --remove-orphans --wait --wait-timeout "${DEPLOY_WAIT_TIMEOUT:-180}" && ready

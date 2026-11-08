@@ -7,19 +7,23 @@ from django.urls import include, path
 from django.views.generic import TemplateView
 
 from config.api import api
-from visitacampo.core.views import platform_home, platform_login, platform_logout
+from suno.core.views import platform_home, platform_login, platform_logout
 
 urlpatterns = [
     path("", TemplateView.as_view(template_name="suno/home.html"), name="home"),
     path("plataforma/", platform_home, name="platform_home"),
     path("plataforma/ingresar/", platform_login, name="platform_login"),
     path("plataforma/salir/", platform_logout, name="platform_logout"),
-    path("plataforma/accesos/", include("visitacampo.core.access_urls")),
-    path("plataforma/equipos/", include("visitacampo.equipment.urls")),
-    path("plataforma/proyectos/", include("visitacampo.projects.urls")),
+    path("plataforma/accesos/", include("suno.core.access_urls")),
+    path("plataforma/equipos/", include("suno.equipment.urls")),
+    path("plataforma/proyectos/", include("suno.projects.urls")),
     path(
         "plataforma/proyectos/<uuid:project_id>/presupuestos/",
-        include("visitacampo.budgets.urls"),
+        include("suno.budgets.urls"),
+    ),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/matriz/",
+        include("suno.matrix.urls"),
     ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),

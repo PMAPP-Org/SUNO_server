@@ -7,7 +7,7 @@ name: Dependency Review
 # complementario a osv-scanner, que escanea todo el árbol.
 #
 # Licencias: docs/08 §3 ya descartó reutilizar código GPL de QField para no
-# arrastrar copyleft sobre VisitaCampo; esta lista lo aplica a dependencias.
+# arrastrar copyleft sobre SUNO; esta lista lo aplica a dependencias.
 
 on:
   pull_request:

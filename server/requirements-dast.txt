@@ -1,4 +1,4 @@
-# VisitaCampo — herramientas de pruebas dinámicas (DAST) contra la API en
+# SUNO — herramientas de pruebas dinámicas (DAST) contra la API en
 # ejecución (.github/workflows/dast.yml). Separadas de requirements-dev.txt
 # porque solo las usa ese workflow y arrastran muchas dependencias.
 # Se instala `requirements-dast.lock` (con hashes), no este archivo.

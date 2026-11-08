@@ -1,4 +1,4 @@
-# VisitaCampo backend — dependencias de desarrollo/CI (Paso 4).
+# SUNO backend — dependencias de desarrollo/CI (Paso 4).
 # Fuente editable a mano; lo que instalan CI y los desarrolladores es
 # `requirements-dev.lock` (versiones exactas + hashes de todo el árbol), que
 # se regenera con el comando de la cabecera de ese archivo.

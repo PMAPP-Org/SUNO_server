@@ -74,7 +74,7 @@ tests:
   - name: BackupStale a las 27 h del último backup, no a las 25 h
     interval: 1m
     input_series:
-      - series: 'visitacampo_backup_last_success_timestamp_seconds{job="node", instance="node-exporter:9100"}'
+      - series: 'suno_backup_last_success_timestamp_seconds{job="node", instance="node-exporter:9100"}'
         values: "0+0x1700"
     alert_rule_test:
       - eval_time: 25h

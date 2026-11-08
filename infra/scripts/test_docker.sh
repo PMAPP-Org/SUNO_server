@@ -25,12 +25,12 @@ docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/
 if [ -z "$(docker ps -q -f "name=^${DB}$")" ]; then
 	docker rm -f "$DB" >/dev/null 2>&1 || true
 	docker run -d --name "$DB" --network "$NET" \
-		-e POSTGRES_DB=visitacampo -e POSTGRES_USER=visitacampo -e POSTGRES_PASSWORD=test \
+		-e POSTGRES_DB=suno -e POSTGRES_USER=suno -e POSTGRES_PASSWORD=test \
 		postgres:16-alpine >/dev/null
 	# El entrypoint reinicia Postgres una vez tras inicializar: esperar a que
 	# responda dos veces seguidas evita conectar justo antes del reinicio.
-	until docker exec "$DB" pg_isready -U visitacampo -q && sleep 2 &&
-		docker exec "$DB" pg_isready -U visitacampo -q; do sleep 1; done
+	until docker exec "$DB" pg_isready -U suno -q && sleep 2 &&
+		docker exec "$DB" pg_isready -U suno -q; do sleep 1; done
 fi
 
 if [ "${1:-}" = "--cmd" ]; then
@@ -40,7 +40,7 @@ else
 fi
 
 docker run --rm --network "$NET" -v "$SERVER_DIR:/app" -v "$VENV:/venv" -w /app \
-	-e POSTGRES_HOST="$DB" -e POSTGRES_PASSWORD=test -e VISITACAMPO_REQUIRE_DB=1 \
+	-e POSTGRES_HOST="$DB" -e POSTGRES_PASSWORD=test -e SUNO_REQUIRE_DB=1 \
 	-e PATH="/venv/bin:/usr/local/bin:/usr/bin:/bin" \
 	python:3.12-slim sh -c '
 		if ! cmp -s requirements-dev.lock /venv/.lock; then

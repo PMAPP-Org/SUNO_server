@@ -1,0 +1,27 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Historial de la matriz · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="history" %}
+<section class="pj-panel">
+  <h2>Importaciones de la matriz</h2>
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Versión</th><th>Archivo</th><th>Subida</th><th>Por</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for imp in imports %}
+      <tr>
+        <td>{% if imp.number %}v{{ imp.number }}{% else %}—{% endif %}</td>
+        <td class="pj-wrap">{% if can_manage_matrix %}<a href="{% url 'matrix:import_preview' project.pk imp.pk %}">{{ imp.file_name }}</a>{% else %}{{ imp.file_name }}{% endif %}</td>
+        <td>{{ imp.uploaded_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ imp.uploaded_by.display_name|default:imp.uploaded_by.username }}</td>
+        <td>{{ imp.get_status_display }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="pj-empty">Todavía no se ha importado la matriz.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

@@ -30,7 +30,7 @@ class DevArgon2PasswordHasher(Argon2PasswordHasher):
     """Argon2id con `memory_cost` reducido, solo para esta máquina de desarrollo.
 
     Añadido durante el checkpoint 14b (2026-08-03): esta máquina tiene 7.4 GB
-    de RAM y con frecuencia <500 MB libres (ver `visitacampo-construccion.md`
+    de RAM y con frecuencia <500 MB libres (ver `plans/visitacampo-construccion.md`
     §12); el `memory_cost` por defecto de Django (100 MiB) hace que
     `argon2.low_level.hash_secret` falle con `HashingError: Memory allocation
     error` incluso para un solo hash. 19 MiB es el mínimo recomendado por

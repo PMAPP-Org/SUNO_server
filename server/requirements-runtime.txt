@@ -1,4 +1,4 @@
-# VisitaCampo backend — dependencias del proceso servidor (gunicorn + worker
+# SUNO backend — dependencias del proceso servidor (gunicorn + worker
 # ASGI), separadas de server/requirements.txt (dependencias de la aplicación).
 # Patrón adaptado de qfieldcloud/docker-app/requirements/requirements_runtime.txt.
 gunicorn==23.0.0

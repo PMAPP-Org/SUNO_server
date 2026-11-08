@@ -1,0 +1,25 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Matriz por ubicación · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="matrix" %}
+{% include "suno/matrix/_nav.html" with sub="locations" %}
+<section class="pj-panel">
+  <h2>Valor planeado y ejecutado por ubicación</h2>
+  <p class="pj-muted">Cantidades validadas por el valor unitario vigente de cada ítem.</p>
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Ubicación</th><th class="num">Planeado ($)</th><th class="num">Ejecutado ($)</th><th class="num">%</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr class="{% if row.depth == 0 %}bg-total{% elif row.depth == 1 %}pj-stage{% endif %}">
+        <td class="pj-name mx-depth-{{ row.depth }}">{{ row.label }}</td>
+        <td class="num">{{ row.planned_value|floatformat:"2g" }}</td>
+        <td class="num">{{ row.executed_value|floatformat:"2g" }}</td>
+        <td class="num">{% if row.pct is not None %}{{ row.pct|floatformat:"-2" }} %{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

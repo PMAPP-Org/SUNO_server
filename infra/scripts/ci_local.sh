@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VisitaCampo — ejecuta localmente el mismo conjunto de checks que
+# SUNO — ejecuta localmente el mismo conjunto de checks que
 # .github/workflows/backend.yml (Paso 3 del plan), sin
 # depender de tener un remoto de GitHub configurado. Ver CONTRIBUTING.md /
 # infra/README.md: ningún paso posterior del plan se considera completo si
@@ -85,6 +85,21 @@ else
 	fail "mypy server/"
 fi
 
+section "Nombres (suno / registro) — check_naming.py"
+# Mismo paso que backend.yml: las pruebas de la guardia y la guardia. El modo
+# pasa a `concept` cuando entre el renombre del concepto.
+if ! command_exists python && ! command_exists python3; then
+	skip "check_naming.py" "python no está instalado en este entorno"
+else
+	PY="$(command -v python || command -v python3)"
+	if "$PY" -m unittest infra/scripts/tests/test_check_naming.py &&
+		"$PY" "$SCRIPT_DIR/check_naming.py" package; then
+		pass "check_naming.py"
+	else
+		fail "check_naming.py"
+	fi
+fi
+
 section "Backend (server/) — pytest"
 if ! has_py_tests; then
 	skip "pytest server/" "server/ todavía no tiene tests (Paso 4+)"
@@ -126,7 +141,7 @@ fi
 section "Backend (server/) — bandit (SAST)"
 if ! command_exists bandit; then
 	skip "bandit" "bandit no está instalado (pip install --require-hashes -r server/requirements-dev.lock)"
-elif bandit -q -r server/visitacampo server/config -x '*/tests/*,*/migrations/*'; then
+elif bandit -q -r server/suno server/config -x '*/tests/*,*/migrations/*'; then
 	pass "bandit"
 else
 	fail "bandit"

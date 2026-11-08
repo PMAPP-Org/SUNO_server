@@ -1,16 +1,16 @@
 openapi: 3.1.0
 
 info:
-  title: VisitaCampo API
+  title: SUNO API
   version: 1.0.0
-  summary: Contrato de API v1 (superficie mínima) de VisitaCampo.
+  summary: Contrato de API v1 (superficie mínima) de SUNO.
   description: |
-    Contrato **fuente de verdad** de la API v1 de VisitaCampo, escrito antes que el código
+    Contrato **fuente de verdad** de la API v1 de SUNO, escrito antes que el código
     (doc 08 §8 Fase 0). Ambos extremos —backend Django Ninja + Pydantic v2 y cliente Flutter—
     se validan contra este archivo (**RD-03**).
 
     Alcance: exactamente la superficie mínima enumerada en
-    [doc 08 §6](../../docs/08-arquitectura-propuesta-visitacampo.md#6-contrato-de-api-v1--superficie-mínima).
+    [doc 08 §6](../../docs/08-arquitectura-propuesta-suno.md#6-contrato-de-api-v1--superficie-mínima).
     No se añaden endpoints fuera de esa lista.
 
     ### Semántica de sincronización (ADR-003)
@@ -53,14 +53,14 @@ info:
   license:
     name: Propietario
   contact:
-    name: VisitaCampo
+    name: SUNO
 
 servers:
   - url: https://{host}
-    description: Instancia de VisitaCampo (self-hosted o gestionada). TLS estricto siempre (ADR-009).
+    description: Instancia de SUNO (self-hosted o gestionada). TLS estricto siempre (ADR-009).
     variables:
       host:
-        default: api.visitacampo.example
+        default: api.suno.example
         description: Host de la instancia.
 
 tags:
@@ -1214,6 +1214,7 @@ components:
         - created_by
         - task_id
         - progress_pct
+        - quantities
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -1264,13 +1265,65 @@ components:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
           description: |
-            Tarea del cronograma (costos, etapa 1) cuyo avance reporta la visita. Va siempre con
-            `progress_pct`: los dos con valor o los dos `null`.
+            Tarea del cronograma (costos, etapa 1) cuyo avance reporta la visita. Sin tarea,
+            `progress_pct` es `null` y `quantities` está vacía; con tarea, hay un `progress_pct`,
+            al menos una cantidad, o ambos.
         progress_pct:
           type: [number, 'null']
           minimum: 0
           maximum: 100
           description: '% de avance acumulado de `task_id` observado en campo, hasta dos decimales.'
+        quantities:
+          type: array
+          description: |
+            Costos, pieza 4: cantidades ejecutadas en esta visita por ítem del presupuesto. Cuentan
+            para el avance de la tarea cuando la visita está validada. Lista vacía si no hay.
+          items:
+            $ref: '#/components/schemas/VisitQuantity'
+
+    VisitQuantity:
+      type: object
+      description: Cantidad ejecutada de un ítem del presupuesto en una visita (costos, pieza 4).
+      required: [item_id, location_id, quantity, note]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        location_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Ubicación precisada en campo; `null` = la ubicación de la tarea.
+        quantity:
+          type: number
+          description: |
+            Distinta de 0, hasta 4 decimales. Negativa solo como ajuste. Sale como número JSON
+            (el servidor la guarda como decimal exacto): es exacta hasta 15 dígitos
+            significativos.
+        note:
+          type: string
+          maxLength: 500
+
+    VisitQuantityPayload:
+      type: object
+      additionalProperties: false
+      required: [item_id, quantity]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        location_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: El nodo de la tarea o uno de sus descendientes (`FieldTask.location_options`).
+        quantity:
+          type: number
+          description: Distinta de 0, |cantidad| < 10^14, hasta 4 decimales.
+        note:
+          type: string
+          maxLength: 500
+          description: |
+            La app la exige al capturar si la cantidad es negativa o el ítem no está en el plan
+            de la tarea; el servidor la acepta vacía y la revisión lo resalta.
 
     VisitAttachment:
       type: object
@@ -1422,7 +1475,7 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Definición declarativa del formulario (visitacampo/form@1). Nunca contiene código ejecutable.
+            Definición declarativa del formulario (suno/form@1). Nunca contiene código ejecutable.
             C5 añade `qr` (texto capturado o escaneado), `default` (literal validado al publicar,
             aplicado solo al crear un formulario o fila) y `repeat` (lista de objetos de respuestas).
             Un grupo declara `fields`, `min_rows` (0 por defecto) y `max_rows` (100 por defecto).
@@ -1712,8 +1765,8 @@ components:
           description: |
             Opcional (un cliente anterior no lo envía). Tarea **vigente y de detalle** de la que quien
             envía es responsable (directo o por una tarea superior). Viaja **siempre junto** con
-            `progress_pct`, también en `update`: los dos con valor, los dos `null` (desvincular) o
-            ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
+            `progress_pct`, también en `update`: con tarea, `progress_pct` con valor o `null` si hay
+            al menos una cantidad; los dos `null` (desvincular); o ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
             (`task_retired`, `task_is_summary`, `task_progress_pair`, `visit_validated`: la visita ya fue
             validada y no puede cambiar de tarea ni de %; también rechaza el `delete` de esa visita, con `field: id`),
             `forbidden` (`not_responsible`). Una operación con `base_version` obsoleto contesta `conflict`,
@@ -1725,6 +1778,23 @@ components:
           description: |
             % de avance acumulado de `task_id`, hasta dos decimales. Un valor menor que el último
             validado se acepta y se marca para la supervisión.
+        quantities:
+          type: array
+          maxItems: 200
+          description: |
+            Opcional (un cliente anterior no lo envía). Reemplaza la lista completa. Solo viaja con
+            `task_id` y `progress_pct`; con tarea, `progress_pct` puede ser `null` si hay al menos
+            una cantidad. Un `update` con `task_id` y `progress_pct` sin `quantities` deja la lista
+            vacía. Rechazos (`validation_error`): `quantities_without_task`, `task_progress_pair`,
+            `item_not_in_project` (el ítem no es de un presupuesto del proyecto de la tarea, o es
+            un capítulo fuera del plan de la tarea),
+            `location_outside_task` (la ubicación no es un nodo del proyecto de la tarea) y
+            `visit_validated` (la visita validada no cambia sus cantidades). Lo demás se acepta y
+            se resalta en la revisión, porque lo registrado sin conexión nunca se pierde: un ítem
+            fuera del plan o un ajuste negativo sin nota (la nota la exige la app al capturar), y
+            una ubicación del proyecto fuera de la ubicación actual de la tarea.
+          items:
+            $ref: '#/components/schemas/VisitQuantityPayload'
 
     VisitAttachmentPayload:
       type: object
@@ -2157,7 +2227,18 @@ components:
     FieldTask:
       type: object
       description: Una tarea del cronograma a la que la app puede vincular una visita.
-      required: [id, project_id, project_name, wbs, outline_number, name, last_validated_pct]
+      required:
+        - id
+        - project_id
+        - project_name
+        - wbs
+        - outline_number
+        - name
+        - last_validated_pct
+        - measured_by
+        - location
+        - location_options
+        - planned_items
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -2180,7 +2261,31 @@ components:
           type: [number, 'null']
           minimum: 0
           maximum: 100
-          description: '% de la visita validada más reciente de la tarea; `null` si no hay.'
+          description: |
+            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el de
+            la visita validada más reciente. `null` si no hay.
+        measured_by:
+          type: string
+          enum: [pct, quantities]
+          description: |
+            `quantities` si la tarea tiene ítems planeados (costos, pieza 4): la app registra
+            cantidades y no pide %; `pct` en el resto.
+        location:
+          oneOf:
+            - $ref: '#/components/schemas/FieldLocation'
+            - type: 'null'
+        location_options:
+          type: array
+          description: La ubicación de la tarea y sus descendientes vigentes, para precisar en campo.
+          items:
+            $ref: '#/components/schemas/FieldLocation'
+        planned_items:
+          type: array
+          description: >-
+            Ítems planeados que miden la tarea (con cantidad planeada > 0; sin los que hoy
+            son capítulos del presupuesto), sin precios ni montos.
+          items:
+            $ref: '#/components/schemas/FieldPlannedItem'
 
     FieldTaskList:
       type: object
@@ -2197,6 +2302,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FieldTask'
+
+    FieldLocation:
+      type: object
+      required: [id, label]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        label:
+          type: string
+          description: Ruta completa, p. ej. "Tramo 2 / PR 12+300".
+
+    FieldPlannedItem:
+      type: object
+      required: [item_id, code, description, unit, planned_quantity, executed_quantity]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+        unit:
+          type: string
+          maxLength: 30
+        planned_quantity:
+          type: number
+        executed_quantity:
+          type: number
+          description: Suma de las cantidades de las visitas validadas (puede pasar lo planeado).
 
     HealthStatus:
       type: object

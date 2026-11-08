@@ -5,11 +5,11 @@
 # y lo usa infra/scripts/deploy.sh. Ver docs/operacion/despliegue.md.
 services:
   api:
-    image: ${VISITACAMPO_API_IMAGE:?define VISITACAMPO_API_IMAGE (ghcr.io/…/visitacampo-api@sha256:…)}
+    image: ${SUNO_API_IMAGE:?define SUNO_API_IMAGE (ghcr.io/…/suno-api@sha256:…)}
     build: !reset null
     pull_policy: missing
 
   worker:
-    image: ${VISITACAMPO_API_IMAGE:?define VISITACAMPO_API_IMAGE (ghcr.io/…/visitacampo-api@sha256:…)}
+    image: ${SUNO_API_IMAGE:?define SUNO_API_IMAGE (ghcr.io/…/suno-api@sha256:…)}
     build: !reset null
     pull_policy: missing

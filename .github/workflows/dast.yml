@@ -44,7 +44,7 @@ jobs:
       # Nombre con punto: un cliente Java (ZAP) solo envía SNI para nombres
       # con punto y, sin SNI, Caddy corta el handshake. Caddy le emite
       # certificado con su CA interna igual que a `localhost`.
-      DAST_HOST: api.visitacampo.localhost
+      DAST_HOST: api.suno.localhost
       COMPOSE: docker compose --project-directory infra --env-file infra/.env -f infra/docker-compose.yml
       # 2.16.1 fijada por digest (`stable` se reconstruye y cambia).
       ZAP_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
@@ -104,7 +104,7 @@ jobs:
       - name: El worker procesa la cola
         run: |
           for _ in $(seq 1 30); do
-            done_jobs="$($COMPOSE exec -T api python manage.py shell -c "from visitacampo.core.models import Job; print(Job.objects.filter(status='succeeded').count())" | tail -1)"
+            done_jobs="$($COMPOSE exec -T api python manage.py shell -c "from suno.core.models import Job; print(Job.objects.filter(status='succeeded').count())" | tail -1)"
             if [ "${done_jobs:-0}" -gt 0 ]; then echo "jobs completados: $done_jobs"; exit 0; fi
             sleep 2
           done
