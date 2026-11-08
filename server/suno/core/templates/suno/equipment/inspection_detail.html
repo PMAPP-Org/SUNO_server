@@ -1,0 +1,76 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Preoperacional {{ inspection.equipment.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:inspection_list' %}">← Preoperacionales</a>
+<section class="eq-detail-head">
+  <div>
+    <p class="editorial-label">{{ inspection.get_status_display }}</p>
+    <h1>{{ inspection.equipment.code }} · {{ inspection.equipment.name }}</h1>
+    <p>{{ inspection.operator.display_name|default:inspection.operator.username }} · capturada el {{ inspection.captured_at|date:"d/m/Y H:i" }}{% if inspection.project %} · {{ inspection.project.name }}{% endif %}</p>
+  </div>
+  <a class="eq-button" href="{% url 'equipment:detail' inspection.equipment.pk %}">Ver equipo</a>
+</section>
+
+<div class="eq-detail-grid">
+  <section class="eq-detail-main">
+    <div class="eq-section-head"><div><p class="editorial-label">Evidencia</p><h2>Lista de chequeo</h2></div></div>
+    <div class="eq-records">
+      {% for row in inspection.items %}
+      <article>
+        <div><strong>{{ row.label }}{% if row.critical %} · crítico{% endif %}</strong>{% if row.note %}<span>{{ row.note }}</span>{% endif %}</div>
+        <div><small>Resultado</small><strong>{% if row.ok %}Cumple{% else %}Novedad{% endif %}</strong></div>
+      </article>
+      {% endfor %}
+    </div>
+    {% if inspection.meter_value != None %}<p class="eq-form-note">Lectura inicial: {{ inspection.meter_value|floatformat:"-2g" }} · {{ inspection.meter_unit }}</p>{% endif %}
+    {% if inspection.notes %}<div class="eq-notes"><h3>Observaciones</h3><p>{{ inspection.notes|linebreaksbr }}</p></div>{% endif %}
+
+    {% if faults %}
+    <div class="eq-section-head"><div><p class="editorial-label">Seguimiento</p><h2>Novedades</h2></div></div>
+    <div class="eq-records">
+      {% for fault in faults %}
+      <article>
+        <div>
+          <strong>{{ fault.item_label }}{% if fault.critical %} · crítico{% endif %}</strong>
+          <span>{{ fault.description }}</span>
+          {% if fault.status == 'closed' %}<small>Cerrada: {{ fault.closing_note }} ({{ fault.closed_at|date:"d/m/Y" }})</small>{% endif %}
+        </div>
+        <div>
+          <small>{{ fault.get_status_display }}</small>
+          {% if fault.status == 'open' and not fault.work_order_id and can_close_faults %}<a data-peek class="eq-button" href="{% url 'equipment:order_create' inspection.equipment.pk %}?fault={{ fault.pk }}">Crear orden correctiva</a>{% endif %}
+          {% if fault.work_order_id %}<small>Con orden de trabajo</small>{% endif %}
+          {% if fault.status == 'open' and can_close_faults %}
+          <form method="post" action="{% url 'equipment:fault_close' fault.pk %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+            {% csrf_token %}
+            <input type="text" name="note" placeholder="Cómo se resolvió" required>
+            <button class="eq-button" type="submit">Cerrar</button>
+          </form>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="eq-detail-rail">
+    {% if inspection.reviewed_by %}
+    <section><p class="editorial-label">Revisión</p><h3>{{ inspection.get_status_display }}</h3><strong>{{ inspection.reviewed_by.display_name|default:inspection.reviewed_by.username }}</strong><span>{{ inspection.reviewed_at|date:"d/m/Y H:i" }}</span>{% if inspection.review_comment %}<p>{{ inspection.review_comment }}</p>{% endif %}</section>
+    {% endif %}
+    {% if can_review %}
+    <section>
+      <p class="editorial-label">Revisión</p><h3>Tu decisión</h3>
+      <form method="post" action="{% url 'equipment:inspection_review' inspection.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        {% csrf_token %}
+        <label class="eq-field-wide"><span>Comentario</span><textarea name="comment" rows="3" placeholder="Obligatorio para rechazar o pedir corrección"></textarea></label>
+        <div class="eq-form-actions">
+          <button class="eq-button eq-button-primary" name="decision" value="approve" type="submit">Aprobar</button>
+          <button class="eq-button" name="decision" value="request_correction" type="submit">Pedir corrección</button>
+          <button class="eq-button" name="decision" value="reject" type="submit">Rechazar</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

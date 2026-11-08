@@ -1,0 +1,26 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Rendimiento · {{ equipment.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:detail' equipment.pk %}">← {{ equipment.code }}</a>
+<section class="eq-heading">
+  <div>
+    <h1>Rendimiento de combustible · {{ equipment.code }}</h1>
+    <p>Avance del medidor por galón, mes a mes, frente al rendimiento nominal de la ficha{% if equipment.nominal_fuel_yield != None %} ({{ equipment.nominal_fuel_yield }} por galón{% if equipment.fuel_tolerance_pct != None %}, tolerancia {{ equipment.fuel_tolerance_pct }} %{% endif %}){% else %} (sin rendimiento nominal definido){% endif %}.</p>
+  </div>
+  <form method="get" class="eq-form eq-filters">
+    <label><span>Meses</span><select name="months"><option value="3"{% if months == 3 %} selected{% endif %}>3</option><option value="6"{% if months == 6 %} selected{% endif %}>6</option><option value="12"{% if months == 12 %} selected{% endif %}>12</option><option value="24"{% if months == 24 %} selected{% endif %}>24</option></select></label>
+    <div class="eq-form-actions"><button class="eq-button" type="submit">Ver</button></div>
+  </form>
+</section>
+<div class="eq-records">
+  {% for row in rows %}
+  <article>
+    <div><strong>{{ row.month|date:"F Y" }}</strong><span>{{ row.gallons|floatformat:"-2g" }} gal · {{ row.distance|floatformat:"-2g" }} de avance</span></div>
+    <div>
+      <small>Real</small><strong>{{ row.real|default_if_none:"—" }}</strong>
+      {% if row.deviation_pct != None %}<span>{{ row.deviation_pct }} % vs nominal{% if row.out_of_tolerance %} · <b>fuera de tolerancia</b>{% endif %}</span>{% endif %}
+    </div>
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay tanqueos con lectura de medidor suficientes en este periodo (se necesitan al menos dos).</p>{% endfor %}
+</div>
+{% endblock %}

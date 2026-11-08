@@ -8,6 +8,10 @@
   </div>
   <div class="eq-heading-actions">
     <a class="eq-button" href="{% url 'equipment:usage_list' %}">Registros de uso</a>
+    <a class="eq-button" href="{% url 'equipment:inspection_list' %}">Preoperacionales</a>
+    <a class="eq-button" href="{% url 'equipment:maintenance' %}">Mantenimiento</a>
+    <a class="eq-button" href="{% url 'equipment:fuel' %}">Combustibles</a>
+    <a class="eq-button" href="{% url 'equipment:transport' %}">Transporte</a>
     {% if can_view_costs %}<a class="eq-button" href="{% url 'equipment:costs' %}">Costos de equipos</a>{% endif %}
     {% if items %}<a class="eq-button" href="{% url 'equipment:labels' %}?{% for item in items %}ids={{ item.equipment.pk }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Etiquetas QR de esta página</a>{% endif %}
     {% if can_create %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}

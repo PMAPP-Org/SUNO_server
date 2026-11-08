@@ -24,6 +24,9 @@ from suno.authn.api import router as auth_router
 from suno.authn.auth import JwtAuth
 from suno.basemaps.api import router as basemaps_router
 from suno.core.api_errors import register_error_handlers
+from suno.equipment.api import router as equipment_router
+from suno.equipment.fuel_api import router as fuel_router
+from suno.equipment.transport_api import router as transport_router
 from suno.health.api import router as health_router
 from suno.jobs.api import router as jobs_router
 from suno.layers.api import router as layers_router
@@ -54,3 +57,6 @@ api.add_router("", privacy_router)
 api.add_router("", basemaps_router)
 api.add_router("", layers_router)
 api.add_router("", projects_router)
+api.add_router("", equipment_router)
+api.add_router("", fuel_router)
+api.add_router("", transport_router)

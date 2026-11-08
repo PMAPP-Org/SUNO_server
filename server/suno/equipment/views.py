@@ -28,6 +28,7 @@ from suno.core.models import (
     AuditEvent,
     Equipment,
     EquipmentDocument,
+    EquipmentMeterReading,
     EquipmentOperatorAssignment,
     EquipmentProject,
     EquipmentRate,
@@ -48,7 +49,17 @@ from suno.equipment.charts import (
     segments,
     short_money,
 )
+from suno.equipment.datasheet import (
+    create_department,
+    define_field,
+    equipment_alerts,
+    field_values_for,
+    latest_meter_readings,
+    record_meter_reading,
+    set_field_value,
+)
 from suno.equipment.forms import (
+    DepartmentForm,
     EquipmentCollectionForm,
     EquipmentDocumentForm,
     EquipmentForm,
@@ -57,6 +68,17 @@ from suno.equipment.forms import (
     EquipmentRateForm,
     EquipmentTypeForm,
     EquipmentUsageForm,
+    FieldDefinitionForm,
+    FieldValueForm,
+    MeterReadingForm,
+)
+from suno.equipment.inspections import is_operator
+from suno.equipment.maintenance import (
+    maintenance_kpis,
+    plan_status,
+    preventive_history,
+    visible_orders,
+    visible_plans,
 )
 from suno.equipment.qr import (
     equipment_payload,
@@ -481,6 +503,22 @@ def collection_edit(request: HttpRequest, collection_id: UUID) -> HttpResponse:
     )
 
 
+def _maintenance_context(ctx: RequestContext, equipment: Equipment, today: date) -> dict[str, Any]:
+    kpis = maintenance_kpis(ctx, equipment, since=today - timedelta(days=90), until=today)
+    return {
+        "plans": [
+            plan_status(ctx, plan, today=today)
+            for plan in visible_plans(ctx).filter(equipment=equipment, active=True)
+        ],
+        "orders": list(visible_orders(ctx).filter(equipment=equipment).select_related("plan")[:15]),
+        "history": preventive_history(ctx, equipment, limit=5),
+        "kpis": kpis,
+        "can_manage": (
+            ctx.has_capability(Section.EQUIPMENT, Capability.UPDATE) and not is_operator(ctx)
+        ),
+    }
+
+
 @login_required(login_url="platform_login")
 def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
@@ -531,6 +569,12 @@ def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
     history = scoped_qs(ctx, AuditEvent).filter(
         Q(target=f"equipment:{equipment.pk}") | Q(metadata__equipment=str(equipment.pk))
     )[:50]
+    meter_readings = list(
+        scoped_qs(ctx, EquipmentMeterReading)
+        .filter(equipment=equipment)
+        .select_related("recorded_by")
+        .order_by("-read_at", "-created_at")[:30]
+    )
     return _render(
         request,
         ctx,
@@ -538,6 +582,14 @@ def equipment_detail(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
         {
             "equipment": equipment,
             "tab": tab,
+            "maintenance": _maintenance_context(ctx, equipment, today)
+            if tab == "maintenance"
+            else {},
+            "meters": latest_meter_readings(ctx, equipment),
+            "meter_readings": meter_readings,
+            "field_values": field_values_for(ctx, equipment),
+            "alerts": equipment_alerts(ctx, equipment, today=today),
+            "can_define_fields": ctx.has_capability(Section.EQUIPMENT, Capability.CREATE),
             "documents": documents,
             "project_links": project_links,
             "assignments": assignments,
@@ -582,6 +634,16 @@ def equipment_edit(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
             "status",
             "specifications",
             "notes",
+            "department",
+            "control_scheme",
+            "primary_meter_unit",
+            "secondary_meter_unit",
+            "work_source",
+            "nominal_fuel_yield",
+            "fuel_tolerance_pct",
+            "acquisition_value",
+            "acquisition_date",
+            "accumulated_depreciation",
         )
     }
     form = EquipmentForm(ctx, request.POST or None, initial=initial)
@@ -618,6 +680,8 @@ def _related_form(
         raise PermissionDenied
     if form_class in {EquipmentProjectForm, EquipmentOperatorForm}:
         form = form_class(ctx, request.POST or None)
+    elif form_class in {MeterReadingForm, FieldValueForm}:
+        form = form_class(ctx, equipment, request.POST or None)
     else:
         form = form_class(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -917,3 +981,95 @@ def costs_recalculate(request: HttpRequest) -> HttpResponse:
     else:
         messages.info(request, "No había usos pendientes con tarifa aplicable.")
     return redirect("equipment:costs")
+
+
+def _submit_meter_reading(
+    ctx: RequestContext, equipment: Equipment, data: dict[str, Any]
+) -> object:
+    values = {key: value for key, value in data.items() if value not in (None, "")}
+    return record_meter_reading(ctx, equipment_id=equipment.pk, **values)
+
+
+def _submit_field_value(ctx: RequestContext, equipment: Equipment, data: dict[str, Any]) -> object:
+    return set_field_value(
+        ctx,
+        equipment_id=equipment.pk,
+        definition_id=data["definition"].pk,
+        value=data.get("value"),
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def meter_reading_create(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
+    return _related_form(
+        request,
+        equipment_id,
+        form_class=MeterReadingForm,
+        title="Registrar lectura de medidor",
+        capability=Capability.UPDATE,
+        submit=_submit_meter_reading,
+        redirect_tab="meters",
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def field_value_create(request: HttpRequest, equipment_id: UUID) -> HttpResponse:
+    return _related_form(
+        request,
+        equipment_id,
+        form_class=FieldValueForm,
+        title="Registrar valor de campo adicional",
+        capability=Capability.UPDATE,
+        submit=_submit_field_value,
+        redirect_tab="meters",
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def department_create(request: HttpRequest) -> HttpResponse:
+    ctx = _ctx(request)
+    if not ctx.has_capability(Section.EQUIPMENT, Capability.CREATE):
+        raise PermissionDenied
+    form = DepartmentForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            create_department(ctx, **form.cleaned_data)
+        except (ValidationError, IntegrityError):
+            form.add_error(None, "Ya existe un departamento con ese código o nombre.")
+        else:
+            messages.success(request, "Departamento de maquinaria creado.")
+            return redirect("equipment:create")
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/form.html",
+        {"form": form, "title": "Nuevo departamento de maquinaria"},
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def field_definition_create(request: HttpRequest) -> HttpResponse:
+    ctx = _ctx(request)
+    if not ctx.has_capability(Section.EQUIPMENT, Capability.CREATE):
+        raise PermissionDenied
+    form = FieldDefinitionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            define_field(ctx, **form.cleaned_data)
+        except (ValidationError, IntegrityError) as exc:
+            if isinstance(exc, ValidationError):
+                _message_validation(request, exc)
+            form.add_error(None, "No fue posible crear el campo. Verifica el nombre y el tipo.")
+        else:
+            messages.success(request, "Campo adicional creado.")
+            return redirect("equipment:list")
+    return _render(
+        request,
+        ctx,
+        "suno/equipment/form.html",
+        {"form": form, "title": "Nuevo campo adicional"},
+    )

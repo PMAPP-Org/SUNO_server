@@ -46,6 +46,33 @@ class EquipmentMeterUnit(models.TextChoices):
     KILOMETERS = "kilometers", "Kilometraje"
 
 
+class EquipmentControlScheme(models.TextChoices):
+    """Cómo se controla el uso del activo (SINCO M&E: esquema de control operativo)."""
+
+    METER = "meter", "Por medidor"
+    DATE = "date", "Por fecha"
+
+
+class EquipmentWorkSource(models.TextChoices):
+    """De dónde sale el trabajo del activo: tanqueos o reportes directos."""
+
+    FUEL = "fuel", "Control por combustible"
+    WORK_REPORTS = "work_reports", "Reportes de trabajo"
+
+
+class EquipmentMeterSource(models.TextChoices):
+    MANUAL = "manual", "Manual"
+    USAGE = "usage", "Registro de uso"
+    PREOPERATIONAL = "preoperational", "Preoperacional"
+    FUEL = "fuel", "Tanqueo"
+
+
+class EquipmentFieldType(models.TextChoices):
+    NUMBER = "number", "Numérico"
+    DATE = "date", "Fecha"
+    TEXT = "text", "Texto"
+
+
 class EquipmentType(OrgScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=40, verbose_name="código")
@@ -189,6 +216,33 @@ class EquipmentCollectionType(OrgScopedModel):
             raise ValidationError(errors)
 
 
+class MachineryDepartment(OrgScopedModel):
+    """Departamento de Maquinaria: centro de costo que absorbe los costos del activo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cost_center_code = models.CharField(max_length=40, verbose_name="código de centro de costo")
+    name = models.CharField(max_length=120, verbose_name="nombre")
+    active = models.BooleanField(default=True, verbose_name="activo")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "machinery_department"
+        ordering = ["name"]
+        verbose_name = "departamento de maquinaria"
+        verbose_name_plural = "departamentos de maquinaria"
+        constraints = [
+            models.UniqueConstraint(
+                Lower("cost_center_code"), "org", name="machinery_department_org_code_ci_uq"
+            ),
+            models.UniqueConstraint(
+                Lower("name"), "org", name="machinery_department_org_name_ci_uq"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.cost_center_code} · {self.name}"
+
+
 class Equipment(OrgScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, verbose_name="código interno")
@@ -218,6 +272,73 @@ class Equipment(OrgScopedModel):
         choices=EquipmentStatus.choices,
         default=EquipmentStatus.AVAILABLE,
         verbose_name="estado",
+    )
+    department = models.ForeignKey(
+        MachineryDepartment,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="equipment",
+        verbose_name="departamento de maquinaria",
+    )
+    control_scheme = models.CharField(
+        max_length=8,
+        choices=EquipmentControlScheme.choices,
+        default=EquipmentControlScheme.METER,
+        verbose_name="esquema de control",
+    )
+    primary_meter_unit = models.CharField(
+        max_length=16,
+        choices=EquipmentMeterUnit.choices,
+        default=EquipmentMeterUnit.HOURS,
+        blank=True,
+        verbose_name="medidor principal",
+    )
+    secondary_meter_unit = models.CharField(
+        max_length=16,
+        choices=EquipmentMeterUnit.choices,
+        blank=True,
+        verbose_name="medidor secundario",
+    )
+    work_source = models.CharField(
+        max_length=16,
+        choices=EquipmentWorkSource.choices,
+        default=EquipmentWorkSource.WORK_REPORTS,
+        verbose_name="fuente del trabajo",
+    )
+    nominal_fuel_yield = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="rendimiento teórico de combustible",
+        help_text="Unidades de medidor por galón (km/gal u horas por galón según el medidor).",
+    )
+    fuel_tolerance_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="tolerancia de consumo (%)",
+    )
+    acquisition_value = models.DecimalField(
+        max_digits=16, decimal_places=2, null=True, blank=True, verbose_name="valor de adquisición"
+    )
+    acquisition_date = models.DateField(null=True, blank=True, verbose_name="fecha de adquisición")
+    accumulated_depreciation = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="depreciación acumulada",
+    )
+    photo = models.ForeignKey(
+        "core.Blob",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="equipment_photos",
+        verbose_name="fotografía",
     )
     specifications = models.JSONField(default=dict, blank=True, verbose_name="especificaciones")
     notes = models.TextField(blank=True, verbose_name="observaciones")
@@ -272,6 +393,14 @@ class Equipment(OrgScopedModel):
                 errors[field] = "El usuario debe pertenecer a la organización."
         if self.ownership != EquipmentOwnership.OWN and not self.owner_name.strip():
             errors["owner_name"] = "Indica el propietario del equipo no propio."
+        if self.department_id and self.org_id and self.department.org_id != self.org_id:
+            errors["department"] = "El departamento debe pertenecer a la organización."
+        if self.control_scheme == EquipmentControlScheme.METER and not self.primary_meter_unit:
+            errors["primary_meter_unit"] = "Indica el medidor principal."
+        if self.secondary_meter_unit and self.secondary_meter_unit == self.primary_meter_unit:
+            errors["secondary_meter_unit"] = "Debe ser distinto del medidor principal."
+        if self.fuel_tolerance_pct is not None and not 0 <= self.fuel_tolerance_pct <= 100:
+            errors["fuel_tolerance_pct"] = "La tolerancia debe estar entre 0 y 100."
         if errors:
             raise ValidationError(errors)
 
@@ -663,6 +792,11 @@ class EquipmentRate(OrgScopedModel):
     hourly_rate = models.DecimalField(
         max_digits=14, decimal_places=2, verbose_name="tarifa total por hora"
     )
+    # Tarifa por kilómetro para equipos controlados por odómetro; independiente de la
+    # suma de componentes horarios.
+    km_rate = models.DecimalField(
+        max_digits=14, decimal_places=2, default=0, verbose_name="tarifa por kilómetro"
+    )
     notes = models.CharField(max_length=300, blank=True, verbose_name="criterio o nota")
     created_by = models.ForeignKey(
         "core.AppUser",
@@ -691,6 +825,10 @@ class EquipmentRate(OrgScopedModel):
                 name="equipment_rate_non_negative",
             ),
             models.CheckConstraint(
+                condition=models.Q(km_rate__gte=0),
+                name="equipment_rate_km_non_negative",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(
                     hourly_rate=models.F("ownership_rate")
                     + models.F("operation_rate")
@@ -716,3 +854,149 @@ class EquipmentRate(OrgScopedModel):
 
     def __str__(self) -> str:
         return f"{self.equipment_id}:{self.valid_from}:{self.hourly_rate}"
+
+
+class EquipmentMeterReading(OrgScopedModel):
+    """Lectura de un medidor del equipo en un instante (manual, de un uso o preoperacional)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipment = models.ForeignKey(
+        Equipment,
+        on_delete=models.PROTECT,
+        related_name="meter_readings",
+        verbose_name="equipo",
+    )
+    meter_unit = models.CharField(
+        max_length=16, choices=EquipmentMeterUnit.choices, verbose_name="medidor"
+    )
+    value = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="lectura")
+    read_at = models.DateTimeField(verbose_name="fecha y hora de la lectura")
+    source = models.CharField(
+        max_length=16,
+        choices=EquipmentMeterSource.choices,
+        default=EquipmentMeterSource.MANUAL,
+        verbose_name="origen",
+    )
+    notes = models.CharField(max_length=300, blank=True, verbose_name="observaciones")
+    recorded_by = models.ForeignKey(
+        "core.AppUser",
+        on_delete=models.PROTECT,
+        related_name="equipment_meter_readings",
+        verbose_name="registrada por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "equipment_meter_reading"
+        ordering = ["-read_at", "-created_at"]
+        verbose_name = "lectura de medidor"
+        verbose_name_plural = "lecturas de medidores"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(value__gte=0), name="equipment_meter_reading_non_negative"
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["org", "equipment", "meter_unit", "-read_at"],
+                name="equipment_meter_reading_idx",
+            )
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        for field in ("equipment", "recorded_by"):
+            value = getattr(self, field, None)
+            if value is not None and self.org_id and value.org_id != self.org_id:
+                errors[field] = "Debe pertenecer a la organización."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"{self.equipment_id}:{self.meter_unit}:{self.value}"
+
+
+class EquipmentFieldDefinition(OrgScopedModel):
+    """Campo adicional definido por el usuario para la ficha (SOAT, tecnomecánica, ruido…).
+
+    Los de tipo fecha con `alert_days` generan alertas de vigencia.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=80, verbose_name="nombre del campo")
+    data_type = models.CharField(
+        max_length=8, choices=EquipmentFieldType.choices, verbose_name="tipo de dato"
+    )
+    alert_days = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="días de aviso previo al vencimiento",
+        help_text="Solo aplica a campos de tipo fecha.",
+    )
+    required = models.BooleanField(default=False, verbose_name="obligatorio")
+    active = models.BooleanField(default=True, verbose_name="activo")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "equipment_field_definition"
+        ordering = ["name"]
+        verbose_name = "campo adicional de equipo"
+        verbose_name_plural = "campos adicionales de equipos"
+        constraints = [
+            models.UniqueConstraint(Lower("name"), "org", name="equipment_field_def_org_name_uq"),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.alert_days is not None and self.data_type != EquipmentFieldType.DATE:
+            raise ValidationError({"alert_days": "Solo los campos de fecha admiten alertas."})
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class EquipmentFieldValue(OrgScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipment = models.ForeignKey(
+        Equipment,
+        on_delete=models.PROTECT,
+        related_name="field_values",
+        verbose_name="equipo",
+    )
+    definition = models.ForeignKey(
+        EquipmentFieldDefinition,
+        on_delete=models.PROTECT,
+        related_name="values",
+        verbose_name="campo",
+    )
+    number_value = models.DecimalField(max_digits=18, decimal_places=4, null=True, blank=True)
+    date_value = models.DateField(null=True, blank=True)
+    text_value = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(
+        "core.AppUser", on_delete=models.PROTECT, related_name="equipment_field_values_updated"
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "equipment_field_value"
+        verbose_name = "valor de campo adicional"
+        verbose_name_plural = "valores de campos adicionales"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["equipment", "definition"], name="equipment_field_value_uq"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["org", "date_value"], name="equipment_field_value_date_idx")
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        for field in ("equipment", "definition", "updated_by"):
+            value = getattr(self, field, None)
+            if value is not None and self.org_id and value.org_id != self.org_id:
+                errors[field] = "Debe pertenecer a la organización."
+        if errors:
+            raise ValidationError(errors)

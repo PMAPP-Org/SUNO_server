@@ -27,6 +27,8 @@
   <a href="?tab=technical"{% if tab == 'technical' %} aria-current="page"{% endif %}>Ficha técnica</a>
   <a href="?tab=documents"{% if tab == 'documents' %} aria-current="page"{% endif %}>Documentos <span>{{ documents|length }}</span></a>
   <a href="?tab=operators"{% if tab == 'operators' %} aria-current="page"{% endif %}>Operadores <span>{{ assignments|length }}</span></a>
+  <a href="?tab=maintenance"{% if tab == 'maintenance' %} aria-current="page"{% endif %}>Mantenimiento</a>
+  <a href="?tab=meters"{% if tab == 'meters' %} aria-current="page"{% endif %}>Medidores y vigencias{% if alerts %} <span>{{ alerts|length }}</span>{% endif %}</a>
   <a href="?tab=usage"{% if tab == 'usage' %} aria-current="page"{% endif %}>Uso <span>{{ usage_records|length }}</span></a>
   {% if can_view_costs %}<a href="?tab=rates"{% if tab == 'rates' %} aria-current="page"{% endif %}>Tarifas <span>{{ rates|length }}</span></a>{% endif %}
   <a href="?tab=projects"{% if tab == 'projects' %} aria-current="page"{% endif %}>Proyectos <span>{{ project_links|length }}</span></a>
@@ -46,9 +48,59 @@
         <div><dt>Placa</dt><dd>{{ equipment.license_plate|default:"—" }}</dd></div>
         <div><dt>Año de fabricación</dt><dd>{{ equipment.manufacture_year|default:"—" }}</dd></div>
         <div><dt>Propiedad</dt><dd>{{ equipment.get_ownership_display }}{% if equipment.owner_name %} · {{ equipment.owner_name }}{% endif %}</dd></div>
+        <div><dt>Departamento de maquinaria</dt><dd>{% if equipment.department %}{{ equipment.department }}{% else %}—{% endif %}</dd></div>
+        <div><dt>Esquema de control</dt><dd>{{ equipment.get_control_scheme_display }}{% if equipment.control_scheme == 'meter' %} · {{ equipment.get_primary_meter_unit_display }}{% if equipment.secondary_meter_unit %} + {{ equipment.get_secondary_meter_unit_display }}{% endif %}{% endif %}</dd></div>
+        <div><dt>Fuente del trabajo</dt><dd>{{ equipment.get_work_source_display }}</dd></div>
+        <div><dt>Rendimiento teórico</dt><dd>{% if equipment.nominal_fuel_yield != None %}{{ equipment.nominal_fuel_yield }} por galón{% if equipment.fuel_tolerance_pct != None %} (±{{ equipment.fuel_tolerance_pct }} %){% endif %}{% else %}—{% endif %}</dd></div>
+        {% if can_view_costs %}
+        <div><dt>Valor de adquisición</dt><dd>{% if equipment.acquisition_value != None %}${{ equipment.acquisition_value|floatformat:"2g" }}{% else %}—{% endif %}{% if equipment.acquisition_date %} · {{ equipment.acquisition_date|date:"d/m/Y" }}{% endif %}</dd></div>
+        <div><dt>Depreciación acumulada</dt><dd>{% if equipment.accumulated_depreciation != None %}${{ equipment.accumulated_depreciation|floatformat:"2g" }}{% else %}—{% endif %}</dd></div>
+        {% endif %}
       </dl>
+      <p class="eq-form-note"><a href="{% url 'equipment:fuel_yield' equipment.pk %}">Rendimiento de combustible</a></p>
+      <p class="eq-form-note"><a href="{% url 'equipment:checklist' equipment.equipment_type_id %}">Lista de chequeo preoperacional de {{ equipment.equipment_type.name }}</a></p>
       {% if equipment.specifications %}<div class="eq-notes"><h3>Especificaciones</h3><pre>{{ equipment.specifications }}</pre></div>{% endif %}
       {% if equipment.notes %}<div class="eq-notes"><h3>Observaciones</h3><p>{{ equipment.notes|linebreaksbr }}</p></div>{% endif %}
+    {% elif tab == 'maintenance' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Preventivo</p><h2>Planes de mantenimiento</h2></div>{% if maintenance.can_manage %}<a data-peek href="{% url 'equipment:plan_create' equipment.pk %}">Nuevo plan</a>{% endif %}<a href="{% url 'equipment:life_sheet' equipment.pk %}">Hoja de Vida (PDF)</a></div>
+      <div class="eq-records">
+        {% for item in maintenance.plans %}
+        <article>
+          <div><strong>{{ item.plan.name }}</strong><span>{% if item.plan.kind == 'meter' %}Cada {{ item.plan.interval_value|floatformat:"-2g" }} · próximo a {{ item.due_value|floatformat:"-2g" }}{% if item.current != None %} (actual {{ item.current|floatformat:"-2g" }}){% endif %}{% else %}Cada {{ item.plan.interval_days }} días · próximo {{ item.due_on|date:"d/m/Y" }}{% endif %}</span></div>
+          <div>
+            <small>{% if item.state == 'overdue' %}Vencido{% elif item.state == 'due_soon' %}Próximo{% elif item.state == 'ok' %}Al día{% else %}Sin lecturas{% endif %}</small>
+            {% if item.open_order %}<a href="{% url 'equipment:order_detail' item.open_order.pk %}">{{ item.open_order.code }}</a>
+            {% elif maintenance.can_manage and item.state != 'ok' %}<a data-peek href="{% url 'equipment:order_create' equipment.pk %}?plan={{ item.plan.pk }}">Generar orden</a>{% endif %}
+            {% if maintenance.can_manage and not item.open_order %}<form method="post" action="{% url 'equipment:plan_retire' item.plan.pk %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button" type="submit">Retirar</button></form>{% endif %}
+          </div>
+        </article>
+        {% empty %}<p class="eq-empty-inline">Este equipo no tiene plan preventivo.</p>{% endfor %}
+      </div>
+      <div class="eq-section-head"><div><p class="editorial-label">Indicadores · 90 días</p><h2>Disponibilidad y fallas</h2></div></div>
+      <div class="eq-breakdown">
+        <div><small>Disponibilidad</small><strong>{% if maintenance.kpis.availability_pct != None %}{{ maintenance.kpis.availability_pct }} %{% else %}—{% endif %}</strong></div>
+        <div><small>MTBF</small><strong>{% if maintenance.kpis.mtbf_hours != None %}{{ maintenance.kpis.mtbf_hours }} h{% else %}—{% endif %}</strong></div>
+        <div><small>Correctivas</small><strong>{{ maintenance.kpis.corrective_orders }}</strong></div>
+        <div><small>Indisponibilidad</small><strong>{{ maintenance.kpis.downtime_hours|floatformat:"-2" }} h</strong></div>
+        <div><small>Días a aprobar</small><strong>{{ maintenance.kpis.avg_days_to_approve|default_if_none:"—" }}</strong></div>
+        <div><small>Días a iniciar</small><strong>{{ maintenance.kpis.avg_days_to_start|default_if_none:"—" }}</strong></div>
+      </div>
+      <div class="eq-section-head"><div><p class="editorial-label">Historial</p><h2>Órdenes de trabajo</h2></div>{% if maintenance.can_manage %}<a data-peek href="{% url 'equipment:order_create' equipment.pk %}">Nueva orden</a>{% endif %}</div>
+      <div class="eq-records">
+        {% for order in maintenance.orders %}<article><div><strong><a href="{% url 'equipment:order_detail' order.pk %}">{{ order.code }}</a> · {{ order.get_kind_display }}</strong><span>{{ order.description|truncatechars:80 }}</span></div><div><small>Estado</small><strong>{{ order.get_status_display }}</strong></div></article>{% empty %}<p class="eq-empty-inline">Sin órdenes de trabajo.</p>{% endfor %}
+      </div>
+    {% elif tab == 'meters' %}
+      <div class="eq-section-head"><div><p class="editorial-label">Control operativo</p><h2>Medidores</h2></div>{% if can_edit and meters or can_edit and equipment.primary_meter_unit %}<a data-peek href="{% url 'equipment:meter_create' equipment.pk %}">Registrar lectura</a>{% endif %}</div>
+      <div class="eq-breakdown" aria-label="Última lectura por medidor">
+        {% for meter in meters %}<div><small>{{ meter.label }}</small><strong>{{ meter.value|floatformat:"1g" }}</strong><span>{{ meter.read_at|date:"d/m/Y H:i" }}</span></div>{% empty %}<p class="eq-empty-inline">Sin lecturas registradas.</p>{% endfor %}
+      </div>
+      <div class="eq-records">
+        {% for reading in meter_readings %}<article><div><strong>{{ reading.value|floatformat:"1g" }} · {{ reading.get_meter_unit_display }}</strong><span>{{ reading.get_source_display }}{% if reading.notes %} · {{ reading.notes }}{% endif %}</span></div><div><small>{{ reading.recorded_by.display_name|default:reading.recorded_by.username }}</small><time>{{ reading.read_at|date:"d/m/Y H:i" }}</time></div></article>{% endfor %}
+      </div>
+      <div class="eq-section-head"><div><p class="editorial-label">Cumplimiento</p><h2>Campos adicionales y vigencias</h2></div>{% if can_edit %}<a data-peek href="{% url 'equipment:field_value_create' equipment.pk %}">Registrar valor</a>{% endif %}{% if can_define_fields %}<a data-peek href="{% url 'equipment:field_definition_create' %}">Nuevo campo</a>{% endif %}</div>
+      <div class="eq-records">
+        {% for item in field_values %}<article><div><strong>{{ item.definition.name }}</strong><span>{{ item.definition.get_data_type_display }}{% if item.definition.alert_days != None %} · aviso {{ item.definition.alert_days }} días antes{% endif %}</span></div><div><small>Valor</small><time>{% if item.date_value %}{{ item.date_value|date:"d/m/Y" }}{% elif item.number_value != None %}{{ item.number_value|floatformat:"-4g" }}{% else %}{{ item.text_value|default:"—" }}{% endif %}</time></div></article>{% empty %}<p class="eq-empty-inline">No hay campos adicionales con valor para este equipo.</p>{% endfor %}
+      </div>
     {% elif tab == 'documents' %}
       <div class="eq-section-head"><div><p class="editorial-label">Cumplimiento</p><h2>Documentos</h2></div>{% if can_edit %}<a data-peek href="{% url 'equipment:document_create' equipment.pk %}">Agregar documento</a>{% endif %}</div>
       <div class="eq-records">
@@ -94,7 +146,7 @@
   <aside class="eq-detail-rail">
     <section><p class="editorial-label">Asignación actual</p><h3>Proyecto</h3>{% if current_project %}<strong>{{ current_project.project.name }}</strong><span>Desde {{ current_project.started_on|date:"d/m/Y" }}</span>{% else %}<span>Sin proyecto asignado</span>{% endif %}</section>
     <section><h3>Operador</h3>{% if current_operator %}<strong>{{ current_operator.operator.display_name|default:current_operator.operator.username }}</strong><span>{{ current_operator.project.name }}</span>{% else %}<span>Sin operador vigente</span>{% endif %}</section>
-    <section><p class="editorial-label">Próximos vencimientos</p>{% for document in upcoming %}<div class="eq-expiry"><strong>{{ document.name }}</strong><time>{{ document.expires_on|date:"d/m/Y" }}</time></div>{% empty %}<span>Sin vencimientos en 60 días</span>{% endfor %}</section>
+    <section><p class="editorial-label">Alertas de vigencia</p>{% for alert in alerts %}<div class="eq-expiry{% if alert.expired %} eq-warn{% endif %}"><strong>{{ alert.name }}</strong><time>{{ alert.expires_on|date:"d/m/Y" }} · {% if alert.expired %}vencido hace {{ alert.days_left|cut:"-" }} día{{ alert.days_left|cut:"-"|pluralize }}{% else %}en {{ alert.days_left }} día{{ alert.days_left|pluralize }}{% endif %}</time></div>{% empty %}<span>Sin alertas de vigencia</span>{% endfor %}</section>
     <section class="eq-qr"><img src="{% url 'equipment:qr_image' equipment.pk 'svg' %}" width="96" height="96" alt="Código QR de {{ equipment.code }}"><div><h3>Identificación móvil</h3><span>Escanéalo para abrir esta ficha.</span><a href="{% url 'equipment:qr' equipment.pk %}">Ver y descargar etiqueta</a></div></section>
   </aside>
 </div>

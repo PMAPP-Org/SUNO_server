@@ -245,6 +245,41 @@ def create_equipment_usage(
     """
 
     _require(ctx, Capability.SCHEDULE, project_id)
+    return _create_usage(
+        ctx,
+        equipment_id=equipment_id,
+        project_id=project_id,
+        operator_id=operator_id,
+        usage_date=usage_date,
+        start_time=start_time,
+        end_time=end_time,
+        activity=activity,
+        status=status,
+        budget_item_code=budget_item_code,
+        **details,
+    )
+
+
+def _create_usage(
+    ctx: RequestContext,
+    *,
+    equipment_id: UUID,
+    project_id: UUID,
+    operator_id: UUID,
+    usage_date: date,
+    start_time: Any,
+    end_time: Any,
+    activity: str,
+    status: str = "scheduled",
+    budget_item_code: str = "",
+    usage_id: UUID | None = None,
+    **details: Any,
+) -> EquipmentUsage:
+    """Cuerpo común de la creación de un uso; quien llama ya autorizó la operación.
+
+    Debe ejecutarse dentro de una transacción (los locks de uso la exigen).
+    """
+
     try:
         equipment = visible_equipment(ctx).get(pk=equipment_id)
         project = scoped_qs(ctx, Project).get(pk=project_id)
@@ -277,6 +312,7 @@ def create_equipment_usage(
     hours = usage_hours(start_time, end_time)
     rate = _rate_on(ctx, equipment.pk, usage_date)
     usage = EquipmentUsage(
+        **({"pk": usage_id} if usage_id is not None else {}),
         org_id=ctx.org_id,
         budget_item=budget_item,
         rate=rate,
@@ -492,6 +528,16 @@ def update_equipment(ctx: RequestContext, equipment_id: UUID, **changes: Any) ->
         "status",
         "specifications",
         "notes",
+        "department",
+        "control_scheme",
+        "primary_meter_unit",
+        "secondary_meter_unit",
+        "work_source",
+        "nominal_fuel_yield",
+        "fuel_tolerance_pct",
+        "acquisition_value",
+        "acquisition_date",
+        "accumulated_depreciation",
     }
     unknown = set(changes) - allowed
     if unknown:
@@ -703,6 +749,7 @@ def set_equipment_rate(
     operation_rate: Decimal = Decimal("0"),
     maintenance_rate: Decimal = Decimal("0"),
     labor_rate: Decimal = Decimal("0"),
+    km_rate: Decimal = Decimal("0"),
     notes: str = "",
 ) -> EquipmentRate:
     """Registra la tarifa por hora (suma de sus componentes) vigente desde `valid_from`.
@@ -715,7 +762,7 @@ def set_equipment_rate(
     if scoped_qs(ctx, EquipmentRate).filter(equipment=equipment, valid_from=valid_from).exists():
         raise ValidationError("Ya existe una tarifa con esa fecha de vigencia; usa una posterior.")
     components = (ownership_rate, operation_rate, maintenance_rate, labor_rate)
-    if any(value < 0 for value in components):
+    if any(value < 0 for value in (*components, km_rate)):
         raise ValidationError("Los componentes de la tarifa no pueden ser negativos.")
     rate = EquipmentRate(
         org_id=ctx.org_id,
@@ -725,6 +772,7 @@ def set_equipment_rate(
         operation_rate=operation_rate,
         maintenance_rate=maintenance_rate,
         labor_rate=labor_rate,
+        km_rate=km_rate,
         hourly_rate=sum(components, Decimal("0")),
         notes=notes.strip(),
         created_by_id=ctx.user_id,

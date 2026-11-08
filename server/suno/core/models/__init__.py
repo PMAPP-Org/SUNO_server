@@ -50,8 +50,14 @@ from .equipment import (
     Equipment,
     EquipmentCollection,
     EquipmentCollectionType,
+    EquipmentControlScheme,
     EquipmentDocument,
     EquipmentDocumentType,
+    EquipmentFieldDefinition,
+    EquipmentFieldType,
+    EquipmentFieldValue,
+    EquipmentMeterReading,
+    EquipmentMeterSource,
     EquipmentMeterUnit,
     EquipmentOperatorAssignment,
     EquipmentOwnership,
@@ -61,9 +67,41 @@ from .equipment import (
     EquipmentType,
     EquipmentUsage,
     EquipmentUsageStatus,
+    EquipmentWorkSource,
+    MachineryDepartment,
+)
+from .fuel import (
+    FuelFill,
+    FuelLiquidation,
+    FuelPurchase,
+    FuelSource,
+    FuelStation,
+    FuelStationRate,
+    FuelStore,
+    FuelSupplier,
+    FuelType,
+    LiquidationStatus,
+)
+from .inspection import (
+    EquipmentFault,
+    EquipmentInspection,
+    FaultStatus,
+    InspectionStatus,
+    PreoperationalItem,
 )
 from .layer import ReferenceLayer
 from .location import MAX_LEVELS, LocationLevel, LocationNode
+from .maintenance import (
+    OPEN_ORDER_STATUSES,
+    MaintenancePlan,
+    PlanKind,
+    WorkOrder,
+    WorkOrderKind,
+    WorkOrderLine,
+    WorkOrderLineKind,
+    WorkOrderMechanic,
+    WorkOrderStatus,
+)
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
 from .project import (
@@ -79,9 +117,49 @@ from .project import (
 )
 from .quantity import QuantityPlan, QuantityPlanImport, QuantityPlanImportStatus
 from .tenancy import AppUser, Device, Membership, Organization
+from .transport import (
+    TransportContractor,
+    TransportMaterial,
+    TransportRate,
+    TransportRoute,
+    TransportSettlement,
+    TransportVehicle,
+    Trip,
+)
 from .visit import Blob, Visit, VisitAttachment, VisitReview, VisitReviewStatus
 
 __all__ = [
+    "TransportContractor",
+    "TransportMaterial",
+    "TransportRate",
+    "TransportRoute",
+    "TransportSettlement",
+    "TransportVehicle",
+    "Trip",
+    "FuelFill",
+    "FuelLiquidation",
+    "FuelPurchase",
+    "FuelSource",
+    "FuelStation",
+    "FuelStationRate",
+    "FuelStore",
+    "FuelSupplier",
+    "FuelType",
+    "LiquidationStatus",
+    "OPEN_ORDER_STATUSES",
+    "MaintenancePlan",
+    "PlanKind",
+    "WorkOrder",
+    "WorkOrderKind",
+    "WorkOrderLine",
+    "WorkOrderLineKind",
+    "WorkOrderMechanic",
+    "WorkOrderStatus",
+    "EquipmentFault",
+    "EquipmentInspection",
+    "FaultStatus",
+    "InspectionStatus",
+    "PreoperationalItem",
     "ACTIVE_JOB_STATUSES",
     "INITIAL_VERSION",
     "LAT_MAX",
@@ -114,6 +192,14 @@ __all__ = [
     "EquipmentProject",
     "EquipmentRate",
     "EquipmentStatus",
+    "EquipmentWorkSource",
+    "MachineryDepartment",
+    "EquipmentControlScheme",
+    "EquipmentFieldDefinition",
+    "EquipmentFieldType",
+    "EquipmentFieldValue",
+    "EquipmentMeterReading",
+    "EquipmentMeterSource",
     "EquipmentType",
     "EquipmentUsage",
     "EquipmentUsageStatus",

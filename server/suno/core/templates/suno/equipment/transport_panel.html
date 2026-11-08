@@ -1,0 +1,79 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Transporte de materiales{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-heading">
+  <div>
+    <h1>Transporte de materiales</h1>
+    <p>{{ report.count }} viaje{{ report.count|pluralize }} · {{ report.total_m3|floatformat:"-2g" }} m³{% if show_costs %} · ${{ report.total_amount|floatformat:"2g" }}{% endif %}.{% if show_costs and report.unpriced %} {{ report.unpriced }} sin tarifa.{% endif %}</p>
+  </div>
+  <div class="eq-heading-actions">
+    <a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:transport_trip_create' %}">Registrar viaje</a>
+    {% if can_settle %}<a data-peek class="eq-button" href="{% url 'equipment:transport_settlement_create' %}">Nueva liquidación</a>{% endif %}
+  </div>
+</section>
+
+{% if can_manage %}
+<div class="eq-heading-actions">
+  <a data-peek class="eq-button" href="{% url 'equipment:transport_material_create' %}">Material</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:transport_route_create' %}">Tramo</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:transport_rate_create' %}">Tarifa por m³</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:transport_contractor_create' %}">Empresa de transporte</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:transport_vehicle_create' %}">Vehículo de terceros</a>
+</div>
+{% endif %}
+
+{% if report.by_zone %}
+<div class="eq-breakdown" aria-label="Volumen por zona de trabajo">
+  {% for zone, m3 in report.by_zone %}<div><small>{{ zone }}</small><strong>{{ m3|floatformat:"-2g" }} m³</strong></div>{% endfor %}
+</div>
+{% endif %}
+
+{% if settlements %}
+<div class="eq-section-head"><div><p class="editorial-label">Fletes de terceros</p><h2>Liquidaciones</h2></div></div>
+<div class="eq-records">
+  {% for settlement in settlements %}
+  <article>
+    <div><strong><a href="{% url 'equipment:transport_settlement' settlement.pk %}">{{ settlement.code }} · {{ settlement.contractor.name }}</a></strong><span>{{ settlement.date_from|date:"d/m/Y" }} — {{ settlement.date_to|date:"d/m/Y" }}</span></div>
+    <div><small>{{ settlement.get_status_display }}</small>{% if settlement.status == 'confirmed' %}<strong>${{ settlement.net_payable|floatformat:"2g" }}</strong>{% endif %}</div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="eq-section-head"><div><p class="editorial-label">Registro</p><h2>Viajes</h2></div></div>
+<form method="get" class="eq-form eq-filters">
+  <label><span>Desde</span><input type="date" name="from" value="{{ filters.from }}"></label>
+  <label><span>Hasta</span><input type="date" name="to" value="{{ filters.to }}"></label>
+  <label><span>Zona</span><input type="text" name="zone" value="{{ filters.zone }}"></label>
+  <label><span>Empresa</span>
+    <select name="contractor"><option value="">Todas</option>{% for c in contractors %}<option value="{{ c.pk }}"{% if c.pk|stringformat:"s" == contractor_id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+  </label>
+  <label><span>Material</span>
+    <select name="material"><option value="">Todos</option>{% for m in materials %}<option value="{{ m.pk }}"{% if m.pk|stringformat:"s" == material_id %} selected{% endif %}>{{ m.name }}</option>{% endfor %}</select>
+  </label>
+  <label><span>Liquidación</span>
+    <select name="state"><option value="">Todas</option><option value="pending"{% if filters.state == 'pending' %} selected{% endif %}>Por liquidar</option><option value="settled"{% if filters.state == 'settled' %} selected{% endif %}>Liquidados</option></select>
+  </label>
+  <div class="eq-form-actions"><button class="eq-button" type="submit">Filtrar</button></div>
+</form>
+<div class="eq-records">
+  {% for trip in page %}
+  <article>
+    <div>
+      <strong>{{ trip.code }} · {{ trip.volume_m3|floatformat:"-2g" }} m³ · {{ trip.material.name }}</strong>
+      <span>{{ trip.recorded_at|date:"d/m/Y H:i" }} · {{ trip.route.origin }} → {{ trip.route.destination }} ({{ trip.distance_km|floatformat:"-2" }} km){% if trip.route.zone %} · {{ trip.route.zone }}{% endif %}</span>
+      <small>{% if trip.equipment %}{{ trip.equipment.code }} (propio){% else %}{{ trip.vehicle.plate }} · {{ trip.vehicle.contractor.name }}{% endif %}{% if trip.driver_name %} · {{ trip.driver_name }}{% endif %}</small>
+    </div>
+    {% if show_costs %}<div><small>{% if trip.settlement_id %}Liquidado{% elif trip.amount == None %}Sin tarifa{% elif trip.vehicle_id %}Por liquidar{% else %}Flota propia{% endif %}</small>{% if trip.amount != None %}<strong>${{ trip.amount|floatformat:"2g" }}</strong>{% endif %}</div>{% endif %}
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay viajes con esos filtros.</p>{% endfor %}
+</div>
+{% if page.has_other_pages %}
+<nav class="eq-tabs" aria-label="Páginas">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;{{ query }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;{{ query }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

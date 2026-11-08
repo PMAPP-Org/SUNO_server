@@ -1,0 +1,40 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Preoperacionales{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-heading">
+  <div>
+    <h1>Preoperacionales</h1>
+    <p>{{ pending }} pendiente{{ pending|pluralize }} de revisión · {{ open_faults }} novedad{{ open_faults|pluralize:",es" }} abierta{{ open_faults|pluralize }}.</p>
+  </div>
+</section>
+<form method="get" class="eq-form eq-filters">
+  <label><span>Estado</span>
+    <select name="status">
+      <option value="">Todos</option>
+      {% for value, label in statuses %}<option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span>Equipo</span><input type="search" name="q" value="{{ q }}" placeholder="Código o nombre"></label>
+  <div class="eq-form-actions"><button class="eq-button" type="submit">Filtrar</button></div>
+</form>
+<div class="eq-records">
+  {% for inspection in page %}
+  <article>
+    <div>
+      <strong><a href="{% url 'equipment:inspection_detail' inspection.pk %}">{{ inspection.equipment.code }} · {{ inspection.equipment.name }}</a></strong>
+      <span>{{ inspection.operator.display_name|default:inspection.operator.username }} · {{ inspection.captured_at|date:"d/m/Y H:i" }}</span>
+      {% if inspection.has_faults %}<small>Con novedades</small>{% endif %}
+    </div>
+    <div><small>Estado</small><strong>{{ inspection.get_status_display }}</strong></div>
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay inspecciones con esos filtros.</p>{% endfor %}
+</div>
+{% if page.has_other_pages %}
+<nav class="eq-tabs" aria-label="Páginas">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;status={{ status }}&amp;q={{ q|urlencode }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;status={{ status }}&amp;q={{ q|urlencode }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
