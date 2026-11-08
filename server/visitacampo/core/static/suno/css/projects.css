@@ -1,5 +1,5 @@
 /* Módulo de proyectos (costos, etapa 1): tablas densas y Gantt. */
-.pj-panel { margin: 24px 0; padding: 20px; border: 1px solid var(--suno-line); background: var(--suno-white); overflow-x: auto; }
+.pj-panel { margin: 24px 0; padding: 20px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius); background: var(--suno-white); overflow-x: auto; }
 .pj-panel h2 { margin: 0 0 16px; font-size: 18px; }
 .pj-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .pj-table th, .pj-table td { padding: 6px 8px; border-bottom: 1px solid var(--suno-line); text-align: left; vertical-align: top; white-space: nowrap; }
@@ -16,15 +16,15 @@
 .pj-badge { display: inline-block; padding: 1px 6px; border-radius: var(--suno-radius); background: var(--suno-red); color: var(--suno-white); font-size: 11px; }
 .pj-form { display: grid; gap: 12px; max-width: 520px; }
 .pj-form label { display: grid; gap: 4px; font-size: 13px; }
-.pj-form input, .pj-form textarea, .pj-form select { padding: 8px; border: 1px solid var(--suno-line); font: inherit; }
+.pj-form input, .pj-form textarea, .pj-form select { min-height: var(--suno-control-height); padding: 8px 10px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); background: var(--suno-white); font: inherit; }
 .pj-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; font-size: 13px; }
 .pj-filters label { display: grid; gap: 4px; }
 .pj-tabs { display: flex; flex-wrap: wrap; gap: 16px; row-gap: 6px; margin: 8px 0 0; font-size: 13px; }
 .pj-tabs a[aria-current="page"] { font-weight: 700; color: var(--suno-red); }
 .pj-messages { list-style: none; padding: 0; }
-.pj-message { padding: 10px 14px; margin-bottom: 8px; border-left: 3px solid var(--suno-green); background: var(--suno-white); }
+.pj-message { padding: 10px 14px; margin-bottom: 8px; border: 1px solid var(--suno-line); border-left: 3px solid var(--suno-green); border-radius: var(--suno-radius-sm); background: var(--suno-white); }
 .pj-message-error { border-color: var(--suno-red); }
-.pj-warning { padding: 10px 14px; border-left: 3px solid var(--suno-amber); background: var(--suno-white); }
+.pj-warning { padding: 10px 14px; border: 1px solid var(--suno-line); border-left: 3px solid var(--suno-amber); border-radius: var(--suno-radius-sm); background: var(--suno-white); }
 .pj-gantt { overflow-x: auto; }
 .pj-gantt svg { display: block; font-family: var(--suno-font); font-size: 11px; }
 .pj-gantt .bar { fill: var(--suno-muted); }

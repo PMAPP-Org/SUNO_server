@@ -10,6 +10,7 @@
   --suno-red: #a42730;
   --suno-accent: #ed4248;
   --suno-red-dark: #7f1d25;
+  --suno-action: var(--suno-red);
   /* Referencias digitales PANTONE para la paleta 2026. */
   --suno-cloud-dancer: #f0eee9;
   --suno-marshmallow: #f0eee4;
@@ -18,21 +19,28 @@
   /* Marshmallow puro identifica las superficies de énfasis. */
   --suno-paper: var(--suno-marshmallow);
   --suno-line: #dedcd3;
+  --suno-line-strong: #cbc8bf;
   --suno-white: #ffffff;
   --suno-ink: #171717;
   --suno-muted: #666760;
   --suno-green: #5f715f;
   --suno-amber: #9a6a25;
   --suno-topography: #a29968;
-  --suno-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --suno-font: "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  --suno-font-display: "Segoe UI Variable Display", "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
   --suno-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-  --suno-radius: 2px;
+  --suno-radius-xs: 4px;
+  --suno-radius-sm: 6px;
+  --suno-radius: 6px;
+  --suno-radius-lg: 8px;
+  --suno-control-height: 38px;
+  --suno-shadow-popover: 0 14px 38px rgb(23 23 23 / 12%);
   --suno-content: 1360px;
 }
 
 .suno-wordmark { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
 .suno-wordmark img { object-fit: contain; flex-shrink: 0; }
-.suno-wordmark span { font: 720 20px/1 var(--suno-font); letter-spacing: .16em; }
+.suno-wordmark span { font: 700 20px/1 var(--suno-font-display); letter-spacing: -.025em; }
 :focus-visible { outline: 3px solid var(--suno-action); outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }

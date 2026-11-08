@@ -1,16 +1,16 @@
 .access-heading h1 { font-size: clamp(34px, 4vw, 52px); }
 .access-messages { margin: 0 0 20px; padding: 0; list-style: none; }
-.access-message { margin-bottom: 8px; padding: 10px 14px; border-left: 3px solid var(--suno-green); background: var(--suno-white); font-size: 12px; }
+.access-message { margin-bottom: 8px; padding: 10px 14px; border: 1px solid var(--suno-line); border-left: 3px solid var(--suno-green); border-radius: var(--suno-radius-sm); background: var(--suno-white); font-size: 12px; }
 .access-message-error { border-color: var(--suno-red); color: var(--suno-red-dark); }
 .access-panel { margin: 0 0 34px; border-top: 1px solid var(--suno-line); }
 .access-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 20px 0 16px; }
 .access-panel-head .editorial-index { margin-bottom: 4px; }
 .access-panel-head h2 { margin: 0; font-size: 22px; letter-spacing: -.03em; }
 .access-panel-head > span { color: var(--suno-muted); font: 9px/1.4 var(--suno-mono); text-transform: uppercase; }
-.access-table-wrap { overflow-x: auto; border: 1px solid var(--suno-line); background: var(--suno-white); }
+.access-table-wrap { overflow-x: auto; border: 1px solid var(--suno-line); border-radius: var(--suno-radius); background: var(--suno-white); }
 .access-matrix, .capability-matrix { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; }
 .access-matrix th, .access-matrix td, .capability-matrix th, .capability-matrix td { min-width: 130px; padding: 10px 12px; border-right: 1px solid var(--suno-line); border-bottom: 1px solid var(--suno-line); text-align: left; vertical-align: top; }
-.access-matrix thead th, .capability-matrix thead th { background: var(--suno-paper); color: var(--suno-muted); font-size: 9px; font-weight: 600; text-transform: uppercase; }
+.access-matrix thead th, .capability-matrix thead th { background: var(--suno-paper); color: var(--suno-ink); font-size: 10px; font-weight: 600; text-transform: none; }
 .access-matrix tbody th { position: sticky; left: 0; z-index: 1; min-width: 190px; background: var(--suno-white); }
 .access-matrix tr.is-selected th { box-shadow: inset 3px 0 0 var(--suno-red); }
 .access-matrix th a { display: grid; color: inherit; text-decoration: none; }
@@ -19,16 +19,16 @@
 .access-none, .cap-no { color: #aaa; }
 .access-empty { padding: 28px !important; text-align: center !important; color: var(--suno-muted); }
 .access-editor-grid { display: grid; grid-template-columns: repeat(3, minmax(230px, 1fr)); gap: 14px; }
-.access-card { display: grid; align-content: start; gap: 12px; padding: 18px; border: 1px solid var(--suno-line); background: var(--suno-white); }
+.access-card { display: grid; align-content: start; gap: 12px; padding: 18px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius); background: var(--suno-white); }
 .access-card-title { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--suno-line); }
 .access-card-title h3 { margin: 0; font-size: 15px; }
 .access-card-title span { color: var(--suno-green); font-size: 9px; text-transform: uppercase; }
 .access-card-title .is-off { color: var(--suno-muted); }
 .access-card > label { display: grid; gap: 4px; font-size: 11px; font-weight: 600; }
-.access-card select { width: 100%; min-height: 38px; padding: 6px 8px; border: 1px solid var(--suno-line); background: var(--suno-white); font: inherit; }
+.access-card select { width: 100%; min-height: 38px; padding: 6px 8px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); background: var(--suno-white); font: inherit; }
 .access-card fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .access-card legend { margin-bottom: 4px; font-size: 11px; font-weight: 600; }
-.access-projects { max-height: 112px; overflow: auto; padding: 8px; border: 1px solid var(--suno-line); background: var(--suno-cream); }
+.access-projects { max-height: 112px; overflow: auto; padding: 8px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius-sm); background: var(--suno-cream); }
 .access-projects label { display: block; padding: 2px 0; font-size: 10px; font-weight: 400; }
 .access-card-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .access-card-actions .button { min-height: 38px; padding: 8px 14px; }

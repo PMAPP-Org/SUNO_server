@@ -107,7 +107,7 @@ input[type="text"], input[type="password"], input[type="email"], input[type="num
 input:focus, textarea:focus, select:focus { outline: 2px solid var(--link-fg); outline-offset: 2px; }
 input[type="checkbox"] { accent-color: var(--button-bg); }
 .button, input[type="submit"], input[type="button"], .submit-row input, a.button, .object-tools a {
-  border-radius: var(--suno-radius); min-height: 44px; padding: 13px 20px; box-sizing: border-box; font-weight: 600; font-size: 12px;
+  border-radius: var(--suno-radius-sm); min-height: 36px; padding: 8px 14px; box-sizing: border-box; font-weight: 600; font-size: 12px;
 }
 .object-tools a { display: inline-flex; align-items: center; }
 .submit-row { background: var(--darkened-bg); border-color: var(--hairline-color); border-radius: var(--suno-radius); }
@@ -118,7 +118,7 @@ input[type="checkbox"] { accent-color: var(--button-bg); }
 #changelist .paginator { background: var(--body-bg); padding: 16px; }
 #changelist .results { overflow-x: auto; }
 body.login { background: var(--darkened-bg); padding: 0 20px; box-sizing: border-box; }
-body.login #container { background: var(--body-bg); width: min(100%, 440px); min-width: 0; margin: 8vh auto; border: 1px solid var(--hairline-color); border-radius: 8px; overflow: hidden; }
+body.login #container { background: var(--body-bg); width: min(100%, 440px); min-width: 0; margin: 8vh auto; border: 1px solid var(--hairline-color); border-radius: var(--suno-radius-lg); overflow: hidden; }
 body.login #header { padding: 28px 32px; }
 body.login .suno-admin-brand { flex-direction: column; align-items: flex-start; gap: 16px; }
 body.login .suno-admin-label { border: 0; padding: 0; text-align: left; line-height: 1.6; }

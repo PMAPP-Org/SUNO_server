@@ -11,7 +11,7 @@
         <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#record"></use></svg> Registros</a>{% endif %}
         {% if navigation.REPORTS %}<span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#report"></use></svg> Reportes <small>Próximamente</small></span>{% endif %}
         <p>Gestión</p>
-        {% if navigation.EQUIPMENT %}<a {% if active == "equipment" %}class="active" {% endif %}href="{% url 'equipment:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Equipos</a>{% endif %}
+        {% if navigation.EQUIPMENT %}<a {% if active == "equipment" %}class="active" {% endif %}href="{% url 'equipment:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#equipment"></use></svg> Equipos</a>{% endif %}
         {% if navigation.FORMS %}<span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#form"></use></svg> Formularios</span>{% endif %}
         {% if navigation.GIS %}<a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg> Capas GIS</a>{% endif %}
         {% if navigation.USERS_ACCESS %}<a {% if active == "access" %}class="active" {% endif %}href="{% url 'access_control:matrix' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Usuarios y accesos</a>{% endif %}
