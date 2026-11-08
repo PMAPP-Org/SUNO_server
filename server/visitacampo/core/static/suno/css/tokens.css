@@ -26,6 +26,8 @@
   --suno-green: #5f715f;
   --suno-amber: #9a6a25;
   --suno-topography: #a29968;
+  --suno-topo-major: #7b2e88;
+  --suno-topo-minor: #8995a0;
   --suno-font: "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
   --suno-font-display: "Segoe UI Variable Display", "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
   --suno-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
