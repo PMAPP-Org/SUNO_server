@@ -2826,10 +2826,12 @@ components:
       oneOf:
         - required: [equipment_id]
           properties:
+            equipment_id: { $ref: '#/components/schemas/Uuid' }
             vehicle_id: { type: 'null' }
         - required: [vehicle_id]
           properties:
             equipment_id: { type: 'null' }
+            vehicle_id: { $ref: '#/components/schemas/Uuid' }
       type: object
       required:
         - id
