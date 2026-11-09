@@ -2823,6 +2823,13 @@ components:
             $ref: '#/components/schemas/TransportPersonItem'
 
     TripIn:
+      oneOf:
+        - required: [equipment_id]
+          properties:
+            vehicle_id: { type: 'null' }
+        - required: [vehicle_id]
+          properties:
+            equipment_id: { type: 'null' }
       type: object
       required:
         - id
