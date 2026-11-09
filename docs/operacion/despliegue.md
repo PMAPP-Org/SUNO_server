@@ -118,3 +118,34 @@ La llave la genera quien administra el servidor, en su propio equipo: `ssh-keyge
 1. **Si la versión fallida no trae migraciones nuevas** (míralo en el CHANGELOG o con `git diff vANTERIOR vNUEVA -- server/suno/*/migrations`): lanza **Actions → Deploy** con `vANTERIOR`, o a mano `bash infra/scripts/deploy.sh vANTERIOR <su imagen@sha256:…>`.
 2. **Si trae migraciones nuevas**, el código anterior puede no funcionar sobre el esquema nuevo. Restaura el backup tomado justo antes del despliegue ([`restauracion.md`](restauracion.md)) y luego despliega `vANTERIOR`. Lo que cambió en el servidor después del backup se pierde, pero los teléfonos lo reenvían si aún no lo habían sincronizado.
 3. Anota el rollback y abre un issue con la causa. La versión fallida no se vuelve a desplegar hasta que haya una corrección con su propia release.
+
+### Release del renombre a "registro" (migración `core.0027_rename_visit_to_record`)
+
+Esta release renombra tablas, columnas, constraints, permisos y `sync_op_log`. **El rollback automático de `deploy.sh` no la deshace**: vuelve a levantar la imagen anterior sobre el esquema ya renombrado, y `/v1/readyz` sigue respondiendo `200` aunque el código viejo no encuentre sus tablas. Además lleva el contrato de sync al esquema 2: las apps sin actualizar dejan de sincronizar, así que se fusiona coordinada con la app.
+
+Antes de fusionar, en producción:
+
+- [ ] Mide el volumen que reescribe la migración, dentro de la misma transacción que el renombre:
+
+  ```sql
+  SELECT count(*) FROM sync_op_log WHERE entity IN ('visit', 'visit_attachment');
+  ```
+
+  Con 200 000 filas, `migrate` tardó unos 19 s hacia delante y 22 s hacia atrás en un PostgreSQL 16 local. La migración fija `lock_timeout = 10s`: si otra sesión retiene una de las tablas, falla en vez de quedarse esperando, y basta con reintentar.
+- [ ] Confirma que el backup previo está activo (`BACKUP_AGE_RECIPIENT` en `infra/.env`): es la otra vía de vuelta.
+
+Para volver atrás, **antes** de levantar la imagen anterior, haz una de estas dos cosas:
+
+1. Deshaz la migración con la imagen **nueva**, la única que la conoce. Se usa `--entrypoint python` porque el entrypoint de `api` aplica `migrate` antes de arrancar:
+
+   ```bash
+   cd /opt/suno/infra
+   docker compose stop api worker
+   SUNO_API_IMAGE=<imagen nueva@sha256:…> docker compose run --rm --entrypoint python api \
+     manage.py migrate core 0026
+   ```
+
+   Después despliega `vANTERIOR` como en el paso 1 de arriba. Se conservan todos los datos, también los escritos con la versión nueva. La traza de auditoría no cambia en ningún sentido.
+2. O restaura el backup tomado justo antes del despliegue ([`restauracion.md`](restauracion.md)) y despliega `vANTERIOR` (paso 2 de arriba).
+
+Si `deploy.sh` ya volvió solo a la versión anterior (código de salida `2`), la base sigue renombrada y la versión anterior no funciona aunque `/v1/readyz` diga lo contrario: aplica igualmente la opción 1 o la 2.

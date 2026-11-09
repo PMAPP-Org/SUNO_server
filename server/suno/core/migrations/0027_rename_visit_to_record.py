@@ -3,7 +3,8 @@
 Producción tiene aplicadas 0001-0026 con los nombres viejos, así que el renombre va en
 una migración nueva en lugar de reescribir las anteriores.
 
-**Esquema**: todo son `RENAME`, sin reescribir tablas ni revalidar constraints. Por eso va
+**Esquema**: con `lock_timeout` de 10 s, para fallar rápido si otra sesión retiene una
+tabla. Todo son `RENAME`, sin reescribir tablas ni revalidar constraints. Por eso va
 en un `SeparateDatabaseAndState` con el SQL escrito a mano: `RenameField` sobre una FK
 borra la constraint y la vuelve a crear, lo que revalida la tabla entera. Los nombres
 generados por Django (`visit_device_id_eb2ac8a1_fk_device_id`) se renombran igual, leídos
@@ -15,7 +16,8 @@ del catálogo: son distintos en cada base y no están en el estado de las migrac
   filas se renombran en el sitio, sin tocar las tablas intermedias. Si ya existiera la
   fila nueva, se funden las asignaciones en ella.
 - `sync_op_log`: el resultado guardado se devuelve tal cual en un reenvío, así que debe
-  hablar el contrato de ahora (`entity`, `server_row`, `error.details`, mensajes).
+  hablar el contrato de ahora (`entity`, `server_row`, `error.details`, mensajes). Se
+  reescribe con `UPDATE` de conjunto en SQL, no fila a fila: la tabla guarda 90 días.
 - `form_template_version.definition.dsl`: el dialecto `visitacampo/form@1` lo dejó de
   aceptar el renombre del paquete y hace rechazar las respuestas contra esas versiones.
   Esta corrección solo va hacia delante: el código anterior tampoco acepta el dialecto
@@ -100,6 +102,7 @@ def _rename_catalog(cursor, table, old_word, new_word):
 
 def rename_schema(apps, schema_editor):
     with schema_editor.connection.cursor() as cursor:
+        cursor.execute("SET LOCAL lock_timeout = '10s'")
         for old_table, new_table in TABLES:
             cursor.execute(f'ALTER TABLE "{old_table}" RENAME TO "{new_table}"')
         for table in TABLES_WITH_FK:
@@ -110,6 +113,7 @@ def rename_schema(apps, schema_editor):
 
 def unrename_schema(apps, schema_editor):
     with schema_editor.connection.cursor() as cursor:
+        cursor.execute("SET LOCAL lock_timeout = '10s'")
         for _, new_table in TABLES:
             _rename_catalog(cursor, new_table, "record", "visit")
         for table in TABLES_WITH_FK:
@@ -179,49 +183,66 @@ def _rename_permissions(apps, *, forwards):
             )
 
 
-def rewrite_result(result, entity, entities, reasons, messages, old_key, new_key):
-    """El `result` de una operación en el contrato de destino. Pura, para poder probarla."""
-    if not isinstance(result, dict):
-        return result
-    # Solo los adjuntos llevan la FK: en un registro, `details.field` puede ser la ruta de
-    # un campo del formulario, que escribe el usuario y no se toca.
-    is_attachment = entity in ("visit_attachment", "record_attachment")
-    if result.get("entity") in entities:
-        result["entity"] = entities[result["entity"]]
-    row = result.get("server_row")
-    if isinstance(row, dict):
-        if row.get("entity") in entities:
-            row["entity"] = entities[row["entity"]]
-        data = row.get("data")
-        if is_attachment and isinstance(data, dict) and old_key in data:
-            data[new_key] = data.pop(old_key)
-    error = result.get("error")
-    if isinstance(error, dict):
-        if error.get("message") in messages:
-            error["message"] = messages[error["message"]]
-        details = error.get("details")
-        if isinstance(details, dict):
-            if details.get("reason") in reasons:
-                details["reason"] = reasons[details["reason"]]
-            if is_attachment and details.get("field") == old_key:
-                details["field"] = new_key
-    return result
+#: Rutas de `result` cuyo valor se cambia solo si coincide exactamente con uno del mapa.
+#: Las de adjuntos (`attachment_only`) son las que nombran la FK: en un registro, un
+#: `field` puede ser la ruta de un campo del formulario, que escribe el usuario.
+def _value_rules(entities, reasons, messages, old_key, new_key):
+    return (
+        (("entity",), entities, False),
+        (("server_row", "entity"), entities, False),
+        (("error", "message"), messages, False),
+        (("error", "details", "reason"), reasons, False),
+        (("error", "details", "field"), {old_key: new_key}, True),
+    )
 
 
-def _rewrite_op_log(apps, entities, reasons, messages, old_key, new_key):
-    op_log = apps.get_model("core", "SyncOpLog").objects
-    batch = []
-    for row in op_log.filter(entity__in=list(entities)).iterator(chunk_size=2000):
-        row.result = rewrite_result(
-            row.result, row.entity, entities, reasons, messages, old_key, new_key
+def _rewrite_op_log(cursor, entities, reasons, messages, old_key, new_key):
+    """Reescribe `sync_op_log` con `UPDATE` de conjunto: una pasada por regla, en SQL.
+
+    Cada `UPDATE` filtra por la entidad vieja, así que la columna `entity` va la última.
+    """
+    attachment = next(old for old in entities if old.endswith("_attachment"))
+    rows = "entity IN (%s, %s)"
+    olds = list(entities)
+    for path, mapping, attachment_only in _value_rules(
+        entities, reasons, messages, old_key, new_key
+    ):
+        cases = " ".join("WHEN %s THEN %s" for _ in mapping)
+        values = [item for pair in mapping.items() for item in pair]
+        where, where_params = ("entity = %s", [attachment]) if attachment_only else (rows, olds)
+        cursor.execute(
+            "UPDATE sync_op_log SET result = jsonb_set(result, %s::text[], "
+            f"to_jsonb(CASE result #>> %s::text[] {cases} END)) "
+            f"WHERE {where} AND jsonb_typeof(result #> %s::text[]) = 'string' "
+            f"AND result #>> %s::text[] IN ({', '.join(['%s'] * len(mapping))})",
+            [list(path), list(path), *values, *where_params, list(path), list(path), *mapping],
         )
-        row.entity = entities[row.entity]
-        batch.append(row)
-        if len(batch) >= 1000:
-            op_log.bulk_update(batch, ["entity", "result"])
-            batch = []
-    if batch:
-        op_log.bulk_update(batch, ["entity", "result"])
+    # La FK dentro de la fila del servidor de un conflicto de adjunto: se renombra la clave.
+    cursor.execute(
+        "UPDATE sync_op_log SET result = jsonb_set(result, '{server_row,data}', "
+        "(result #> '{server_row,data}') - %s "
+        "|| jsonb_build_object(%s, result #> ARRAY['server_row', 'data', %s])) "
+        "WHERE entity = %s AND jsonb_typeof(result #> '{server_row,data}') = 'object' "
+        "AND jsonb_exists(result #> '{server_row,data}', %s)",
+        [old_key, new_key, old_key, attachment, old_key],
+    )
+    # Errores de validación del payload (`api_errors.redacted_validation_details`).
+    cursor.execute(
+        "UPDATE sync_op_log SET result = jsonb_set(result, '{error,details,errors}', "
+        "(SELECT jsonb_agg(CASE WHEN e ->> 'field' = %s "
+        "THEN jsonb_set(e, '{field}', to_jsonb(%s::text)) ELSE e END ORDER BY i) "
+        "FROM jsonb_array_elements(result #> '{error,details,errors}') "
+        "WITH ORDINALITY AS t(e, i))) "
+        "WHERE entity = %s AND jsonb_typeof(result #> '{error,details,errors}') = 'array' "
+        "AND EXISTS (SELECT 1 FROM jsonb_array_elements(result #> '{error,details,errors}') e "
+        "WHERE e ->> 'field' = %s)",
+        [old_key, new_key, attachment, old_key],
+    )
+    cases = " ".join("WHEN %s THEN %s" for _ in entities)
+    cursor.execute(
+        f"UPDATE sync_op_log SET entity = CASE entity {cases} END WHERE {rows}",
+        [item for pair in entities.items() for item in pair] + olds,
+    )
 
 
 def _invert(mapping):
@@ -230,8 +251,8 @@ def _invert(mapping):
 
 def rename_stored_data(apps, schema_editor):
     _rename_permissions(apps, forwards=True)
-    _rewrite_op_log(apps, ENTITIES, REASONS, MESSAGES, "visit_id", "record_id")
     with schema_editor.connection.cursor() as cursor:
+        _rewrite_op_log(cursor, ENTITIES, REASONS, MESSAGES, "visit_id", "record_id")
         cursor.execute(
             "UPDATE form_template_version "
             "SET definition = jsonb_set(definition, '{dsl}', '\"suno/form@1\"') "
@@ -241,9 +262,15 @@ def rename_stored_data(apps, schema_editor):
 
 def unrename_stored_data(apps, schema_editor):
     _rename_permissions(apps, forwards=False)
-    _rewrite_op_log(
-        apps, _invert(ENTITIES), _invert(REASONS), _invert(MESSAGES), "record_id", "visit_id"
-    )
+    with schema_editor.connection.cursor() as cursor:
+        _rewrite_op_log(
+            cursor,
+            _invert(ENTITIES),
+            _invert(REASONS),
+            _invert(MESSAGES),
+            "record_id",
+            "visit_id",
+        )
 
 
 class Migration(migrations.Migration):

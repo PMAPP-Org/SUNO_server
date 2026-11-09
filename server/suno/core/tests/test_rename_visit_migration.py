@@ -160,6 +160,58 @@ class RenameMigrationTests(TransactionTestCase):
             },
             **base,
         )
+        self.op_record_conflict, self.op_nested, self.op_record_nested = (
+            uuid.uuid4(),
+            uuid.uuid4(),
+            uuid.uuid4(),
+        )
+        # Un conflicto de registro: sus respuestas son del usuario, aunque una clave
+        # se llame como la FK vieja.
+        op_log.create(
+            op_uuid=self.op_record_conflict,
+            entity="visit",
+            entity_id=visit.pk,
+            result={
+                "entity": "visit",
+                "status": "conflict",
+                "server_row": {
+                    "entity": "visit",
+                    "data": {"id": str(visit.pk), "answers": {"visit_id": "respuesta"}},
+                },
+                "error": {"details": {"field": "base_version", "reason": "stale"}},
+            },
+            **base,
+        )
+        nested_errors = {
+            "errors": [
+                {"field": "visit_id", "reason": "missing"},
+                {"field": "role", "reason": "enum"},
+            ]
+        }
+        op_log.create(
+            op_uuid=self.op_nested,
+            entity="visit_attachment",
+            entity_id=self.attachment_id,
+            result={
+                "entity": "visit_attachment",
+                "status": "rejected",
+                "server_row": None,
+                "error": {"message": "Payload failed validation.", "details": nested_errors},
+            },
+            **base,
+        )
+        op_log.create(
+            op_uuid=self.op_record_nested,
+            entity="visit",
+            entity_id=visit.pk,
+            result={
+                "entity": "visit",
+                "status": "rejected",
+                "server_row": None,
+                "error": {"message": "Payload failed validation.", "details": nested_errors},
+            },
+            **base,
+        )
         self.audit_id = (
             apps.get_model("core", "AuditEvent")
             .objects.create(
@@ -225,6 +277,20 @@ class RenameMigrationTests(TransactionTestCase):
         self.assertEqual(conflict.result["server_row"]["data"]["record_id"], str(self.visit_id))
         self.assertNotIn("visit_id", conflict.result["server_row"]["data"])
 
+        record_conflict = results.get(pk=self.op_record_conflict).result
+        self.assertEqual(record_conflict["server_row"]["entity"], "record")
+        self.assertEqual(
+            record_conflict["server_row"]["data"]["answers"], {"visit_id": "respuesta"}
+        )
+        self.assertEqual(
+            results.get(pk=self.op_nested).result["error"]["details"]["errors"],
+            [{"field": "record_id", "reason": "missing"}, {"field": "role", "reason": "enum"}],
+        )
+        self.assertEqual(
+            results.get(pk=self.op_record_nested).result["error"]["details"]["errors"][0],
+            {"field": "visit_id", "reason": "missing"},
+        )
+
         audit = apps.get_model("core", "AuditEvent").objects.get(pk=self.audit_id)
         self.assertEqual(audit.action, "backoffice.visit_reviewed")
         self.assertEqual(audit.target, f"visit:{self.visit_id}")
@@ -283,6 +349,17 @@ class RenameMigrationTests(TransactionTestCase):
             restored_conflict.result["server_row"]["data"]["visit_id"], str(self.visit_id)
         )
         self.assertEqual(
+            old_results.get(pk=self.op_nested).result["error"]["details"]["errors"][0],
+            {"field": "visit_id", "reason": "missing"},
+        )
+        self.assertEqual(
+            old_results.get(pk=self.op_record_conflict).result["server_row"],
+            {
+                "entity": "visit",
+                "data": {"id": str(self.visit_id), "answers": {"visit_id": "respuesta"}},
+            },
+        )
+        self.assertEqual(
             old_apps.get_model("core", "AuditEvent").objects.get(pk=self.audit_id).action,
             "backoffice.visit_reviewed",
         )
@@ -305,3 +382,39 @@ class RenameMigrationTests(TransactionTestCase):
         groups = apps.get_model("auth", "Group").objects
         for group in (self.group, other):
             self.assertTrue(groups.get(pk=group.pk).permissions.filter(pk=survivor.pk).exists())
+
+    def test_merges_a_user_holding_both_permissions_and_reverses_after(self):
+        permissions = self.apps.get_model("auth", "Permission").objects
+        old = permissions.get(pk=self.review_pk)
+        new = permissions.create(
+            content_type=old.content_type,
+            codename="change_recordreview",
+            name="Can change revisión de registro",
+        )
+        user = self.apps.get_model("core", "AppUser").objects.get(pk=self.user.pk)
+        user.user_permissions.add(new)  # ya tenía la vieja
+        apps = migrate_to(AFTER)
+        merged = apps.get_model("auth", "Permission").objects.filter(codename="change_recordreview")
+        self.assertEqual(list(merged.values_list("pk", flat=True)), [new.pk])
+        grants = apps.get_model("core", "AppUser").user_permissions.through.objects
+        self.assertEqual(
+            list(grants.filter(appuser_id=self.user.pk).values_list("permission_id", flat=True)),
+            [new.pk],
+        )
+
+        old_apps = migrate_to(BEFORE)
+        restored = old_apps.get_model("auth", "Permission").objects
+        self.assertFalse(restored.filter(codename="change_recordreview").exists())
+        self.assertEqual(restored.get(pk=new.pk).codename, "change_visitreview")
+        self.assertTrue(
+            old_apps.get_model("core", "AppUser")
+            .objects.get(pk=self.user.pk)
+            .user_permissions.filter(pk=new.pk)
+            .exists()
+        )
+        self.assertTrue(
+            old_apps.get_model("auth", "Group")
+            .objects.get(pk=self.group.pk)
+            .permissions.filter(codename="view_visit")
+            .exists()
+        )
