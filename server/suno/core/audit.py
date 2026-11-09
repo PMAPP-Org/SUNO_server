@@ -60,7 +60,11 @@ _IP_HASH_SALT = "suno.core.audit.ip_hash"
 
 
 class AuditAction:
-    """Códigos de `AuditEvent.action`. Estables: el back-office filtra por ellos."""
+    """Códigos de `AuditEvent.action`. Estables: el back-office filtra por ellos.
+
+    La traza no se reescribe: las filas de antes del renombre a "registro" (migración
+    0027) conservan su código y su `target` originales, y los lectores los muestran tal cual.
+    """
 
     LOGIN = "auth.login"
     LOGIN_DENIED = "auth.login_denied"

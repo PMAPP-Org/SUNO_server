@@ -27,6 +27,7 @@ los nombres nuevos.
 | Id de la app | `com.visitacampo.visitacampo` pasa a `com.suno.app` (Android `applicationId`/`namespace` e iOS bundle id). Es una app nueva para las tiendas; sin producción no se pierde nada. |
 | Contrato | Se cambia en el sitio. `SCHEMA_VERSION` y `MIN_SUPPORTED_SCHEMA_VERSION` pasan a 2 al mismo tiempo; la app vieja deja de sincronizar. |
 | Migraciones del servidor | Sin producción, las migraciones 0001–0014 se reescriben en el sitio con los nombres nuevos; no se agregan `RenameModel`. Todos los ambientes recrean la base. |
+| Migraciones del servidor (2026-11-09) | **Reemplaza a la fila anterior.** Master ya se despliega a producción en cada commit, así que 0001–0026 quedan intactas y el renombre es aditivo: `0027_rename_visit_to_record.py` lleva una base poblada al esquema nuevo (tablas, columnas, constraints, índices, permisos, tipos de contenido, `sync_op_log`) y es reversible. La traza de auditoría conserva sus códigos históricos. |
 | Migraciones de la app | Como el id de la app cambia, ningún teléfono actualiza desde la base vieja: el historial de Drift se reinicia en una versión 1 con los nombres nuevos. |
 | Documentos | Los históricos de `plans/` no se tocan. Los vivos (`docs/`, `README`, `CONTRIBUTING`, registro de avance) se actualizan; el registro de avance pasa a `plans/suno-progreso.md`. |
 | Repos de GitHub | No cambian: ya se llaman SUNO. |

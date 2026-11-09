@@ -13,7 +13,7 @@ Permitir que cada usuario tenga un rol distinto en cada sección de SUNO, que la
 Consiste en crear más valores en `Membership.role`, por ejemplo `EQUIPMENT_REVIEWER` o `BUDGET_MANAGER`.
 
 - Ventaja: cambio pequeño.
-- Problema: combina responsabilidades no relacionadas. Una persona que revisa equipos podría terminar heredando permisos de visitas, proyectos o presupuestos.
+- Problema: combina responsabilidades no relacionadas. Una persona que revisa equipos podría terminar heredando permisos de registros, proyectos o presupuestos.
 - Resultado: descartada; no satisface “un rol por sección”.
 
 ### 2. Usar solamente grupos y permisos de Django
