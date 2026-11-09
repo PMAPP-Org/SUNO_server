@@ -1,0 +1,50 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Registros de uso{% endblock %}
+{% block content %}
+<section class="eq-heading">
+  <div>
+    <p class="editorial-label">Operación de equipos</p>
+    <h1>Registros de uso</h1>
+    <p>Consulta quién usó cada equipo, en qué proyecto y durante qué horario.</p>
+  </div>
+  <div class="eq-heading-actions">
+    <a class="eq-button" href="{% url 'equipment:list' %}">Ver equipos</a>
+    {% if can_report %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:usage_report' %}">Reportar mi uso</a>{% endif %}
+    {% if can_create %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:usage_create' %}">Registrar uso</a>{% endif %}
+  </div>
+</section>
+
+<form class="eq-filters eq-usage-filters" method="get" aria-label="Filtros de uso">
+  <label><span>Desde</span><input type="date" name="date_from" value="{{ date_from }}"></label>
+  <label><span>Hasta</span><input type="date" name="date_to" value="{{ date_to }}"></label>
+  <label><span>Proyecto</span><select name="project"><option value="">Todos</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label>
+  <label><span>Equipo</span><select name="equipment"><option value="">Todos</option>{% for equipment in equipment_options %}<option value="{{ equipment.pk }}"{% if selected_equipment == equipment.pk|stringformat:'s' %} selected{% endif %}>{{ equipment.code }} · {{ equipment.name }}</option>{% endfor %}</select></label>
+  <label><span>Operador</span><select name="operator"><option value="">Todos</option>{% for membership in operators %}<option value="{{ membership.user_id }}"{% if selected_operator == membership.user_id|stringformat:'s' %} selected{% endif %}>{{ membership.user.display_name|default:membership.user.username }}</option>{% endfor %}</select></label>
+  <label><span>Estado</span><select name="status"><option value="">Todos</option>{% for value, label in statuses %}<option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <button class="eq-button" type="submit">Aplicar</button>
+</form>
+
+<section class="eq-table-wrap" aria-label="Usos de equipos">
+  <table class="eq-table eq-usage-table">
+    <thead><tr><th>Fecha y horario</th><th>Equipo</th><th>Proyecto</th><th>Operador</th><th>Actividad</th><th>Estado</th><th>Medidor</th>{% if can_view_costs %}<th>Costo</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for usage in page.object_list %}
+      <tr>
+        <td data-label="Fecha"><strong>{{ usage.usage_date|date:"d/m/Y" }}</strong><small>{{ usage.start_time|time:"H:i" }}–{{ usage.end_time|time:"H:i" }}</small></td>
+        <td data-label="Equipo"><a data-peek class="eq-name" href="{% url 'equipment:detail' usage.equipment_id %}?tab=usage">{{ usage.equipment.name }}</a><small>{{ usage.equipment.code }}</small></td>
+        <td data-label="Proyecto">{{ usage.project.name }}</td>
+        <td data-label="Operador">{{ usage.operator.display_name|default:usage.operator.username }}</td>
+        <td data-label="Actividad">{{ usage.activity }}{% if usage.location %}<small>{{ usage.location }}</small>{% endif %}</td>
+        <td data-label="Estado"><span class="eq-status eq-usage-status-{{ usage.status }}"><i></i>{{ usage.get_status_display }}</span></td>
+        <td data-label="Medidor">{% if usage.start_meter != None %}{{ usage.start_meter }}{% if usage.end_meter != None %} → {{ usage.end_meter }}{% endif %}<small>{{ usage.get_meter_unit_display }}</small>{% else %}—{% endif %}</td>
+        {% if can_view_costs %}<td data-label="Costo">{% if usage.cost != None %}${{ usage.cost|floatformat:"2g" }}<small>{{ usage.billable_hours }} h × ${{ usage.hourly_rate|floatformat:"2g" }}</small>{% else %}<span class="eq-muted">Sin tarifa</span>{% endif %}</td>{% endif %}
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="eq-empty"><strong>No hay registros de uso.</strong><span>Crea el primero o cambia los filtros.</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if page.paginator.num_pages > 1 %}<nav class="eq-pagination" aria-label="Paginación"><span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span></nav>{% endif %}
+{% endblock %}

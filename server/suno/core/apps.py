@@ -23,6 +23,10 @@ class CoreConfig(AppConfig):
     label = "core"
     verbose_name = "Núcleo SUNO"
 
+    def ready(self) -> None:
+        # Registra el aprovisionamiento de permisos para Membership nuevas.
+        from suno.core import signals  # noqa: F401
+
 
 class OtpAdminConfig(AdminConfig):
     """Django Admin con segundo factor obligatorio (riesgo R-20, A.8.5).

@@ -1,0 +1,43 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ liquidation.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:fuel' %}">← Combustibles</a>
+<section class="eq-detail-head">
+  <div>
+    <p class="editorial-label">{{ liquidation.get_status_display }}</p>
+    <h1>{{ liquidation.code }} · {{ liquidation.supplier.name }}</h1>
+    <p>{{ liquidation.date_from|date:"d/m/Y" }} — {{ liquidation.date_to|date:"d/m/Y" }}{% if liquidation.supplier.tax_id %} · NIT {{ liquidation.supplier.tax_id }}{% endif %}</p>
+  </div>
+</section>
+
+{% if preview %}
+<div class="eq-section-head"><div><p class="editorial-label">Vista previa</p><h2>Estaciones con consumo</h2></div></div>
+{% for block in preview.stations %}
+<div class="eq-section-head"><div><h3>{{ block.station.name }}</h3></div><strong>{{ block.gallons|floatformat:"-2g" }} gal · ${{ block.amount|floatformat:"2g" }}</strong></div>
+<div class="eq-records">
+  {% for line in block.lines %}<article><div><strong>{{ line.equipment.code }} · {{ line.equipment.name }}</strong><span>{{ line.fills }} tanqueo{{ line.fills|pluralize }}</span></div><div><strong>{{ line.gallons|floatformat:"-2g" }} gal</strong><span>${{ line.amount|floatformat:"2g" }}</span></div></article>{% endfor %}
+</div>
+{% empty %}<p class="eq-empty-inline">No hay tanqueos por liquidar en este periodo.</p>{% endfor %}
+<p class="eq-form-note">Total: <strong>{{ preview.total_gallons|floatformat:"-2g" }} galones · ${{ preview.total_amount|floatformat:"2g" }}</strong>.
+{% if preview.unpriced %} <b>{{ preview.unpriced }} tanqueo{{ preview.unpriced|pluralize }} sin tarifa:</b> define la tarifa de la estación para poder confirmar.{% endif %}</p>
+{% if preview.stations and not preview.unpriced %}
+<form method="post" action="{% url 'equipment:fuel_liquidation_confirm' liquidation.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  {% csrf_token %}
+  {% for field in form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
+  <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Confirmar liquidación</button></div>
+</form>
+{% endif %}
+{% else %}
+<dl class="eq-specs">
+  <div><dt>Galones</dt><dd>{{ liquidation.total_gallons|floatformat:"-2g" }}</dd></div>
+  <div><dt>Valor total</dt><dd>${{ liquidation.total_amount|floatformat:"2g" }}</dd></div>
+  <div><dt>Anticipo amortizado</dt><dd>${{ liquidation.advance_applied|floatformat:"2g" }}</dd></div>
+  <div><dt>Saldo a pagar</dt><dd>${{ liquidation.net_payable|floatformat:"2g" }}</dd></div>
+  <div><dt>Confirmada</dt><dd>{{ liquidation.confirmed_at|date:"d/m/Y H:i" }}</dd></div>
+</dl>
+<div class="eq-section-head"><div><p class="editorial-label">Detalle</p><h2>Tanqueos liquidados</h2></div></div>
+<div class="eq-records">
+  {% for fill in fills %}<article><div><strong>{{ fill.equipment.code }} · vale {{ fill.voucher_number }}</strong><span>{{ fill.station.name }} · {{ fill.filled_at|date:"d/m/Y H:i" }}</span></div><div><strong>{{ fill.gallons|floatformat:"-2g" }} gal</strong><span>${{ fill.cost|floatformat:"2g" }}</span></div></article>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

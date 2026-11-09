@@ -51,7 +51,7 @@ La regla completa está en [`CONTRIBUTING.md`](CONTRIBUTING.md): **ningún paso 
 
 ## Releases y despliegue
 
-release-please versiona a partir de Conventional Commits. Cada release publica la imagen `ghcr.io/<owner>/suno-api` con SBOM y atestación de procedencia, y `deploy.yml` la despliega en producción si el environment `production` está configurado ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)).
+Cada push a `master` publica una imagen inmutable por SHA y la despliega automáticamente por digest, con procedencia verificada, backup y rollback. release-please mantiene en paralelo las versiones semánticas, el CHANGELOG y las imágenes de release con SBOM ([`docs/operacion/despliegue.md`](docs/operacion/despliegue.md)).
 
 ## Convención de commits
 

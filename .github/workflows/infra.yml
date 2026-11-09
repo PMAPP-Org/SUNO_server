@@ -149,12 +149,21 @@ jobs:
         run: |
           bash infra/scripts/deploy.sh v0.0.1-ci suno-api:good
           test "$(cat .deploy-state)" = "v0.0.1-ci suno-api:good"
+          grep -qx 'SUNO_API_IMAGE=suno-api:good' infra/.env
+          grep -qx 'VISITACAMPO_API_IMAGE=suno-api:good' infra/.env
+
+      - name: Desplegar el SHA de master → 0
+        run: |
+          sha="$(git rev-parse HEAD)"
+          bash infra/scripts/deploy.sh "$sha" suno-api:good
+          test "$(cat .deploy-state)" = "$sha suno-api:good"
 
       - name: Desplegar v0.0.2-ci (rota) → rollback (2) y servicio en pie
         run: |
           set +e; bash infra/scripts/deploy.sh v0.0.2-ci suno-api:broken; code=$?; set -e
           test "$code" = 2 || { echo "esperado 2 (rollback correcto), fue $code"; exit 1; }
-          test "$(cat .deploy-state)" = "v0.0.1-ci suno-api:good"
+          # El despliegue bueno inmediatamente anterior fue la prueba por SHA.
+          test "$(cat .deploy-state)" = "$(git rev-parse HEAD) suno-api:good"
           test "$(docker inspect --format '{{.Config.Image}}' "$(cd infra && docker compose ps -q api)")" = suno-api:good
           curl -fsSk --resolve "${DAST_HOST}:443:127.0.0.1" "https://${DAST_HOST}/v1/readyz"
 

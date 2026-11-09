@@ -29,11 +29,12 @@ antes del bucle — RD-07/RD-16), nunca el cuerpo de la función.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from ninja.errors import HttpError
 
+from suno.core.access import Capability, Section
 from suno.core.context import RequestContext, RoleValue
 from suno.core.models import Role
 
@@ -91,6 +92,7 @@ __all__ = [
     "check_view_budgets",
     "check_write_record",
     "user_has_organization_roles",
+    "user_has_section_capability",
 ]
 
 # --- Conjuntos de roles -----------------------------------------------------
@@ -187,6 +189,19 @@ def user_has_organization_roles(
     return ctx.org_id == org_id and ctx.has_any_role(roles)
 
 
+def user_has_section_capability(
+    ctx: RequestContext,
+    org_id: UUID,
+    section: Any,
+    capability: Capability,
+    *,
+    project_id: UUID | None = None,
+) -> bool:
+    """Primitiva RBAC: organización, sección, capacidad y alcance."""
+
+    return ctx.org_id == org_id and ctx.has_capability(section, capability, project_id)
+
+
 def _denial(ctx: RequestContext, resource_org_id: UUID) -> PolicyDenied:
     """Elige entre `404` y `403` (RD-11).
 
@@ -215,7 +230,7 @@ def can_read_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
     correspondiente ya resuelto en el `ctx` (ADR-013: extender, nunca
     puentear), no se añade un filtro suelto en la vista.
     """
-    return user_has_organization_roles(ctx, record.org_id, MEMBER_ROLES)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.READ)
 
 
 def can_write_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
@@ -232,7 +247,7 @@ def can_write_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
     Sirve igual para un alta: basta con pasar la instancia candidata sin
     guardar, porque lo único que se lee es su `org_id`.
     """
-    return user_has_organization_roles(ctx, record.org_id, WRITE_RECORD_ROLES)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.CREATE)
 
 
 def can_modify_record(ctx: RequestContext, record: AuthoredResource) -> bool:
@@ -244,10 +259,10 @@ def can_modify_record(ctx: RequestContext, record: AuthoredResource) -> bool:
     mínimo privilegio; antes la app lo impedía solo en pantalla). Supervisión
     y administración sí, porque corregir es parte de revisar.
     """
-    if user_has_organization_roles(ctx, record.org_id, SUPERVISION_ROLES):
+    if user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.REVIEW):
         return True
-    return record.created_by_id == ctx.user_id and user_has_organization_roles(
-        ctx, record.org_id, WRITE_RECORD_ROLES
+    return record.created_by_id == ctx.user_id and user_has_section_capability(
+        ctx, record.org_id, Section.FIELD_RECORDS, Capability.UPDATE
     )
 
 
@@ -282,7 +297,7 @@ def can_publish_form_template(ctx: RequestContext, template: OrgScopedResource) 
     se publica otra (`forms/services.py`). Una política para editar sería una
     política para algo que el diseño no permite hacer.
     """
-    return user_has_organization_roles(ctx, template.org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, template.org_id, Section.FORMS, Capability.PUBLISH)
 
 
 def can_upload_attachment(ctx: RequestContext, org_id: UUID) -> bool:
@@ -305,7 +320,7 @@ def can_upload_attachment(ctx: RequestContext, org_id: UUID) -> bool:
     tampoco haría falta — el aislamiento real de los adjuntos vive en
     `record_attachment`, que sí lleva `org_id`.
     """
-    return user_has_organization_roles(ctx, org_id, WRITE_RECORD_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.FIELD_RECORDS, Capability.CREATE)
 
 
 def can_read_job_output(ctx: RequestContext, job: OrgScopedResource) -> bool:
@@ -327,7 +342,7 @@ def can_read_job_output(ctx: RequestContext, job: OrgScopedResource) -> bool:
     (hay recurso, le falta rol) y uno de otra organización `404` (RD-11) — los
     dos códigos que el contrato declara para este endpoint.
     """
-    return user_has_organization_roles(ctx, job.org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, job.org_id, Section.OPERATIONS, Capability.READ)
 
 
 def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
@@ -359,12 +374,12 @@ def can_review_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
     Supervisión de la organización del registro. Un agente no valida su propio
     trabajo ni el de otros (segregación de funciones, ISO 27001 A.5.3).
     """
-    return user_has_organization_roles(ctx, record.org_id, SUPERVISION_ROLES)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.REVIEW)
 
 
 def can_assign_work(ctx: RequestContext, org_id: UUID) -> bool:
     """Crear asignaciones de trabajo para los agentes (Paso 24): supervisión."""
-    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.FIELD_RECORDS, Capability.ASSIGN)
 
 
 def can_export_records(ctx: RequestContext, org_id: UUID) -> bool:
@@ -373,22 +388,22 @@ def can_export_records(ctx: RequestContext, org_id: UUID) -> bool:
     Un archivo exportado sale del control de la aplicación (ubicaciones,
     respuestas): solo supervisión, y cada exportación queda en la auditoría.
     """
-    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.FIELD_RECORDS, Capability.EXPORT)
 
 
 def can_manage_projects(ctx: RequestContext, org_id: UUID) -> bool:
     """Crear proyectos e importar cronogramas: administración de la organización."""
-    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.PROJECTS, Capability.CREATE)
 
 
 def can_assign_task_responsibles(ctx: RequestContext, org_id: UUID) -> bool:
     """Asignar o quitar responsables de tareas: supervisión."""
-    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.PROJECTS, Capability.ASSIGN)
 
 
 def can_export_schedule(ctx: RequestContext, org_id: UUID) -> bool:
     """Exportar el cronograma a Excel: el archivo sale del control de la app."""
-    return user_has_organization_roles(ctx, org_id, SUPERVISION_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.PROJECTS, Capability.EXPORT)
 
 
 def can_read_field_tasks(ctx: RequestContext, org_id: UUID) -> bool:
@@ -397,17 +412,17 @@ def can_read_field_tasks(ctx: RequestContext, org_id: UUID) -> bool:
     Cualquier miembro: la lista ya se limita a las tareas de las que quien
     llama es responsable, y el push vuelve a comprobarlo al vincular.
     """
-    return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
+    return ctx.org_id == org_id and ctx.has_section_access(Section.PROJECTS)
 
 
 def can_view_budgets(ctx: RequestContext, org_id: UUID) -> bool:
     """Ver los presupuestos de los proyectos: todos los roles menos el agente de campo."""
-    return user_has_organization_roles(ctx, org_id, BUDGET_READ_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.BUDGETS, Capability.READ)
 
 
 def can_manage_budgets(ctx: RequestContext, org_id: UUID) -> bool:
     """Crear presupuestos, importar versiones, editar cargos y marcar la contractual."""
-    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.BUDGETS, Capability.CREATE)
 
 
 def can_export_budgets(ctx: RequestContext, org_id: UUID) -> bool:
@@ -416,7 +431,7 @@ def can_export_budgets(ctx: RequestContext, org_id: UUID) -> bool:
     A diferencia del cronograma, el Observador sí exporta: la spec de la pieza 3
     da a Supervisor y Observador "ver y exportar".
     """
-    return user_has_organization_roles(ctx, org_id, BUDGET_READ_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.BUDGETS, Capability.EXPORT)
 
 
 def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
@@ -424,12 +439,12 @@ def can_read_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
 
     Cualquier miembro: el mapa es la herramienta de trabajo de campo.
     """
-    return user_has_organization_roles(ctx, org_id, MEMBER_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.GIS, Capability.READ)
 
 
 def can_manage_basemaps(ctx: RequestContext, org_id: UUID) -> bool:
     """Importar o retirar mapas base y capas: administración de la organización."""
-    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.GIS, Capability.IMPORT)
 
 
 def can_record_consent(ctx: RequestContext, org_id: UUID) -> bool:
@@ -447,7 +462,7 @@ def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
     Solo administración: suprimir es irreversible, y exportar entrega todos los
     datos de una persona.
     """
-    return user_has_organization_roles(ctx, org_id, ADMIN_ROLES)
+    return user_has_section_capability(ctx, org_id, Section.USERS_ACCESS, Capability.MANAGE_ACCESS)
 
 
 def check_read_record(ctx: RequestContext, record: OrgScopedResource) -> None:

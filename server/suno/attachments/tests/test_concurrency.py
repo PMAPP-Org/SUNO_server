@@ -38,7 +38,7 @@ from django.test import TransactionTestCase, override_settings
 
 from suno.attachments import services
 from suno.attachments.localfs import LocalFsBlobStore
-from suno.core.context import RequestContext
+from suno.core.context import Principal, RequestContext, resolve_request_context
 from suno.core.models import Blob, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -88,10 +88,11 @@ class SimultaneousCommitTests(TransactionTestCase):
         LocalFsBlobStore(self._tmp.name).put_object(JPEG_SHA, JPEG_BYTES, JPEG_MIME)
 
     def _ctx(self) -> RequestContext:
-        return RequestContext(
-            user_id=self.scenario.user.pk,
-            org_id=self.scenario.org.pk,
-            roles=frozenset({Role.FIELD_AGENT}),
+        return resolve_request_context(
+            Principal(
+                user_id=self.scenario.user.pk,
+                org_id=self.scenario.org.pk,
+            )
         )
 
     def _commit(self) -> services.CommitResult:

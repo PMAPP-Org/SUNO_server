@@ -109,9 +109,7 @@ class ConcurrentEnqueueTests(TransactionTestCase):
         self.assertEqual(sum(results), len(periodic.PERIODIC_JOBS))
         for definition in periodic.PERIODIC_JOBS:
             with self.subTest(job=definition.type):
-                self.assertEqual(
-                    Job.objects.filter(org=self.org, type=definition.type).count(), 1
-                )
+                self.assertEqual(Job.objects.filter(org=self.org, type=definition.type).count(), 1)
 
     def test_nobody_raises_an_integrity_error(self) -> None:
         """`ON CONFLICT DO NOTHING`, no "intenta y recupérate del error".
@@ -202,9 +200,7 @@ class SingleMechanismTests(TransactionTestCase):
         no una garantía.
         """
         org = make_org()
-        first = queue.enqueue(
-            org_id=org.pk, job_type="queue.reap", idempotency_key="queue.reap"
-        )
+        first = queue.enqueue(org_id=org.pk, job_type="queue.reap", idempotency_key="queue.reap")
         self.assertIsNotNone(first)
 
         with self.assertRaises(IntegrityError):
@@ -219,9 +215,7 @@ class SingleMechanismTests(TransactionTestCase):
     def test_the_same_key_is_writable_again_once_the_job_is_terminal(self) -> None:
         """El índice es **parcial**: el historial no bloquea el futuro."""
         org = make_org()
-        first = queue.enqueue(
-            org_id=org.pk, job_type="queue.reap", idempotency_key="queue.reap"
-        )
+        first = queue.enqueue(org_id=org.pk, job_type="queue.reap", idempotency_key="queue.reap")
         Job.objects.filter(pk=first).update(status=JobStatus.DEAD_LETTER)
 
         Job.objects.create(

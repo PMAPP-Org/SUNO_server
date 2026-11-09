@@ -2,7 +2,7 @@
 # Despliega una release en el servidor, con rollback automático.
 #
 # Uso (como `deploy`, desde el clon del repositorio en el servidor):
-#   bash infra/scripts/deploy.sh vX.Y.Z ghcr.io/<owner>/suno-api@sha256:<digest>
+#   bash infra/scripts/deploy.sh <vX.Y.Z|SHA-de-master> ghcr.io/<owner>/suno-api@sha256:<digest>
 #
 # Lo invoca .github/workflows/deploy.yml por SSH tras verificar la atestación
 # de procedencia de la imagen; también vale a mano (docs/operacion/despliegue.md).
@@ -46,9 +46,12 @@ log() { printf '%s deploy: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
 if [ -z "$version" ] || [ -z "$image" ]; then
-	die "uso: deploy.sh vX.Y.Z <imagen@sha256:digest>"
+	die "uso: deploy.sh <vX.Y.Z|SHA-de-master> <imagen@sha256:digest>"
 fi
-[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "versión inválida: $version"
+valid_revision() {
+	[[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ || "$1" =~ ^[0-9a-f]{40}$ ]]
+}
+valid_revision "$version" || die "versión/SHA inválido: $version"
 # Solo caracteres de una referencia de imagen: el valor acaba en infra/.env.
 [[ "$image" =~ ^[A-Za-z0-9./:@_-]+$ ]] || die "referencia de imagen inválida: $image"
 if [ "${DEPLOY_ALLOW_TAG:-0}" != 1 ] && [[ "$image" != *@sha256:* ]]; then
@@ -70,8 +73,19 @@ domain="$(sed -n 's/^CADDY_DOMAIN=//p' "$ENV_FILE" | tail -1)"
 compose() { (cd "$REPO_DIR/infra" && docker compose "$@"); }
 
 checkout() {
-	[ "${DEPLOY_NO_FETCH:-0}" = 1 ] || git fetch --tags --quiet
-	git -c advice.detachedHead=false checkout --quiet "refs/tags/$1"
+	local revision="$1"
+	valid_revision "$revision" || die "versión/SHA inválido: $revision"
+	if [[ "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+		if [ "${DEPLOY_NO_FETCH:-0}" != 1 ]; then
+			git fetch --quiet origin master:refs/remotes/origin/master
+			git merge-base --is-ancestor "$revision" origin/master \
+				|| die "el SHA no pertenece a origin/master: $revision"
+		fi
+		git -c advice.detachedHead=false checkout --quiet "$revision"
+	else
+		[ "${DEPLOY_NO_FETCH:-0}" = 1 ] || git fetch --tags --quiet
+		git -c advice.detachedHead=false checkout --quiet "refs/tags/$revision"
+	fi
 }
 
 ready() {
@@ -89,16 +103,24 @@ ready() {
 
 # La imagen en marcha queda también en infra/.env, para que un operador pueda
 # usar `docker compose ps|logs|exec` en el servidor sin exportarla a mano.
-record_image() { # $1 = imagen
-	if grep -q '^SUNO_API_IMAGE=' "$ENV_FILE"; then
-		sed -i "s|^SUNO_API_IMAGE=.*|SUNO_API_IMAGE=$1|" "$ENV_FILE"
+record_image_variable() { # $1 = nombre; $2 = imagen
+	if grep -q "^$1=" "$ENV_FILE"; then
+		sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
 	else
-		printf 'SUNO_API_IMAGE=%s\n' "$1" >> "$ENV_FILE"
+		printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
 	fi
+}
+
+record_image() { # $1 = imagen
+	# Compatibilidad de ida y vuelta entre v0.13 (`VISITACAMPO_*`) y v0.14+
+	# (`SUNO_*`). Es necesaria también para que el rollback pueda cruzar el rename.
+	record_image_variable SUNO_API_IMAGE "$1"
+	record_image_variable VISITACAMPO_API_IMAGE "$1"
 }
 
 start() { # $1 = imagen
 	export SUNO_API_IMAGE="$1"
+	export VISITACAMPO_API_IMAGE="$1"
 	record_image "$1"
 	[ "${DEPLOY_SKIP_PULL:-0}" = 1 ] || compose pull api worker
 	compose up -d --remove-orphans --wait --wait-timeout "${DEPLOY_WAIT_TIMEOUT:-180}" && ready
@@ -106,6 +128,13 @@ start() { # $1 = imagen
 
 previous="$(cat "$STATE" 2> /dev/null || true)"
 log "versión actual: ${previous:-ninguna}; desplegando $version ($image)"
+
+# `compose run backup` ocurre antes de `start`, pero Compose evalúa las imágenes
+# de todos los servicios al cargar los archivos. Exportar ambos nombres permite
+# tomar el backup tanto al pasar de v0.13 a v0.14+ como al volver atrás, sin
+# modificar todavía el `.env` persistente.
+export SUNO_API_IMAGE="$image"
+export VISITACAMPO_API_IMAGE="$image"
 
 checkout "$version"
 

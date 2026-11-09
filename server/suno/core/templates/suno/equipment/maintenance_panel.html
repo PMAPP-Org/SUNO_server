@@ -1,0 +1,70 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Mantenimiento{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-heading">
+  <div>
+    <h1>Mantenimiento</h1>
+    <p>Alertas preventivas y órdenes de trabajo de los equipos que puedes ver.</p>
+  </div>
+</section>
+
+<div class="eq-section-head"><div><p class="editorial-label">Panel</p><h2>Preventivos por vencer</h2></div></div>
+<div class="eq-records">
+  {% for alert in alerts %}
+  <article>
+    <div>
+      <strong><a href="{% url 'equipment:detail' alert.plan.equipment.pk %}?tab=maintenance">{{ alert.plan.equipment.code }} · {{ alert.plan.name }}</a></strong>
+      <span>
+        {% if alert.plan.kind == 'meter' %}
+          {% if alert.remaining < 0 %}Vencido hace {{ alert.remaining|cut:"-" }} {{ alert.plan.get_meter_unit_display }}{% else %}Faltan {{ alert.remaining }} {{ alert.plan.get_meter_unit_display|lower }}{% endif %}
+        {% else %}
+          {% if alert.remaining < 0 %}Vencido hace {{ alert.remaining|cut:"-" }} días{% else %}Faltan {{ alert.remaining }} días{% endif %}
+        {% endif %}
+      </span>
+    </div>
+    <div>
+      {% if alert.open_order %}<a href="{% url 'equipment:order_detail' alert.open_order.pk %}">{{ alert.open_order.code }} · {{ alert.open_order.get_status_display }}</a>
+      {% elif can_manage %}<a data-peek class="eq-button" href="{% url 'equipment:order_create' alert.plan.equipment.pk %}?plan={{ alert.plan.pk }}">Generar orden</a>{% endif %}
+    </div>
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay preventivos próximos a vencer.</p>{% endfor %}
+</div>
+
+<div class="eq-section-head"><div><p class="editorial-label">Órdenes</p><h2>Órdenes de trabajo</h2></div></div>
+<form method="get" class="eq-form eq-filters">
+  <label><span>Estado</span>
+    <select name="status">
+      <option value="">Todos</option>
+      <option value="open"{% if status == 'open' %} selected{% endif %}>Abiertas</option>
+      {% for value, label in statuses %}<option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span>Tipo</span>
+    <select name="kind">
+      <option value="">Todos</option>
+      {% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span>Equipo</span><input type="search" name="q" value="{{ q }}" placeholder="Código o nombre"></label>
+  <div class="eq-form-actions"><button class="eq-button" type="submit">Filtrar</button></div>
+</form>
+<div class="eq-records">
+  {% for order in page %}
+  <article>
+    <div>
+      <strong><a href="{% url 'equipment:order_detail' order.pk %}">{{ order.code }} · {{ order.equipment.code }}</a></strong>
+      <span>{{ order.get_kind_display }}{% if order.plan %} · {{ order.plan.name }}{% endif %} — {{ order.description|truncatechars:90 }}</span>
+    </div>
+    <div><small>Estado</small><strong>{{ order.get_status_display }}</strong></div>
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay órdenes con esos filtros.</p>{% endfor %}
+</div>
+{% if page.has_other_pages %}
+<nav class="eq-tabs" aria-label="Páginas">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;status={{ status }}&amp;kind={{ kind }}&amp;q={{ q|urlencode }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;status={{ status }}&amp;kind={{ kind }}&amp;q={{ q|urlencode }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

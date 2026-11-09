@@ -1,0 +1,43 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ settlement.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:transport' %}">← Transporte</a>
+<section class="eq-detail-head">
+  <div>
+    <p class="editorial-label">{{ settlement.get_status_display }}</p>
+    <h1>{{ settlement.code }} · {{ settlement.contractor.name }}</h1>
+    <p>{{ settlement.date_from|date:"d/m/Y" }} — {{ settlement.date_to|date:"d/m/Y" }}{% if settlement.contractor.tax_id %} · NIT {{ settlement.contractor.tax_id }}{% endif %}</p>
+  </div>
+</section>
+
+{% if preview %}
+<div class="eq-section-head"><div><p class="editorial-label">Vista previa</p><h2>Volumen y tramos por vehículo</h2></div></div>
+{% for block in preview.vehicles %}
+<div class="eq-section-head"><div><h3>{{ block.vehicle.plate }}</h3></div><strong>{{ block.m3|floatformat:"-2g" }} m³ · ${{ block.amount|floatformat:"2g" }}</strong></div>
+<div class="eq-records">
+  {% for line in block.lines %}<article><div><strong>{{ line.route.origin }} → {{ line.route.destination }}</strong><span>{{ line.material.name }} · {{ line.trips }} viaje{{ line.trips|pluralize }}</span></div><div><strong>{{ line.m3|floatformat:"-2g" }} m³</strong><span>${{ line.amount|floatformat:"2g" }}</span></div></article>{% endfor %}
+</div>
+{% empty %}<p class="eq-empty-inline">No hay viajes por liquidar en este periodo.</p>{% endfor %}
+<p class="eq-form-note">Total: <strong>{{ preview.total_m3|floatformat:"-2g" }} m³ · ${{ preview.total_amount|floatformat:"2g" }}</strong>.
+{% if preview.unpriced %} <b>{{ preview.unpriced }} viaje{{ preview.unpriced|pluralize }} sin tarifa:</b> define la tarifa del tramo y el material para poder confirmar.{% endif %}</p>
+{% if preview.vehicles and not preview.unpriced %}
+<form method="post" action="{% url 'equipment:transport_settlement_confirm' settlement.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  {% csrf_token %}
+  {% for field in form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
+  <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Confirmar liquidación</button></div>
+</form>
+{% endif %}
+{% else %}
+<dl class="eq-specs">
+  <div><dt>Volumen</dt><dd>{{ settlement.total_m3|floatformat:"-2g" }} m³</dd></div>
+  <div><dt>Valor total</dt><dd>${{ settlement.total_amount|floatformat:"2g" }}</dd></div>
+  <div><dt>Anticipo amortizado</dt><dd>${{ settlement.advance_applied|floatformat:"2g" }}</dd></div>
+  <div><dt>Saldo a pagar</dt><dd>${{ settlement.net_payable|floatformat:"2g" }}</dd></div>
+  <div><dt>Confirmada</dt><dd>{{ settlement.confirmed_at|date:"d/m/Y H:i" }}</dd></div>
+</dl>
+<div class="eq-section-head"><div><p class="editorial-label">Detalle</p><h2>Viajes liquidados</h2></div></div>
+<div class="eq-records">
+  {% for trip in trips %}<article><div><strong>{{ trip.code }} · {{ trip.vehicle.plate }}</strong><span>{{ trip.route.origin }} → {{ trip.route.destination }} · {{ trip.material.name }} · {{ trip.recorded_at|date:"d/m/Y H:i" }}</span></div><div><strong>{{ trip.volume_m3|floatformat:"-2g" }} m³</strong><span>${{ trip.amount|floatformat:"2g" }}</span></div></article>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

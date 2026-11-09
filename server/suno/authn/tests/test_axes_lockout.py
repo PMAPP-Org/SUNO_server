@@ -1,5 +1,5 @@
 """`django-axes` — rate limiting de login (Tarea 4 de
-plans/visitacampo-despliegue-demo-implementacion.md, ADR-004). Reemplaza la
+plans/suno-despliegue-demo-implementacion.md, ADR-004). Reemplaza la
 construcción de rate limiting a mano: el bloqueo lo decide
 `axes.backends.AxesBackend`, antepuesto en `AUTHENTICATION_BACKENDS`, dentro
 de la misma llamada a `django.contrib.auth.authenticate()` que

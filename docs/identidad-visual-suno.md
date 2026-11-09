@@ -20,6 +20,21 @@ La identidad utiliza el emblema original entregado y el nombre **SUNO**. El mock
 
 El color de marca no se usa directamente detrás de texto pequeño blanco. El tema oscuro utiliza `#F0A0A5` para acciones y enlaces sobre tinta. Los estados siempre incluyen una etiqueta, no solo color. Los bordes de campos usan un gris más fuerte que los separadores decorativos.
 
+## Paleta de dashboards
+
+Paleta predeterminada para tableros y gráficos (`--chart-*` en `tokens.css`; espejo en `equipment/charts.py::PALETTE`). Se asigna a las series en este orden:
+
+| Orden | Color | Hex | Uso |
+| --- | --- | --- | --- |
+| 1 | Rojo corporativo | `#9E2B2F` | Serie principal, valores ejecutados y alertas |
+| 2 | Azul petróleo | `#007A99` | Segunda serie y avance dentro de lo presupuestado |
+| 3 | Naranja ámbar | `#F28C28` | Advertencias y tercera serie |
+| 4 | Azul acero | `#6787B7` | Cuarta serie |
+| 5 | Turquesa vivo | `#19B7C6` | Quinta serie |
+| 6 | Grafito | `#3B3B46` | Líneas de acumulado, puntos y texto de ejes |
+
+Reglas: el rojo se reserva para la serie principal y para superar un límite (por ejemplo, un presupuesto); el grafito dibuja líneas sobre columnas; nunca se comunica un estado solo con color.
+
 ## Tipografía y composición
 
 Inter 4.1, incluida localmente con su licencia SIL OFL. Fuente: https://rsms.me/inter/download/ y release oficial https://github.com/rsms/inter/releases/tag/v4.1. Pesos de interfaz: 400, 500, 600 y 700. La web utiliza el archivo variable WOFF2; Flutter usa TTF estáticos. No se hacen peticiones a Google Fonts ni a un CDN al abrir la aplicación.

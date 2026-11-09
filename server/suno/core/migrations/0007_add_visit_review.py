@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="RecordReview",
+            name="VisitReview",
             fields=[
                 (
                     "id",
@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
                 (
                     "status",
                     models.CharField(
-                        choices=[("approved", "Validado"), ("rejected", "Rechazado")],
+                        choices=[("approved", "Validada"), ("rejected", "Rechazada")],
                         max_length=16,
                         verbose_name="decisión",
                     ),
@@ -49,29 +49,29 @@ class Migration(migrations.Migration):
                     "reviewer",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="record_reviews",
+                        related_name="visit_reviews",
                         to=settings.AUTH_USER_MODEL,
                         verbose_name="revisada por",
                     ),
                 ),
                 (
-                    "record",
+                    "visit",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="reviews",
-                        to="core.record",
-                        verbose_name="registro",
+                        to="core.visit",
+                        verbose_name="visita",
                     ),
                 ),
             ],
             options={
-                "verbose_name": "revisión de registro",
-                "verbose_name_plural": "revisiones de registro",
-                "db_table": "record_review",
+                "verbose_name": "revisión de visita",
+                "verbose_name_plural": "revisiones de visita",
+                "db_table": "visit_review",
                 "ordering": ("-created_at",),
                 "indexes": [
                     models.Index(
-                        fields=["org", "record", "-created_at"], name="review_org_record_idx"
+                        fields=["org", "visit", "-created_at"], name="review_org_visit_idx"
                     )
                 ],
             },

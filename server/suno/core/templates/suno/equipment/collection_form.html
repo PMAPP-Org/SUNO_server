@@ -1,0 +1,25 @@
+{% extends "suno/equipment/base.html" %}
+{% load static %}
+{% static 'suno/brand/icons.svg' as suno_icons %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="eq-form-shell eq-dialog-shell">
+  <a class="eq-dialog-close" href="{% if collection %}{% url 'equipment:collection_detail' collection.pk %}{% else %}{% url 'equipment:list' %}{% endif %}" aria-label="Cerrar"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#close"></use></svg></a>
+  <header><h1>{{ title }}</h1><p>Agrupa el catálogo usando una o varias tipologías.</p></header>
+  <form method="post" class="eq-form eq-collection-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <label><span>{{ form.name.label }}<b aria-hidden="true">*</b></span>{{ form.name }}{{ form.name.errors }}</label>
+    <label class="eq-field-wide"><span>{{ form.description.label }}</span>{{ form.description }}{{ form.description.errors }}</label>
+    <fieldset class="eq-field-wide eq-tag-picker">
+      <legend>{{ form.equipment_types.label }}</legend>
+      <p>{{ form.equipment_types.help_text }}</p>
+      <div>
+        {% for checkbox in form.equipment_types %}<label>{{ checkbox.tag }}<span>{{ checkbox.choice_label }}</span></label>{% empty %}<span class="eq-muted">Crea primero una tipología de equipo.</span>{% endfor %}
+      </div>
+      {{ form.equipment_types.errors }}
+    </fieldset>
+    <div class="eq-form-actions"><a data-peek-close href="{% if collection %}{% url 'equipment:collection_detail' collection.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">Cancelar</a><button class="eq-button eq-button-primary" type="submit">Guardar colección</button></div>
+  </form>
+</section>
+{% endblock %}

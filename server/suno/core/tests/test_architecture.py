@@ -79,6 +79,9 @@ ALLOWED = {
     # que haya contexto, y escribe en las tablas de django-otp, que no tienen
     # `org_id` (son del back-office, no datos de negocio de un tenant).
     "suno/management/commands/enroll_admin_totp.py": "alta offline del 2.º factor del Admin",
+    # Datos de ejemplo del panel de costos: siembra offline para desarrollo y demos,
+    # fuera de una request y con una organización ya existente (sin `ctx` que scopear).
+    "suno/management/commands/seed_equipment_demo.py": "siembra offline de datos de ejemplo",
 }
 
 
@@ -236,6 +239,7 @@ class WalkerTests(SimpleTestCase):
                 "suno/authn/lookups.py",
                 "suno/management/commands/bootstrap_demo.py",
                 "suno/management/commands/enroll_admin_totp.py",
+                "suno/management/commands/seed_equipment_demo.py",
             },
         )
 

@@ -1,4 +1,4 @@
-"""`record.accuracy_m` y `record.altitude_m` no pueden ser `NaN` ni `±Infinity`.
+"""`visit.accuracy_m` y `visit.altitude_m` no pueden ser `NaN` ni `±Infinity`.
 
 Revisión del Paso 8, hallazgo C-2. `NaN` e `Infinity` son valores **legales**
 de `double precision` en PostgreSQL: se escribían con éxito y solo envenenaban
@@ -24,19 +24,19 @@ tampoco corre offline porque el `SchemaEditor` de PostgreSQL pasa cada
 sentencia por `mogrify()`, que exige un cursor vivo). DDL generado::
 
     -- forwards
-    ALTER TABLE "record" DROP CONSTRAINT "record_accuracy_non_negative";
-    ALTER TABLE "record" ADD CONSTRAINT "record_accuracy_finite_non_negative"
+    ALTER TABLE "visit" DROP CONSTRAINT "visit_accuracy_non_negative";
+    ALTER TABLE "visit" ADD CONSTRAINT "visit_accuracy_finite_non_negative"
         CHECK (("accuracy_m" IS NULL OR ("accuracy_m" >= 0.0
                 AND "accuracy_m" > '-Infinity'::float8
                 AND "accuracy_m" < 'Infinity'::float8)));
-    ALTER TABLE "record" ADD CONSTRAINT "record_altitude_finite"
+    ALTER TABLE "visit" ADD CONSTRAINT "visit_altitude_finite"
         CHECK (("altitude_m" IS NULL OR ("altitude_m" > '-Infinity'::float8
                 AND "altitude_m" < 'Infinity'::float8)));
 
     -- backwards (reversible, patrón C-18)
-    ALTER TABLE "record" DROP CONSTRAINT "record_altitude_finite";
-    ALTER TABLE "record" DROP CONSTRAINT "record_accuracy_finite_non_negative";
-    ALTER TABLE "record" ADD CONSTRAINT "record_accuracy_non_negative"
+    ALTER TABLE "visit" DROP CONSTRAINT "visit_altitude_finite";
+    ALTER TABLE "visit" DROP CONSTRAINT "visit_accuracy_finite_non_negative";
+    ALTER TABLE "visit" ADD CONSTRAINT "visit_accuracy_non_negative"
         CHECK (("accuracy_m" IS NULL OR "accuracy_m" >= 0.0));
 
 El `backwards` restituye exactamente la constraint que creó `0001`, carácter
@@ -54,20 +54,20 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0002_add_record_attachment_org_isolation_fk'),
+        ('core', '0002_add_visit_attachment_org_isolation_fk'),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='record',
-            name='record_accuracy_non_negative',
+            model_name='visit',
+            name='visit_accuracy_non_negative',
         ),
         migrations.AddConstraint(
-            model_name='record',
-            constraint=models.CheckConstraint(condition=models.Q(('accuracy_m__isnull', True), models.Q(('accuracy_m__gte', 0), ('accuracy_m__gt', float("-inf")), ('accuracy_m__lt', float("inf"))), _connector='OR'), name='record_accuracy_finite_non_negative'),
+            model_name='visit',
+            constraint=models.CheckConstraint(condition=models.Q(('accuracy_m__isnull', True), models.Q(('accuracy_m__gte', 0), ('accuracy_m__gt', float("-inf")), ('accuracy_m__lt', float("inf"))), _connector='OR'), name='visit_accuracy_finite_non_negative'),
         ),
         migrations.AddConstraint(
-            model_name='record',
-            constraint=models.CheckConstraint(condition=models.Q(('altitude_m__isnull', True), models.Q(('altitude_m__gt', float("-inf")), ('altitude_m__lt', float("inf"))), _connector='OR'), name='record_altitude_finite'),
+            model_name='visit',
+            constraint=models.CheckConstraint(condition=models.Q(('altitude_m__isnull', True), models.Q(('altitude_m__gt', float("-inf")), ('altitude_m__lt', float("inf"))), _connector='OR'), name='visit_altitude_finite'),
         ),
     ]

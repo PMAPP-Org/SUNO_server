@@ -18,6 +18,7 @@ from ninja import Router, Status
 
 from suno.authn import services
 from suno.authn.schemas import (
+    AccessProfile,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -25,6 +26,7 @@ from suno.authn.schemas import (
     TokenPair,
 )
 from suno.core import ratelimit
+from suno.core.access import capabilities_for
 from suno.core.context import get_request_context
 
 router = Router(tags=["auth"])
@@ -38,6 +40,31 @@ def _token_pair(session: services.IssuedSession) -> dict[str, object]:
         "refresh_token": session.refresh_token,
         "refresh_expires_in": session.refresh_expires_in,
         "server_time": session.server_time,
+    }
+
+
+@router.get(
+    "/auth/access",
+    response={200: AccessProfile},
+    summary="Accesos efectivos del usuario",
+    operation_id="authAccess",
+)
+def access_profile(request):
+    """Secciones y capacidades vigentes, resueltas desde la base de datos."""
+    ctx = get_request_context(request)
+    return {
+        "sections": [
+            {
+                "section": str(access.section),
+                "role": str(access.role),
+                "scope": access.scope,
+                "project_ids": sorted(access.project_ids, key=str),
+                "capabilities": sorted(
+                    str(capability) for capability in capabilities_for(access.section, access.role)
+                ),
+            }
+            for access in ctx.section_access
+        ]
     }
 
 

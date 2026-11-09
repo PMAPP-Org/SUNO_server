@@ -1,0 +1,41 @@
+{% load static %}
+{% static 'suno/brand/icons.svg' as suno_icons %}
+<!doctype html>
+<html lang="es">
+<head>
+  <script src="{% static 'suno/js/peek-frame.js' %}"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#F0EEE9">
+  <title>{% block title %}Equipos{% endblock %} · SUNO</title>
+  <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}?v=20261108-topo-v1">
+  <link rel="stylesheet" href="{% static 'suno/css/web.css' %}?v=20261108-topo-v1">
+  <link rel="stylesheet" href="{% static 'suno/css/equipment.css' %}?v=20261108-topo-v1">
+  <script src="{% static 'suno/js/web.js' %}" defer></script>
+  <script src="{% static 'suno/js/peek.js' %}" defer></script>
+</head>
+<body class="workspace-page eq-page">
+  <a class="skip-link" href="#workspace-content">Saltar al contenido</a>
+  <div class="app-shell">
+    {% include "suno/_sidebar.html" with active="equipment" %}
+    <div class="workspace-frame">
+      <header class="workspace-topbar">
+        <button class="sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false" data-sidebar-toggle>
+          <svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#menu"></use></svg>
+          <span class="sr-only">Abrir navegación</span>
+        </button>
+        <div class="project-selector"><span>Organización</span><strong>{{ organization.name }}</strong></div>
+      </header>
+      <main id="workspace-content" class="workspace-content">
+        {% if messages %}
+          <ul class="eq-messages" role="status">
+            {% for message in messages %}<li class="eq-message eq-message-{{ message.tags }}">{{ message }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>

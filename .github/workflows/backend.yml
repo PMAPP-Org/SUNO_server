@@ -31,6 +31,9 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
+    # La suite completa tarda unos 18 minutos. Este límite evita que una
+    # prueba bloqueada consuma el runner durante horas y deje el gate abierto.
+    timeout-minutes: 35
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
     # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
@@ -60,7 +63,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -90,7 +93,7 @@ jobs:
         env:
           SUNO_REQUIRE_DB: "1"
         run: |
-          pytest server/ --cov --cov-config=server/pyproject.toml \
+          pytest -vv server/ --cov --cov-config=server/pyproject.toml \
             --cov-report=term --cov-report=xml:coverage-server.xml
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -123,7 +126,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -142,9 +145,12 @@ jobs:
 
       - name: pip-audit (advisories PyPA/OSV)
         run: |
-          pip-audit --require-hashes --disable-pip --progress-spinner off \
-            -r server/requirements.lock -r server/requirements-dev.lock \
-            -r server/requirements-dast.lock
+          # Los locks comparten paquetes y pueden fijarlos a versiones distintas;
+          # pip-audit rechaza requisitos duplicados si se pasan juntos.
+          for lock in requirements.lock requirements-dev.lock requirements-dast.lock; do
+            pip-audit --require-hashes --disable-pip --progress-spinner off \
+              -r "server/${lock}"
+          done
 
       # Aparte, para que las excepciones EXC-001 y EXC-004
       # (docs/seguridad/excepciones.md) solo cubran el lock de Semgrep, y

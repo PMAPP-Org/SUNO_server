@@ -84,6 +84,8 @@ tags:
     description: Capas de referencia GeoJSON (RFC 7946, WGS84) para ver sobre el mapa, por organización.
   - name: projects
     description: Cronograma de proyectos (costos, etapa 1) — avance desde campo.
+  - name: equipment
+    description: Maquinaria y equipos — ficha, alertas de vigencia y lecturas de medidor desde campo.
 
 security:
   - bearerAuth: []
@@ -119,6 +121,26 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/auth/access:
+    get:
+      operationId: authAccess
+      tags: [auth]
+      summary: Accesos efectivos del usuario
+      description: |
+        Devuelve el rol, las capacidades y el alcance por proyecto de cada sección disponible.
+        El servidor resuelve estos datos desde la base de datos en cada solicitud: el cliente los
+        usa para navegación y operación offline, pero nunca como sustituto de la autorización del
+        servidor.
+      responses:
+        '200':
+          description: Autorización funcional vigente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessProfile'
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/auth/refresh:
@@ -633,6 +655,325 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  # ----------------------------------------------------------- equipment ----
+
+  /v1/equipment:
+    get:
+      operationId: equipmentList
+      tags: [equipment]
+      summary: Equipos que quien llama puede ver
+      description: |
+        Equipos no retirados dentro del alcance de quien llama: toda la organización o los de sus
+        proyectos y, para un operador, solo los que tiene asignados hoy. Cada uno trae su ficha
+        resumida (identificación, departamento de maquinaria, esquema de control), la última
+        lectura de cada medidor configurado, los documentos, los campos adicionales y las alertas
+        de vigencia (campos de fecha con aviso y documentos vencidos o por vencer).
+
+        Sin acceso a la sección Equipos la lista va vacía. Se entrega la lista **completa** y el
+        cliente reemplaza la suya. Para no repetir la descarga, el cliente envía la `version` de la
+        última lista; si nada cambió, la respuesta trae `changed: false` e `items` vacío. Como las
+        alertas cuentan días, la `version` cambia al pasar la medianoche cuando hay alertas.
+      parameters:
+        - name: version
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: '`version` de la última lista descargada.'
+      responses:
+        '200':
+          description: Lista de equipos, o "sin cambios".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldEquipmentList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/equipment/{equipment_id}/meter-readings:
+    post:
+      operationId: equipmentMeterReadingCreate
+      tags: [equipment]
+      summary: Registra una lectura de medidor (idempotente por `id`)
+      description: |
+        Registra la lectura de un medidor configurado en la ficha del equipo. El `id` lo genera
+        el cliente: reenviar la misma lectura tras un corte de red devuelve la ya registrada, sin
+        duplicarla. Los medidores solo avanzan: una lectura menor que la anterior (o mayor que una
+        posterior) del mismo medidor, una fecha futura o un medidor no configurado responden `422`.
+        Un equipo inexistente o fuera del alcance de quien llama responde `404`.
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeterReadingIn'
+      responses:
+        '200':
+          description: Lectura registrada (o la ya existente con ese `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterReadingOut'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/transport/catalog:
+    get:
+      operationId: transportCatalog
+      tags: [equipment]
+      summary: Tramos, materiales, vehículos de terceros y usuarios para registrar viajes
+      description: |
+        Los tramos activos del mapa de distancias (con su zona y kilómetros), los materiales, los
+        vehículos subcontratados (con su empresa y capacidad) y las personas de la organización que
+        pueden figurar como quien solicita, despacha o recibe. Los equipos propios que pueden
+        transportar vienen en `GET /v1/equipment`. Sin acceso a la sección Equipos las listas van
+        vacías. El cliente envía la `version` de la última lista; si nada cambió, la respuesta trae
+        `changed: false` y las listas vacías.
+      parameters:
+        - name: version
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        '200':
+          description: Catálogo de transporte, o "sin cambios".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransportCatalog'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/transport/trips:
+    post:
+      operationId: transportTripCreate
+      tags: [equipment]
+      summary: Registra un viaje de material (idempotente por `id`)
+      description: |
+        Registra un viaje con exactamente un vehículo: un equipo propio (`equipment_id`) o uno
+        subcontratado (`vehicle_id`). El `id` lo genera el cliente: reenviar el mismo viaje tras un
+        corte de red devuelve el ya registrado, sin duplicarlo. El servidor fija la distancia del
+        tramo y la tarifa por m³ vigente del material; sin tarifa, el viaje queda sin valorar.
+
+        Exige tres usuarios de la organización (solicita, despacha, recibe) y quien despacha no
+        puede ser quien recibe. Responde `422` y no guarda nada si falta o sobra el vehículo, el
+        volumen es cero o supera la capacidad del vehículo, la fecha es futura, el tramo o el
+        material no existe o está inactivo, o el equipo está retirado. Un equipo fuera del alcance
+        responde `404`; sin permiso para registrar viajes, `403`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TripIn'
+      responses:
+        '200':
+          description: Viaje registrado (o el ya existente con ese `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripOut'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/fuel/catalog:
+    get:
+      operationId: fuelCatalog
+      tags: [equipment]
+      summary: Estaciones de servicio y tanques propios para registrar tanqueos
+      description: |
+        Las estaciones de servicio activas (con su proveedor) y los tanques propios de la
+        organización, para elegir el origen de un tanqueo sin red. Sin acceso a la sección Equipos
+        la lista va vacía. El cliente envía la `version` de la última lista; si nada cambió, la
+        respuesta trae `changed: false` y las listas vacías.
+      parameters:
+        - name: version
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        '200':
+          description: Catálogo de combustible, o "sin cambios".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelCatalog'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/equipment/{equipment_id}/fuel-fills:
+    post:
+      operationId: equipmentFuelFillCreate
+      tags: [equipment]
+      summary: Registra un tanqueo (idempotente por `id`)
+      description: |
+        Registra un tanqueo en una estación de servicio (`source: station`) o una salida del
+        tanque propio (`source: store`). El `id` lo genera el cliente: reenviar el mismo tanqueo
+        tras un corte de red devuelve el ya registrado, sin duplicarlo.
+
+        Responde `422` y no guarda nada si el vale ya existe en esa estación o tanque, si falta la
+        lectura del medidor (equipo controlado por medidor) o retrocede, si la fecha es futura, si
+        el equipo está retirado o si el tanque no tiene stock suficiente. Un equipo inexistente o
+        fuera del alcance responde `404`; sin permiso para registrar, `403`.
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuelFillIn'
+      responses:
+        '200':
+          description: Tanqueo registrado (o el ya existente con ese `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuelFillOut'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/equipment/{equipment_id}/usage-reports:
+    post:
+      operationId: equipmentUsageReportCreate
+      tags: [equipment]
+      summary: Reporta el uso de un equipo asignado (idempotente por `id`)
+      description: |
+        El operador reporta su propia jornada con un equipo que tiene asignado, en un proyecto donde
+        el equipo está vinculado (`usage_projects` de la ficha). Queda **completada**. El `id` lo
+        genera el cliente: reenviar el mismo reporte tras un corte de red devuelve el ya registrado,
+        sin duplicarlo. Una jornada repartida entre proyectos se reporta en varios reportes que no se
+        solapan.
+
+        Si el equipo se controla por medidor exige las lecturas inicial y final (la final pasa a ser
+        la última lectura del equipo y no puede retroceder). Responde `422` y no guarda nada si la
+        fecha u hora es futura, la hora final no es posterior a la inicial, falta la actividad, hay
+        solape con otro uso del equipo o del operador, el proyecto no está vinculado al equipo, el
+        operador no está asignado o el equipo está retirado. Un equipo fuera del alcance responde
+        `404`; sin permiso, `403`.
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsageReportIn'
+      responses:
+        '200':
+          description: Uso registrado (o el ya existente con ese `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageReportOut'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/equipment/{equipment_id}/life-sheet:
+    get:
+      operationId: equipmentLifeSheet
+      tags: [equipment]
+      summary: Hoja de Vida del equipo en PDF
+      description: |
+        El PDF oficial del equipo: identificación, medidores, vigencia de documentos y campos,
+        matriz preventiva y los últimos cinco preventivos ejecutados. Los datos financieros solo
+        se incluyen si quien llama puede verlos. Un equipo inexistente o fuera del alcance
+        responde `404`. La respuesta no se almacena en cachés compartidas.
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      responses:
+        '200':
+          description: Documento PDF.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/equipment/{equipment_id}/inspections:
+    post:
+      operationId: equipmentInspectionCreate
+      tags: [equipment]
+      summary: Envía un preoperacional (idempotente por `id`)
+      description: |
+        Registra la inspección preoperacional de un equipo. El `id` lo genera el cliente: reenviar
+        la misma inspección tras un corte de red devuelve la ya registrada, sin duplicarla.
+
+        **Todo o nada**: debe responder cada ítem de la lista de chequeo vigente exactamente una
+        vez, describir cada ítem fallido y, si el equipo se controla por medidor, traer la lectura
+        inicial (que no puede retroceder). Cualquier incumplimiento, un equipo no disponible o una
+        fecha futura responden `422` y no se guarda nada. Cada ítem fallido abre una novedad.
+        Un equipo inexistente o fuera del alcance responde `404`; sin permiso para registrar
+        inspecciones, `403`. Una inspección enviada no se edita: la revisión añade su decisión.
+      parameters:
+        - name: equipment_id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionIn'
+      responses:
+        '200':
+          description: Inspección registrada (o la ya existente con ese `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionOut'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   # -------------------------------------------------------------- health ----
 
   /v1/healthz:
@@ -972,6 +1313,69 @@ components:
           $ref: '#/components/schemas/TokenPair'
         user:
           $ref: '#/components/schemas/UserProfile'
+
+    AccessProfile:
+      type: object
+      required: [sections]
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionAccessProfile'
+
+    SectionAccessProfile:
+      type: object
+      required: [section, role, scope, project_ids, capabilities]
+      properties:
+        section:
+          type: string
+          enum:
+            - FIELD_RECORDS
+            - PROJECTS
+            - BUDGETS
+            - FORMS
+            - EQUIPMENT
+            - GIS
+            - REPORTS
+            - USERS_ACCESS
+            - OPERATIONS
+        role:
+          type: string
+          enum:
+            - MANAGER
+            - REVIEWER
+            - CONTRIBUTOR
+            - VIEWER
+            - EQUIPMENT_OPERATOR
+            - SST_AUDITOR
+            - ACCESS_ADMIN
+        scope:
+          type: string
+          enum: [organization, projects]
+        project_ids:
+          type: array
+          description: Vacío para alcance organizacional o para un alcance de proyectos sin acceso.
+          items:
+            $ref: '#/components/schemas/Uuid'
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - create
+              - read
+              - update
+              - delete
+              - review
+              - approve
+              - reject
+              - assign
+              - import
+              - publish
+              - export
+              - schedule
+              - manage_access
 
     RefreshToken:
       type: string
@@ -2147,6 +2551,767 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Layer'
+
+    MeterUnit:
+      type: string
+      enum: [hours, kilometers]
+      description: Medidor del equipo — `hours` (horómetro) o `kilometers` (odómetro).
+
+    FieldEquipmentType:
+      type: object
+      required: [id, code, name, preoperational_template_id]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+        name:
+          type: string
+        preoperational_template_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Formulario preoperacional de la tipología, si tiene uno.
+
+    FieldEquipmentDepartment:
+      type: object
+      description: Departamento de maquinaria (centro de costo) que absorbe los costos del activo.
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    FieldEquipmentMeter:
+      type: object
+      description: Última lectura de un medidor configurado.
+      required: [unit, label, is_primary, value, read_at]
+      properties:
+        unit:
+          $ref: '#/components/schemas/MeterUnit'
+        label:
+          type: string
+        is_primary:
+          type: boolean
+        value:
+          type: number
+        read_at:
+          $ref: '#/components/schemas/Timestamp'
+
+    FieldEquipmentDocument:
+      type: object
+      required: [id, type, name, number, expires_on]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        type:
+          type: string
+          description: Tipo de documento (`registration`, `insurance`, `technical_review`…).
+        name:
+          type: string
+        number:
+          type: string
+        expires_on:
+          type:
+            - string
+            - 'null'
+          format: date
+
+    FieldEquipmentField:
+      type: object
+      description: Campo adicional definido por la organización (SOAT, certificado de ruido…).
+      required: [name, type, value]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [number, date, text]
+        value:
+          description: Número, fecha ISO (`date`) o texto según `type`; `null` si está vacío.
+          oneOf:
+            - type: number
+            - type: string
+            - type: 'null'
+
+    FieldEquipmentAlert:
+      type: object
+      description: Vigencia próxima o vencida (`days_left` negativo = vencida).
+      required: [source, name, expires_on, days_left]
+      properties:
+        source:
+          type: string
+          enum: [field, document]
+        name:
+          type: string
+        expires_on:
+          type: string
+          format: date
+        days_left:
+          type: integer
+
+    InspectionStatus:
+      type: string
+      enum: [submitted, approved, rejected, correction_requested]
+      description: |
+        `submitted` espera revisión; `approved`, `rejected` y `correction_requested` son
+        decisiones finales (una corrección es una inspección nueva).
+
+    FieldChecklistItem:
+      type: object
+      required: [id, label, critical]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        label:
+          type: string
+        critical:
+          type: boolean
+
+    FieldInspectionSummary:
+      type: object
+      required: [id, captured_at, status, has_faults, review_comment]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        status:
+          $ref: '#/components/schemas/InspectionStatus'
+        has_faults:
+          type: boolean
+        review_comment:
+          type: string
+          description: Motivo de la revisión; vacío si aún no se revisó o no hubo comentario.
+
+    InspectionAnswerIn:
+      type: object
+      required: [item_id, ok]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        ok:
+          type: boolean
+        note:
+          type: string
+          maxLength: 500
+          default: ''
+          description: "Obligatoria cuando `ok` es `false` (describe la novedad)."
+
+    InspectionIn:
+      type: object
+      required: [id, captured_at, items]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        captured_at:
+          $ref: '#/components/schemas/Timestamp'
+        meter_unit:
+          oneOf:
+            - $ref: '#/components/schemas/MeterUnit'
+            - type: 'null'
+        meter_value:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          description: Lectura inicial. Obligatoria con `meter_unit` si el equipo se controla por medidor.
+        items:
+          type: array
+          maxItems: 200
+          description: Una respuesta por cada ítem de la lista de chequeo vigente, sin repetir.
+          items:
+            $ref: '#/components/schemas/InspectionAnswerIn'
+        notes:
+          type: string
+          maxLength: 1000
+          default: ''
+
+    InspectionOut:
+      type: object
+      required: [id, status, has_faults]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        status:
+          $ref: '#/components/schemas/InspectionStatus'
+        has_faults:
+          type: boolean
+
+    TransportRouteItem:
+      type: object
+      required: [id, origin, destination, zone, distance_km]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        origin:
+          type: string
+        destination:
+          type: string
+        zone:
+          type: string
+        distance_km:
+          type: number
+
+    TransportMaterialItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+
+    TransportVehicleItem:
+      type: object
+      required: [id, plate, contractor, capacity_m3]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        plate:
+          type: string
+        contractor:
+          type: string
+        capacity_m3:
+          type:
+            - number
+            - 'null'
+
+    TransportPersonItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+
+    TransportCatalog:
+      type: object
+      required: [version, changed, routes, materials, vehicles, people]
+      properties:
+        version:
+          type: string
+          maxLength: 64
+          description: Huella del catálogo. Se reenvía en `?version=` la próxima vez.
+        changed:
+          type: boolean
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransportRouteItem'
+        materials:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransportMaterialItem'
+        vehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransportVehicleItem'
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransportPersonItem'
+
+    TripIn:
+      type: object
+      required:
+        - id
+        - recorded_at
+        - route_id
+        - material_id
+        - volume_m3
+        - requested_by_id
+        - dispatched_by_id
+        - received_by_id
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        recorded_at:
+          $ref: '#/components/schemas/Timestamp'
+        route_id:
+          $ref: '#/components/schemas/Uuid'
+        material_id:
+          $ref: '#/components/schemas/Uuid'
+        volume_m3:
+          type: number
+          exclusiveMinimum: 0
+        equipment_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Equipo propio. Exactamente uno de `equipment_id` y `vehicle_id`.
+        vehicle_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Vehículo de terceros. Exactamente uno de `equipment_id` y `vehicle_id`.
+        requested_by_id:
+          $ref: '#/components/schemas/Uuid'
+        dispatched_by_id:
+          $ref: '#/components/schemas/Uuid'
+        received_by_id:
+          $ref: '#/components/schemas/Uuid'
+        driver_name:
+          type: string
+          maxLength: 160
+          default: ''
+        driver_document:
+          type: string
+          maxLength: 40
+          default: ''
+        notes:
+          type: string
+          maxLength: 300
+          default: ''
+
+    TripOut:
+      type: object
+      required: [id, code, number]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          description: Consecutivo del viaje por organización, p. ej. `TV-000123`.
+        number:
+          type: integer
+
+    FuelStationItem:
+      type: object
+      required: [id, name, supplier]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        supplier:
+          type: string
+
+    FuelStoreItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+
+    FuelCatalog:
+      type: object
+      required: [version, changed, stations, stores]
+      properties:
+        version:
+          type: string
+          maxLength: 64
+          description: Huella del catálogo. Se reenvía en `?version=` la próxima vez.
+        changed:
+          type: boolean
+        stations:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuelStationItem'
+        stores:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuelStoreItem'
+
+    FuelFillIn:
+      type: object
+      required: [id, source, voucher_number, filled_at, gallons]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        source:
+          type: string
+          enum: [station, store]
+        station_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Obligatoria con `source = station`; prohibida con `store`.
+        store_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Obligatoria con `source = store`; prohibida con `station`.
+        fuel_type:
+          type: string
+          enum: [acpm, gasoline, other]
+          default: acpm
+        voucher_number:
+          type: string
+          minLength: 1
+          maxLength: 60
+        filled_at:
+          $ref: '#/components/schemas/Timestamp'
+        gallons:
+          type: number
+          exclusiveMinimum: 0
+        meter_unit:
+          oneOf:
+            - $ref: '#/components/schemas/MeterUnit'
+            - type: 'null'
+        meter_value:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          description: Lectura del medidor al tanquear; obligatoria si el equipo se controla por medidor.
+        work_front:
+          type: string
+          maxLength: 160
+          default: ''
+        driver_name:
+          type: string
+          maxLength: 160
+          default: ''
+        driver_document:
+          type: string
+          maxLength: 40
+          default: ''
+        notes:
+          type: string
+          maxLength: 300
+          default: ''
+
+    FuelFillOut:
+      type: object
+      required: [id, voucher_number]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        voucher_number:
+          type: string
+
+    UsageStatus:
+      type: string
+      enum: [scheduled, in_progress, completed, cancelled]
+
+    FieldUsageProject:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+
+    FieldUsageSummary:
+      type: object
+      required: [id, usage_date, start_time, end_time, hours, activity, project_name, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        usage_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          description: Hora de inicio `HH:MM`.
+        end_time:
+          type: string
+          description: Hora de fin `HH:MM`.
+        hours:
+          type:
+            - number
+            - 'null'
+        activity:
+          type: string
+        project_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/UsageStatus'
+
+    UsageReportIn:
+      type: object
+      required: [id, project_id, usage_date, start_time, end_time, activity]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        project_id:
+          $ref: '#/components/schemas/Uuid'
+        usage_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        activity:
+          type: string
+          minLength: 1
+          maxLength: 200
+        location:
+          type: string
+          maxLength: 200
+          default: ''
+          description: Ubicación o frente de obra.
+        start_meter:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+        end_meter:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+        notes:
+          type: string
+          maxLength: 500
+          default: ''
+
+    UsageReportOut:
+      type: object
+      required: [id, hours, status]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        hours:
+          type:
+            - number
+            - 'null'
+        status:
+          $ref: '#/components/schemas/UsageStatus'
+
+    FieldMaintenancePlan:
+      type: object
+      required: [id, name, kind, meter_unit, state, remaining, due_value, due_on, has_open_order]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [meter, date]
+        meter_unit:
+          oneOf:
+            - $ref: '#/components/schemas/MeterUnit'
+            - type: 'null'
+        state:
+          type: string
+          enum: [ok, due_soon, overdue, unknown]
+          description: "`unknown` si un plan por medidor aún no tiene lecturas."
+        remaining:
+          type:
+            - number
+            - 'null'
+          description: Lo que falta (horas/km o días); negativo = vencido.
+        due_value:
+          type:
+            - number
+            - 'null'
+          description: Medidor en el que vence (plan por medidor).
+        due_on:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Fecha de vencimiento (plan por fecha).
+        has_open_order:
+          type: boolean
+
+    FieldWorkOrderSummary:
+      type: object
+      required: [id, code, kind, status, description]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          description: Número de orden por organización, p. ej. `OT-0012`.
+        kind:
+          type: string
+          enum: [preventive, corrective, overhaul]
+        status:
+          type: string
+          enum: [draft, approved, in_execution, closed_technical, cancelled]
+        description:
+          type: string
+
+    FieldEquipment:
+      type: object
+      description: Un equipo visible para quien llama, con lo necesario para consultarlo en campo.
+      required:
+        - id
+        - code
+        - name
+        - qr_identifier
+        - equipment_type
+        - status
+        - ownership
+        - license_plate
+        - manufacturer
+        - model
+        - serial_number
+        - manufacture_year
+        - department
+        - control_scheme
+        - work_source
+        - current_project_id
+        - meters
+        - meter_units
+        - documents
+        - fields
+        - alerts
+        - checklist
+        - recent_inspections
+        - usage_projects
+        - recent_usage
+        - maintenance_plans
+        - open_work_orders
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+        name:
+          type: string
+        qr_identifier:
+          type: string
+          description: Contenido que identifica al equipo en su QR (`suno:eq:<uuid>`).
+        equipment_type:
+          $ref: '#/components/schemas/FieldEquipmentType'
+        status:
+          type: string
+          enum: [available, assigned, maintenance, out_of_service, retired]
+        ownership:
+          type: string
+          enum: [own, rented, contractor]
+        license_plate:
+          type: string
+        manufacturer:
+          type: string
+        model:
+          type: string
+        serial_number:
+          type: string
+        manufacture_year:
+          type:
+            - integer
+            - 'null'
+        department:
+          oneOf:
+            - $ref: '#/components/schemas/FieldEquipmentDepartment'
+            - type: 'null'
+        control_scheme:
+          type: string
+          enum: [meter, date]
+        work_source:
+          type: string
+          enum: [fuel, work_reports]
+        current_project_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        meters:
+          type: array
+          description: Última lectura de cada medidor que ya tiene lecturas.
+          items:
+            $ref: '#/components/schemas/FieldEquipmentMeter'
+        meter_units:
+          type: array
+          description: Medidores configurados en la ficha (principal primero).
+          items:
+            $ref: '#/components/schemas/MeterUnit'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldEquipmentDocument'
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldEquipmentField'
+        alerts:
+          type: array
+          description: Más urgente primero.
+          items:
+            $ref: '#/components/schemas/FieldEquipmentAlert'
+        checklist:
+          type: array
+          description: Lista de chequeo preoperacional vigente de la tipología, en orden.
+          items:
+            $ref: '#/components/schemas/FieldChecklistItem'
+        recent_inspections:
+          type: array
+          description: Las últimas inspecciones de quien llama sobre este equipo (más reciente primero).
+          items:
+            $ref: '#/components/schemas/FieldInspectionSummary'
+        usage_projects:
+          type: array
+          description: |
+            Proyectos en los que quien llama puede reportar uso de este equipo hoy: los de sus
+            asignaciones vigentes en los que el equipo está vinculado.
+          items:
+            $ref: '#/components/schemas/FieldUsageProject'
+        recent_usage:
+          type: array
+          description: Los últimos usos propios del equipo (más reciente primero), sin costos.
+          items:
+            $ref: '#/components/schemas/FieldUsageSummary'
+        maintenance_plans:
+          type: array
+          description: Planes preventivos vigentes con lo que falta para cada uno.
+          items:
+            $ref: '#/components/schemas/FieldMaintenancePlan'
+        open_work_orders:
+          type: array
+          description: Órdenes de trabajo abiertas (borrador, aprobada o en ejecución), por número.
+          items:
+            $ref: '#/components/schemas/FieldWorkOrderSummary'
+
+    FieldEquipmentList:
+      type: object
+      required: [version, changed, items]
+      properties:
+        version:
+          type: string
+          maxLength: 64
+          description: Huella de la lista. Se reenvía en `?version=` la próxima vez.
+        changed:
+          type: boolean
+          description: '`false` si la lista no cambió desde `?version=`; entonces `items` va vacío.'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldEquipment'
+
+    MeterReadingIn:
+      type: object
+      required: [id, meter_unit, value, read_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        meter_unit:
+          $ref: '#/components/schemas/MeterUnit'
+        value:
+          type: number
+          minimum: 0
+          description: Lectura del medidor, con hasta 2 decimales.
+        read_at:
+          $ref: '#/components/schemas/Timestamp'
+        notes:
+          type: string
+          maxLength: 300
+          default: ''
+
+    MeterReadingOut:
+      type: object
+      required: [id, meter_unit, value, read_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        meter_unit:
+          $ref: '#/components/schemas/MeterUnit'
+        value:
+          type: number
+        read_at:
+          $ref: '#/components/schemas/Timestamp'
 
     FieldTask:
       type: object

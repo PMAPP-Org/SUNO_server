@@ -22,6 +22,11 @@
     submit.setAttribute('aria-busy', 'true');
   });
 
+  // Filtros que se aplican al cambiar (sin pulsar Aplicar); el botón queda como respaldo.
+  document.querySelectorAll('form[data-autosubmit]').forEach((form) => {
+    form.addEventListener('change', () => form.requestSubmit());
+  });
+
   const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
   const sidebar = document.querySelector('#workspace-sidebar');
   const closeSidebar = () => {

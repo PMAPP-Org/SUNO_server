@@ -1,6 +1,6 @@
 """Verifica que `config.settings.prod` completa el endurecimiento de RD-15
 (cabeceras de proxy confiable detrás de Caddy) y de estáticos (Tarea 3 de
-plans/visitacampo-despliegue-demo-implementacion.md). No usa `manage.py
+plans/suno-despliegue-demo-implementacion.md). No usa `manage.py
 check --deploy` como test (ese comando solo emite warnings, nunca falla) —
 en su lugar importa el módulo de settings directamente y comprueba los
 valores, que es lo que un `check --deploy` verde depende de que sea cierto.

@@ -11,11 +11,13 @@ al del propio doc 08:
 - `ops`      — `SyncOpLog`, `Job`, `AuditEvent`, `SyncCursorFloor`.
 - `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
 - `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
+- `access`   — roles funcionales por sección y alcance de proyecto.
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
 import Record` funcione igual que con un `models.py` plano.
 """
 
+from .access import SectionGrant, SectionProjectScope
 from .base import (
     ACTIVE_JOB_STATUSES,
     INITIAL_VERSION,
@@ -44,8 +46,62 @@ from .budget import (
     BudgetVersionStatus,
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
+from .equipment import (
+    Equipment,
+    EquipmentCollection,
+    EquipmentCollectionType,
+    EquipmentControlScheme,
+    EquipmentDocument,
+    EquipmentDocumentType,
+    EquipmentFieldDefinition,
+    EquipmentFieldType,
+    EquipmentFieldValue,
+    EquipmentMeterReading,
+    EquipmentMeterSource,
+    EquipmentMeterUnit,
+    EquipmentOperatorAssignment,
+    EquipmentOwnership,
+    EquipmentProject,
+    EquipmentRate,
+    EquipmentStatus,
+    EquipmentType,
+    EquipmentUsage,
+    EquipmentUsageStatus,
+    EquipmentWorkSource,
+    MachineryDepartment,
+)
+from .fuel import (
+    FuelFill,
+    FuelLiquidation,
+    FuelPurchase,
+    FuelSource,
+    FuelStation,
+    FuelStationRate,
+    FuelStore,
+    FuelSupplier,
+    FuelType,
+    LiquidationStatus,
+)
+from .inspection import (
+    EquipmentFault,
+    EquipmentInspection,
+    FaultStatus,
+    InspectionStatus,
+    PreoperationalItem,
+)
 from .layer import ReferenceLayer
 from .location import MAX_LEVELS, LocationLevel, LocationNode
+from .maintenance import (
+    OPEN_ORDER_STATUSES,
+    MaintenancePlan,
+    PlanKind,
+    WorkOrder,
+    WorkOrderKind,
+    WorkOrderLine,
+    WorkOrderLineKind,
+    WorkOrderMechanic,
+    WorkOrderStatus,
+)
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
 from .project import (
@@ -62,8 +118,48 @@ from .project import (
 from .quantity import QuantityPlan, QuantityPlanImport, QuantityPlanImportStatus
 from .record import Blob, Record, RecordAttachment, RecordReview, RecordReviewStatus
 from .tenancy import AppUser, Device, Membership, Organization
+from .transport import (
+    TransportContractor,
+    TransportMaterial,
+    TransportRate,
+    TransportRoute,
+    TransportSettlement,
+    TransportVehicle,
+    Trip,
+)
 
 __all__ = [
+    "TransportContractor",
+    "TransportMaterial",
+    "TransportRate",
+    "TransportRoute",
+    "TransportSettlement",
+    "TransportVehicle",
+    "Trip",
+    "FuelFill",
+    "FuelLiquidation",
+    "FuelPurchase",
+    "FuelSource",
+    "FuelStation",
+    "FuelStationRate",
+    "FuelStore",
+    "FuelSupplier",
+    "FuelType",
+    "LiquidationStatus",
+    "OPEN_ORDER_STATUSES",
+    "MaintenancePlan",
+    "PlanKind",
+    "WorkOrder",
+    "WorkOrderKind",
+    "WorkOrderLine",
+    "WorkOrderLineKind",
+    "WorkOrderMechanic",
+    "WorkOrderStatus",
+    "EquipmentFault",
+    "EquipmentInspection",
+    "FaultStatus",
+    "InspectionStatus",
+    "PreoperationalItem",
     "ACTIVE_JOB_STATUSES",
     "INITIAL_VERSION",
     "LAT_MAX",
@@ -85,6 +181,28 @@ __all__ = [
     "AuditEvent",
     "Blob",
     "Device",
+    "Equipment",
+    "EquipmentCollection",
+    "EquipmentCollectionType",
+    "EquipmentDocument",
+    "EquipmentDocumentType",
+    "EquipmentMeterUnit",
+    "EquipmentOperatorAssignment",
+    "EquipmentOwnership",
+    "EquipmentProject",
+    "EquipmentRate",
+    "EquipmentStatus",
+    "EquipmentWorkSource",
+    "MachineryDepartment",
+    "EquipmentControlScheme",
+    "EquipmentFieldDefinition",
+    "EquipmentFieldType",
+    "EquipmentFieldValue",
+    "EquipmentMeterReading",
+    "EquipmentMeterSource",
+    "EquipmentType",
+    "EquipmentUsage",
+    "EquipmentUsageStatus",
     "DependencyType",
     "FormTemplate",
     "FormTemplateVersion",
@@ -110,6 +228,8 @@ __all__ = [
     "Resource",
     "ScheduleImport",
     "ScheduleImportStatus",
+    "SectionGrant",
+    "SectionProjectScope",
     "SyncCursorFloor",
     "SyncEntityType",
     "SyncOpLog",

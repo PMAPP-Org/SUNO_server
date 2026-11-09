@@ -1,0 +1,184 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Panel de costos de equipos{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-heading">
+  <div>
+    <h1>Panel de costos de equipos</h1>
+    <p>Horas de uso valoradas con las tarifas por hora de cada equipo e imputadas a las partidas del presupuesto vigente.</p>
+  </div>
+  {% if can_recalculate and summary.unpriced %}
+  <form method="post" action="{% url 'equipment:costs_recalculate' %}" class="eq-heading-actions">
+    {% csrf_token %}
+    <button class="eq-button" type="submit">Costear usos sin tarifa</button>
+  </form>
+  {% endif %}
+</section>
+
+<form class="eq-filters" method="get" aria-label="Filtros del panel" data-autosubmit>
+  <label><span>Proyecto</span><select name="project"><option value="">Todos</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label>
+  <label><span>Desde</span><input type="date" name="date_from" value="{{ date_from }}"></label>
+  <label><span>Hasta</span><input type="date" name="date_to" value="{{ date_to }}"></label>
+  <label class="eq-check"><input type="checkbox" name="scheduled" value="1"{% if include_scheduled %} checked{% endif %}> Incluir programados</label>
+  <button class="eq-button" type="submit">Aplicar</button>
+  {% if selected_project or date_from or date_to or include_scheduled %}<a class="eq-clear" href="{% url 'equipment:costs' %}">Limpiar</a>{% endif %}
+</form>
+
+<div class="dash">
+  <section class="dash-scorecards" aria-label="Indicadores principales">
+    <article class="dash-card dash-card-accent">
+      <small>Costo de equipos ({{ currency }})</small>
+      <strong>${{ summary.total_cost|floatformat:"2g" }}</strong>
+      <span>{{ summary.rows|length }} equipo{{ summary.rows|length|pluralize }} con uso{% if include_scheduled %} · incluye ${{ scheduled_total|floatformat:"0g" }} programado{% endif %}</span>
+    </article>
+    <article class="dash-card">
+      <small>Horas costeadas</small>
+      <strong>{{ summary.total_hours|floatformat:"1g" }} h</strong>
+      <span>{% if average_cost_per_hour != None %}${{ average_cost_per_hour|floatformat:"2g" }} por hora en promedio{% else %}sin horas registradas{% endif %}</span>
+    </article>
+    <article class="dash-card">
+      <small>Partidas con imputación</small>
+      <strong>{{ summary.budget_rows|length }}</strong>
+      <span>${{ summary.unassigned_cost|floatformat:"2g" }} sin partida asignada</span>
+    </article>
+    <article class="dash-card{% if summary.unpriced %} dash-card-warn{% endif %}">
+      <small>Usos sin tarifa</small>
+      <strong>{{ summary.unpriced }}</strong>
+      <span>{% if summary.unpriced %}no suman costo todavía{% else %}todo el uso está costeado{% endif %}</span>
+    </article>
+  </section>
+
+  <figure class="fig" aria-labelledby="fig-1">
+    <figcaption id="fig-1"><span class="fig-no">Figura 1.</span> <strong>Costo mensual y acumulado de equipos</strong></figcaption>
+    {% if combo.points %}
+    <ul class="fig-legend" aria-label="Leyenda">
+      <li><i class="lg-bar"></i> Costo mensual</li>
+      {% if scheduled_total %}<li><i class="lg-scheduled"></i> Costo programado</li>{% endif %}
+      <li><i class="lg-line"></i> Acumulado</li>
+    </ul>
+    <div class="cx">
+      <div class="cx-title cx-title-left">Costo mensual ({{ combo.left.unit }})</div>
+      <div class="cx-ticks cx-ticks-left" aria-hidden="true">{% for pos, label in combo.left.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
+      <div class="cx-plot" role="img" aria-label="Figura 1: columnas de costo mensual y línea de costo acumulado">
+        {% for pos, label in combo.left.ticks %}<i class="cx-grid" style="bottom: {{ pos|stringformat:'s' }}%"></i>{% endfor %}
+        <div class="cx-cols">
+          {% for p in combo.points %}
+          <div class="cx-col" title="{{ p.label }}: ${{ p.cost|floatformat:'2g' }} · {{ p.hours|floatformat:'1g' }} h · acumulado ${{ p.cumulative|floatformat:'2g' }}{% if p.scheduled %} (programado ${{ p.scheduled|floatformat:'2g' }}){% endif %}">
+            <span class="cx-bar"><i class="is-done" style="height: {{ p.completed_h|stringformat:'s' }}%"></i>{% if p.scheduled %}<i class="is-scheduled" style="height: {{ p.scheduled_h|stringformat:'s' }}%"></i>{% endif %}</span>
+            <b class="cx-val {% if p.low_bar or p.scheduled %}is-out{% else %}is-in{% endif %}" style="bottom: {{ p.total_h|stringformat:'s' }}%">{{ p.cost_label }}</b>
+          </div>
+          {% endfor %}
+        </div>
+        <svg class="cx-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ combo.polyline }}" /></svg>
+        {% for p in combo.points %}<span class="cx-pt{% if p.label_below %} is-below{% endif %}" style="left: {{ p.x|stringformat:'s' }}%; bottom: {{ p.cumulative_y|stringformat:'s' }}%" title="Acumulado a {{ p.label }}: ${{ p.cumulative|floatformat:'2g' }}"><i></i><b>{{ p.cumulative_label }}</b></span>{% endfor %}
+      </div>
+      <div class="cx-ticks cx-ticks-right" aria-hidden="true">{% for pos, label in combo.right.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
+      <div class="cx-title cx-title-right">Acumulado ({{ combo.right.unit }})</div>
+      <div class="cx-xlabels">{% for p in combo.points %}<span>{{ p.label }}</span>{% endfor %}</div>
+    </div>
+    {% else %}<p class="dash-empty">Aún no hay usos costeados en este periodo.</p>{% endif %}
+    <p class="fig-source">Fuente: registros de uso de equipos, SUNO. {{ scope_label }}. Periodo: {{ period_label }}. {{ status_label }}</p>
+  </figure>
+
+  <div class="dash-grid">
+    <figure class="fig" aria-labelledby="fig-2">
+      <figcaption id="fig-2"><span class="fig-no">Figura 2.</span> <strong>Composición del costo por componente de la tarifa</strong></figcaption>
+      {% if summary.total_cost %}
+      <div class="dn">
+        <div class="dn-ring" style="background: {{ donut_gradient }}" role="img" aria-label="Figura 2: composición del costo"><span><small>Total</small><strong>{{ total_label }}</strong></span></div>
+        <table class="dn-table">
+          <thead><tr><th scope="col">Componente</th><th scope="col" class="eq-num">Costo</th><th scope="col" class="eq-num">%</th></tr></thead>
+          <tbody>
+          {% for part in donut_parts %}<tr><th scope="row"><i style="background: {{ part.color }}"></i>{{ part.label }}</th><td class="eq-num">{{ part.value_label }}</td><td class="eq-num">{{ part.pct|stringformat:"s" }} %</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="dash-empty">Sin costos para componer.</p>{% endif %}
+      <p class="fig-source">Fuente: tarifas por hora vigentes y horas de uso, SUNO. {{ scope_label }}.</p>
+    </figure>
+
+    <figure class="fig fig-span-2" aria-labelledby="fig-3">
+      <figcaption id="fig-3"><span class="fig-no">Figura 3.</span> <strong>Costo por equipo en el periodo</strong></figcaption>
+      {% if hbars.items %}
+      <div class="hb">
+        <div class="hb-body">
+          <div class="hb-lines" aria-hidden="true">{% for pos, label in hbars.axis.ticks %}<i style="left: {{ pos|stringformat:'s' }}%"></i>{% endfor %}</div>
+          {% for bar in hbars.items %}
+          <div class="hb-row">
+            <a data-peek href="{% url 'equipment:detail' bar.ident %}">{{ bar.label }}<small>{{ bar.code }} · {{ bar.hours|floatformat:'1g' }} h · {{ bar.share|stringformat:'s' }} %</small></a>
+            <span class="hb-track" title="{{ bar.label }}: ${{ bar.value|floatformat:'2g' }}"><i style="width: {{ bar.width|stringformat:'s' }}%"></i><b class="{% if bar.width >= 34 %}is-in{% else %}is-out{% endif %}" style="{% if bar.width >= 34 %}width: {{ bar.width|stringformat:'s' }}%{% else %}left: {{ bar.width|stringformat:'s' }}%{% endif %}">{{ bar.value_label }}</b></span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="hb-axis" aria-hidden="true"><div class="hb-ticks">{% for pos, label in hbars.axis.ticks %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div></div>
+        <p class="hb-axis-title">Costo acumulado ({{ hbars.axis.unit }})</p>
+      </div>
+      {% else %}<p class="dash-empty">Registra usos de equipos y define sus tarifas por hora.</p>{% endif %}
+      <p class="fig-source">Fuente: registros de uso de equipos, SUNO. Se muestran los {{ hbars.items|length }} equipos con mayor costo. {{ scope_label }}.</p>
+    </figure>
+  </div>
+
+  <figure class="fig" aria-labelledby="fig-4">
+    <figcaption id="fig-4"><span class="fig-no">Figura 4.</span> <strong>Consumo del presupuesto vigente por partida</strong></figcaption>
+    {% if bullets.items %}
+    <ul class="fig-legend" aria-label="Leyenda">
+      <li><i class="lg-petrol"></i> Dentro del presupuesto</li>
+      <li><i class="lg-over"></i> Excede el presupuesto</li>
+      <li><i class="lg-marker"></i> 100 % de la partida</li>
+    </ul>
+    <div class="bl" style="--step: {{ bullets.step|stringformat:'s' }}%; --marker: {{ bullets.marker|stringformat:'s' }}%">
+      {% for item in bullets.items %}
+      <div class="bl-row">
+        <div class="bl-head"><strong>{{ item.code }}</strong><span>{{ item.description|truncatechars:70 }}</span></div>
+        <div class="bl-track"><i class="{% if item.over %}is-over{% endif %}" style="width: {{ item.width|stringformat:'s' }}%"></i>{% if item.pct != None %}<b class="{% if item.width >= 80 %}is-in{% else %}is-out{% endif %}" style="{% if item.width >= 80 %}width: {{ item.width|stringformat:'s' }}%{% else %}left: {{ item.width|stringformat:'s' }}%{% endif %}">{{ item.pct|stringformat:'s' }} %</b>{% endif %}</div>
+        <small>{{ item.imputed_label }} imputados{% if item.pct != None %} de {{ item.budget_label }} presupuestados{% else %} · {{ item.budget_label }} vigente{% endif %}</small>
+      </div>
+      {% endfor %}
+      <div class="bl-axis" aria-hidden="true">{% for pos, label in bullets.axis.ticks %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
+      <p class="hb-axis-title">Consumo ({{ bullets.axis.unit }})</p>
+    </div>
+    {% else %}<p class="dash-empty">Indica el código de la partida al registrar un uso para ver su consumo.</p>{% endif %}
+    <p class="fig-source">Fuente: costo imputado a la partida (SUNO) contra el total de la versión vigente del presupuesto.</p>
+  </figure>
+
+  <details class="dash-details">
+    <summary>Ver tablas detalladas</summary>
+    <section class="eq-table-wrap" aria-label="Costo por equipo">
+      <table class="eq-table">
+        <caption class="tb-cap"><span class="fig-no">Tabla 1.</span> <strong>Costo y horas por equipo</strong> ({{ currency }})</caption>
+        <thead><tr><th>Equipo</th><th class="eq-num">Usos</th><th class="eq-num">Horas</th><th class="eq-num">Costo</th></tr></thead>
+        <tbody>
+        {% for row in summary.rows %}
+          <tr>
+            <td data-label="Equipo"><a data-peek class="eq-name" href="{% url 'equipment:detail' row.equipment_id %}?tab=rates">{{ row.name }}</a><small>{{ row.code }}{% if row.unpriced %} · {{ row.unpriced }} sin tarifa{% endif %}</small></td>
+            <td data-label="Usos" class="eq-num">{{ row.usages }}</td>
+            <td data-label="Horas" class="eq-num">{{ row.hours|floatformat:"2g" }}</td>
+            <td data-label="Costo" class="eq-num"><strong>${{ row.cost|floatformat:"2g" }}</strong></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="eq-empty"><strong>No hay usos para costear.</strong><span>Registra usos de equipos y define sus tarifas por hora.</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    <section class="eq-table-wrap" aria-label="Costo por partida">
+      <table class="eq-table">
+        <caption class="tb-cap"><span class="fig-no">Tabla 2.</span> <strong>Costo imputado y presupuesto vigente por partida</strong> ({{ currency }})</caption>
+        <thead><tr><th>Partida</th><th class="eq-num">Imputado</th><th class="eq-num">Presupuestado</th><th class="eq-num">Consumo</th></tr></thead>
+        <tbody>
+        {% for row in summary.budget_rows %}
+          <tr>
+            <td data-label="Partida"><strong>{{ row.code }}</strong><small>{{ row.description|truncatechars:80 }}</small></td>
+            <td data-label="Imputado" class="eq-num">${{ row.imputed|floatformat:"2g" }}</td>
+            <td data-label="Presupuestado" class="eq-num">{% if row.budgeted != None %}${{ row.budgeted|floatformat:"2g" }}{% else %}—{% endif %}</td>
+            <td data-label="Consumo" class="eq-num">{% if row.pct_consumed != None %}{{ row.pct_consumed }} %{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="eq-empty"><strong>Ningún uso está imputado a una partida.</strong><span>Indica el código de la partida al registrar el uso de un equipo.</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </details>
+</div>
+{% endblock %}

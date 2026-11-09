@@ -3,15 +3,17 @@
 <!doctype html>
 <html lang="es">
 <head>
+  <script src="{% static 'suno/js/peek-frame.js' %}"></script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#faf9f2">
   <title>{% block title %}Proyectos{% endblock %} · SUNO</title>
   <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
-  <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}">
-  <link rel="stylesheet" href="{% static 'suno/css/web.css' %}">
-  <link rel="stylesheet" href="{% static 'suno/css/projects.css' %}">
+  <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}?v=20261108-topo-v1">
+  <link rel="stylesheet" href="{% static 'suno/css/web.css' %}?v=20261108-topo-v1">
+  <link rel="stylesheet" href="{% static 'suno/css/projects.css' %}?v=20261108-topo-v1">
   <script src="{% static 'suno/js/web.js' %}" defer></script>
+  <script src="{% static 'suno/js/peek.js' %}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body class="workspace-page pj-page">

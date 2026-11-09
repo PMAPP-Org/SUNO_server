@@ -1,0 +1,109 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}{{ order.code }}{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:maintenance' %}">← Mantenimiento</a>
+<section class="eq-detail-head">
+  <div>
+    <p class="editorial-label">{{ order.get_kind_display }} · {{ order.get_status_display }}</p>
+    <h1>{{ order.code }} · {{ order.equipment.code }} {{ order.equipment.name }}</h1>
+    <p>Creada por {{ order.created_by.display_name|default:order.created_by.username }} el {{ order.created_at|date:"d/m/Y H:i" }}{% if order.plan %} · plan «{{ order.plan.name }}»{% endif %}</p>
+  </div>
+  <a class="eq-button" href="{% url 'equipment:detail' order.equipment.pk %}?tab=maintenance">Ver equipo</a>
+</section>
+
+<div class="eq-detail-grid">
+  <section class="eq-detail-main">
+    <div class="eq-notes"><h3>Trabajo a realizar</h3><p>{{ order.description|linebreaksbr }}</p></div>
+
+    {% if faults %}
+    <div class="eq-section-head"><div><p class="editorial-label">Origen</p><h2>Novedades que atiende</h2></div></div>
+    <div class="eq-records">
+      {% for fault in faults %}<article><div><strong>{{ fault.item_label }}{% if fault.critical %} · crítico{% endif %}</strong><span>{{ fault.description }}</span></div><div><small>{{ fault.get_status_display }}</small></div></article>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="eq-section-head"><div><p class="editorial-label">Recursos</p><h2>Insumos, servicios y mano de obra</h2></div></div>
+    <div class="eq-records">
+      {% for line in lines %}
+      <article>
+        <div><strong>{{ line.description }}</strong><span>{{ line.get_kind_display }}{% if line.supplier %} · {{ line.supplier }}{% endif %} · {{ line.quantity|floatformat:"-2g" }} × ${{ line.unit_cost|floatformat:"2g" }}</span></div>
+        <div>
+          <strong>${{ line.total|floatformat:"2g" }}</strong>
+          {% if can_edit %}<form method="post" action="{% url 'equipment:order_action' order.pk 'remove-line' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<input type="hidden" name="line" value="{{ line.pk }}"><button class="eq-button" type="submit">Quitar</button></form>{% endif %}
+        </div>
+      </article>
+      {% empty %}<p class="eq-empty-inline">Sin líneas registradas.</p>{% endfor %}
+    </div>
+    {% if lines %}<p class="eq-form-note">Costo total de la orden: <strong>${{ total|floatformat:"2g" }}</strong></p>{% endif %}
+    {% if can_edit %}
+    <form method="post" action="{% url 'equipment:order_action' order.pk 'line' %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+      {% csrf_token %}
+      {% for field in line_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}
+      <div class="eq-form-actions"><button class="eq-button" type="submit">Agregar línea</button></div>
+    </form>
+    {% endif %}
+
+    {% if order.status == 'closed_technical' %}
+    <div class="eq-section-head"><div><p class="editorial-label">Cierre técnico</p><h2>Resultado</h2></div></div>
+    <dl class="eq-specs">
+      <div><dt>Duración (indisponibilidad)</dt><dd>{{ order.downtime_hours|floatformat:"-2" }} h</dd></div>
+      <div><dt>Cerrada</dt><dd>{{ order.closed_at|date:"d/m/Y H:i" }} · {{ order.closed_by.display_name|default:order.closed_by.username }}</dd></div>
+      {% if order.meter_at_close != None %}<div><dt>Medidor al cierre</dt><dd>{{ order.meter_at_close|floatformat:"-2g" }}</dd></div>{% endif %}
+      {% if order.failed_part %}<div><dt>Parte afectada</dt><dd>{{ order.failed_part }}</dd></div><div><dt>Causa de la falla</dt><dd>{{ order.failure_cause }}</dd></div>{% endif %}
+    </dl>
+    {% if order.closing_notes %}<div class="eq-notes"><h3>Notas</h3><p>{{ order.closing_notes|linebreaksbr }}</p></div>{% endif %}
+    {% elif order.status == 'cancelled' %}
+    <div class="eq-notes"><h3>Cancelada</h3><p>{{ order.closing_notes }}</p></div>
+    {% endif %}
+  </section>
+
+  <aside class="eq-detail-rail">
+    <section>
+      <p class="editorial-label">Mecánicos</p>
+      {% for link in mechanics %}<div class="eq-expiry"><strong>{{ link.mechanic.display_name|default:link.mechanic.username }}</strong></div>{% empty %}<span>Sin mecánicos asignados</span>{% endfor %}
+      {% if can_edit %}
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'mechanic' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        {% csrf_token %}
+        <select name="mechanic" required>
+          <option value="">Mecánico…</option>
+          {% for member in members %}<option value="{{ member.user_id }}">{{ member.user.display_name|default:member.user.username }}</option>{% endfor %}
+        </select>
+        <button class="eq-button" type="submit">Asignar</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <section>
+      <p class="editorial-label">Flujo</p>
+      <small>Aprobada: {% if order.approved_at %}{{ order.approved_at|date:"d/m/Y H:i" }} · {{ order.approved_by.display_name|default:order.approved_by.username }}{% else %}—{% endif %}</small><br>
+      <small>Inicio de trabajos: {{ order.started_at|date:"d/m/Y H:i"|default:"—" }}</small>
+      <div class="eq-form-actions">
+        {% if can_approve %}<form method="post" action="{% url 'equipment:order_action' order.pk 'approve' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Aprobar</button></form>{% endif %}
+        {% if can_start %}<form method="post" action="{% url 'equipment:order_action' order.pk 'start' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Iniciar trabajos</button></form>{% endif %}
+      </div>
+    </section>
+
+    {% if can_close %}
+    <section>
+      <p class="editorial-label">Cierre técnico</p>
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'close' %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        {% csrf_token %}
+        {% for field in close_form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
+        <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Cerrar orden</button></div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if can_cancel %}
+    <section>
+      <p class="editorial-label">Cancelar</p>
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'cancel' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        {% csrf_token %}
+        <input type="text" name="reason" placeholder="Motivo" required>
+        <button class="eq-button" type="submit">Cancelar orden</button>
+      </form>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

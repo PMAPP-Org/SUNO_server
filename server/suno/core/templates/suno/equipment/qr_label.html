@@ -1,0 +1,34 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Etiqueta QR{% endblock %}
+{% block content %}
+<a class="eq-back eq-no-print" href="{% if single %}{% url 'equipment:detail' labels.0.equipment.pk %}{% else %}{% url 'equipment:list' %}{% endif %}">← Volver</a>
+<section class="eq-heading eq-no-print">
+  <div>
+    <h1>{% if single %}Etiqueta QR{% else %}Etiquetas QR{% endif %}</h1>
+    <p>Imprímela en vinilo o papel resistente y pégala en un lugar visible del equipo. El código solo contiene un identificador: para abrir la ficha hay que iniciar sesión en SUNO.</p>
+  </div>
+  <div class="eq-heading-actions">
+    {% if single %}
+      <a class="eq-button" href="{% url 'equipment:qr_image' labels.0.equipment.pk 'svg' %}?download=1">Descargar SVG</a>
+      <a class="eq-button" href="{% url 'equipment:qr_image' labels.0.equipment.pk 'png' %}?download=1">Descargar PNG</a>
+    {% endif %}
+    <button class="eq-button eq-button-primary" type="button" onclick="window.print()">Imprimir</button>
+  </div>
+</section>
+
+<section class="eq-label-sheet{% if single %} eq-label-single{% endif %}" aria-label="Etiquetas">
+  {% for label in labels %}
+    <article class="eq-label">
+      <div class="eq-label-qr"><img src="{{ label.qr_data_uri }}" alt="Código QR de {{ label.equipment.code }}"></div>
+      <div class="eq-label-text">
+        <span class="eq-label-brand">SUNO</span>
+        <strong>{{ label.equipment.code }}</strong>
+        <span>{{ label.equipment.name }}</span>
+        {% if label.equipment.license_plate %}<small>Placa {{ label.equipment.license_plate }}</small>{% elif label.equipment.serial_number %}<small>Serie {{ label.equipment.serial_number }}</small>{% endif %}
+      </div>
+    </article>
+  {% empty %}
+    <p class="eq-empty-inline">No hay equipos visibles para generar etiquetas.</p>
+  {% endfor %}
+</section>
+{% endblock %}

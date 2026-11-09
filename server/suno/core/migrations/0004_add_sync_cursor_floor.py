@@ -22,7 +22,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0003_add_record_float_finiteness_checks'),
+        ('core', '0003_add_visit_float_finiteness_checks'),
     ]
 
     operations = [

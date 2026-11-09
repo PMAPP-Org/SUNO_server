@@ -26,7 +26,8 @@ from django.test import SimpleTestCase, TestCase
 from pydantic import TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
-from suno.core.context import RequestContext
+from suno.core.access import AccessScope, Section, SectionRole
+from suno.core.context import RequestContext, SectionAccess
 from suno.core.models import FormTemplate, FormTemplateVersion, Organization, Role
 from suno.core.policies import PolicyDenied
 from suno.core.tests.dbsupport import (
@@ -53,6 +54,21 @@ setUpModule = setup_test_database
 tearDownModule = teardown_test_database
 
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
+
+
+def publishing_context(org_id: uuid.UUID) -> RequestContext:
+    return RequestContext(
+        user_id=uuid.uuid4(),
+        org_id=org_id,
+        roles=frozenset({Role.ADMIN}),
+        section_access=(
+            SectionAccess(
+                section=Section.FORMS,
+                role=SectionRole.MANAGER,
+                scope=str(AccessScope.ORGANIZATION),
+            ),
+        ),
+    )
 
 
 class MetaSchemaTests(SimpleTestCase):
@@ -442,9 +458,7 @@ class PublishVersionTests(TestCase):
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Org")
         self.template = FormTemplate.objects.create(org=self.org, name="Inspección")
-        self.ctx = RequestContext(
-            user_id=uuid.uuid4(), org_id=self.org.pk, roles=frozenset({Role.ADMIN})
-        )
+        self.ctx = publishing_context(self.org.pk)
 
     def test_publishing_a_valid_definition_creates_version_one(self) -> None:
         version = publish_version(
@@ -522,9 +536,7 @@ class ImmutabilityTests(TestCase):
     def setUp(self) -> None:
         self.org = Organization.objects.create(name="Org")
         self.template = FormTemplate.objects.create(org=self.org, name="Inspección")
-        self.ctx = RequestContext(
-            user_id=uuid.uuid4(), org_id=self.org.pk, roles=frozenset({Role.ADMIN})
-        )
+        self.ctx = publishing_context(self.org.pk)
         self.version = publish_version(
             self.ctx, template_id=self.template.pk, definition=INSPECCION_V1
         )

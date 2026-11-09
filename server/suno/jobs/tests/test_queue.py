@@ -76,9 +76,7 @@ class EnqueueTests(TestCase):
         )
 
     def test_a_running_job_still_holds_its_key(self) -> None:
-        job_id = queue.enqueue(
-            org_id=self.org.pk, job_type="queue.reap", idempotency_key="reap"
-        )
+        job_id = queue.enqueue(org_id=self.org.pk, job_type="queue.reap", idempotency_key="reap")
         assert job_id is not None
         queue.take(worker_id=WORKER, lease_seconds=60)
 
@@ -201,9 +199,7 @@ class HeartbeatTests(TestCase):
 
     def test_it_extends_the_lease(self) -> None:
         original = job_row(self.record.id)["locked_until"]
-        self.assertTrue(
-            queue.heartbeat(job_id=self.record.id, worker_id=WORKER, lease_seconds=600)
-        )
+        self.assertTrue(queue.heartbeat(job_id=self.record.id, worker_id=WORKER, lease_seconds=600))
         self.assertGreater(job_row(self.record.id)["locked_until"], original)
 
     def test_another_worker_cannot_extend_our_lease(self) -> None:
@@ -234,9 +230,7 @@ class TerminalStateTests(TestCase):
 
     def test_success_clears_the_lease_and_stores_the_output(self) -> None:
         record = self.take()
-        self.assertTrue(
-            queue.succeed(job_id=record.id, worker_id=WORKER, output={"filas": 12})
-        )
+        self.assertTrue(queue.succeed(job_id=record.id, worker_id=WORKER, output={"filas": 12}))
         row = job_row(record.id)
         self.assertEqual(row["status"], JobStatus.SUCCEEDED)
         self.assertEqual(row["output"], {"filas": 12})
@@ -273,9 +267,7 @@ class TerminalStateTests(TestCase):
     def test_the_backoff_is_capped(self) -> None:
         from django.conf import settings
 
-        self.assertEqual(
-            queue.backoff_seconds(64), float(settings.JOB_BACKOFF_MAX_SECONDS)
-        )
+        self.assertEqual(queue.backoff_seconds(64), float(settings.JOB_BACKOFF_MAX_SECONDS))
 
     def test_the_last_attempt_goes_to_dead_letter(self) -> None:
         """Tarea 5: agotados los intentos, el job no vuelve a la cola."""
@@ -343,9 +335,7 @@ class ReaperTests(TestCase):
         queue.enqueue(org_id=self.org.pk, job_type="export_records_csv", **kwargs)
         record = queue.take(worker_id=WORKER, lease_seconds=60)
         assert record is not None
-        Job.objects.filter(pk=record.id).update(
-            locked_until=timezone.now() - timedelta(seconds=1)
-        )
+        Job.objects.filter(pk=record.id).update(locked_until=timezone.now() - timedelta(seconds=1))
         return record
 
     def test_an_expired_lease_goes_back_to_pending(self) -> None:
@@ -396,8 +386,6 @@ class ReaperTests(TestCase):
         queue.enqueue(org_id=other.pk, job_type="export_records_csv")
         second = queue.take(worker_id=OTHER_WORKER, lease_seconds=60)
         assert second is not None
-        Job.objects.filter(pk=second.id).update(
-            locked_until=timezone.now() - timedelta(seconds=1)
-        )
+        Job.objects.filter(pk=second.id).update(locked_until=timezone.now() - timedelta(seconds=1))
 
         self.assertEqual(queue.reap_expired_leases().requeued, 2)

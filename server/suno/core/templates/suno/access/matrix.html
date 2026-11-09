@@ -1,0 +1,50 @@
+{% extends "suno/access/base.html" %}
+{% load access_tags %}
+{% block content %}
+<section class="workspace-heading access-heading">
+  <div><p class="editorial-label">Control de acceso</p><h1>Usuarios y <span>secciones</span></h1><p>Asigna un rol funcional y un alcance por proyecto. Las capacidades se derivan del rol y no se editan individualmente.</p></div>
+  <p class="workspace-scope">{{ organization.name }}<br><span>{{ memberships|length }} usuario{{ memberships|length|pluralize:"s" }}</span></p>
+</section>
+
+<section class="access-panel" aria-labelledby="matrix-title">
+  <div class="access-panel-head"><div><p class="editorial-index">Matriz 01</p><h2 id="matrix-title">Secciones disponibles por usuario</h2></div><span>Rol activo</span></div>
+  <div class="access-table-wrap">
+    <table class="access-matrix">
+      <thead><tr><th>Usuario</th>{% for section in sections %}<th>{{ section.label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in matrix %}
+        <tr class="{% if selected_membership.user_id == row.membership.user_id %}is-selected{% endif %}">
+          <th><a href="?usuario={{ row.membership.user_id }}"><strong>{{ row.membership.user.display_name|default:row.membership.user.username }}</strong><small>{{ row.membership.get_role_display }}</small></a></th>
+          {% for grant in row.cells %}<td>{% if grant %}<span class="access-role">{{ grant.get_role_display }}</span><small>{% if grant.scope == "organization" %}Organización{% else %}{{ grant.project_scopes.all|length }} proyecto{{ grant.project_scopes.all|length|pluralize:"s" }}{% endif %}</small>{% else %}<span class="access-none">Sin acceso</span>{% endif %}</td>{% endfor %}
+        </tr>
+      {% empty %}<tr><td colspan="10" class="access-empty">No hay membresías activas.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if selected_membership %}
+<section class="access-panel" aria-labelledby="edit-title">
+  <div class="access-panel-head"><div><p class="editorial-index">Matriz 02</p><h2 id="edit-title">Roles de {{ selected_membership.user.display_name|default:selected_membership.user.username }}</h2></div><span>Edición controlada</span></div>
+  <div class="access-editor-grid">
+  {% for section in sections %}
+    {% with grant=selected_grants|get_item:section.value %}
+    <form method="post" class="access-card">
+      {% csrf_token %}<input type="hidden" name="user_id" value="{{ selected_membership.user_id }}"><input type="hidden" name="section" value="{{ section.value }}">
+      <div class="access-card-title"><h3>{{ section.label }}</h3>{% if grant %}<span>Activo</span>{% else %}<span class="is-off">Sin acceso</span>{% endif %}</div>
+      <label>Rol<select name="role" required><option value="">Seleccionar</option>{% for role in section.roles %}<option value="{{ role.value }}" {% if grant.role == role.value %}selected{% endif %}>{{ role.label }}</option>{% endfor %}</select></label>
+      <label>Alcance<select name="scope" required><option value="organization" {% if not grant or grant.scope == "organization" %}selected{% endif %}>Toda la organización</option><option value="projects" {% if grant.scope == "projects" %}selected{% endif %}>Proyectos seleccionados</option></select></label>
+      <fieldset><legend>Proyectos</legend><div class="access-projects">{% for project in projects %}<label><input type="checkbox" name="projects" value="{{ project.pk }}" {% if grant and project in grant.project_scopes.all|project_list %}checked{% endif %}> {{ project.name }}</label>{% empty %}<small>No hay proyectos.</small>{% endfor %}</div></fieldset>
+      <div class="access-card-actions"><button class="button" type="submit" name="action" value="set">Guardar</button>{% if grant %}<button class="access-revoke" type="submit" name="action" value="revoke">Revocar</button>{% endif %}</div>
+    </form>
+    {% endwith %}
+  {% endfor %}
+  </div>
+</section>
+
+<section class="access-panel" aria-labelledby="cap-title">
+  <div class="access-panel-head"><div><p class="editorial-index">Matriz 03</p><h2 id="cap-title">Capacidades efectivas</h2></div><span>Solo lectura</span></div>
+  <div class="access-table-wrap"><table class="capability-matrix"><thead><tr><th>Sección</th>{% for capability in capability_values %}<th>{{ capability.value }}</th>{% endfor %}</tr></thead><tbody>{% for row in capability_rows %}<tr><th>{{ row.section }}{% if row.grant %}<small>{{ row.grant.get_role_display }}</small>{% endif %}</th>{% for capability in capability_values %}<td>{% if capability in row.capabilities %}<span class="cap-yes" aria-label="Permitido">✓</span>{% else %}<span class="cap-no" aria-label="No permitido">—</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}

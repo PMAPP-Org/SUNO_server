@@ -1,0 +1,74 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Equipos{% endblock %}
+{% block content %}
+<section class="eq-heading">
+  <div>
+    <h1>Equipos</h1>
+    <p>Ficha técnica, asignaciones y documentos en un solo lugar.</p>
+  </div>
+  <div class="eq-heading-actions">
+    <a class="eq-button" href="{% url 'equipment:usage_list' %}">Registros de uso</a>
+    <a class="eq-button" href="{% url 'equipment:inspection_list' %}">Preoperacionales</a>
+    <a class="eq-button" href="{% url 'equipment:maintenance' %}">Mantenimiento</a>
+    <a class="eq-button" href="{% url 'equipment:fuel' %}">Combustibles</a>
+    <a class="eq-button" href="{% url 'equipment:transport' %}">Transporte</a>
+    {% if can_view_costs %}<a class="eq-button" href="{% url 'equipment:costs' %}">Costos de equipos</a>{% endif %}
+    {% if items %}<a class="eq-button" href="{% url 'equipment:labels' %}?{% for item in items %}ids={{ item.equipment.pk }}{% if not forloop.last %}&amp;{% endif %}{% endfor %}">Etiquetas QR de esta página</a>{% endif %}
+    {% if can_create %}<a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
+  </div>
+</section>
+
+<section class="eq-collections" aria-labelledby="collections-title">
+  <div class="eq-collection-heading">
+    <div>
+      <h2 id="collections-title">Colecciones</h2>
+      <p>Organiza el catálogo por tipología.</p>
+    </div>
+    {% if can_create %}<a data-peek href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span> Nueva colección</a>{% endif %}
+  </div>
+  <div class="eq-collection-grid">
+    {% for collection in collections %}
+      <a data-peek class="eq-collection-card" href="{% url 'equipment:collection_detail' collection.pk %}">
+        <span class="eq-collection-cover" aria-hidden="true"></span>
+        <span class="eq-collection-body">
+          <strong>{{ collection.name }}</strong>
+          {% if collection.description %}<span class="eq-collection-description">{{ collection.description|truncatechars:84 }}</span>{% endif %}
+          <span class="eq-tags" aria-label="Tipologías">
+            {% for type in collection.equipment_types.all %}<span>{{ type.name }}</span>{% empty %}<span>Sin etiquetas</span>{% endfor %}
+          </span>
+          <span class="eq-collection-meta"><span>{{ collection.equipment_count }} equipo{{ collection.equipment_count|pluralize:"s" }}</span><b aria-hidden="true">→</b></span>
+        </span>
+      </a>
+    {% endfor %}
+    {% if can_create %}
+      <a data-peek class="eq-collection-card eq-collection-new" href="{% url 'equipment:collection_create' %}"><span aria-hidden="true">+</span><strong>Nueva colección</strong></a>
+    {% elif not collections %}
+      <p class="eq-empty-inline">Todavía no hay colecciones creadas.</p>
+    {% endif %}
+  </div>
+</section>
+
+<form class="eq-identify" method="get" action="{% url 'equipment:identify' %}" aria-label="Identificar equipo">
+  <label><span>Identificar equipo</span><input type="text" name="q" placeholder="Escanea el QR o escribe código, serie o placa" autocomplete="off" required></label>
+  <button class="eq-button" type="submit">Abrir ficha</button>
+</form>
+
+<form class="eq-filters" method="get" aria-label="Filtros de equipos">
+  <label class="eq-search"><span>Buscar</span><input type="search" name="q" value="{{ query }}" placeholder="Código, nombre, serie o placa"></label>
+  <label><span>Tipo</span><select name="type"><option value="">Todos</option>{% for type in types %}<option value="{{ type.pk }}"{% if selected_type == type.pk|stringformat:'s' %} selected{% endif %}>{{ type.name }}</option>{% endfor %}</select></label>
+  <label><span>Estado</span><select name="status"><option value="">Todos</option>{% for value, label in statuses %}<option value="{{ value }}"{% if selected_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label><span>Proyecto</span><select name="project"><option value="">Todos</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.name }}</option>{% endfor %}</select></label>
+  <button class="eq-button" type="submit">Aplicar</button>
+  {% if query or selected_type or selected_status or selected_project %}<a class="eq-clear" href="{% url 'equipment:list' %}">Limpiar</a>{% endif %}
+</form>
+
+{% include "suno/equipment/_equipment_table.html" %}
+
+{% if page.paginator.num_pages > 1 %}
+<nav class="eq-pagination" aria-label="Paginación">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ query|urlencode }}&type={{ selected_type }}&status={{ selected_status }}&project={{ selected_project }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ query|urlencode }}&type={{ selected_type }}&status={{ selected_status }}&project={{ selected_project }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

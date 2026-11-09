@@ -14,6 +14,8 @@ urlpatterns = [
     path("plataforma/", platform_home, name="platform_home"),
     path("plataforma/ingresar/", platform_login, name="platform_login"),
     path("plataforma/salir/", platform_logout, name="platform_logout"),
+    path("plataforma/accesos/", include("suno.core.access_urls")),
+    path("plataforma/equipos/", include("suno.equipment.urls")),
     path("plataforma/proyectos/", include("suno.projects.urls")),
     path(
         "plataforma/proyectos/<uuid:project_id>/presupuestos/",

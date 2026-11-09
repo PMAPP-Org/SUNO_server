@@ -25,7 +25,8 @@ from django.test import SimpleTestCase
 from ninja.errors import HttpError
 
 from suno.core import policies
-from suno.core.context import RequestContext
+from suno.core.access_services import LEGACY_GRANTS
+from suno.core.context import RequestContext, SectionAccess
 from suno.core.models import Device, FormTemplate, Job, Record, Role
 from suno.core.policies import (
     can_manage_device,
@@ -49,7 +50,17 @@ OTHER_USER = uuid.uuid4()
 
 
 def ctx(*roles: object, org_id: uuid.UUID = ORG, user_id: uuid.UUID = USER) -> RequestContext:
-    return RequestContext(user_id=user_id, org_id=org_id, roles=frozenset(roles))
+    section_access = tuple(
+        SectionAccess(section=section, role=section_role, scope=scope)
+        for role in roles
+        for section, section_role, scope in LEGACY_GRANTS.get(str(role), ())
+    )
+    return RequestContext(
+        user_id=user_id,
+        org_id=org_id,
+        roles=frozenset(roles),
+        section_access=section_access,
+    )
 
 
 def record(org_id: uuid.UUID = ORG) -> Record:

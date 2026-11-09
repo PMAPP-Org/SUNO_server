@@ -16,6 +16,9 @@ class BrandingTests(SimpleTestCase):
         self.assertNotContains(response, 'width="1280"')
         self.assertContains(response, 'lang="es"')
         self.assertContains(response, "suno/css/web.css")
+        self.assertContains(response, "topography/suno_banner_hero_derecha.svg")
+        self.assertContains(response, "topography/topografia_05_laderas_diagonales.svg")
+        self.assertNotContains(response, "suno/brand/topography.png")
         self.assertRedirects(
             self.client.get("/admin/"), "/admin/login/?next=/admin/", fetch_redirect_response=False
         )
@@ -31,6 +34,7 @@ class BrandingTests(SimpleTestCase):
         self.assertIn('name="csrfmiddlewaretoken"', form_html)
         self.assertContains(response, "Acceso restringido para administración")
         self.assertNotContains(response, "Logo_Principal.png")
+        self.assertContains(response, "topography/topografia_01_relieve_organico.svg")
 
     @override_settings(ADMIN_REQUIRE_OTP=True)
     def test_branded_login_keeps_csrf_password_and_otp(self):
@@ -56,6 +60,10 @@ class BrandingTests(SimpleTestCase):
             "brand/Logo_Principal.png",
             "brand/Logo_CabezaSinCirculo.png",
             "brand/Icon_App.png",
+            "brand/topography/suno_banner_hero_derecha.svg",
+            "brand/topography/suno_fondo_esquinas.svg",
+            "brand/topography/topografia_01_relieve_organico.svg",
+            "brand/topography/topografia_05_laderas_diagonales.svg",
         ):
             with self.subTest(asset=asset):
                 self.assertIsNotNone(finders.find(f"suno/{asset}"))

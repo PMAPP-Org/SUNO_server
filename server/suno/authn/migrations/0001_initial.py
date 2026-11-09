@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('core', '0002_add_record_attachment_org_isolation_fk'),
+        ('core', '0002_add_visit_attachment_org_isolation_fk'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

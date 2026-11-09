@@ -18,8 +18,10 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
+from suno.core.access import Section
 from suno.core.context import Principal, RequestContext, resolve_request_context
 from suno.core.models import AppUser, Assignment, Membership, Record
+from suno.core.navigation import platform_navigation
 from suno.core.scoping import scoped_qs
 from suno.projects.access import visible_projects
 
@@ -61,13 +63,16 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         return redirect("platform_login")
 
     records = scoped_qs(request_context, Record).filter(deleted_at__isnull=True)
+    if not request_context.has_section_access(Section.FIELD_RECORDS):
+        records = records.none()
     recent_records = list(
         records.select_related("template_version__template", "created_by")
         .annotate(review_count=Count("reviews"))
         .order_by("-captured_at")[:8]
     )
+    map_records = records if request_context.has_section_access(Section.GIS) else records.none()
     located_records = list(
-        records.exclude(lat__isnull=True)
+        map_records.exclude(lat__isnull=True)
         .exclude(lon__isnull=True)
         .select_related("template_version__template", "created_by")
         .order_by("-captured_at")[:80]
@@ -90,16 +95,20 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         .filter(record_count=0)
         .count()
     )
+    projects = visible_projects(request_context)
+    if not request_context.has_section_access(Section.PROJECTS):
+        projects = projects.none()
     context = {
         "organization": user.org,
+        "navigation": platform_navigation(request_context),
         "recent_records": recent_records,
         "map_points": map_points,
         "record_count": records.count(),
         "pending_review_count": records.filter(reviews__isnull=True).count(),
         "pending_assignment_count": pending_assignments,
         "member_count": scoped_qs(request_context, Membership).count(),
-        "projects": list(visible_projects(request_context).order_by("name")[:6]),
-        "project_count": visible_projects(request_context).count(),
+        "projects": list(projects.order_by("name")[:6]),
+        "project_count": projects.count(),
     }
     return render(request, "suno/platform.html", context)
 

@@ -9,19 +9,20 @@ from uuid import UUID
 from django.db.models import QuerySet
 from django.http import Http404
 
+from suno.core.access import AccessScope, Section
 from suno.core.context import RequestContext
 from suno.core.models import AppUser, Project, Task, TaskResponsible
-from suno.core.policies import PROJECT_READ_ALL_ROLES
 from suno.core.scoping import scoped_qs
 
 
 def visible_projects(ctx: RequestContext) -> QuerySet[Project]:
     projects = scoped_qs(ctx, Project)
-    if ctx.has_any_role(PROJECT_READ_ALL_ROLES):
+    access = ctx.access_for(Section.PROJECTS)
+    if access is None:
+        return projects.none()
+    if access.scope == AccessScope.ORGANIZATION:
         return projects
-    return projects.filter(
-        tasks__responsibles__user_id=ctx.user_id, tasks__retired_in__isnull=True
-    ).distinct()
+    return projects.filter(pk__in=access.project_ids)
 
 
 def get_visible_project(ctx: RequestContext, project_id: UUID) -> Project:

@@ -13,7 +13,8 @@ name: Release
 #    SPDX atestado y atestación de procedencia SLSA firmada (Sigstore),
 #    verificable con `gh attestation verify`. El APK lo publica la release de
 #    PMAPP-Org/SUNO_client.
-# 4. La imagen se despliega en producción con deploy.yml (si está configurado).
+# 4. Producción ya sigue cada SHA de master mediante deploy-master.yml; la
+#    release conserva la imagen semántica para trazabilidad y rollback manual.
 #
 # Requisitos del repositorio (los configura un admin): Settings → Actions →
 # "Allow GitHub Actions to create and approve pull requests", y el
@@ -69,6 +70,7 @@ jobs:
       packages: write # publicar en GHCR
       id-token: write # firmar las atestaciones (Sigstore)
       attestations: write
+      artifact-metadata: write
     env:
       TAG: ${{ needs.release-please.outputs.tag_name }}
       VERSION: ${{ needs.release-please.outputs.version }}
@@ -133,23 +135,3 @@ jobs:
         run: |
           gh release upload "$TAG" sbom-api.spdx.json sbom-api.cdx.json \
             --repo "$GITHUB_REPOSITORY" --clobber
-
-  # Despliegue de la imagen recién publicada: deploy.yml verifica su atestación
-  # y no hace nada mientras no exista el environment `production` con secretos.
-  deploy:
-    name: Desplegar en producción
-    needs: [release-please, image]
-    uses: ./.github/workflows/deploy.yml # zizmor: ignore[self-repository] actionlint no admite `$/`
-    permissions:
-      contents: read
-      packages: read
-      attestations: read
-    with:
-      version: ${{ needs.release-please.outputs.tag_name }}
-      image: ${{ needs.image.outputs.ref }}
-    # Los secretos de despliegue son del environment `production`, que
-    # deploy.yml declara en su job, pero GitHub solo se los entrega a un
-    # workflow reutilizable si el llamador hereda los secretos: sin esta línea
-    # llegaban vacíos y el despliegue de la v0.3.0 se omitió. Se heredan hacia
-    # un archivo de este mismo repositorio (CODEOWNERS), no hacia terceros.
-    secrets: inherit # zizmor: ignore[secrets-inherit] # nosemgrep: secrets-inherit

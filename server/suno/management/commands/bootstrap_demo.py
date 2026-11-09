@@ -2,7 +2,7 @@
 nuevo necesita para ejecutar el ciclo login -> capturar registro -> sincronizar.
 
 **Por qué existe (hallazgo Crítico de la revisión final de**
-`plans/visitacampo-despliegue-demo-implementacion.md`**)**: un VPS recién
+`plans/suno-despliegue-demo-implementacion.md`**)**: un VPS recién
 desplegado no tiene ninguna `Organization`, ningún `AppUser`, ninguna
 `Membership` ni ninguna `FormTemplateVersion` publicada. Sin esas cuatro
 filas, `POST /v1/auth/login` (`authn/services.py::log_in`) falla siempre con

@@ -5,15 +5,16 @@
       <nav class="sidebar-nav">
         <p>General</p>
         <a {% if active == "home" %}class="active" {% endif %}href="{% url 'platform_home' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#home"></use></svg> Inicio</a>
-        <a {% if active == "projects" %}class="active" {% endif %}href="{% url 'projects:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#folder"></use></svg> Proyectos</a>
-        <a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#map"></use></svg> Mapa</a>
-        <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#activity"></use></svg> Actividades</a>
-        <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#record"></use></svg> Registros</a>
-        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#report"></use></svg> Reportes <small>Próximamente</small></span>
+        {% if navigation.PROJECTS %}<a {% if active == "projects" %}class="active" {% endif %}href="{% url 'projects:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#folder"></use></svg> Proyectos</a>{% endif %}
+        {% if navigation.GIS %}<a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#map"></use></svg> Mapa</a>{% endif %}
+        {% if navigation.FIELD_RECORDS %}<a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#activity"></use></svg> Actividades</a>
+        <a href="{% url 'platform_home' %}#actividad"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#record"></use></svg> Registros</a>{% endif %}
+        {% if navigation.REPORTS %}<span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#report"></use></svg> Reportes <small>Próximamente</small></span>{% endif %}
         <p>Gestión</p>
-        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Equipos</span>
-        <span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#form"></use></svg> Formularios</span>
-        <a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg> Capas GIS</a>
+        {% if navigation.EQUIPMENT %}<a {% if active == "equipment" %}class="active" {% endif %}href="{% url 'equipment:list' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#equipment"></use></svg> Equipos</a>{% endif %}
+        {% if navigation.FORMS %}<span class="nav-disabled" aria-disabled="true"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#form"></use></svg> Formularios</span>{% endif %}
+        {% if navigation.GIS %}<a href="{% url 'platform_home' %}#mapa"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#layers"></use></svg> Capas GIS</a>{% endif %}
+        {% if navigation.USERS_ACCESS %}<a {% if active == "access" %}class="active" {% endif %}href="{% url 'access_control:matrix' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#team"></use></svg> Usuarios y accesos</a>{% endif %}
         {% if request.user.is_staff %}<a href="{% url 'admin:index' %}"><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#settings"></use></svg> Administración</a>{% endif %}
       </nav>
       <div class="sidebar-user">

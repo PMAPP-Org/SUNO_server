@@ -1,0 +1,75 @@
+{% extends "suno/equipment/base.html" %}
+{% block title %}Combustibles{% endblock %}
+{% block content %}
+<a class="eq-back" href="{% url 'equipment:list' %}">← Todos los equipos</a>
+<section class="eq-heading">
+  <div>
+    <h1>Combustibles</h1>
+    <p>{{ month_gallons|floatformat:"-2g" }} galones este mes{% if show_costs and month_cost != None %} · ${{ month_cost|floatformat:"2g" }}{% endif %}.</p>
+  </div>
+  <div class="eq-heading-actions">
+    <a data-peek class="eq-button eq-button-primary" href="{% url 'equipment:fuel_fill_create' %}">Registrar tanqueo</a>
+    {% if can_liquidate %}<a data-peek class="eq-button" href="{% url 'equipment:fuel_liquidation_create' %}">Nueva liquidación</a>{% endif %}
+  </div>
+</section>
+
+{% if can_manage %}
+<div class="eq-section-head"><div><p class="editorial-label">Catálogo</p><h2>Proveedores, estaciones y tanques</h2></div></div>
+<div class="eq-heading-actions">
+  <a data-peek class="eq-button" href="{% url 'equipment:fuel_supplier_create' %}">Proveedor</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:fuel_station_create' %}">Estación</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:fuel_rate_create' %}">Tarifa por galón</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:fuel_store_create' %}">Tanque propio</a>
+  <a data-peek class="eq-button" href="{% url 'equipment:fuel_purchase_create' %}">Compra al tanque</a>
+</div>
+{% endif %}
+
+{% if stores %}
+<div class="eq-breakdown" aria-label="Stock de tanques propios">
+  {% for store, stock in stores %}<div><small>{{ store.name }}</small><strong>{{ stock.gallons|floatformat:"-2g" }} gal</strong>{% if stock.average_cost != None and show_costs %}<span>costo prom. ${{ stock.average_cost|floatformat:"2g" }}</span>{% endif %}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if liquidations %}
+<div class="eq-section-head"><div><p class="editorial-label">Terceros</p><h2>Liquidaciones</h2></div></div>
+<div class="eq-records">
+  {% for liquidation in liquidations %}
+  <article>
+    <div><strong><a href="{% url 'equipment:fuel_liquidation' liquidation.pk %}">{{ liquidation.code }} · {{ liquidation.supplier.name }}</a></strong><span>{{ liquidation.date_from|date:"d/m/Y" }} — {{ liquidation.date_to|date:"d/m/Y" }}</span></div>
+    <div><small>{{ liquidation.get_status_display }}</small>{% if liquidation.status == 'confirmed' %}<strong>${{ liquidation.net_payable|floatformat:"2g" }}</strong>{% endif %}</div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="eq-section-head"><div><p class="editorial-label">Registro</p><h2>Tanqueos</h2></div></div>
+<form method="get" class="eq-form eq-filters">
+  <label><span>Origen</span>
+    <select name="source">
+      <option value="">Todos</option>
+      {% for value, label in sources %}<option value="{{ value }}"{% if value == source %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span>Buscar</span><input type="search" name="q" value="{{ q }}" placeholder="Equipo, vale o conductor"></label>
+  <div class="eq-form-actions"><button class="eq-button" type="submit">Filtrar</button></div>
+</form>
+<div class="eq-records">
+  {% for fill in page %}
+  <article>
+    <div>
+      <strong>{{ fill.equipment.code }} · {{ fill.gallons|floatformat:"-2g" }} gal · vale {{ fill.voucher_number }}</strong>
+      <span>{{ fill.filled_at|date:"d/m/Y H:i" }} · {% if fill.station %}{{ fill.station.supplier.name }} · {{ fill.station.name }}{% else %}{{ fill.store.name }}{% endif %}{% if fill.work_front %} · {{ fill.work_front }}{% endif %}</span>
+      {% if fill.meter_value != None %}<small>{{ fill.meter_value|floatformat:"-2g" }} · {{ fill.driver_name }}</small>{% endif %}
+    </div>
+    {% if show_costs %}<div><small>{% if fill.liquidation_id %}Liquidado{% elif fill.cost == None %}Sin tarifa{% else %}Por liquidar{% endif %}</small>{% if fill.cost != None %}<strong>${{ fill.cost|floatformat:"2g" }}</strong>{% endif %}</div>{% endif %}
+  </article>
+  {% empty %}<p class="eq-empty-inline">No hay tanqueos con esos filtros.</p>{% endfor %}
+</div>
+{% if page.has_other_pages %}
+<nav class="eq-tabs" aria-label="Páginas">
+  {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&amp;source={{ source }}&amp;q={{ q|urlencode }}">Anterior</a>{% endif %}
+  <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?page={{ page.next_page_number }}&amp;source={{ source }}&amp;q={{ q|urlencode }}">Siguiente</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

@@ -1,13 +1,13 @@
-"""`RequestContext`: identidad, organización y roles resueltos **una vez** por request.
+"""`RequestContext`: identidad y autorización resueltas **una vez** por request.
 
 Referencias normativas:
 - **ADR-013** — autorización con funciones de política puras sobre un
-  `RequestContext` inmutable construido con **una sola query** antes de
-  cualquier bucle.
+  `RequestContext` inmutable construido con un número **acotado** de queries
+  antes de cualquier bucle.
 - **RD-07** (hallazgo **H-07**, HIGH) — QFieldCloud llamaba a
   `permissions_utils.can_create_delta(user, delta)` *dentro* del loop de
   deltas; cada llamada re-consultaba la vista SQL de roles ⇒ N+1. Aquí los
-  roles se resuelven **fuera** del bucle, y las políticas
+  roles y accesos por sección se resuelven **fuera** del bucle, y las políticas
   (`suno.core.policies`) son evaluación en memoria: cero queries por
   recurso, cueste el lote 1 o 500 operaciones.
 - **RD-16** (hallazgo **H-20**, LOW) — fetches redundantes de la entidad de
@@ -32,7 +32,8 @@ from uuid import UUID
 
 from ninja.security import HttpBearer
 
-from suno.core.models import Membership
+from suno.core.access import AccessScope, role_has_capability
+from suno.core.models import Membership, SectionGrant
 
 T = TypeVar("T")
 
@@ -44,6 +45,9 @@ T = TypeVar("T")
 # realmente es. Tiparlo como `str` obligaría a sembrar de `# type: ignore`
 # cada política — ruido que ocultaría los errores de tipo de verdad.
 RoleValue = Any
+SectionValue = Any
+SectionRoleValue = Any
+CapabilityValue = Any
 
 # Atributo donde la dependencia deja el contexto. Se declara como constante
 # (y no se escribe `request.ctx` a mano por ahí) para que renombrarlo sea un
@@ -106,6 +110,19 @@ class Principal:
 
 
 @dataclass(frozen=True, slots=True)
+class SectionAccess:
+    """Rol funcional y alcance de proyecto de una sección, ya resuelto."""
+
+    section: SectionValue
+    role: SectionRoleValue
+    scope: str
+    project_ids: frozenset[UUID] = frozenset()
+
+    def covers_project(self, project_id: UUID) -> bool:
+        return self.scope == AccessScope.ORGANIZATION or project_id in self.project_ids
+
+
+@dataclass(frozen=True, slots=True)
 class RequestContext:
     """Contexto **inmutable** de la request (ADR-013).
 
@@ -118,6 +135,7 @@ class RequestContext:
     org_id: UUID
     roles: frozenset[RoleValue]
     device_id: UUID | None = None
+    section_access: tuple[SectionAccess, ...] = ()
     # Fuera de `__eq__`/`__repr__`: la identidad de un contexto son sus ids y
     # sus roles, no lo que haya cacheado; y el repr no debe volcar entidades
     # completas en un log (RD-12).
@@ -141,20 +159,56 @@ class RequestContext:
         """
         return not self.roles.isdisjoint(roles)
 
+    def access_for(self, section: SectionValue) -> SectionAccess | None:
+        """Devuelve el acceso resuelto de la sección, sin consultar la BD."""
+        wanted = str(section)
+        return next((access for access in self.section_access if access.section == wanted), None)
+
+    def has_section_access(self, section: SectionValue) -> bool:
+        """La sección aparece para el usuario, aunque su alcance esté vacío."""
+        return self.is_member and self.access_for(section) is not None
+
+    def section_role(self, section: SectionValue) -> SectionRoleValue | None:
+        access = self.access_for(section)
+        return access.role if access is not None else None
+
+    def has_capability(
+        self,
+        section: SectionValue,
+        capability: CapabilityValue,
+        project_id: UUID | None = None,
+    ) -> bool:
+        """Comprueba capacidad y alcance sin consultas.
+
+        Un grant limitado por proyectos exige siempre el ``project_id``. Que
+        la sección sea visible no autoriza una operación organizacional.
+        """
+        if not self.is_member:
+            return False
+        access = self.access_for(section)
+        if access is None or not role_has_capability(access.section, access.role, capability):
+            return False
+        if access.scope == AccessScope.ORGANIZATION:
+            return True
+        return project_id is not None and access.covers_project(project_id)
+
     def resolve_entity(self, key: str, loader: Callable[[], T]) -> T:
         """Resuelve y cachea la entidad de contexto de esta request (RD-16)."""
         return self.entities.resolve(key, loader)
 
 
 def resolve_request_context(principal: Principal) -> RequestContext:
-    """Construye el contexto con **exactamente una query** (RD-07).
+    """Construye el contexto con una o dos queries, siempre antes de autorizar.
 
-    Esa query es la de roles. Se usa `values_list("role", flat=True)` y no
+    La primera query es la de roles. Se usa `values_list("role", flat=True)` y no
     `select_related`/`prefetch_related` porque de `Membership` solo se
     necesita una columna: no hay relación que seguir, así que el JOIN que
     ahorraría `select_related` no llega a existir. El resultado es una sola
     sentencia `SELECT role FROM membership WHERE user_id=%s AND org_id=%s`,
-    servida por el índice único `membership_org_user_uq`.
+    servida por el índice único `membership_org_user_uq`. Si existe
+    membresía, una segunda query carga todos los grants y proyectos mediante
+    un único ``LEFT JOIN``. Autorizar después cuesta cero queries, tenga el
+    lote uno o quinientos recursos.
 
     Un usuario sin membresía en `org_id` obtiene `roles` vacío — no un error:
     la denegación la deciden las políticas, de forma uniforme y deny-by-default.
@@ -165,11 +219,37 @@ def resolve_request_context(principal: Principal) -> RequestContext:
             org_id=principal.org_id,
         ).values_list("role", flat=True)
     )
+    section_access: tuple[SectionAccess, ...] = ()
+    if roles:
+        grouped: dict[tuple[str, str, str], set[UUID]] = {}
+        rows = (
+            SectionGrant.objects.filter(
+                user_id=principal.user_id,
+                org_id=principal.org_id,
+                active=True,
+            )
+            .order_by("section", "project_scopes__project_id")
+            .values_list("section", "role", "scope", "project_scopes__project_id")
+        )
+        for section, role, scope, project_id in rows:
+            projects = grouped.setdefault((section, role, scope), set())
+            if project_id is not None:
+                projects.add(project_id)
+        section_access = tuple(
+            SectionAccess(
+                section=section,
+                role=role,
+                scope=scope,
+                project_ids=frozenset(project_ids),
+            )
+            for (section, role, scope), project_ids in grouped.items()
+        )
     return RequestContext(
         user_id=principal.user_id,
         org_id=principal.org_id,
         roles=roles,
         device_id=principal.device_id,
+        section_access=section_access,
     )
 
 
