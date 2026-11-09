@@ -389,7 +389,7 @@ def recalculate_fill_prices(ctx: RequestContext, *, station_id: UUID | None = No
         pending = pending.filter(station_id=station_id)
     updated = 0
     for fill in pending.select_for_update(of=("self",)).select_related("station"):
-        assert fill.station is not None
+        assert fill.station is not None  # nosec B101
         price = _rate_on(ctx, fill.station, fill.filled_at.date())
         if price is None:
             continue
@@ -449,7 +449,7 @@ def yield_report(
     previous: FuelFill | None = None
     for fill in fills:
         if previous is not None and since <= fill.filled_at.date() <= until:
-            assert fill.meter_value is not None and previous.meter_value is not None
+            assert fill.meter_value is not None and previous.meter_value is not None  # nosec B101
             delta = fill.meter_value - previous.meter_value
             if delta >= 0:
                 bucket = buckets.setdefault(
@@ -547,7 +547,7 @@ def liquidation_preview(
     by_station: dict[UUID, dict[UUID, list[FuelFill]]] = {}
     stations: dict[UUID, FuelStation] = {}
     for fill in fills:
-        assert fill.station is not None
+        assert fill.station is not None  # nosec B101
         stations[fill.station_id or fill.station.pk] = fill.station
         by_station.setdefault(fill.station.pk, {}).setdefault(fill.equipment_id, []).append(fill)
     blocks: list[StationBlock] = []

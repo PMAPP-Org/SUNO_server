@@ -723,6 +723,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeterReadingOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -789,6 +790,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TripOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -857,6 +859,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FuelFillOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -900,6 +903,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UsageReportOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -932,6 +936,7 @@ paths:
                 format: binary
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/equipment/{equipment_id}/inspections:
@@ -968,6 +973,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InspectionOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2716,6 +2722,8 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura inicial. Obligatoria con `meter_unit` si el equipo se controla por medidor.
         items:
           type: array
@@ -2837,6 +2845,8 @@ components:
         volume_m3:
           type: number
           exclusiveMinimum: 0
+          maximum: 999999.99
+          multipleOf: 0.01
         equipment_id:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
@@ -2949,6 +2959,8 @@ components:
         gallons:
           type: number
           exclusiveMinimum: 0
+          maximum: 99999999.99
+          multipleOf: 0.01
         meter_unit:
           oneOf:
             - $ref: '#/components/schemas/MeterUnit'
@@ -2958,6 +2970,8 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura del medidor al tanquear; obligatoria si el equipo se controla por medidor.
         work_front:
           type: string
@@ -3055,11 +3069,15 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
         end_meter:
           type:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
         notes:
           type: string
           maxLength: 500
@@ -3292,6 +3310,8 @@ components:
         value:
           type: number
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura del medidor, con hasta 2 decimales.
         read_at:
           $ref: '#/components/schemas/Timestamp'
