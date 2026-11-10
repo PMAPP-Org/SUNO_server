@@ -1,7 +1,7 @@
 """`answers` contra el schema de su plantilla, en el camino real del push (Paso 20).
 
 Es el **comando de verificación 2** del Paso 20 ejecutado de punta a punta:
-`visit.answers` que no cumple el schema de su `template_version_id` se rechaza
+`record.answers` que no cumple el schema de su `template_version_id` se rechaza
 en `POST /v1/sync/push`, con el código del contrato y sin tumbar el lote.
 Requiere PostgreSQL, como el resto de la integración de sync.
 
@@ -13,7 +13,7 @@ Lo que estos tests fijan y `forms/tests/test_answers.py` no puede fijar:
   forma del contrato, **no** un 500 ni un lote perdido;
 - que una operación rechazada por esto **no escribe nada** y no impide que el
   resto del lote se aplique;
-- que la validación es contra la versión que la visita referencia, también
+- que la validación es contra la versión que el registro referencia, también
   cuando existe una versión más nueva de la misma plantilla
   (retrocompatibilidad histórica, criterio de salida del paso).
 """
@@ -25,14 +25,14 @@ import uuid
 
 from django.test import TestCase
 
-from suno.core.models import FormTemplateVersion, Visit
+from suno.core.models import FormTemplateVersion, Record
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
 
-from .factories import build_scenario, create_op, push, update_op, visit_of
+from .factories import build_scenario, create_op, push, record_of, update_op
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -72,9 +72,9 @@ class AnswersValidationTests(TestCase):
         return response.json()["results"][0]
 
     def test_answers_out_of_range_are_rejected_in_the_push(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self._result(
-            create_op(self.scenario, visit_id=visit_id, answers={"altura_cm": 900})
+            create_op(self.scenario, record_id=record_id, answers={"altura_cm": 900})
         )
         self.assertEqual(result["status"], "rejected")
         self.assertEqual(result["error"]["code"], "validation_error")
@@ -82,7 +82,7 @@ class AnswersValidationTests(TestCase):
             result["error"]["details"],
             {"errors": [{"field": "answers.altura_cm", "reason": "out_of_range"}]},
         )
-        self.assertFalse(Visit.objects.filter(pk=visit_id).exists())
+        self.assertFalse(Record.objects.filter(pk=record_id).exists())
 
     def test_a_badly_typed_answer_is_rejected(self) -> None:
         result = self._result(create_op(self.scenario, answers={"altura_cm": "muy alta"}))
@@ -96,12 +96,12 @@ class AnswersValidationTests(TestCase):
         )
 
     def test_valid_answers_are_applied(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         result = self._result(
-            create_op(self.scenario, visit_id=visit_id, answers={"altura_cm": 12})
+            create_op(self.scenario, record_id=record_id, answers={"altura_cm": 12})
         )
         self.assertEqual(result["status"], "applied")
-        self.assertEqual(visit_of(visit_id).answers, {"altura_cm": 12})
+        self.assertEqual(record_of(record_id).answers, {"altura_cm": 12})
 
     def test_an_invalid_operation_does_not_take_the_batch_down(self) -> None:
         good = uuid.uuid4()
@@ -109,11 +109,11 @@ class AnswersValidationTests(TestCase):
             self.scenario,
             [
                 create_op(self.scenario, answers={"altura_cm": 900}),
-                create_op(self.scenario, visit_id=good),
+                create_op(self.scenario, record_id=good),
             ],
         ).json()["results"]
         self.assertEqual([result["status"] for result in results], ["rejected", "applied"])
-        self.assertTrue(Visit.objects.filter(pk=good).exists())
+        self.assertTrue(Record.objects.filter(pk=good).exists())
 
     def test_the_error_body_never_echoes_the_offending_value(self) -> None:
         """RD-12, también por este camino."""
@@ -123,23 +123,23 @@ class AnswersValidationTests(TestCase):
 
     def test_an_update_that_rewrites_answers_is_validated_too(self) -> None:
         """Sin `template_version_id` en el payload: se resuelve de la fila."""
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        base = visit_of(visit_id).version
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        base = record_of(record_id).version
 
-        result = self._result(update_op(visit_id, base_version=base, answers={"altura_cm": 900}))
+        result = self._result(update_op(record_id, base_version=base, answers={"altura_cm": 900}))
         self.assertEqual(result["status"], "rejected")
         self.assertEqual(result["error"]["code"], "validation_error")
-        self.assertEqual(visit_of(visit_id).version, base)
+        self.assertEqual(record_of(record_id).version, base)
 
     def test_an_update_with_valid_answers_is_applied(self) -> None:
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        base = visit_of(visit_id).version
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        base = record_of(record_id).version
 
-        result = self._result(update_op(visit_id, base_version=base, answers={"altura_cm": 7}))
+        result = self._result(update_op(record_id, base_version=base, answers={"altura_cm": 7}))
         self.assertEqual(result["status"], "applied")
-        self.assertEqual(visit_of(visit_id).answers, {"altura_cm": 7})
+        self.assertEqual(record_of(record_id).answers, {"altura_cm": 7})
 
     def test_a_version_without_a_declared_schema_accepts_any_answers(self) -> None:
         """Retrocompatibilidad de las filas anteriores al Paso 20 (`definition = {}`)."""
@@ -193,13 +193,13 @@ class HistoricalCompatibilityTests(TestCase):
             change_seq=self.scenario.template_version.change_seq + 1,
         )
 
-    def test_a_visit_on_the_old_version_is_still_accepted(self) -> None:
-        visit_id = uuid.uuid4()
-        result = push(self.scenario, [create_op(self.scenario, visit_id=visit_id)]).json()[
+    def test_a_record_on_the_old_version_is_still_accepted(self) -> None:
+        record_id = uuid.uuid4()
+        result = push(self.scenario, [create_op(self.scenario, record_id=record_id)]).json()[
             "results"
         ][0]
         self.assertEqual(result["status"], "applied", result)
-        self.assertEqual(visit_of(visit_id).answers, {"altura_cm": 12})
+        self.assertEqual(record_of(record_id).answers, {"altura_cm": 12})
 
     def test_the_new_version_is_genuinely_incompatible(self) -> None:
         """Si la v2 aceptara las respuestas de la v1, el test de arriba no probaría nada."""
@@ -209,26 +209,26 @@ class HistoricalCompatibilityTests(TestCase):
         ).json()["results"][0]
         self.assertEqual(result["status"], "rejected")
 
-    def test_an_update_of_a_historical_visit_uses_its_own_version(self) -> None:
-        """Reeditar una visita vieja se valida contra la plantilla con la que se capturó."""
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        base = visit_of(visit_id).version
+    def test_an_update_of_a_historical_record_uses_its_own_version(self) -> None:
+        """Reeditar un registro viejo se valida contra la plantilla con la que se capturó."""
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        base = record_of(record_id).version
 
         result = push(
-            self.scenario, [update_op(visit_id, base_version=base, answers={"altura_cm": 30})]
+            self.scenario, [update_op(record_id, base_version=base, answers={"altura_cm": 30})]
         ).json()["results"][0]
         self.assertEqual(result["status"], "applied", result)
-        self.assertEqual(visit_of(visit_id).answers, {"altura_cm": 30})
+        self.assertEqual(record_of(record_id).answers, {"altura_cm": 30})
 
-    def test_a_visit_on_the_new_version_uses_the_new_schema(self) -> None:
-        visit_id = uuid.uuid4()
+    def test_a_record_on_the_new_version_uses_the_new_schema(self) -> None:
+        record_id = uuid.uuid4()
         result = push(
             self.scenario,
             [
                 create_op(
                     self.scenario,
-                    visit_id=visit_id,
+                    record_id=record_id,
                     template_version_id=str(self.v2.pk),
                     answers={"altura_m": 1.2},
                 )

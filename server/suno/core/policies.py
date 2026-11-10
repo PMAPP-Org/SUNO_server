@@ -45,52 +45,52 @@ __all__ = [
     "MEMBER_ROLES",
     "PROJECT_READ_ALL_ROLES",
     "SUPERVISION_ROLES",
-    "WRITE_VISIT_ROLES",
+    "WRITE_RECORD_ROLES",
     "PolicyDenied",
     "can_assign_task_responsibles",
     "can_assign_work",
     "can_export_budgets",
     "can_export_schedule",
-    "can_export_visits",
+    "can_export_records",
     "can_manage_basemaps",
     "can_manage_budgets",
     "can_manage_device",
     "can_manage_personal_data",
     "can_manage_projects",
-    "can_modify_visit",
+    "can_modify_record",
     "can_publish_form_template",
     "can_read_basemaps",
     "can_read_field_tasks",
     "can_read_job_output",
     "can_read_members",
-    "can_read_visit",
+    "can_read_record",
     "can_record_consent",
-    "can_review_visit",
+    "can_review_record",
     "can_upload_attachment",
     "can_view_budgets",
-    "can_write_visit",
+    "can_write_record",
     "check_assign_task_responsibles",
     "check_assign_work",
     "check_export_budgets",
     "check_export_schedule",
-    "check_export_visits",
+    "check_export_records",
     "check_manage_basemaps",
     "check_manage_budgets",
     "check_manage_device",
     "check_manage_personal_data",
     "check_manage_projects",
-    "check_modify_visit",
+    "check_modify_record",
     "check_publish_form_template",
     "check_read_basemaps",
     "check_read_field_tasks",
     "check_read_job_output",
     "check_read_members",
-    "check_read_visit",
+    "check_read_record",
     "check_record_consent",
-    "check_review_visit",
+    "check_review_record",
     "check_upload_attachment",
     "check_view_budgets",
-    "check_write_visit",
+    "check_write_record",
     "user_has_organization_roles",
     "user_has_section_capability",
 ]
@@ -106,12 +106,12 @@ MEMBER_ROLES: frozenset[RoleValue] = frozenset(Role.values)
 ADMIN_ROLES: frozenset[RoleValue] = frozenset({Role.OWNER, Role.ADMIN})
 
 #: Quien captura o corrige trabajo de campo. `VIEWER` queda fuera por definición.
-WRITE_VISIT_ROLES: frozenset[RoleValue] = frozenset(
+WRITE_RECORD_ROLES: frozenset[RoleValue] = frozenset(
     {Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.FIELD_AGENT}
 )
 
 #: Quien puede tener un dispositivo propio que administrar.
-DEVICE_OWNER_ROLES: frozenset[RoleValue] = WRITE_VISIT_ROLES
+DEVICE_OWNER_ROLES: frozenset[RoleValue] = WRITE_RECORD_ROLES
 
 #: Back-office (Paso 24): quien supervisa el trabajo de campo — lo valida o
 #: rechaza y lo exporta. `FIELD_AGENT` y `VIEWER` quedan fuera.
@@ -138,7 +138,7 @@ CODE_NOT_FOUND = "not_found"
 class OrgScopedResource(Protocol):
     """Lo mínimo que una política necesita de un recurso: a qué org pertenece.
 
-    Tipar así (y no como `Visit`) mantiene la pureza visible: una política no
+    Tipar así (y no como `Record`) mantiene la pureza visible: una política no
     puede navegar relaciones —lo que dispararía una query perezosa dentro de
     un bucle, que es justo el bug H-07— porque no declara tener acceso a ellas.
     """
@@ -220,21 +220,21 @@ def _denial(ctx: RequestContext, resource_org_id: UUID) -> PolicyDenied:
 # --- Políticas --------------------------------------------------------------
 
 
-def can_read_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
-    """Leer una visita: cualquier miembro de su organización.
+def can_read_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
+    """Leer un registro: cualquier miembro de su organización.
 
-    En fase 1 no se estrecha a "solo las visitas propias": el pull de sync
+    En fase 1 no se estrecha a "solo los registros propios": el pull de sync
     entrega a cada dispositivo el conjunto de datos de su organización
     (ADR-003) y `VIEWER` existe precisamente para consultar. Si un cliente
     exigiera visibilidad por equipo, se **extiende** esta función con el dato
     correspondiente ya resuelto en el `ctx` (ADR-013: extender, nunca
     puentear), no se añade un filtro suelto en la vista.
     """
-    return user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.READ)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.READ)
 
 
-def can_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
-    """Crear o modificar una visita: todo rol salvo `VIEWER`.
+def can_write_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
+    """Crear o modificar un registro: todo rol salvo `VIEWER`.
 
     **Alcance deliberado**: esto responde solo "¿este actor está autorizado?".
     No responde "¿esta escritura es válida?" — el CAS optimista
@@ -247,22 +247,22 @@ def can_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
     Sirve igual para un alta: basta con pasar la instancia candidata sin
     guardar, porque lo único que se lee es su `org_id`.
     """
-    return user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.CREATE)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.CREATE)
 
 
-def can_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> bool:
-    """Editar o borrar una visita **ya existente**: su autor o supervisión.
+def can_modify_record(ctx: RequestContext, record: AuthoredResource) -> bool:
+    """Editar o borrar un registro **ya existente**: su autor o supervisión.
 
-    `can_write_visit` responde "¿puede escribir visitas en esta organización?";
+    `can_write_record` responde "¿puede escribir registros en esta organización?";
     esto, además, "¿esta en concreto?". Un agente de campo no cambia ni borra
     el trabajo de otro agente, ni siquiera por la API (ISO 27001 A.5.15,
     mínimo privilegio; antes la app lo impedía solo en pantalla). Supervisión
     y administración sí, porque corregir es parte de revisar.
     """
-    if user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW):
+    if user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.REVIEW):
         return True
-    return visit.created_by_id == ctx.user_id and user_has_section_capability(
-        ctx, visit.org_id, Section.FIELD_RECORDS, Capability.UPDATE
+    return record.created_by_id == ctx.user_id and user_has_section_capability(
+        ctx, record.org_id, Section.FIELD_RECORDS, Capability.UPDATE
     )
 
 
@@ -303,22 +303,22 @@ def can_publish_form_template(ctx: RequestContext, template: OrgScopedResource) 
 def can_upload_attachment(ctx: RequestContext, org_id: UUID) -> bool:
     """Pedir una URL prefirmada de subida (Paso 17, ADR-007).
 
-    Mismos roles que escribir una visita —un adjunto **es** trabajo de campo—,
+    Mismos roles que escribir un registro —un adjunto **es** trabajo de campo—,
     así que un `VIEWER` no obtiene URL de subida: no captura, no sube.
 
-    Existe como política propia en vez de reutilizar `can_write_visit` porque
-    el contrato hace `visit_id` **opcional** en `PresignRequest`: el dispositivo
-    puede pedir la firma de una foto antes de decidir a qué visita la adjunta.
-    Sin `visit_id` no hay recurso que pasar a `can_write_visit`, y forzar uno
+    Existe como política propia en vez de reutilizar `can_write_record` porque
+    el contrato hace `record_id` **opcional** en `PresignRequest`: el dispositivo
+    puede pedir la firma de una foto antes de decidir a qué registro la adjunta.
+    Sin `record_id` no hay recurso que pasar a `can_write_record`, y forzar uno
     ficticio para poder llamarla sería justo el tipo de puenteo que ADR-013
-    prohíbe. Cuando **sí** viene `visit_id`, el servicio llama además a
-    `check_write_visit` sobre la visita real: esta política es el suelo, no el
+    prohíbe. Cuando **sí** viene `record_id`, el servicio llama además a
+    `check_write_record` sobre el registro real: esta política es el suelo, no el
     techo.
 
     Lo que **no** hace, y es deliberado: no mira el `sha256`. Autorizar por
     contenido no tendría sentido (el hash aún no existe en el servidor) y
     tampoco haría falta — el aislamiento real de los adjuntos vive en
-    `visit_attachment`, que sí lleva `org_id`.
+    `record_attachment`, que sí lleva `org_id`.
     """
     return user_has_section_capability(ctx, org_id, Section.FIELD_RECORDS, Capability.CREATE)
 
@@ -368,13 +368,13 @@ def can_manage_device(ctx: RequestContext, device: DeviceLike) -> bool:
 # devolviendo un 403 donde RD-11 exige un 404).
 
 
-def can_review_visit(ctx: RequestContext, visit: OrgScopedResource) -> bool:
-    """Validar o rechazar una visita desde el back-office (Paso 24).
+def can_review_record(ctx: RequestContext, record: OrgScopedResource) -> bool:
+    """Validar o rechazar un registro desde el back-office (Paso 24).
 
-    Supervisión de la organización de la visita. Un agente no valida su propio
+    Supervisión de la organización del registro. Un agente no valida su propio
     trabajo ni el de otros (segregación de funciones, ISO 27001 A.5.3).
     """
-    return user_has_section_capability(ctx, visit.org_id, Section.FIELD_RECORDS, Capability.REVIEW)
+    return user_has_section_capability(ctx, record.org_id, Section.FIELD_RECORDS, Capability.REVIEW)
 
 
 def can_assign_work(ctx: RequestContext, org_id: UUID) -> bool:
@@ -382,8 +382,8 @@ def can_assign_work(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_section_capability(ctx, org_id, Section.FIELD_RECORDS, Capability.ASSIGN)
 
 
-def can_export_visits(ctx: RequestContext, org_id: UUID) -> bool:
-    """Exportar visitas a CSV/Excel (Paso 24).
+def can_export_records(ctx: RequestContext, org_id: UUID) -> bool:
+    """Exportar registros a CSV/Excel (Paso 24).
 
     Un archivo exportado sale del control de la aplicación (ubicaciones,
     respuestas): solo supervisión, y cada exportación queda en la auditoría.
@@ -465,19 +465,19 @@ def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_section_capability(ctx, org_id, Section.USERS_ACCESS, Capability.MANAGE_ACCESS)
 
 
-def check_read_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
-    if not can_read_visit(ctx, visit):
-        raise _denial(ctx, visit.org_id)
+def check_read_record(ctx: RequestContext, record: OrgScopedResource) -> None:
+    if not can_read_record(ctx, record):
+        raise _denial(ctx, record.org_id)
 
 
-def check_write_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
-    if not can_write_visit(ctx, visit):
-        raise _denial(ctx, visit.org_id)
+def check_write_record(ctx: RequestContext, record: OrgScopedResource) -> None:
+    if not can_write_record(ctx, record):
+        raise _denial(ctx, record.org_id)
 
 
-def check_modify_visit(ctx: RequestContext, visit: AuthoredResource) -> None:
-    if not can_modify_visit(ctx, visit):
-        raise _denial(ctx, visit.org_id)
+def check_modify_record(ctx: RequestContext, record: AuthoredResource) -> None:
+    if not can_modify_record(ctx, record):
+        raise _denial(ctx, record.org_id)
 
 
 def check_read_members(ctx: RequestContext, org_id: UUID) -> None:
@@ -505,9 +505,9 @@ def check_manage_device(ctx: RequestContext, device: DeviceLike) -> None:
         raise _denial(ctx, device.org_id)
 
 
-def check_review_visit(ctx: RequestContext, visit: OrgScopedResource) -> None:
-    if not can_review_visit(ctx, visit):
-        raise _denial(ctx, visit.org_id)
+def check_review_record(ctx: RequestContext, record: OrgScopedResource) -> None:
+    if not can_review_record(ctx, record):
+        raise _denial(ctx, record.org_id)
 
 
 def check_assign_work(ctx: RequestContext, org_id: UUID) -> None:
@@ -515,8 +515,8 @@ def check_assign_work(ctx: RequestContext, org_id: UUID) -> None:
         raise _denial(ctx, org_id)
 
 
-def check_export_visits(ctx: RequestContext, org_id: UUID) -> None:
-    if not can_export_visits(ctx, org_id):
+def check_export_records(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_export_records(ctx, org_id):
         raise _denial(ctx, org_id)
 
 

@@ -123,7 +123,7 @@ class EndpointLimitTests(TestCase):
             "sha256": "a" * 64,
             "size": 10,
             "mime": "image/jpeg",
-            "visit_id": str(uuid.uuid4()),
+            "record_id": str(uuid.uuid4()),
         }
         auth = {"HTTP_AUTHORIZATION": f"Bearer {access}"}
         post_json(client, "/v1/attachments/presign", body, **auth)

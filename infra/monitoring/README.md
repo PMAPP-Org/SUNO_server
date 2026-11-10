@@ -24,7 +24,7 @@ GRAFANA_ADMIN_PASSWORD=<generada>      # p. ej. openssl rand -base64 24
 # EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS.
 ```
 
-Después: `docker compose up -d`. Para la vigilancia externa, define la variable de repositorio `PRODUCTION_URL` (p. ej. `https://visitas.example.com`).
+Después: `docker compose up -d`. Para la vigilancia externa, define la variable de repositorio `PRODUCTION_URL` (p. ej. `https://registros.example.com`).
 
 **Memoria:** el monitoreo suma unos 400–500 MB (Prometheus ~200, Grafana ~100, el resto ~20–30 cada uno). Con el stack de la app hace falta un VPS de **al menos 2 GB**. Prometheus guarda 15 días de métricas (`PROMETHEUS_RETENTION`).
 

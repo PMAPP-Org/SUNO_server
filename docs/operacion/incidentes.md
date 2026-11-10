@@ -95,7 +95,7 @@ Cada access token lleva en la cabecera `kid` la huella de la clave que lo firmó
 Los datos en el teléfono están cifrados (SQLCipher) y los tokens en el almacén seguro del sistema. Para cortar el acceso:
 1. En el Admin, revoca los refresh tokens del dispositivo, o desactiva al usuario si hay duda.
 2. El access token vigente caduca en ≤ 15 min.
-3. Las visitas no sincronizadas de ese teléfono se pierden: avisa al cliente.
+3. Los registros no sincronizados de ese teléfono se pierden: avisa al cliente.
 
 ## Sospecha de acceso no autorizado o fuga de datos (S1)
 

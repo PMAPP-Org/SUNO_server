@@ -6,7 +6,7 @@ Síntesis de los patrones extraídos de QField/QFieldCloud, traducidos a decisio
 
 Independientemente del stack elegido, el patrón más valioso observado es el de **QField ↔ QFieldCloud**:
 
-1. Cada edición offline (crear/editar/eliminar una visita, formulario, evidencia) se registra localmente como un **delta** con `uuid` generado en el cliente (no autoincremental de servidor) — esto da idempotencia real ante reintentos de red.
+1. Cada edición offline (crear/editar/eliminar un registro, formulario, evidencia) se registra localmente como un **delta** con `uuid` generado en el cliente (no autoincremental de servidor) — esto da idempotencia real ante reintentos de red.
 2. Los deltas se acumulan en una cola local ("outbox") y se aplican de inmediato en la UI (optimistic UI), sin esperar confirmación del servidor.
 3. Al recuperar conectividad, se suben en batch. El servidor valida, encola como job asíncrono, y aplica los cambios.
 4. **La resolución de conflictos ocurre en el servidor**, no en el dispositivo: el cliente solo necesita saber "aplicado / conflicto / error" y, ante conflicto, descartar su copia local y re-sincronizar el estado autoritativo. Esto evita implementar merge de 3 vías en el móvil, que es la parte más costosa y propensa a bugs de cualquier sistema offline-first.
@@ -20,7 +20,7 @@ QFieldCloud demuestra que una cola sobre PostgreSQL (`SELECT ... FOR UPDATE SKIP
 
 ## 3. Modelo de datos: patrones aplicables sin necesitar PostGIS
 
-SUNO no necesariamente requiere PostGIS completo (QFieldCloud lo usa porque maneja geometrías vectoriales complejas de QGIS). Si el alcance es solo "punto de ubicación de la visita" + formularios, un campo `POINT` simple (PostGIS ligero o incluso lat/lng planos) puede bastar. Patrones a conservar igual:
+SUNO no necesariamente requiere PostGIS completo (QFieldCloud lo usa porque maneja geometrías vectoriales complejas de QGIS). Si el alcance es solo "punto de ubicación del registro" + formularios, un campo `POINT` simple (PostGIS ligero o incluso lat/lng planos) puede bastar. Patrones a conservar igual:
 - Herencia o composición para tipos de usuario (individual/organización) si aplica.
 - Modelo `Delta`/`Job` separado del modelo de negocio, con estados explícitos.
 - Versionado de archivos con checksum (`FileVersion`) para adjuntos.

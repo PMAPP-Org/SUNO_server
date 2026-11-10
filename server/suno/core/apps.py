@@ -7,7 +7,7 @@ class CoreConfig(AppConfig):
 
     **Elección de nombre**: el brief permitía `core` o `tenancy`. Se elige
     `core` porque la app no aloja solo el andamiaje multi-tenant
-    (`Organization`/`Membership`), sino también el dominio (`Visit`,
+    (`Organization`/`Membership`), sino también el dominio (`Record`,
     `Blob`, `Job`, `AuditEvent`...). `tenancy` habría sido un nombre
     engañoso para una app que contiene toda la tabla §4.4.
 

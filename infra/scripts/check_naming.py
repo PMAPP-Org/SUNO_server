@@ -48,6 +48,22 @@ _SELF = {"infra/scripts/check_naming.py", "infra/scripts/tests/test_check_naming
 # Historia que cita los nombres de entonces: el CHANGELOG publicado y las huellas de
 # gitleaks (`commit:ruta:regla:línea`, con la ruta que tenía el archivo en ese commit).
 _HISTORY = {"CHANGELOG.md", ".gitleaksignore"}
+# Migraciones ya aplicadas en producción que nombran la visita (no se reescriben) y la que
+# hace el renombre: es la historia de la base de datos, y cada ruta se lista a propósito.
+_MIGRATIONS_HISTORY = {
+    "server/suno/authn/migrations/0001_initial.py",
+    "server/suno/core/migrations/0001_initial.py",
+    "server/suno/core/migrations/0002_add_visit_attachment_org_isolation_fk.py",
+    "server/suno/core/migrations/0003_add_visit_float_finiteness_checks.py",
+    "server/suno/core/migrations/0004_add_sync_cursor_floor.py",
+    "server/suno/core/migrations/0007_add_visit_review.py",
+    "server/suno/core/migrations/0008_add_privacy_consent.py",
+    "server/suno/core/migrations/0012_add_visit_task_progress.py",
+    "server/suno/core/migrations/0013_add_budgets.py",
+    "server/suno/core/migrations/0014_add_quantity_matrix.py",
+    "server/suno/core/migrations/0027_rename_visit_to_record.py",
+    "server/suno/core/tests/test_rename_visit_migration.py",
+}
 # Compatibilidad de despliegue estrictamente acotada. La primera actualización
 # desde v0.13 necesita reconocer su ruta y variable de imagen para poder hacer
 # rollback; cualquier aparición del nombre anterior fuera de estos literales
@@ -57,10 +73,25 @@ _PACKAGE_COMPATIBILITY: dict[str, tuple[str, ...]] = {
     ".github/workflows/infra.yml": ("VISITACAMPO_API_IMAGE",),
     "infra/scripts/deploy.sh": ("VISITACAMPO_API_IMAGE", "VISITACAMPO_*"),
 }
+# El runbook del renombre cita la migración y los valores viejos de `sync_op_log` que hay
+# que contar en producción antes de desplegarla.
+_CONCEPT_COMPATIBILITY: dict[str, tuple[str, ...]] = {
+    "docs/operacion/despliegue.md": (
+        "0027_rename_visit_to_record",
+        "'visit_attachment'",
+        "'visit'",
+    ),
+}
 
 
 def skipped(path: str) -> bool:
-    return path in _HISTORY or path in _SELF or path.endswith(_BINARY) or path.startswith("plans/")
+    return (
+        path in _HISTORY
+        or path in _MIGRATIONS_HISTORY
+        or path in _SELF
+        or path.endswith(_BINARY)
+        or path.startswith("plans/")
+    )
 
 
 def _is_concept(word: str) -> bool:
@@ -103,7 +134,9 @@ def main() -> int:
     for path in files:
         if skipped(path):
             continue
-        allowed_literals = _PACKAGE_COMPATIBILITY.get(path, ())
+        allowed_literals = _PACKAGE_COMPATIBILITY.get(path, ()) + _CONCEPT_COMPATIBILITY.get(
+            path, ()
+        )
         found = offenders(path + "\n", mode, tracked, allowed_literals)
         try:
             with open(path, encoding="utf-8") as handle:

@@ -26,7 +26,7 @@ patrón CAS existe para evitar. Lo que **no** se pierde por bajar a SQL:
   se escribe siempre con el `org_id` del contexto. El aislamiento entre
   organizaciones (RD-11) no depende de que el llamador se acuerde: es parte de
   la sentencia. El test `test_sql.py` lo verifica sobre el texto generado.
-- Los nombres de columna **no se escriben a mano**: salen de `Visit._meta`, así
+- Los nombres de columna **no se escriben a mano**: salen de `Record._meta`, así
   que renombrar un campo del modelo rompe estos tests en vez de generar SQL
   contra una columna que ya no existe.
 
@@ -45,7 +45,7 @@ from typing import Any
 
 from django.db import connection
 
-from suno.core.models import INITIAL_VERSION, Visit, VisitAttachment
+from suno.core.models import INITIAL_VERSION, Record, RecordAttachment
 
 __all__ = ["Statement", "build_attachment_insert", "build_insert", "build_update"]
 
@@ -101,13 +101,13 @@ _INSERT_FIELDS: tuple[str, ...] = (
 # —un nombre de contrato fuera de `_MODEL_FIELD_BY_CONTRACT_NAME` lanza
 # `KeyError` antes de llegar al SQL— y placeholders `%s`; los valores, nunca.
 def column(contract_name: str) -> str:
-    """Columna citada de un campo del contrato, resuelta contra `Visit._meta`."""
-    field = Visit._meta.get_field(_MODEL_FIELD_BY_CONTRACT_NAME[contract_name])
+    """Columna citada de un campo del contrato, resuelta contra `Record._meta`."""
+    field = Record._meta.get_field(_MODEL_FIELD_BY_CONTRACT_NAME[contract_name])
     return connection.ops.quote_name(field.column)
 
 
 def table() -> str:
-    return connection.ops.quote_name(Visit._meta.db_table)
+    return connection.ops.quote_name(Record._meta.db_table)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +136,7 @@ def _placeholder_and_param(contract_name: str, value: Any) -> tuple[str, Any]:
 def build_insert(
     *,
     org_id: uuid.UUID,
-    visit_id: uuid.UUID,
+    record_id: uuid.UUID,
     change_seq: int,
     created_by: uuid.UUID,
     fields: dict[str, Any],
@@ -145,12 +145,12 @@ def build_insert(
 
     `version` arranca en `INITIAL_VERSION` (Paso 5) y `deleted_at` en `NULL`:
     una fila nace viva. `org_id` y `created_by` los pone el servidor —son
-    server-authoritative y el contrato ni siquiera los admite en `VisitPayload`—,
-    de modo que un cliente no puede crear una visita en otra organización ni
-    atribuírsela a otro usuario.
+    server-authoritative y el contrato ni siquiera los admite en `RecordPayload`—,
+    de modo que un cliente no puede crear un registro en otra organización ni
+    atribuírselo a otro usuario.
     """
     values: dict[str, Any] = {
-        "id": visit_id,
+        "id": record_id,
         "org_id": org_id,
         "version": INITIAL_VERSION,
         "change_seq": change_seq,
@@ -184,7 +184,7 @@ def build_insert(
 def build_update(
     *,
     org_id: uuid.UUID,
-    visit_id: uuid.UUID,
+    record_id: uuid.UUID,
     base_version: int,
     change_seq: int,
     fields: dict[str, Any],
@@ -221,18 +221,18 @@ def build_update(
         f"WHERE {column('id')} = %s AND {column('org_id')} = %s AND {version_col} = %s "
         f"RETURNING {version_col}, {column('change_seq')}"
     )
-    params.extend([visit_id, org_id, base_version])
+    params.extend([record_id, org_id, base_version])
     return Statement(sql=sql, params=tuple(params))
 
 
-#: `visit_attachment` (Paso 22): nombre del contrato → campo del modelo.
+#: `record_attachment` (Paso 22): nombre del contrato → campo del modelo.
 _ATTACHMENT_FIELD_BY_CONTRACT_NAME: dict[str, str] = {
     "id": "id",
     "org_id": "org",
     "version": "version",
     "change_seq": "change_seq",
     "deleted_at": "deleted_at",
-    "visit_id": "visit",
+    "record_id": "record",
     "sha256": "blob",
     "role": "role",
     "caption": "caption",
@@ -242,7 +242,7 @@ _ATTACHMENT_FIELD_BY_CONTRACT_NAME: dict[str, str] = {
 
 
 def _attachment_column(contract_name: str) -> str:
-    field = VisitAttachment._meta.get_field(_ATTACHMENT_FIELD_BY_CONTRACT_NAME[contract_name])
+    field = RecordAttachment._meta.get_field(_ATTACHMENT_FIELD_BY_CONTRACT_NAME[contract_name])
     return connection.ops.quote_name(field.column)
 
 
@@ -253,10 +253,10 @@ def build_attachment_insert(
     change_seq: int,
     fields: dict[str, Any],
 ) -> Statement:
-    """Alta de `visit_attachment` con la misma guarda CAS que `build_insert`.
+    """Alta de `record_attachment` con la misma guarda CAS que `build_insert`.
 
-    `org_id` lo pone el servidor. La FK compuesta `(visit_id, org_id) → visit`
-    (migración 0002) hace imposible apuntar a una visita de otra organización
+    `org_id` lo pone el servidor. La FK compuesta `(record_id, org_id) → record`
+    (migración 0002) hace imposible apuntar a un registro de otra organización
     aunque la comprobación de `services.py` fallara; esa comprobación existe
     para contestar `rejected` en vez de dejar que el `INSERT` reviente el lote.
     """
@@ -271,7 +271,7 @@ def build_attachment_insert(
     names = tuple(_ATTACHMENT_FIELD_BY_CONTRACT_NAME)
     columns = ", ".join(_attachment_column(name) for name in names)
     placeholders = ", ".join("%s" for _ in names)
-    table_name = connection.ops.quote_name(VisitAttachment._meta.db_table)
+    table_name = connection.ops.quote_name(RecordAttachment._meta.db_table)
     sql = (
         f"INSERT INTO {table_name} ({columns}) "  # nosec B608
         f"VALUES ({placeholders}) "

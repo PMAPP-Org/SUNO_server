@@ -2,7 +2,7 @@
 
 Este directorio documenta la arquitectura, el funcionamiento interno y el modelo de integración de **QField** (cliente móvil/desktop) y **QFieldCloud** (backend Django), los dos proyectos analizados como referencia antes de iniciar **SUNO**.
 
-El objetivo no es documentar QField/QFieldCloud por sí mismos, sino extraer **patrones de diseño probados en producción** para una app de seguimiento/visitas de campo con backend propio: sincronización offline-first, manejo de adjuntos, colas de trabajo, modelo de datos geoespacial/no geoespacial, permisos, despliegue con Docker.
+El objetivo no es documentar QField/QFieldCloud por sí mismos, sino extraer **patrones de diseño probados en producción** para una app de seguimiento/registros de campo con backend propio: sincronización offline-first, manejo de adjuntos, colas de trabajo, modelo de datos geoespacial/no geoespacial, permisos, despliegue con Docker.
 
 ## Contenido
 

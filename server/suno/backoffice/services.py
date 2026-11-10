@@ -15,7 +15,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from suno.authn.models import RefreshToken
-from suno.core.audit import AuditAction, record
+from suno.core import audit
+from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
 from suno.core.models import (
     AppUser,
@@ -24,15 +25,15 @@ from suno.core.models import (
     FormTemplateVersion,
     Job,
     JobStatus,
-    Visit,
-    VisitReview,
-    VisitReviewStatus,
+    Record,
+    RecordReview,
+    RecordReviewStatus,
 )
 from suno.core.policies import (
     can_assign_work,
     can_manage_device,
     can_read_job_output,
-    can_review_visit,
+    can_review_record,
 )
 from suno.core.scoping import scoped_qs
 from suno.sync.changeseq import acquire_org_lock, highest_change_seq
@@ -41,7 +42,7 @@ __all__ = [
     "RETRYABLE_JOB_STATUSES",
     "create_assignment",
     "retry_job",
-    "review_visit",
+    "review_record",
     "revoke_device_sessions",
 ]
 
@@ -49,30 +50,30 @@ __all__ = [
 RETRYABLE_JOB_STATUSES = (JobStatus.FAILED, JobStatus.DEAD_LETTER)
 
 
-def review_visit(
-    ctx: RequestContext, visit: Visit, *, status: str, comment: str | None = None
-) -> VisitReview:
-    """Valida o rechaza una visita. Cada decisión es una fila nueva (historial)."""
-    if status not in VisitReviewStatus.values:
+def review_record(
+    ctx: RequestContext, record: Record, *, status: str, comment: str | None = None
+) -> RecordReview:
+    """Valida o rechaza un registro. Cada decisión es una fila nueva (historial)."""
+    if status not in RecordReviewStatus.values:
         raise ValueError(f"decisión desconocida: {status!r}")
-    if not can_review_visit(ctx, visit):
-        raise PermissionDenied("Solo supervisión de la organización puede revisar visitas.")
+    if not can_review_record(ctx, record):
+        raise PermissionDenied("Solo supervisión de la organización puede revisar registros.")
     with transaction.atomic():
         # Mismo candado de organización que el push: una revisión no puede
-        # colarse entre la comprobación de "visita validada" del push y su
+        # colarse entre la comprobación de "registro validado" del push y su
         # UPDATE (ni al revés).
         acquire_org_lock(ctx.org_id)
-        review = scoped_qs(ctx, VisitReview).create(
+        review = scoped_qs(ctx, RecordReview).create(
             org_id=ctx.org_id,
-            visit=visit,
+            record=record,
             status=status,
             comment=(comment or "").strip() or None,
             reviewer_id=ctx.user_id,
         )
-        record(
+        audit.record(
             ctx,
-            action=AuditAction.VISIT_REVIEWED,
-            target=f"visit:{visit.pk}",
+            action=AuditAction.RECORD_REVIEWED,
+            target=f"record:{record.pk}",
             metadata={"status": status},
         )
     return review
@@ -96,7 +97,7 @@ def revoke_device_sessions(ctx: RequestContext, device: Device, *, ip: str | Non
             .filter(device_id=device.pk, revoked_at__isnull=True)
             .update(revoked_at=timezone.now())
         )
-        record(
+        audit.record(
             ctx,
             action=AuditAction.DEVICE_REVOKED,
             target=f"device:{device.pk}",
@@ -141,7 +142,7 @@ def create_assignment(
             lon=lon,
             change_seq=highest_change_seq(ctx) + 1,
         )
-        record(
+        audit.record(
             ctx,
             action=AuditAction.ASSIGNMENT_CREATED,
             target=f"assignment:{assignment.pk}",
@@ -172,7 +173,7 @@ def retry_job(ctx: RequestContext, job: Job) -> bool:
             )
         )
         if updated:
-            record(
+            audit.record(
                 ctx,
                 action=AuditAction.JOB_RETRIED,
                 target=f"job:{job.pk}",

@@ -26,6 +26,7 @@ from suno.core.models import (
     LocationLevel,
     Project,
     QuantityPlan,
+    Record,
     Resource,
     ScheduleImport,
     ScheduleImportStatus,
@@ -33,7 +34,6 @@ from suno.core.models import (
     TaskDependency,
     TaskResource,
     TaskResponsible,
-    Visit,
 )
 from suno.core.scoping import scoped_qs
 from suno.matrix.locations import (
@@ -92,7 +92,7 @@ def summarize_changes(
 
     `existing` son las tareas del proyecto por `uid`: los `TASK_FIELDS` más
     `retired` (bool). `responsible_uids`: uids de tareas con responsables.
-    `progress_uids`: uids de tareas con visitas vinculadas (avance de campo).
+    `progress_uids`: uids de tareas con registros vinculados (avance de campo).
     """
     examples: dict[str, list[str]] = {"added": [], "retired": [], "reactivated": [], "modified": []}
     counts = dict.fromkeys(examples, 0)
@@ -294,7 +294,7 @@ def stage_import(
         .values_list("task__uid", flat=True)
     )
     progress_uids = set(
-        scoped_qs(ctx, Visit)
+        scoped_qs(ctx, Record)
         .filter(task__project=project, deleted_at__isnull=True)
         .values_list("task__uid", flat=True)
     )

@@ -2,7 +2,7 @@
 
 Cuándo: la BD de producción se perdió o se corrompió, o hay que volver a un estado anterior (por ejemplo, tras borrar datos por error). El mecanismo y la custodia de llaves están en [`infra/backup/README.md`](../../infra/backup/README.md).
 
-**Objetivos propuestos** ([`politicas.md`](../seguridad/politicas.md) §7): perder como máximo 24 h de datos sincronizados (RPO) y recuperar el servicio en 8 h (RTO). Las visitas que todavía no se habían sincronizado siguen en los teléfonos y se reenvían solas.
+**Objetivos propuestos** ([`politicas.md`](../seguridad/politicas.md) §7): perder como máximo 24 h de datos sincronizados (RPO) y recuperar el servicio en 8 h (RTO). Los registros que todavía no se habían sincronizado siguen en los teléfonos y se reenvían solas.
 
 ## Antes de empezar
 
@@ -28,7 +28,7 @@ Cuándo: la BD de producción se perdió o se corrompió, o hay que volver a un 
 4. **Arrancar:** `docker compose up -d api worker`. La API aplica las migraciones pendientes al arrancar.
 5. **Verificar:**
    - `curl -s https://<dominio>/v1/readyz` responde 200;
-   - en el Admin, las visitas recientes están y la última es de la hora esperada;
+   - en el Admin, los registros recientes están y el último es de la hora esperada;
    - un teléfono de prueba sincroniza.
 6. **Borrar la llave** del servidor si la copiaste (`shred -u`). No debe quedarse ahí.
 7. Si se restauró un servidor nuevo: restaura también los adjuntos (`rclone copy backup:<bucket>/blobs blobs:<bucket-adjuntos>`) y comprueba que las fotos se ven.

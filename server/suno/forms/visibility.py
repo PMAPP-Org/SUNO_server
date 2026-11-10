@@ -62,7 +62,7 @@ donde:
 - Referencias a datos fuera del formulario (usuario, fecha del sistema,
   ubicación): la evaluación tiene que ser una **función pura de las respuestas
   del propio formulario**, reproducible en el servidor y en el cliente y
-  auditable a posteriori sobre una visita histórica.
+  auditable a posteriori sobre un registro histórico.
 
 Ampliar el vocabulario es una decisión consciente que se toma aquí, con su
 justificación escrita, y que obliga a versionar el dialecto

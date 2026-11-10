@@ -20,8 +20,8 @@ from .factories import (
     budget_world,
     item,
     project_levels_from_xml,
+    quantity_record,
     quantity_row,
-    quantity_visit,
     suno_levels,
 )
 
@@ -102,7 +102,7 @@ class EditsTests(TestCase):
         concrete = item(self.budget, "2.1")
         task = self.world.task(3)
         set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4")
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(concrete, "1")))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(concrete, "1")))
         self.assertFalse(remove_plan(self.ctx, task, concrete.pk))
         self.assertEqual(QuantityPlan.objects.get().planned_quantity, Decimal("0"))
         set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.2", quantity="4")
@@ -110,15 +110,15 @@ class EditsTests(TestCase):
         self.assertEqual(QuantityPlan.objects.count(), 1)
 
     def test_remove_keeps_pending_execution_at_zero(self) -> None:
-        """Una visita aún sin revisar puede validarse después: su par no se borra. Una
-        rechazada o borrada no cuenta."""
+        """Un registro aún sin revisar puede validarse después: su par no se borra. Uno
+        rechazado o borrado no cuenta."""
         concrete, steel = item(self.budget, "2.1"), item(self.budget, "2.2")
         task = self.world.task(3)
         set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.1", quantity="4")
         set_plan(self.ctx, task, budget_id=self.budget.pk, code="2.2", quantity="4")
-        quantity_visit(self.world, 3, quantity_row(concrete, "1"))
-        self.world.reject(quantity_visit(self.world, 3, quantity_row(steel, "1"), hours=1))
-        deleted = quantity_visit(self.world, 3, quantity_row(steel, "1"), hours=2)
+        quantity_record(self.world, 3, quantity_row(concrete, "1"))
+        self.world.reject(quantity_record(self.world, 3, quantity_row(steel, "1"), hours=1))
+        deleted = quantity_record(self.world, 3, quantity_row(steel, "1"), hours=2)
         deleted.deleted_at = deleted.captured_at
         deleted.save(update_fields=["deleted_at"])
         self.assertFalse(remove_plan(self.ctx, task, concrete.pk))

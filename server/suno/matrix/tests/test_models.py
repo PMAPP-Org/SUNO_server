@@ -17,14 +17,14 @@ from suno.core.models import (
     QuantityPlan,
     QuantityPlanImport,
     QuantityPlanImportStatus,
-    Visit,
+    Record,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
-from suno.projects.tests.factories import make_field_world, make_visit
+from suno.projects.tests.factories import make_field_world, make_record
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -141,37 +141,37 @@ class QuantityPlanModelTests(TestCase):
 
 
 @skip_without_db
-class VisitQuantitiesConstraintTests(TestCase):
+class RecordQuantitiesConstraintTests(TestCase):
     def setUp(self) -> None:
         self.world = make_field_world()
 
-    def _save(self, visit: Visit, **values: object) -> None:
+    def _save(self, record: Record, **values: object) -> None:
         for name, value in values.items():
-            setattr(visit, name, value)
+            setattr(record, name, value)
         with transaction.atomic():
-            visit.save()
+            record.save()
 
     def test_quantities_default_to_empty_list(self) -> None:
-        visit = make_visit(self.world.org, self.world.agent)
-        self.assertEqual(visit.quantities, [])
+        record = make_record(self.world.org, self.world.agent)
+        self.assertEqual(record.quantities, [])
 
     def test_task_with_quantities_and_no_pct_is_valid(self) -> None:
-        visit = make_visit(self.world.org, self.world.agent)
+        record = make_record(self.world.org, self.world.agent)
         row = {"item_id": "x", "location_id": None, "quantity": "1.0000", "note": ""}
-        self._save(visit, task=self.world.task(3), progress_pct=None, quantities=[row])
+        self._save(record, task=self.world.task(3), progress_pct=None, quantities=[row])
 
     def test_task_without_pct_or_quantities_is_rejected(self) -> None:
-        visit = make_visit(self.world.org, self.world.agent)
+        record = make_record(self.world.org, self.world.agent)
         with self.assertRaises(IntegrityError):
-            self._save(visit, task=self.world.task(3), progress_pct=None, quantities=[])
+            self._save(record, task=self.world.task(3), progress_pct=None, quantities=[])
 
     def test_quantities_without_task_are_rejected(self) -> None:
-        visit = make_visit(self.world.org, self.world.agent)
+        record = make_record(self.world.org, self.world.agent)
         row = {"item_id": "x", "location_id": None, "quantity": "1.0000", "note": ""}
         with self.assertRaises(IntegrityError):
-            self._save(visit, quantities=[row])
+            self._save(record, quantities=[row])
 
     def test_pct_range_still_checked(self) -> None:
-        visit = make_visit(self.world.org, self.world.agent)
+        record = make_record(self.world.org, self.world.agent)
         with self.assertRaises(IntegrityError):
-            self._save(visit, task=self.world.task(3), progress_pct=Decimal("101"))
+            self._save(record, task=self.world.task(3), progress_pct=Decimal("101"))

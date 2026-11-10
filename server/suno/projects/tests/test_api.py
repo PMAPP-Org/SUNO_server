@@ -1,4 +1,4 @@
-"""`GET /v1/projects/tasks`: las tareas que el agente puede vincular a una visita."""
+"""`GET /v1/projects/tasks`: las tareas que el agente puede vincular a un registro."""
 
 from __future__ import annotations
 
@@ -53,8 +53,8 @@ class FieldTasksApiTests(TestCase):
     def test_branch_lists_current_detail_tasks_with_last_validated_pct(self) -> None:
         w = self.world
         w.responsible(1)
-        w.approve(w.visit(3, "40", hours=1))
-        w.visit(3, "70", hours=2)  # sin validar
+        w.approve(w.record(3, "40", hours=1))
+        w.record(3, "70", hours=2)  # sin validar
         body = self.get()
         self.assertEqual(
             [(i["wbs"], i["name"], i["last_validated_pct"]) for i in body["items"]],
@@ -86,9 +86,9 @@ class FieldTasksApiTests(TestCase):
     def test_a_validation_changes_the_version(self) -> None:
         w = self.world
         w.responsible(1)
-        visit = w.visit(3, "40", hours=1)
+        record = w.record(3, "40", hours=1)
         before = self.get()["version"]
-        w.approve(visit)
+        w.approve(record)
         self.assertTrue(self.get(version=before)["changed"])
 
     def test_removing_the_responsibility_empties_the_list(self) -> None:

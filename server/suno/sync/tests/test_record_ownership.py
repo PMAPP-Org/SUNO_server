@@ -1,7 +1,7 @@
-"""Editar o borrar una visita existente: su autor o supervisión (`can_modify_visit`).
+"""Editar o borrar un registro existente: su autor o supervisión (`can_modify_record`).
 
 Antes, cualquier miembro con permiso de escritura podía cambiar o borrar por la
-API la visita de otro agente de su organización; la app solo lo impedía en
+API el registro de otro agente de su organización; la app solo lo impedía en
 pantalla. ISO 27001 A.5.15 (mínimo privilegio).
 """
 
@@ -19,7 +19,7 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 
-from .factories import build_scenario, create_op, delete_op, push, update_op, visit_of
+from .factories import build_scenario, create_op, delete_op, push, record_of, update_op
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -28,11 +28,11 @@ skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 
 @skip_without_db
-class VisitOwnershipTests(TestCase):
+class RecordOwnershipTests(TestCase):
     def setUp(self) -> None:
         self.author = build_scenario(username="autora")
-        self.visit_id = uuid.uuid4()
-        response = push(self.author, [create_op(self.author, visit_id=self.visit_id)])
+        self.record_id = uuid.uuid4()
+        response = push(self.author, [create_op(self.author, record_id=self.record_id)])
         self.assertEqual(response.json()["results"][0]["status"], "applied", response.content)
 
     def result(self, scenario, op):
@@ -43,19 +43,19 @@ class VisitOwnershipTests(TestCase):
     def test_another_agent_cannot_edit_or_delete_it(self) -> None:
         other = build_scenario(username="otro", org=self.author.org)
         for op in (
-            update_op(self.visit_id, base_version=1),
-            delete_op(self.visit_id, base_version=1),
+            update_op(self.record_id, base_version=1),
+            delete_op(self.record_id, base_version=1),
         ):
             with self.subTest(op=op["op_type"]):
                 result = self.result(other, op)
                 self.assertEqual(result["status"], "rejected")
                 self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertIsNone(visit_of(self.visit_id).deleted_at)
-        self.assertEqual(visit_of(self.visit_id).version, 1, "nada cambió")
+        self.assertIsNone(record_of(self.record_id).deleted_at)
+        self.assertEqual(record_of(self.record_id).version, 1, "nada cambió")
 
     def test_the_author_can(self) -> None:
         self.assertEqual(
-            self.result(self.author, update_op(self.visit_id, base_version=1))["status"], "applied"
+            self.result(self.author, update_op(self.record_id, base_version=1))["status"], "applied"
         )
 
     def test_a_supervisor_can(self) -> None:
@@ -63,13 +63,13 @@ class VisitOwnershipTests(TestCase):
             username="supervisora", role=Role.SUPERVISOR, org=self.author.org
         )
         self.assertEqual(
-            self.result(supervisor, update_op(self.visit_id, base_version=1))["status"], "applied"
+            self.result(supervisor, update_op(self.record_id, base_version=1))["status"], "applied"
         )
 
     def test_create_and_edit_in_the_same_batch(self) -> None:
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         response = push(
             self.author,
-            [create_op(self.author, visit_id=visit_id), update_op(visit_id, base_version=1)],
+            [create_op(self.author, record_id=record_id), update_op(record_id, base_version=1)],
         )
         self.assertEqual([r["status"] for r in response.json()["results"]], ["applied", "applied"])

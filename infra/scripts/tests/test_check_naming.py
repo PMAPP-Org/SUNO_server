@@ -81,6 +81,40 @@ class OffendersTests(unittest.TestCase):
         self.assertFalse(check_naming.skipped("server/suno/core/models/record.py"))
 
 
+class MigrationHistoryTests(unittest.TestCase):
+    def test_skips_applied_migrations_and_the_rename_by_exact_path(self):
+        for path in (
+            "server/suno/core/migrations/0001_initial.py",
+            "server/suno/core/migrations/0002_add_visit_attachment_org_isolation_fk.py",
+            "server/suno/core/migrations/0012_add_visit_task_progress.py",
+            "server/suno/core/migrations/0014_add_quantity_matrix.py",
+            "server/suno/core/migrations/0027_rename_visit_to_record.py",
+        ):
+            self.assertTrue(check_naming.skipped(path), path)
+
+    def test_stays_strict_with_any_other_migration(self):
+        for path in (
+            "server/suno/core/migrations/0005_add_job_idempotency_key.py",
+            "server/suno/core/migrations/0011_add_projects.py",
+            "server/suno/core/migrations/0015_add_section_access.py",
+            "server/suno/core/migrations/0028_add_visit_flag.py",
+            "server/suno/core/migrations/0002_add_visit_other.py",
+            "server/suno/otra/migrations/0001_initial.py",
+        ):
+            self.assertFalse(check_naming.skipped(path), path)
+
+
+class ConceptCompatibilityTests(unittest.TestCase):
+    def test_the_rename_runbook_may_cite_only_its_literals(self):
+        allowed = check_naming._CONCEPT_COMPATIBILITY["docs/operacion/despliegue.md"]
+        text = "core.0027_rename_visit_to_record; entity IN ('visit', 'visit_attachment')"
+        self.assertEqual(check_naming.offenders(text, "concept", allowed_literals=allowed), [])
+        self.assertEqual(
+            check_naming.offenders("la visita", "concept", allowed_literals=allowed),
+            ["visita"],
+        )
+
+
 class MainTests(unittest.TestCase):
     def test_runs_from_the_repository_root_when_invoked_from_a_subdirectory(self):
         # Sin GIT_DIR/GIT_WORK_TREE heredados: git debe descubrir el repo temporal.

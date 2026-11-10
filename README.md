@@ -1,6 +1,6 @@
 # SUNO_server
 
-Backend de SUNO, la aplicación offline-first de seguimiento de visitas de campo. Contiene:
+Backend de SUNO, la aplicación offline-first de seguimiento de registros de campo. Contiene:
 - la **API** v1 de sincronización, autenticación y adjuntos (Django 5 + Django Ninja);
 - el **panel de administración** (Django Admin con MFA obligatorio);
 - la **infraestructura** de despliegue: Docker Compose, Caddy, backups cifrados, monitoreo, aprovisionamiento del VPS y despliegue con rollback.

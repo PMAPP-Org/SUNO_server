@@ -45,18 +45,18 @@
 </section>
 <section class="pj-panel">
   <h2>Avance de campo</h2>
-  <p>% SUNO ({% if measured_by_quantities %}por cantidades{% else %}última visita validada{% endif %}): <strong>{{ suno_pct_text }}</strong></p>
-  {% if field_visits %}
+  <p>% SUNO ({% if measured_by_quantities %}por cantidades{% else %}último registro validado{% endif %}): <strong>{{ suno_pct_text }}</strong></p>
+  {% if field_records %}
   <div class="pj-scroll">
   <table class="pj-table">
     <thead><tr><th>Fecha</th><th>Autor</th><th>% acumulado</th><th>Revisión</th><th>Aviso</th></tr></thead>
     <tbody>
-      {% for row in field_visits %}
+      {% for row in field_records %}
       <tr>
-        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
-        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.record.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.record.created_by.display_name|default:row.record.created_by.username }}</td>
         <td>{{ row.pct_text }}</td>
-        <td>{% if perms.core.view_visit %}<a href="{% url 'admin:core_visit_change' row.visit.pk %}">{{ row.status_label }}</a>{% else %}{{ row.status_label }}{% endif %}</td>
+        <td>{% if perms.core.view_record %}<a href="{% url 'admin:core_record_change' row.record.pk %}">{{ row.status_label }}</a>{% else %}{{ row.status_label }}{% endif %}</td>
         <td>{% if row.regression %}<span class="pj-late">Menor que el último validado ({{ row.previous_text }})</span>{% endif %}</td>
       </tr>
       {% endfor %}
@@ -64,7 +64,7 @@
   </table>
   </div>
   {% else %}
-  <p class="pj-muted">Sin visitas vinculadas.</p>
+  <p class="pj-muted">Sin registros vinculados.</p>
   {% endif %}
 </section>
 {% if not task.is_summary %}
@@ -99,7 +99,7 @@
     </tbody>
   </table>
   </div>
-  {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de las visitas.</p>{% endif %}
+  {% else %}<p class="pj-muted">La tarea no tiene ítems planeados: su avance es el % de los registros.</p>{% endif %}
   {% if unplanned_executed %}<p class="pj-warning">Cantidades registradas en ítems fuera del plan (no suman al %): {% for f in unplanned_executed %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
   {% if chapter_plans %}<p class="pj-warning">Ítems del plan que hoy son capítulos del presupuesto (no suman al %): {% for f in chapter_plans %}{{ f.code }} {{ f.description }}{% if not forloop.last %}; {% endif %}{% endfor %}. Lo registrado en ellos se conserva.</p>{% endif %}
   {% for f in retired_plans %}<p class="pj-warning">Ítem retirado del presupuesto: {{ f.code }} {{ f.description }}. Sigue en el plan con el precio de la última versión que lo tenía.</p>{% endfor %}
@@ -107,23 +107,23 @@
   <h3>Registros validados</h3>
   <div class="pj-scroll">
   <table class="pj-table" id="mx-history">
-    <thead><tr><th>Fecha</th><th>Agente</th><th>Ítem</th><th>Ubicación</th><th class="num">Cantidad</th><th>Nota</th>{% if perms.core.view_visit %}<th>Visita</th>{% endif %}</tr></thead>
+    <thead><tr><th>Fecha</th><th>Agente</th><th>Ítem</th><th>Ubicación</th><th class="num">Cantidad</th><th>Nota</th>{% if perms.core.view_record %}<th>Registro</th>{% endif %}</tr></thead>
     <tbody>
     {% for row in quantity_history %}
       <tr>
-        <td>{{ row.visit.captured_at|date:"d/m/Y H:i" }}</td>
-        <td>{{ row.visit.created_by.display_name|default:row.visit.created_by.username }}</td>
+        <td>{{ row.record.captured_at|date:"d/m/Y H:i" }}</td>
+        <td>{{ row.record.created_by.display_name|default:row.record.created_by.username }}</td>
         <td>{{ row.code }}</td>
         <td class="pj-wrap">{{ row.location|default:"—" }}</td>
         <td class="num">{{ row.quantity|floatformat:"-4g" }} {{ row.unit }}</td>
         <td class="pj-wrap">{{ row.note|default:"" }}</td>
-        {% if perms.core.view_visit %}<td><a href="{% url 'admin:core_visit_change' row.visit.pk %}">Ver visita</a></td>{% endif %}
+        {% if perms.core.view_record %}<td><a href="{% url 'admin:core_record_change' row.record.pk %}">Ver registro</a></td>{% endif %}
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  {% if history_truncated %}<p class="pj-muted">Se muestran las {{ history_visits }} visitas validadas más recientes.</p>{% endif %}
+  {% if history_truncated %}<p class="pj-muted">Se muestran los {{ history_records }} registros validados más recientes.</p>{% endif %}
   {% endif %}
   {% if plan_error %}<p class="pj-late" role="alert">{{ plan_error }}</p>{% endif %}
   {% if can_edit_plan and not retired %}

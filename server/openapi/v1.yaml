@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: SUNO API
-  version: 1.0.0
+  version: 2.0.0
   summary: Contrato de API v1 (superficie mínima) de SUNO.
   description: |
     Contrato **fuente de verdad** de la API v1 de SUNO, escrito antes que el código
@@ -25,7 +25,7 @@ info:
     - **Server-authoritative sin merge de 3 vías**: una operación en `conflict` devuelve la
       **fila autoritativa completa** (`server_row`) para que el cliente reemplace su fila local.
     - **Pull incremental por cursor** (`change_seq`), con orden estricto y tombstones.
-    - **Carril de adjuntos independiente**: una visita se acepta aunque sus fotos aún no estén subidas.
+    - **Carril de adjuntos independiente**: un registro se acepta aunque sus fotos aún no estén subidas.
 
     ### Límites de lote (ADR-003)
 
@@ -627,9 +627,9 @@ paths:
       summary: Tareas del cronograma de las que quien llama es responsable
       description: |
         Tareas **de detalle vigentes** (ni resumen ni retiradas) de las que quien llama es
-        responsable, directamente o por una tarea superior de la EDT, con su último % validado (la
-        visita validada más reciente vinculada a la tarea). Es lo que la app ofrece para vincular
-        una visita a una tarea (`VisitPayload.task_id`).
+        responsable, directamente o por una tarea superior de la EDT, con su último % validado (el
+        registro validado más reciente vinculado a la tarea). Es lo que la app ofrece para vincular
+        un registro a una tarea (`RecordPayload.task_id`).
 
         Se entrega la lista **completa** y el cliente reemplaza la suya: una tarea retirada o una
         responsabilidad quitada desaparecen sin tombstones. Para no repetir la descarga, el cliente
@@ -723,6 +723,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeterReadingOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -789,6 +790,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TripOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -857,6 +859,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FuelFillOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -900,6 +903,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UsageReportOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -932,6 +936,7 @@ paths:
                 format: binary
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/equipment/{equipment_id}/inspections:
@@ -968,6 +973,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InspectionOut'
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1135,7 +1141,7 @@ components:
         Versión del *payload* de sincronización (RD-03). Presente en todos los cuerpos de
         `/v1/sync/*`. Se negocia con `GET /v1/server/info`.
       examples:
-        - 1
+        - 2
 
     ChangeSeq:
       type: integer
@@ -1490,6 +1496,13 @@ components:
           type: integer
           minimum: 1
           description: Tamaño máximo por adjunto individual.
+        attachment_max_bytes_per_record:
+          type: integer
+          minimum: 1
+          description: |
+            Tope acumulado de bytes de adjuntos por registro (ADR-007; 200 MiB). Opcional: un
+            servidor que no lo anuncie no fija este tope.
+          examples: [209715200]
         attachment_allowed_mime:
           type: array
           items:
@@ -1501,15 +1514,15 @@ components:
       type: string
       description: Entidades que participan en la sincronización.
       enum:
-        - visit
-        - visit_attachment
+        - record
+        - record_attachment
         - assignment
         - form_template_version
 
-    Visit:
+    Record:
       type: object
       description: |
-        Visita de campo. El `id` lo **genera el cliente** (idempotencia real). `answers` se valida
+        Registro de campo. El `id` lo **genera el cliente** (idempotencia real). `answers` se valida
         en el servidor contra el JSON Schema de `template_version_id`. La ubicación son
         **columnas planas**, no geometría (ADR-005).
 
@@ -1554,7 +1567,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
-          description: Asignación que originó la visita, si la hubo.
+          description: Asignación que originó el registro, si la hubo.
         template_version_id:
           $ref: '#/components/schemas/Uuid'
         answers:
@@ -1586,7 +1599,7 @@ components:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
           description: |
-            Tarea del cronograma (costos, etapa 1) cuyo avance reporta la visita. Sin tarea,
+            Tarea del cronograma (costos, etapa 1) cuyo avance reporta el registro. Sin tarea,
             `progress_pct` es `null` y `quantities` está vacía; con tarea, hay un `progress_pct`,
             al menos una cantidad, o ambos.
         progress_pct:
@@ -1597,14 +1610,14 @@ components:
         quantities:
           type: array
           description: |
-            Costos, pieza 4: cantidades ejecutadas en esta visita por ítem del presupuesto. Cuentan
-            para el avance de la tarea cuando la visita está validada. Lista vacía si no hay.
+            Costos, pieza 4: cantidades ejecutadas en este registro por ítem del presupuesto. Cuentan
+            para el avance de la tarea cuando el registro está validado. Lista vacía si no hay.
           items:
-            $ref: '#/components/schemas/VisitQuantity'
+            $ref: '#/components/schemas/RecordQuantity'
 
-    VisitQuantity:
+    RecordQuantity:
       type: object
-      description: Cantidad ejecutada de un ítem del presupuesto en una visita (costos, pieza 4).
+      description: Cantidad ejecutada de un ítem del presupuesto en un registro (costos, pieza 4).
       required: [item_id, location_id, quantity, note]
       properties:
         item_id:
@@ -1624,7 +1637,7 @@ components:
           type: string
           maxLength: 500
 
-    VisitQuantityPayload:
+    RecordQuantityPayload:
       type: object
       additionalProperties: false
       required: [item_id, quantity]
@@ -1646,11 +1659,11 @@ components:
             La app la exige al capturar si la cantidad es negativa o el ítem no está en el plan
             de la tarea; el servidor la acepta vacía y la revisión lo resalta.
 
-    VisitAttachment:
+    RecordAttachment:
       type: object
       description: |
-        Uso de un blob dentro de una visita. Separa "qué archivo" (`blob`, inmutable y compartido)
-        de "dónde se usa". Una visita se acepta aunque el blob todavía no esté subido: el adjunto
+        Uso de un blob dentro de un registro. Separa "qué archivo" (`blob`, inmutable y compartido)
+        de "dónde se usa". Un registro se acepta aunque el blob todavía no esté subido: el adjunto
         queda pendiente y se confirma por el carril de adjuntos.
 
         **Todas las propiedades son `required`** (convención de entidades emitidas por el
@@ -1661,7 +1674,7 @@ components:
         - version
         - change_seq
         - deleted_at
-        - visit_id
+        - record_id
         - sha256
         - role
         - caption
@@ -1680,7 +1693,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'
             - type: 'null'
-        visit_id:
+        record_id:
           $ref: '#/components/schemas/Uuid'
         sha256:
           $ref: '#/components/schemas/Sha256'
@@ -1695,12 +1708,12 @@ components:
         order:
           type: integer
           minimum: 0
-          description: Orden de presentación dentro de la visita.
+          description: Orden de presentación dentro del registro.
 
     Assignment:
       type: object
       description: |
-        Trabajo planificado que origina visitas. Se descarga por el pull; el cliente no la modifica.
+        Trabajo planificado que origina registros. Se descarga por el pull; el cliente no la modifica.
 
         **Todas las propiedades son `required`** (convención de entidades emitidas por el
         servidor); la opcionalidad se expresa con `null` en el valor, no con la ausencia del campo.
@@ -1755,7 +1768,7 @@ components:
         Versión inmutable de una plantilla de formulario. `definition` es **JSON declarativo**
         (campos, tipos, etiquetas i18n, obligatoriedad, rangos, visibilidad condicional de un DSL
         restringido). El cliente la **interpreta**; nunca evalúa código remoto (ADR-012).
-        Cada visita referencia la versión exacta usada, de modo que las visitas históricas siguen
+        Cada registro referencia la versión exacta usada, de modo que los registros históricos siguen
         siendo interpretables tras cambios de formulario.
 
         **Todas las propiedades son `required`** (convención de entidades emitidas por el
@@ -1817,37 +1830,37 @@ components:
         Fila autoritativa etiquetada con su entidad. Se usa en el pull (`rows`) y en el resultado
         de conflicto del push (`server_row`). `entity` es el discriminador.
       oneOf:
-        - $ref: '#/components/schemas/VisitRecord'
-        - $ref: '#/components/schemas/VisitAttachmentRecord'
+        - $ref: '#/components/schemas/RecordRow'
+        - $ref: '#/components/schemas/RecordAttachmentRow'
         - $ref: '#/components/schemas/AssignmentRecord'
         - $ref: '#/components/schemas/FormTemplateVersionRecord'
       discriminator:
         propertyName: entity
         mapping:
-          visit: '#/components/schemas/VisitRecord'
-          visit_attachment: '#/components/schemas/VisitAttachmentRecord'
+          record: '#/components/schemas/RecordRow'
+          record_attachment: '#/components/schemas/RecordAttachmentRow'
           assignment: '#/components/schemas/AssignmentRecord'
           form_template_version: '#/components/schemas/FormTemplateVersionRecord'
 
-    VisitRecord:
+    RecordRow:
       type: object
       required: [entity, data]
       properties:
         entity:
           type: string
-          const: visit
+          const: record
         data:
-          $ref: '#/components/schemas/Visit'
+          $ref: '#/components/schemas/Record'
 
-    VisitAttachmentRecord:
+    RecordAttachmentRow:
       type: object
       required: [entity, data]
       properties:
         entity:
           type: string
-          const: visit_attachment
+          const: record_attachment
         data:
-          $ref: '#/components/schemas/VisitAttachment'
+          $ref: '#/components/schemas/RecordAttachment'
 
     AssignmentRecord:
       type: object
@@ -1905,8 +1918,8 @@ components:
         - user
         - form_template_versions
         - assignments
-        - visits
-        - visit_attachments
+        - records
+        - record_attachments
       properties:
         schema_version:
           $ref: '#/components/schemas/SchemaVersion'
@@ -1926,14 +1939,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Assignment'
-        visits:
+        records:
           type: array
           items:
-            $ref: '#/components/schemas/Visit'
-        visit_attachments:
+            $ref: '#/components/schemas/Record'
+        record_attachments:
           type: array
           items:
-            $ref: '#/components/schemas/VisitAttachment'
+            $ref: '#/components/schemas/RecordAttachment'
         has_more:
           type: boolean
           default: false
@@ -1992,13 +2005,13 @@ components:
         idempotencia**: reenviarla devuelve el resultado ya registrado en `sync_op_log`.
         `entity` es el discriminador del payload.
       oneOf:
-        - $ref: '#/components/schemas/VisitOp'
-        - $ref: '#/components/schemas/VisitAttachmentOp'
+        - $ref: '#/components/schemas/RecordOp'
+        - $ref: '#/components/schemas/RecordAttachmentOp'
       discriminator:
         propertyName: entity
         mapping:
-          visit: '#/components/schemas/VisitOp'
-          visit_attachment: '#/components/schemas/VisitAttachmentOp'
+          record: '#/components/schemas/RecordOp'
+          record_attachment: '#/components/schemas/RecordAttachmentOp'
 
     SyncOpBase:
       type: object
@@ -2016,7 +2029,7 @@ components:
             Versión sobre la que el cliente basó el cambio. `null` en `create`.
             El UPSERT aplica `WHERE version = base_version`; si no coincide ⇒ `conflict`.
 
-    VisitOp:
+    RecordOp:
       allOf:
         - $ref: '#/components/schemas/SyncOpBase'
         - type: object
@@ -2024,11 +2037,11 @@ components:
           properties:
             entity:
               type: string
-              const: visit
+              const: record
             payload:
-              $ref: '#/components/schemas/VisitPayload'
+              $ref: '#/components/schemas/RecordPayload'
 
-    VisitAttachmentOp:
+    RecordAttachmentOp:
       allOf:
         - $ref: '#/components/schemas/SyncOpBase'
         - type: object
@@ -2036,14 +2049,14 @@ components:
           properties:
             entity:
               type: string
-              const: visit_attachment
+              const: record_attachment
             payload:
-              $ref: '#/components/schemas/VisitAttachmentPayload'
+              $ref: '#/components/schemas/RecordAttachmentPayload'
 
-    VisitPayload:
+    RecordPayload:
       type: object
       description: |
-        Campos de `visit` que el cliente puede escribir. `org_id`, `version`, `change_seq` y
+        Campos de `record` que el cliente puede escribir. `org_id`, `version`, `change_seq` y
         `deleted_at` son **server-authoritative** y no se envían.
         En `op_type: create` el servidor exige el conjunto completo
         (`template_version_id`, `answers`, `captured_at`, `device_id`); en `update` basta con los
@@ -2088,10 +2101,10 @@ components:
             envía es responsable (directo o por una tarea superior). Viaja **siempre junto** con
             `progress_pct`, también en `update`: con tarea, `progress_pct` con valor o `null` si hay
             al menos una cantidad; los dos `null` (desvincular); o ninguno. Rechazos: `not_found` (`unknown_reference`), `validation_error`
-            (`task_retired`, `task_is_summary`, `task_progress_pair`, `visit_validated`: la visita ya fue
-            validada y no puede cambiar de tarea ni de %; también rechaza el `delete` de esa visita, con `field: id`),
+            (`task_retired`, `task_is_summary`, `task_progress_pair`, `record_validated`: el registro ya fue
+            validado y no puede cambiar de tarea ni de %; también rechaza el `delete` de ese registro, con `field: id`),
             `forbidden` (`not_responsible`). Una operación con `base_version` obsoleto contesta `conflict`,
-            no `visit_validated`.
+            no `record_validated`.
         progress_pct:
           type: [number, 'null']
           minimum: 0
@@ -2110,26 +2123,26 @@ components:
             `item_not_in_project` (el ítem no es de un presupuesto del proyecto de la tarea, o es
             un capítulo fuera del plan de la tarea),
             `location_outside_task` (la ubicación no es un nodo del proyecto de la tarea) y
-            `visit_validated` (la visita validada no cambia sus cantidades). Lo demás se acepta y
+            `record_validated` (el registro validado no cambia sus cantidades). Lo demás se acepta y
             se resalta en la revisión, porque lo registrado sin conexión nunca se pierde: un ítem
             fuera del plan o un ajuste negativo sin nota (la nota la exige la app al capturar), y
             una ubicación del proyecto fuera de la ubicación actual de la tarea.
           items:
-            $ref: '#/components/schemas/VisitQuantityPayload'
+            $ref: '#/components/schemas/RecordQuantityPayload'
 
-    VisitAttachmentPayload:
+    RecordAttachmentPayload:
       type: object
       description: |
-        Campos de `visit_attachment` que el cliente puede escribir. El `sha256` puede referenciar
+        Campos de `record_attachment` que el cliente puede escribir. El `sha256` puede referenciar
         un blob **aún no subido**: el dato estructurado no espera a los bytes.
-        En el MVP solo se admite `op_type: create` (con `visit_id`, `sha256`, `role` y
-        `captured_at`); `update`/`delete` se rechazan con `reason: unsupported_op_type`. La visita
+        En el MVP solo se admite `op_type: create` (con `record_id`, `sha256`, `role` y
+        `captured_at`); `update`/`delete` se rechazan con `reason: unsupported_op_type`. El registro
         tiene que existir en la organización o crearse antes en el mismo lote.
       required: [id]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
-        visit_id:
+        record_id:
           $ref: '#/components/schemas/Uuid'
         sha256:
           $ref: '#/components/schemas/Sha256'
@@ -2159,9 +2172,9 @@ components:
         schema_version:
           allOf:
             - $ref: '#/components/schemas/SchemaVersion'
-          const: 1
+          const: 2
           description: |
-            Versión de payload de este contrato (v1). Otra versión ⇒ `422 schema_unsupported`;
+            Versión de payload de este contrato (2). Otra versión ⇒ `422 schema_unsupported`;
             `GET /v1/server/info` publica el rango aceptado.
         device_id:
           $ref: '#/components/schemas/Uuid'
@@ -2253,11 +2266,11 @@ components:
             por archivo (`ServerCapabilities.attachment_max_bytes`); por encima, `413`.
         mime:
           $ref: '#/components/schemas/Mime'
-        visit_id:
+        record_id:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
-          description: Visita a la que se destina, para comprobar permisos y cuota por visita.
+          description: Registro al que se destina, para comprobar permisos y cuota por registro.
 
     PresignResponse:
       type: object
@@ -2368,7 +2381,7 @@ components:
           $ref: '#/components/schemas/Uuid'
         type:
           type: string
-          description: Tipo de job (p. ej. `export_visits_csv`).
+          description: Tipo de job (p. ej. `export_records_csv`).
         status:
           $ref: '#/components/schemas/JobStatus'
         attempts:
@@ -2404,7 +2417,7 @@ components:
       enum: [account, location, photos]
       description: |
         Finalidad aceptada en el aviso de privacidad: `account` (cuenta y uso de la app),
-        `location` (ubicación de las visitas), `photos` (fotos y firmas de las visitas).
+        `location` (ubicación de los registros), `photos` (fotos y firmas de los registros).
 
     ConsentRequest:
       type: object
@@ -2709,6 +2722,8 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura inicial. Obligatoria con `meter_unit` si el equipo se controla por medidor.
         items:
           type: array
@@ -2808,6 +2823,15 @@ components:
             $ref: '#/components/schemas/TransportPersonItem'
 
     TripIn:
+      oneOf:
+        - required: [equipment_id]
+          properties:
+            equipment_id: { $ref: '#/components/schemas/Uuid' }
+            vehicle_id: { type: 'null' }
+        - required: [vehicle_id]
+          properties:
+            equipment_id: { type: 'null' }
+            vehicle_id: { $ref: '#/components/schemas/Uuid' }
       type: object
       required:
         - id
@@ -2830,6 +2854,8 @@ components:
         volume_m3:
           type: number
           exclusiveMinimum: 0
+          maximum: 999999.99
+          multipleOf: 0.01
         equipment_id:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
@@ -2942,6 +2968,8 @@ components:
         gallons:
           type: number
           exclusiveMinimum: 0
+          maximum: 99999999.99
+          multipleOf: 0.01
         meter_unit:
           oneOf:
             - $ref: '#/components/schemas/MeterUnit'
@@ -2951,6 +2979,8 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura del medidor al tanquear; obligatoria si el equipo se controla por medidor.
         work_front:
           type: string
@@ -3048,11 +3078,15 @@ components:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
         end_meter:
           type:
             - number
             - 'null'
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
         notes:
           type: string
           maxLength: 500
@@ -3285,6 +3319,8 @@ components:
         value:
           type: number
           minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
           description: Lectura del medidor, con hasta 2 decimales.
         read_at:
           $ref: '#/components/schemas/Timestamp'
@@ -3308,7 +3344,7 @@ components:
 
     FieldTask:
       type: object
-      description: Una tarea del cronograma a la que la app puede vincular una visita.
+      description: Una tarea del cronograma a la que la app puede vincular un registro.
       required:
         - id
         - project_id
@@ -3344,8 +3380,8 @@ components:
           minimum: 0
           maximum: 100
           description: |
-            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el de
-            la visita validada más reciente. `null` si no hay.
+            % SUNO de la tarea: por cantidades validadas si tiene ítems planeados; si no, el del
+            registro validado más reciente. `null` si no hay.
         measured_by:
           type: string
           enum: [pct, quantities]
@@ -3413,7 +3449,7 @@ components:
           type: number
         executed_quantity:
           type: number
-          description: Suma de las cantidades de las visitas validadas (puede pasar lo planeado).
+          description: Suma de las cantidades de los registros validados (puede pasar lo planeado).
 
     HealthStatus:
       type: object

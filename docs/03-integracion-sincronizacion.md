@@ -99,4 +99,4 @@ Flujo en `core/views/deltas_views.py` (`ListCreateDeltasView.post`):
 
 ## 10. Patrón a replicar en SUNO
 
-El patrón completo es: **outbox local con IDs generados en cliente (UUID) → subida idempotente → cola de jobs server-side → procesamiento asíncrono → polling de estado → si hay conflicto, el cliente descarta y re-sincroniza en vez de mergear localmente**. Es directamente aplicable a "visitas de campo": cada visita/formulario/evidencia completado offline se modela como un delta con `uuid`, snapshot y adjuntos referenciados por checksum, sin necesitar lógica de merge compleja en el dispositivo móvil.
+El patrón completo es: **outbox local con IDs generados en cliente (UUID) → subida idempotente → cola de jobs server-side → procesamiento asíncrono → polling de estado → si hay conflicto, el cliente descarta y re-sincroniza en vez de mergear localmente**. Es directamente aplicable a "registros de campo": cada registro/formulario/evidencia completado offline se modela como un delta con `uuid`, snapshot y adjuntos referenciados por checksum, sin necesitar lógica de merge compleja en el dispositivo móvil.

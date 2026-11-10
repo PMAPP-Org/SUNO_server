@@ -81,9 +81,9 @@ class PresignRequest(Schema):
     size: int = Field(ge=1)
     mime: Mime
     #: Opcional en el contrato: el dispositivo puede pedir la firma antes de
-    #: decidir a qué visita adjunta la foto. Cuando viene, el servicio
-    #: comprueba además permisos sobre esa visita y su cuota acumulada.
-    visit_id: uuid.UUID | None = None
+    #: decidir a qué registro adjunta la foto. Cuando viene, el servicio
+    #: comprueba además permisos sobre ese registro y su cuota acumulada.
+    record_id: uuid.UUID | None = None
 
 
 class PresignResponse(Schema):

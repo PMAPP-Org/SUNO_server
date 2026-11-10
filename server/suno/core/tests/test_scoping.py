@@ -35,8 +35,8 @@ from suno.core.models import (
     Organization,
     OrgScopedModel,
     Platform,
+    Record,
     Role,
-    Visit,
 )
 from suno.core.scoping import NotOrgScopedError, scoped_qs
 
@@ -68,13 +68,13 @@ class ScopedQuerysetTests(SimpleTestCase):
         self.ctx = _ctx(self.org_id)
 
     def test_returns_a_queryset_of_the_requested_model(self) -> None:
-        qs = scoped_qs(self.ctx, Visit)
+        qs = scoped_qs(self.ctx, Record)
         self.assertIsInstance(qs, QuerySet)
-        self.assertIs(qs.model, Visit)
+        self.assertIs(qs.model, Record)
 
     def test_filters_by_the_context_organization(self) -> None:
-        sql, params = scoped_qs(self.ctx, Visit).query.sql_with_params()
-        self.assertIn('"visit"."org_id" = %s', sql)
+        sql, params = scoped_qs(self.ctx, Record).query.sql_with_params()
+        self.assertIn('"record"."org_id" = %s', sql)
         self.assertEqual(_bound(params), [self.org_id.hex])
 
     def test_every_org_scoped_model_of_the_app_can_be_scoped(self) -> None:
@@ -92,9 +92,9 @@ class ScopedQuerysetTests(SimpleTestCase):
                 self.assertEqual(_bound(params), [self.org_id.hex])
 
     def test_chaining_preserves_the_organization_filter(self) -> None:
-        qs = scoped_qs(self.ctx, Visit).filter(deleted_at__isnull=True).exclude(lat=None)
+        qs = scoped_qs(self.ctx, Record).filter(deleted_at__isnull=True).exclude(lat=None)
         sql, params = qs.query.sql_with_params()
-        self.assertIn('"visit"."org_id" = %s', sql)
+        self.assertIn('"record"."org_id" = %s', sql)
         self.assertEqual(_bound(params), [self.org_id.hex])
 
     def test_the_organization_is_the_only_filter_applied(self) -> None:
@@ -103,9 +103,9 @@ class ScopedQuerysetTests(SimpleTestCase):
         Se mira la cláusula `WHERE`, no el SQL entero: `deleted_at` aparece
         siempre en la lista de columnas seleccionadas, que no filtra nada.
         """
-        sql, params = scoped_qs(self.ctx, Visit).query.sql_with_params()
+        sql, params = scoped_qs(self.ctx, Record).query.sql_with_params()
         where = sql.split(" WHERE ", maxsplit=1)[1]
-        self.assertEqual(where, '"visit"."org_id" = %s')
+        self.assertEqual(where, '"record"."org_id" = %s')
         self.assertEqual(_bound(params), [self.org_id.hex])
 
 
@@ -137,7 +137,7 @@ class UnscopableModelTests(SimpleTestCase):
 
     def test_rejects_a_model_instance_instead_of_the_class(self) -> None:
         with self.assertRaises(TypeError):
-            scoped_qs(self.ctx, Visit(id=uuid.uuid4()))
+            scoped_qs(self.ctx, Record(id=uuid.uuid4()))
 
 
 @unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
@@ -148,11 +148,11 @@ class CrossOrgVisibilityTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.org_a = Organization.objects.create(name="Org A")
         cls.org_b = Organization.objects.create(name="Org B")
-        cls.visit_a = cls._make_visit(cls.org_a, "a")
-        cls.visit_b = cls._make_visit(cls.org_b, "b")
+        cls.record_a = cls._make_record(cls.org_a, "a")
+        cls.record_b = cls._make_record(cls.org_b, "b")
 
     @classmethod
-    def _make_visit(cls, org: Organization, suffix: str) -> Visit:
+    def _make_record(cls, org: Organization, suffix: str) -> Record:
         user = AppUser.objects.create_user(
             username=f"agente-{suffix}",
             email=f"{suffix}@example.test",
@@ -174,7 +174,7 @@ class CrossOrgVisibilityTests(TestCase):
             version_number=1,
             change_seq=1,
         )
-        return Visit.objects.create(
+        return Record.objects.create(
             id=uuid.uuid4(),
             org=org,
             change_seq=2,
@@ -185,17 +185,17 @@ class CrossOrgVisibilityTests(TestCase):
         )
 
     def test_only_the_own_organization_rows_are_visible(self) -> None:
-        visible = list(scoped_qs(_ctx(self.org_a.pk), Visit))
-        self.assertEqual([v.pk for v in visible], [self.visit_a.pk])
+        visible = list(scoped_qs(_ctx(self.org_a.pk), Record))
+        self.assertEqual([v.pk for v in visible], [self.record_a.pk])
 
     def test_a_foreign_row_is_invisible_even_by_primary_key(self) -> None:
         """Base del `404` (y no `403`) de RD-11: la fila no aparece siquiera."""
-        with self.assertRaises(Visit.DoesNotExist):
-            scoped_qs(_ctx(self.org_a.pk), Visit).get(pk=self.visit_b.pk)
+        with self.assertRaises(Record.DoesNotExist):
+            scoped_qs(_ctx(self.org_a.pk), Record).get(pk=self.record_b.pk)
 
     def test_unscoped_access_would_have_seen_both(self) -> None:
         """Sin esta comprobación, los tests de arriba pasarían por vacuidad."""
-        self.assertEqual(Visit.objects.count(), 2)
+        self.assertEqual(Record.objects.count(), 2)
 
     def test_scoping_also_applies_to_memberships(self) -> None:
         """La tabla del hallazgo H-16: enumerar miembros ajenos no es posible."""

@@ -24,7 +24,7 @@ from suno.core.models import INITIAL_VERSION
 from suno.sync import sql
 
 ORG = uuid.UUID("11111111-1111-1111-1111-111111111111")
-VISIT = uuid.UUID("22222222-2222-2222-2222-222222222222")
+RECORD = uuid.UUID("22222222-2222-2222-2222-222222222222")
 USER = uuid.UUID("33333333-3333-3333-3333-333333333333")
 TEMPLATE = uuid.UUID("44444444-4444-4444-4444-444444444444")
 DEVICE = uuid.UUID("55555555-5555-5555-5555-555555555555")
@@ -56,14 +56,14 @@ class ColumnMappingTests(SimpleTestCase):
         self.assertEqual(sql.column("org_id"), '"org_id"')
         self.assertEqual(sql.column("task_id"), '"task_id"')
         self.assertEqual(sql.column("progress_pct"), '"progress_pct"')
-        self.assertEqual(sql.table(), '"visit"')
+        self.assertEqual(sql.table(), '"record"')
 
 
 class InsertTests(SimpleTestCase):
     def setUp(self) -> None:
         self.statement = sql.build_insert(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             change_seq=42,
             created_by=USER,
             fields=create_fields(),
@@ -75,7 +75,7 @@ class InsertTests(SimpleTestCase):
         self.assertIn('"progress_pct"', self.statement.sql)
 
     def test_is_an_upsert_guarded_by_the_primary_key(self) -> None:
-        self.assertIn('INSERT INTO "visit"', self.statement.sql)
+        self.assertIn('INSERT INTO "record"', self.statement.sql)
         self.assertIn('ON CONFLICT ("id") DO NOTHING', self.statement.sql)
 
     def test_returns_the_applied_version_and_change_seq(self) -> None:
@@ -94,7 +94,7 @@ class InsertTests(SimpleTestCase):
         self.assertIn(json.dumps({"altura_cm": 12}), self.statement.params)
 
     def test_no_value_is_interpolated_into_the_text(self) -> None:
-        for value in (str(ORG), str(VISIT), str(USER), "altura_cm"):
+        for value in (str(ORG), str(RECORD), str(USER), "altura_cm"):
             with self.subTest(value=value):
                 self.assertNotIn(value, self.statement.sql)
 
@@ -107,7 +107,7 @@ class UpdateTests(SimpleTestCase):
     def test_carries_the_cas_guard_and_the_org_isolation(self) -> None:
         statement = sql.build_update(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             base_version=3,
             change_seq=99,
             fields={"lat": 4.6},
@@ -117,31 +117,31 @@ class UpdateTests(SimpleTestCase):
             statement.sql,
         )
         # …y en ese orden en los parámetros.
-        self.assertEqual(statement.params[-3:], (VISIT, ORG, 3))
+        self.assertEqual(statement.params[-3:], (RECORD, ORG, 3))
 
     def test_increments_the_version_in_the_database(self) -> None:
         """`version + 1` calculado en SQL: no depende de nada leído antes."""
         statement = sql.build_update(
-            org_id=ORG, visit_id=VISIT, base_version=3, change_seq=99, fields={"lat": 4.6}
+            org_id=ORG, record_id=RECORD, base_version=3, change_seq=99, fields={"lat": 4.6}
         )
         self.assertIn('"version" = "version" + 1', statement.sql)
 
     def test_assigns_the_new_change_seq(self) -> None:
         statement = sql.build_update(
-            org_id=ORG, visit_id=VISIT, base_version=3, change_seq=99, fields={"lat": 4.6}
+            org_id=ORG, record_id=RECORD, base_version=3, change_seq=99, fields={"lat": 4.6}
         )
         self.assertIn('"change_seq" = %s', statement.sql)
         self.assertIn(99, statement.params)
 
     def test_returns_the_resulting_row_version(self) -> None:
         statement = sql.build_update(
-            org_id=ORG, visit_id=VISIT, base_version=3, change_seq=99, fields={"lat": 4.6}
+            org_id=ORG, record_id=RECORD, base_version=3, change_seq=99, fields={"lat": 4.6}
         )
         self.assertTrue(statement.sql.endswith('RETURNING "version", "change_seq"'))
 
     def test_only_the_fields_sent_are_written(self) -> None:
         statement = sql.build_update(
-            org_id=ORG, visit_id=VISIT, base_version=3, change_seq=99, fields={"lat": 4.6}
+            org_id=ORG, record_id=RECORD, base_version=3, change_seq=99, fields={"lat": 4.6}
         )
         for untouched in ("template_version_id", "captured_at", "answers", "device_id"):
             with self.subTest(column=untouched):
@@ -152,7 +152,7 @@ class UpdateTests(SimpleTestCase):
         deleted_at = datetime(2026, 7, 31, 9, 0, tzinfo=UTC)
         statement = sql.build_update(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             base_version=3,
             change_seq=99,
             fields={},
@@ -166,7 +166,7 @@ class UpdateTests(SimpleTestCase):
     def test_a_delete_never_writes_client_data(self) -> None:
         statement = sql.build_update(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             base_version=3,
             change_seq=99,
             fields={},
@@ -177,7 +177,7 @@ class UpdateTests(SimpleTestCase):
     def test_updates_answers_with_the_jsonb_cast(self) -> None:
         statement = sql.build_update(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             base_version=3,
             change_seq=99,
             fields={"answers": {"a": 1}},
@@ -193,7 +193,7 @@ class QuantitiesTests(SimpleTestCase):
 
     def test_insert_writes_an_empty_list_when_absent(self) -> None:
         statement = sql.build_insert(
-            org_id=ORG, visit_id=VISIT, change_seq=42, created_by=USER, fields=create_fields()
+            org_id=ORG, record_id=RECORD, change_seq=42, created_by=USER, fields=create_fields()
         )
         self.assertIn('"quantities"', statement.sql)
         self.assertEqual(statement.sql.count("%s::jsonb"), 2)
@@ -202,7 +202,7 @@ class QuantitiesTests(SimpleTestCase):
     def test_insert_serializes_the_rows(self) -> None:
         statement = sql.build_insert(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             change_seq=42,
             created_by=USER,
             fields={**create_fields(), "quantities": self.ROWS},
@@ -212,7 +212,7 @@ class QuantitiesTests(SimpleTestCase):
     def test_update_casts_the_rows_to_jsonb(self) -> None:
         statement = sql.build_update(
             org_id=ORG,
-            visit_id=VISIT,
+            record_id=RECORD,
             base_version=3,
             change_seq=99,
             fields={"quantities": self.ROWS},

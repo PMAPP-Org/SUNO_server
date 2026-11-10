@@ -502,7 +502,7 @@ def settlement_preview(
     grouped: dict[UUID, dict[tuple[UUID, UUID], list[Trip]]] = {}
     vehicles: dict[UUID, TransportVehicle] = {}
     for trip in trips:
-        assert trip.vehicle is not None
+        assert trip.vehicle is not None  # nosec B101
         vehicles[trip.vehicle.pk] = trip.vehicle
         grouped.setdefault(trip.vehicle.pk, {}).setdefault(
             (trip.route_id, trip.material_id), []

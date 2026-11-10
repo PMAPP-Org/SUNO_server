@@ -34,7 +34,7 @@ SUNO necesita administrar los equipos usados en campo y permitir que el personal
 - Existen cinco roles organizacionales: `OWNER`, `ADMIN`, `SUPERVISOR`, `FIELD_AGENT` y `VIEWER`.
 - `Membership` permite una sola fila por usuario y organización; en la práctica, un usuario tiene un único rol global.
 - `OWNER` y `ADMIN` tienen hoy las mismas capacidades de negocio.
-- `SUPERVISOR` puede revisar visitas, asignar trabajo, asignar responsables y exportar información.
+- `SUPERVISOR` puede revisar registros, asignar trabajo, asignar responsables y exportar información.
 - `FIELD_AGENT` puede capturar y modificar sus propios registros, pero no revisar registros ni ver presupuestos.
 - `VIEWER` solo consulta, aunque puede exportar presupuestos.
 - El acceso al Django Admin es una segunda capa independiente basada en `is_staff` y permisos de modelo.

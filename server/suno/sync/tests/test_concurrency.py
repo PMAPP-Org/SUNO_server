@@ -43,7 +43,7 @@ from typing import Any
 from django.db import connections
 from django.test import TransactionTestCase
 
-from suno.core.models import SyncOpLog, Visit
+from suno.core.models import Record, SyncOpLog
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -107,7 +107,7 @@ class AdvisoryLockSerializationTests(TransactionTestCase):
             statuses = {result["status"] for result in response.json()["results"]}
             self.assertEqual(statuses, {"applied"})
 
-        self.assertEqual(Visit.objects.count(), 2 * OPS_PER_BATCH)
+        self.assertEqual(Record.objects.count(), 2 * OPS_PER_BATCH)
         self.assertEqual(SyncOpLog.objects.count(), 2 * OPS_PER_BATCH)
 
     def test_no_two_rows_share_a_change_seq(self) -> None:
@@ -121,7 +121,7 @@ class AdvisoryLockSerializationTests(TransactionTestCase):
         second = [create_op(self.scenario) for _ in range(OPS_PER_BATCH)]
         self._push_in_parallel(first, second)
 
-        seqs = list(Visit.objects.values_list("change_seq", flat=True))
+        seqs = list(Record.objects.values_list("change_seq", flat=True))
         self.assertEqual(len(seqs), 2 * OPS_PER_BATCH)
         self.assertEqual(len(set(seqs)), len(seqs), "hay `change_seq` repetidos")
 
@@ -138,7 +138,7 @@ class AdvisoryLockSerializationTests(TransactionTestCase):
 
         for response in responses:
             ids = [uuid.UUID(result["entity_id"]) for result in response.json()["results"]]
-            seqs = sorted(Visit.objects.filter(pk__in=ids).values_list("change_seq", flat=True))
+            seqs = sorted(Record.objects.filter(pk__in=ids).values_list("change_seq", flat=True))
             self.assertEqual(
                 seqs,
                 list(range(seqs[0], seqs[0] + len(seqs))),
@@ -151,19 +151,19 @@ class AdvisoryLockSerializationTests(TransactionTestCase):
         Sin el lock tomado **antes** de leer `sync_op_log`, las dos requests
         leerían "no está" y aplicarían las dos.
         """
-        visit_id = uuid.uuid4()
+        record_id = uuid.uuid4()
         op_uuid = uuid.uuid4()
-        op = create_op(self.scenario, visit_id=visit_id, op_uuid=op_uuid)
+        op = create_op(self.scenario, record_id=record_id, op_uuid=op_uuid)
 
         responses = self._push_in_parallel([op], [dict(op)])
         statuses = [response.json()["results"][0]["status"] for response in responses]
 
         self.assertEqual(sorted(statuses), ["applied", "applied"])
-        self.assertEqual(Visit.objects.filter(pk=visit_id).count(), 1)
+        self.assertEqual(Record.objects.filter(pk=record_id).count(), 1)
         self.assertEqual(SyncOpLog.objects.filter(op_uuid=op_uuid).count(), 1)
         # Aplicada **una** vez: la segunda devolvió el resultado guardado.
-        visit = Visit.objects.get(pk=visit_id)
-        self.assertEqual(visit.version, 1)
+        record = Record.objects.get(pk=record_id)
+        self.assertEqual(record.version, 1)
         self.assertEqual(
             [response.json()["results"][0] for response in responses][0],
             [response.json()["results"][0] for response in responses][1],
@@ -171,13 +171,13 @@ class AdvisoryLockSerializationTests(TransactionTestCase):
 
     def test_concurrent_updates_of_one_row_leave_exactly_one_winner(self) -> None:
         """El CAS por `version`: dos escrituras sobre la misma base, un ganador."""
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        base = Visit.objects.get(pk=visit_id).version
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        base = Record.objects.get(pk=record_id).version
         responses = self._push_in_parallel(
-            [update_op(visit_id, base_version=base, lat=1.0)],
-            [update_op(visit_id, base_version=base, lat=2.0)],
+            [update_op(record_id, base_version=base, lat=1.0)],
+            [update_op(record_id, base_version=base, lat=2.0)],
         )
         statuses = sorted(response.json()["results"][0]["status"] for response in responses)
         self.assertEqual(statuses, ["applied", "conflict"])
-        self.assertEqual(Visit.objects.get(pk=visit_id).version, base + 1)
+        self.assertEqual(Record.objects.get(pk=record_id).version, base + 1)

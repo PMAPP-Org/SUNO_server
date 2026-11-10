@@ -8,7 +8,7 @@ Los plazos se configuran con variables de entorno, con valor por defecto en `ser
 |---|---|---|---|---|
 | `AuditEvent` (traza de auditoría) | Usuario actor; IP solo como HMAC | 365 días | `AUDIT_EVENT_RETENTION_DAYS` | Periódico `security.purge_logs`, diario, por organización |
 | `AccessFailureLog` / `AccessLog` de django-axes | Usuario e IP **en claro** | 90 días | `AXES_LOG_RETENTION_DAYS` | Periódico `security.purge_logs` (API de axes) |
-| Tombstones de sync (filas borradas lógicamente) | Según la visita | Ventana de sync (`sync/retention.py`) | — | Periódico `sync.purge_tombstones` |
+| Tombstones de sync (filas borradas lógicamente) | Según el registro | Ventana de sync (`sync/retention.py`) | — | Periódico `sync.purge_tombstones` |
 | Adjuntos subidos y nunca confirmados | Fotos | 24 h | `ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS` (setting) | Periódico `attachments.gc_unconfirmed_uploads` |
 | Copias de seguridad de la BD | Todo el contenido | Ver `infra/backup/README.md` | `BACKUP_RETENTION_DAYS` | Rotación en el job de backup |
 
@@ -23,4 +23,4 @@ Los plazos se configuran con variables de entorno, con valor por defecto en `ser
 - El periódico se ejecuta en el servicio `worker` (`infra/docker-compose.yml`). El DAST de CI comprueba que el worker procesa la cola contra el stack de producción. El worker vuelve a programar los periódicos cada `JOB_BOOTSTRAP_INTERVAL_SECONDS` (300 s), así que una organización nueva queda cubierta sin reiniciar nada.
 - El resultado de cada pasada (cuántas filas se borraron) queda en `job.output`, visible para ADMIN.
 
-**Lo que este documento no cubre (pendiente)**: el plazo de conservación de los datos de negocio (visitas, fotos, respuestas de formulario). Depende del contrato con cada organización cliente y de su finalidad, y debe definirlo el responsable del tratamiento antes de producción.
+**Lo que este documento no cubre (pendiente)**: el plazo de conservación de los datos de negocio (registros, fotos, respuestas de formulario). Depende del contrato con cada organización cliente y de su finalidad, y debe definirlo el responsable del tratamiento antes de producción.

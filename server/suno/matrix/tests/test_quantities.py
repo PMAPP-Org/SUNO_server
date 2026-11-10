@@ -19,7 +19,7 @@ from suno.matrix.quantities import (
     suno_pct_by_task,
 )
 
-from .factories import budget_world, item, plan, quantity_row, quantity_visit
+from .factories import budget_world, item, plan, quantity_record, quantity_row
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -36,30 +36,30 @@ class QuantitiesTests(TestCase):
         plan(self.world, 3, self.concrete, "10")
         plan(self.world, 3, self.steel, "500")
 
-    def test_only_validated_visits_count(self) -> None:
-        approved = quantity_visit(self.world, 3, quantity_row(self.concrete, "4"))
+    def test_only_validated_records_count(self) -> None:
+        approved = quantity_record(self.world, 3, quantity_row(self.concrete, "4"))
         self.world.approve(approved)
-        rejected = quantity_visit(self.world, 3, quantity_row(self.concrete, "3"), hours=1)
+        rejected = quantity_record(self.world, 3, quantity_row(self.concrete, "3"), hours=1)
         self.world.reject(rejected)
-        quantity_visit(self.world, 3, quantity_row(self.concrete, "2"), hours=2)  # sin revisar
+        quantity_record(self.world, 3, quantity_row(self.concrete, "2"), hours=2)  # sin revisar
         executed = executed_by_pair(self.ctx, project_ids=[self.world.project.pk])
         self.assertEqual(executed, {(self.world.task(3).pk, self.concrete.pk): Decimal("4")})
 
     def test_adjustments_add_up(self) -> None:
         for hours, qty in enumerate(("4", "-1")):
-            visit = quantity_visit(
+            record = quantity_record(
                 self.world, 3, quantity_row(self.concrete, qty, note="ajuste"), hours=hours
             )
-            self.world.approve(visit)
+            self.world.approve(record)
         executed = executed_by_pair(self.ctx, task_ids=[self.world.task(3).pk])
         self.assertEqual(executed[(self.world.task(3).pk, self.concrete.pk)], Decimal("3"))
 
     def test_measured_progress_and_suno_pct(self) -> None:
-        visit = quantity_visit(
+        record = quantity_record(
             self.world, 3, quantity_row(self.concrete, "5"), quantity_row(self.steel, "500")
         )
-        self.world.approve(visit)
-        manual = self.world.visit(2, "40")  # tarea sin plan: % manual
+        self.world.approve(record)
+        manual = self.world.record(2, "40")  # tarea sin plan: % manual
         self.world.approve(manual)
         # (5 × 450.000 + 500 × 4.200) / (10 × 450.000 + 500 × 4.200) = 4.350.000 / 6.600.000
         progress = measured_progress(self.ctx, project_ids=[self.world.project.pk])
@@ -69,7 +69,7 @@ class QuantitiesTests(TestCase):
         self.assertEqual(pct[self.world.task(2).pk], Decimal("40"))
 
     def test_quantities_override_manual_pct_on_planned_tasks(self) -> None:
-        self.world.approve(self.world.visit(3, "90"))
+        self.world.approve(self.world.record(3, "90"))
         pct = suno_pct_by_task(self.ctx, task_ids=[self.world.task(3).pk])
         self.assertEqual(pct[self.world.task(3).pk], Decimal("0.00"))
 

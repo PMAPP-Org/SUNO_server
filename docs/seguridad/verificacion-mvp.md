@@ -40,11 +40,11 @@ Un runner compartido de GitHub mide con ruido y tiene menos recursos que el VPS 
 
 | # | Criterio | Estado |
 |---|---|---|
-| 12 | Jornada de 8 h sin red, ≥ 50 visitas con 10 fotos, sin degradación perceptible | **Manual**, en emulador o teléfono de gama baja. Pendiente |
+| 12 | Jornada de 8 h sin red, ≥ 50 registros con 10 fotos, sin degradación perceptible | **Manual**, en emulador o teléfono de gama baja. Pendiente |
 | 13 | Drenaje de esa outbox en < 5 min con 4G decente | **Manual**. Pendiente |
 | 14 | p95 de `/sync/push` con 100 operaciones < 1,5 s | Tarea 10 (workflow `Load test`) |
 | 15 | Arranque en frío < 3 s en gama baja (2 GB RAM, Android 10) | **Manual**. Pendiente |
-| 16 | Cero pérdida de datos: (a) app matada a mitad de guardado, (b) red cortada a mitad de push, (c) servidor caído durante la subida de un adjunto | (a) CI: atomicidad visita + outbox en una transacción (`database_test.dart`, H-04); (b) CI: idempotencia por `op_uuid` y reintento (`test_push.py`, `sync_engine_test.dart`); (c) CI: la cola de adjuntos reintenta con backoff y cierra el archivo (`attachment_upload_service_test.dart`, H-05). **Manual**: repetir los tres matando el proceso real en un dispositivo |
+| 16 | Cero pérdida de datos: (a) app matada a mitad de guardado, (b) red cortada a mitad de push, (c) servidor caído durante la subida de un adjunto | (a) CI: atomicidad registro + outbox en una transacción (`database_test.dart`, H-04); (b) CI: idempotencia por `op_uuid` y reintento (`test_push.py`, `sync_engine_test.dart`); (c) CI: la cola de adjuntos reintenta con backoff y cierra el archivo (`attachment_upload_service_test.dart`, H-05). **Manual**: repetir los tres matando el proceso real en un dispositivo |
 | 17 | `assertNumQueries` constante en push sin importar el lote | CI (ítem 2) |
 
 ## Riesgos abiertos

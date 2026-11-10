@@ -60,7 +60,11 @@ _IP_HASH_SALT = "suno.core.audit.ip_hash"
 
 
 class AuditAction:
-    """Códigos de `AuditEvent.action`. Estables: el back-office filtra por ellos."""
+    """Códigos de `AuditEvent.action`. Estables: el back-office filtra por ellos.
+
+    La traza no se reescribe: las filas de antes del renombre a "registro" (migración
+    0027) conservan su código y su `target` originales, y los lectores los muestran tal cual.
+    """
 
     LOGIN = "auth.login"
     LOGIN_DENIED = "auth.login_denied"
@@ -71,12 +75,12 @@ class AuditAction:
     REFRESH_REUSE_DETECTED = "auth.refresh_reuse_detected"
     ADMIN_MFA_ENROLLED = "admin.mfa_enrolled"
     # Back-office (Paso 24): cada acción con efecto deja rastro.
-    VISIT_REVIEWED = "backoffice.visit_reviewed"
+    RECORD_REVIEWED = "backoffice.record_reviewed"
     DEVICE_REVOKED = "backoffice.device_revoked"
     JOB_RETRIED = "backoffice.job_retried"
     ASSIGNMENT_CREATED = "backoffice.assignment_created"
     TEMPLATE_PUBLISHED = "backoffice.template_published"
-    VISITS_EXPORTED = "backoffice.visits_exported"
+    RECORDS_EXPORTED = "backoffice.records_exported"
     PERSONAL_DATA_EXPORTED = "backoffice.personal_data_exported"
     PERSONAL_DATA_SUPPRESSED = "backoffice.personal_data_suppressed"
     PRIVACY_CONSENT_RECORDED = "privacy.consent_recorded"

@@ -9,7 +9,7 @@ usen: los clientes antiguos rechazan explícitamente tipos desconocidos.
 - `qr` almacena texto (máximo 4096 caracteres, restringible con `min_length` y
   `max_length`). La app permite escanear o escribir; nunca abre el contenido como URL.
 - `default` es un literal del tipo del campo, validado al publicar. Se aplica al
-  crear una visita o añadir una fila; no modifica visitas editadas ni campos
+  crear un registro o añadir una fila; no modifica registros editados ni campos
   vaciados. No se admite en fotos, firmas o grupos repetibles.
 - `repeat` contiene `fields`, `min_rows` (por defecto 0) y `max_rows` (1–100,
   por defecto 100). La respuesta es una lista de objetos. Cada fila tiene su
@@ -36,7 +36,7 @@ Ejemplo:
 
 En `/admin`, abre una plantilla y selecciona **Importar XLSForm**. Adjunta el
 `.xlsx` y pulsa **Validar y publicar nueva versión**. Se exige rol OWNER o ADMIN;
-las versiones anteriores y sus visitas quedan intactas. El resultado viaja por
+las versiones anteriores y sus registros quedan intactos. El resultado viaja por
 la sincronización normal y queda auditado. También está disponible:
 
 ```sh
@@ -72,18 +72,18 @@ el XML se analiza con defusedxml. Un error indica hoja/fila cuando corresponde.
 
 ## Exportar
 
-En la lista de visitas del administrador selecciona las visitas y ejecuta
-**Exportar a GeoJSON**, **Exportar a GeoPackage** o **Informe PDF de una visita**.
-PDF exige exactamente una visita. Los tres formatos requieren OWNER, ADMIN o
+En la lista de registros del administrador selecciona los registros y ejecuta
+**Exportar a GeoJSON**, **Exportar a GeoPackage** o **Informe PDF de un registro**.
+PDF exige exactamente un registro. Los tres formatos requieren OWNER, ADMIN o
 SUPERVISOR, filtran por organización, excluyen borradas y registran la descarga
-en auditoría. Se mantiene el máximo de 10000 visitas por selección; las salidas
+en auditoría. Se mantiene el máximo de 10000 registros por selección; las salidas
 geográficas se rechazan si superan 20000 entidades o 64 MiB de contenido JSON.
 
 GeoJSON sigue RFC 7946 y GeoPackage el
 [formato OGC 1.3](https://www.geopackage.org/spec130/). Ambos usan WGS84, orden
-longitud/latitud. Una visita puede producir varias entidades: su punto GPS y
+longitud/latitud. Un registro puede producir varias entidades: su punto GPS y
 cada campo de ubicación, línea o polígono, incluidos los de grupos repetibles.
-`visit_id` agrupa esas entidades y `field` identifica la ruta del campo. Si no
+`record_id` agrupa esas entidades y `field` identifica la ruta del campo. Si no
 hay geometría, se conserva una entidad con geometría nula. Las respuestas
 completas acompañan cada entidad; en GeoPackage son JSON en la columna `answers`.
 
@@ -92,8 +92,8 @@ autor, ubicación y respuestas con etiquetas, incluidas las filas repetidas.
 Fotos y firmas se indican por referencia: sus binarios no se incrustan.
 Se escapa el texto y no se descargan recursos externos.
 
-En la app, supervisión puede abrir el detalle de una visita y elegir **Exportar
-visita**, incluso sin conexión: GeoJSON o PDF mediante el menú nativo de
+En la app, supervisión puede abrir el detalle de un registro y elegir **Exportar
+registro**, incluso sin conexión: GeoJSON o PDF mediante el menú nativo de
 compartir/guardar. La copia indica que procede del dispositivo y su estado de
 sincronización; puede contener cambios aún pendientes. Esta salida local no
 genera una descarga ni un evento de auditoría en el servidor. Para exportaciones

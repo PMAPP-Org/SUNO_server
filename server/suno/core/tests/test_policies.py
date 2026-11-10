@@ -6,7 +6,7 @@ BD, cualquier query que se colase en una política haría fallar estos tests.
 Esa prohibición es parte de lo que se está verificando.
 
 Los recursos son instancias **reales** de los modelos, sin guardar: la política
-solo lee `org_id`/`owner_id`, así que un `Visit(...)` en memoria es un recurso
+solo lee `org_id`/`owner_id`, así que un `Record(...)` en memoria es un recurso
 tan real como uno persistido, y evita montar una BD para probar aritmética de
 conjuntos.
 
@@ -27,19 +27,19 @@ from ninja.errors import HttpError
 from suno.core import policies
 from suno.core.access_services import LEGACY_GRANTS
 from suno.core.context import RequestContext, SectionAccess
-from suno.core.models import Device, FormTemplate, Job, Role, Visit
+from suno.core.models import Device, FormTemplate, Job, Record, Role
 from suno.core.policies import (
     can_manage_device,
     can_publish_form_template,
     can_read_job_output,
     can_read_members,
-    can_read_visit,
-    can_write_visit,
+    can_read_record,
+    can_write_record,
     check_manage_device,
     check_read_job_output,
     check_read_members,
-    check_read_visit,
-    check_write_visit,
+    check_read_record,
+    check_write_record,
     user_has_organization_roles,
 )
 
@@ -63,8 +63,8 @@ def ctx(*roles: object, org_id: uuid.UUID = ORG, user_id: uuid.UUID = USER) -> R
     )
 
 
-def visit(org_id: uuid.UUID = ORG) -> Visit:
-    return Visit(id=uuid.uuid4(), org_id=org_id)
+def record(org_id: uuid.UUID = ORG) -> Record:
+    return Record(id=uuid.uuid4(), org_id=org_id)
 
 
 def device(org_id: uuid.UUID = ORG, owner_id: uuid.UUID = USER) -> Device:
@@ -76,7 +76,7 @@ def form_template(org_id: uuid.UUID = ORG) -> FormTemplate:
 
 
 def job(org_id: uuid.UUID = ORG) -> Job:
-    return Job(id=uuid.uuid4(), org_id=org_id, type="export_visits_csv")
+    return Job(id=uuid.uuid4(), org_id=org_id, type="export_records_csv")
 
 
 # --- La primitiva -----------------------------------------------------------
@@ -127,64 +127,64 @@ class CanReadMembersTests(SimpleTestCase):
         check_read_members(ctx(Role.VIEWER), ORG)  # no debe lanzar
 
 
-# --- Visitas ----------------------------------------------------------------
+# --- Registros ----------------------------------------------------------------
 
 
-class CanReadVisitTests(SimpleTestCase):
+class CanReadRecordTests(SimpleTestCase):
     def test_true_for_any_member_role(self) -> None:
         for role in Role.values:
             with self.subTest(role=role):
-                self.assertTrue(can_read_visit(ctx(role), visit()))
+                self.assertTrue(can_read_record(ctx(role), record()))
 
     def test_false_without_memberships(self) -> None:
-        self.assertFalse(can_read_visit(ctx(), visit()))
+        self.assertFalse(can_read_record(ctx(), record()))
 
-    def test_false_for_a_visit_of_another_organization(self) -> None:
-        self.assertFalse(can_read_visit(ctx(Role.OWNER), visit(org_id=OTHER_ORG)))
+    def test_false_for_a_record_of_another_organization(self) -> None:
+        self.assertFalse(can_read_record(ctx(Role.OWNER), record(org_id=OTHER_ORG)))
 
     def test_check_passes_for_a_viewer(self) -> None:
-        check_read_visit(ctx(Role.VIEWER), visit())  # no debe lanzar
+        check_read_record(ctx(Role.VIEWER), record())  # no debe lanzar
 
     def test_check_raises_404_across_organizations(self) -> None:
         with self.assertRaises(HttpError) as raised:
-            check_read_visit(ctx(Role.OWNER), visit(org_id=OTHER_ORG))
+            check_read_record(ctx(Role.OWNER), record(org_id=OTHER_ORG))
         self.assertEqual(raised.exception.status_code, 404)
 
     def test_check_raises_404_for_a_non_member(self) -> None:
         """Sin membresía no se distingue "no puedes" de "no existe" (RD-11)."""
         with self.assertRaises(HttpError) as raised:
-            check_read_visit(ctx(), visit())
+            check_read_record(ctx(), record())
         self.assertEqual(raised.exception.status_code, 404)
 
 
-class CanWriteVisitTests(SimpleTestCase):
+class CanWriteRecordTests(SimpleTestCase):
     def test_true_for_roles_that_capture_or_supervise(self) -> None:
         for role in (Role.OWNER, Role.ADMIN, Role.SUPERVISOR, Role.FIELD_AGENT):
             with self.subTest(role=role):
-                self.assertTrue(can_write_visit(ctx(role), visit()))
+                self.assertTrue(can_write_record(ctx(role), record()))
 
     def test_false_for_a_viewer(self) -> None:
-        self.assertFalse(can_write_visit(ctx(Role.VIEWER), visit()))
+        self.assertFalse(can_write_record(ctx(Role.VIEWER), record()))
 
     def test_false_without_memberships(self) -> None:
-        self.assertFalse(can_write_visit(ctx(), visit()))
+        self.assertFalse(can_write_record(ctx(), record()))
 
-    def test_false_for_a_visit_of_another_organization(self) -> None:
-        self.assertFalse(can_write_visit(ctx(Role.OWNER), visit(org_id=OTHER_ORG)))
+    def test_false_for_a_record_of_another_organization(self) -> None:
+        self.assertFalse(can_write_record(ctx(Role.OWNER), record(org_id=OTHER_ORG)))
 
     def test_check_raises_403_for_a_viewer_in_the_same_organization(self) -> None:
         with self.assertRaises(HttpError) as raised:
-            check_write_visit(ctx(Role.VIEWER), visit())
+            check_write_record(ctx(Role.VIEWER), record())
         self.assertEqual(raised.exception.status_code, 403)
 
     def test_check_raises_404_across_organizations(self) -> None:
         """Un 403 confirmaría que el recurso existe (RD-11)."""
         with self.assertRaises(HttpError) as raised:
-            check_write_visit(ctx(Role.OWNER), visit(org_id=OTHER_ORG))
+            check_write_record(ctx(Role.OWNER), record(org_id=OTHER_ORG))
         self.assertEqual(raised.exception.status_code, 404)
 
     def test_check_passes_for_a_field_agent(self) -> None:
-        check_write_visit(ctx(Role.FIELD_AGENT), visit())  # no debe lanzar
+        check_write_record(ctx(Role.FIELD_AGENT), record())  # no debe lanzar
 
 
 # --- Dispositivos -----------------------------------------------------------
@@ -199,7 +199,7 @@ class CanManageDeviceTests(SimpleTestCase):
         self.assertFalse(can_manage_device(agent, device(owner_id=OTHER_USER)))
 
     def test_false_for_a_supervisor_over_someone_elses_device(self) -> None:
-        """Supervisar visitas no es administrar dispositivos ajenos."""
+        """Supervisar registros no es administrar dispositivos ajenos."""
         self.assertFalse(can_manage_device(ctx(Role.SUPERVISOR), device(owner_id=OTHER_USER)))
 
     def test_true_for_administrators_over_any_device_of_their_org(self) -> None:
@@ -239,7 +239,7 @@ class CanPublishFormTemplateTests(SimpleTestCase):
                 self.assertTrue(can_publish_form_template(ctx(role), form_template()))
 
     def test_false_for_everyone_else(self) -> None:
-        """Un formulario define qué captura toda la organización, no una visita."""
+        """Un formulario define qué captura toda la organización, no un registro."""
         for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
             with self.subTest(role=role):
                 self.assertFalse(can_publish_form_template(ctx(role), form_template()))
@@ -284,9 +284,9 @@ class BackofficePoliciesTests(SimpleTestCase):
 
     def test_supervision_reviews_assigns_and_exports(self) -> None:
         checks: tuple[tuple[Callable[..., bool], object], ...] = (
-            (policies.can_review_visit, visit()),
+            (policies.can_review_record, record()),
             (policies.can_assign_work, ORG),
-            (policies.can_export_visits, ORG),
+            (policies.can_export_records, ORG),
         )
         for policy, resource in checks:
             for role in (Role.OWNER, Role.ADMIN, Role.SUPERVISOR):
@@ -345,14 +345,14 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
 
     def _registry(self) -> dict[str, object]:
         return {
-            "can_read_visit": visit(),
-            "can_write_visit": visit(),
-            "can_modify_visit": visit(),
+            "can_read_record": record(),
+            "can_write_record": record(),
+            "can_modify_record": record(),
             "can_read_members": ORG,
             "can_manage_device": device(),
             "can_publish_form_template": form_template(),
-            # Paso 17: el recurso es la organización, no una visita, porque
-            # `visit_id` es opcional en `PresignRequest` (ver el docstring de
+            # Paso 17: el recurso es la organización, no un registro, porque
+            # `record_id` es opcional en `PresignRequest` (ver el docstring de
             # la política). Queda igualmente sujeta a los dos invariantes de
             # H-16/RD-11 que comprueban los tests de esta clase.
             "can_upload_attachment": ORG,
@@ -363,9 +363,9 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_read_job_output": job(),
             # Paso 24 (back-office): supervisión revisa, asigna y exporta;
             # administración atiende los derechos del titular.
-            "can_review_visit": visit(),
+            "can_review_record": record(),
             "can_assign_work": ORG,
-            "can_export_visits": ORG,
+            "can_export_records": ORG,
             "can_manage_personal_data": ORG,
             # Ley 1581: cualquier miembro registra su propia autorización.
             "can_record_consent": ORG,

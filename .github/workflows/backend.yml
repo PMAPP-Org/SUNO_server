@@ -31,9 +31,10 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
-    # La suite completa tarda unos 18 minutos. Este límite evita que una
-    # prueba bloqueada consuma el runner durante horas y deje el gate abierto.
-    timeout-minutes: 35
+    # Con el módulo de equipos, la suite completa tarda entre 29 y más de 35 minutos.
+    # Este límite evita que una prueba bloqueada consuma el runner durante horas y
+    # deje el gate abierto.
+    timeout-minutes: 55
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
     # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
@@ -85,7 +86,7 @@ jobs:
       - name: Nombres (suno / registro)
         run: |
           python -m unittest infra/scripts/tests/test_check_naming.py
-          python infra/scripts/check_naming.py package
+          python infra/scripts/check_naming.py concept
 
       # Cobertura de ramas del código de producción con suelo `fail_under`
       # (server/pyproject.toml, [tool.coverage.report]): bajar de ahí falla.

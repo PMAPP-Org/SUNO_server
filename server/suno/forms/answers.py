@@ -1,4 +1,4 @@
-"""Validación de `visit.answers` contra la definición de **su propia** versión de plantilla.
+"""Validación de `record.answers` contra la definición de **su propia** versión de plantilla.
 
 Paso 20, tarea 3. **El servidor es la autoridad** (RD-03, ADR-012): el cliente
 valida en el dispositivo para dar UX inmediata, pero lo que decide si una
@@ -7,9 +7,9 @@ respuesta entra en la base de datos es esta función, ejecutada en el camino de
 
 **Retrocompatibilidad histórica** — la propiedad que ADR-012 pide y que este
 módulo hace cierta por construcción: se valida contra la definición de la
-`template_version_id` **que la propia visita referencia**, no contra "la última
+`template_version_id` **que el propio registro referencia**, no contra "la última
 versión de la plantilla". Publicar una versión nueva, por tanto, no puede
-invalidar una visita antigua ni obliga a migrar dato histórico alguno: son
+invalidar un registro antiguo ni obliga a migrar dato histórico alguno: son
 definiciones distintas, cada una viva en su fila inmutable. Esta función ni
 siquiera sabe si existe una versión más nueva, y no tiene por dónde enterarse.
 

@@ -18,7 +18,7 @@ from suno.core.tests.dbsupport import (
 from suno.matrix.locations import load_tree
 from suno.matrix.reports import filter_item_rows, item_rows, location_rows
 
-from .factories import budget_world, item, locate, plan, quantity_row, quantity_visit, suno_levels
+from .factories import budget_world, item, locate, plan, quantity_record, quantity_row, suno_levels
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -36,7 +36,7 @@ class ReportsTests(TestCase):
         self.concrete = item(self.budget, "2.1")  # 10 m3 a 450.000
         plan(self.world, 3, self.concrete, "4")
         plan(self.world, 5, self.concrete, "8")
-        self.world.approve(quantity_visit(self.world, 5, quantity_row(self.concrete, "2")))
+        self.world.approve(quantity_record(self.world, 5, quantity_row(self.concrete, "2")))
 
     def test_item_rows(self) -> None:
         rows = {row.code: row for row in item_rows(self.ctx, self.world.project)}
@@ -79,7 +79,7 @@ class ReportsTests(TestCase):
         planeado ni su ejecutado suman."""
         steel = item(self.budget, "2.2")
         plan(self.world, 3, steel, "0")
-        self.world.approve(quantity_visit(self.world, 3, quantity_row(steel, "100"), hours=1))
+        self.world.approve(quantity_record(self.world, 3, quantity_row(steel, "100"), hours=1))
         rows = {row.label: row for row in location_rows(self.ctx, self.world.project)}
         self.assertEqual(rows["Tramo 1"].executed_value, Decimal("0.00"))
         self.assertEqual(rows["Total"].planned_value, Decimal("5400000.00"))
@@ -101,7 +101,7 @@ class ReportsTests(TestCase):
 
     def test_item_pct_is_capped_at_100(self) -> None:
         self.world.approve(
-            quantity_visit(self.world, 5, quantity_row(self.concrete, "20"), hours=1)
+            quantity_record(self.world, 5, quantity_row(self.concrete, "20"), hours=1)
         )
         rows = {row.code: row for row in item_rows(self.ctx, self.world.project)}
         self.assertEqual(rows["2.1"].executed, Decimal("22"))

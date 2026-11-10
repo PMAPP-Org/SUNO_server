@@ -36,12 +36,12 @@ Los tres puntos donde el orden **no** es intercambiable:
    que aplica el cambio.** Ver `changeseq.py` para el argumento completo.
 
 **Autorización: resuelta antes del bucle, cero queries dentro** (RD-07 /
-H-07 / ADR-013). El bucle no llama a ninguna `can_*`: para `visit`, la
+H-07 / ADR-013). El bucle no llama a ninguna `can_*`: para `record`, la
 política depende solo del `org_id` del recurso, y el `org_id` de toda fila que
 este endpoint escribe es `ctx.org_id` por construcción (el contrato no admite
-`org_id` en `VisitPayload`; lo pone el servidor en `sql.build_insert`). Siendo
+`org_id` en `RecordPayload`; lo pone el servidor en `sql.build_insert`). Siendo
 el mismo predicado para las 500 operaciones, evaluarlo 500 veces sería ruido:
-se evalúa **una** vez, arriba, con `check_write_visit`. Si una entidad futura
+se evalúa **una** vez, arriba, con `check_write_record`. Si una entidad futura
 tuviera una política que dependiera de la fila, la llamada baja al bucle y
 sigue costando cero queries — que es la garantía que RD-07 pide y la que mide
 `tests/test_query_budget.py`.
@@ -76,16 +76,16 @@ from suno.core.models import (
     FormTemplateVersion,
     LocationNode,
     QuantityPlan,
+    Record,
+    RecordAttachment,
     SyncOpLog,
     Task,
-    Visit,
-    VisitAttachment,
 )
 from suno.core.policies import (
     CODE_FORBIDDEN,
     PolicyDenied,
-    can_modify_visit,
-    check_write_visit,
+    can_modify_record,
+    check_write_record,
 )
 from suno.core.scoping import scoped_qs
 from suno.forms.answers import validate_answers, violation_details
@@ -103,11 +103,11 @@ from suno.sync.payloads import (
     CODE_NOT_FOUND,
     CODE_VALIDATION_ERROR,
     AttachmentWrite,
+    RecordWrite,
     Rejection,
-    VisitWrite,
     parse_op,
 )
-from suno.sync.records import visit_attachment_record, visit_record
+from suno.sync.records import record_attachment_row, record_row
 from suno.sync.schemas import RawSyncOp
 
 __all__ = ["apply_push"]
@@ -128,8 +128,8 @@ class _OrgResource:
     """Recurso mínimo que una política necesita: a qué organización pertenece.
 
     Cumple el `Protocol` `OrgScopedResource` de `core/policies.py`. Existe para
-    poder preguntar "¿puede este actor escribir visitas *de esta organización*?"
-    sin fabricar una instancia de `Visit` a medio construir.
+    poder preguntar "¿puede este actor escribir registros *de esta organización*?"
+    sin fabricar una instancia de `Record` a medio construir.
 
     No es `frozen`: un `Protocol` con un atributo declarado (`org_id: UUID`)
     exige que sea asignable, y una dataclass congelada no lo es. Es una
@@ -141,8 +141,8 @@ class _OrgResource:
 
 
 @dataclass(slots=True)
-class _AuthoredVisit:
-    """Lo que `can_modify_visit` necesita de una visita existente, ya leído."""
+class _AuthoredRecord:
+    """Lo que `can_modify_record` necesita de un registro existente, ya leído."""
 
     org_id: uuid.UUID
     created_by_id: uuid.UUID
@@ -191,14 +191,14 @@ def _applied_result(op: RawSyncOp, entity_id: uuid.UUID, version: int) -> dict[s
     }
 
 
-def _conflict_result(op: RawSyncOp, row: Visit | VisitAttachment) -> dict[str, Any]:
+def _conflict_result(op: RawSyncOp, row: Record | RecordAttachment) -> dict[str, Any]:
     """Conflicto **con la fila autoritativa completa** adjunta (contrato).
 
     Sin `server_row` el cliente tendría que re-descargar el proyecto entero
     para reconciliar, que es exactamente el comportamiento de QFieldCloud que
     ADR-003 rechaza.
     """
-    record = visit_record(row) if isinstance(row, Visit) else visit_attachment_record(row)
+    record = record_row(row) if isinstance(row, Record) else record_attachment_row(row)
     return {
         "op_uuid": str(op.op_uuid),
         "entity": op.entity,
@@ -252,7 +252,7 @@ class _References:
     o 500 operaciones. No es una optimización, es corrección en dos frentes:
 
     - **RD-11**: las FK del esquema son globales, así que sin esta
-      comprobación una organización podría crear una visita apuntando a la
+      comprobación una organización podría crear un registro apuntando a la
       `form_template_version` de otra. `scoped_qs` hace que una referencia
       ajena sencillamente no exista.
     - **Nunca un 500**: una FK inexistente reventaría el `INSERT` con
@@ -263,7 +263,7 @@ class _References:
     (Paso 20): la misma query que comprueba que la versión de plantilla existe
     trae su definición, que es lo que hace falta para validar `answers`. Una
     segunda query para lo mismo sería el N+1 que este archivo evita.
-    `visit_template_versions` cubre el caso del `update` que cambia `answers`
+    `record_template_versions` cubre el caso del `update` que cambia `answers`
     **sin** repetir `template_version_id` en el payload: se resuelve de la fila
     existente, también en bloque.
     """
@@ -271,9 +271,9 @@ class _References:
     template_versions: dict[uuid.UUID, Any]
     assignments: set[uuid.UUID]
     devices: set[uuid.UUID]
-    visit_template_versions: dict[uuid.UUID, uuid.UUID]
+    record_template_versions: dict[uuid.UUID, uuid.UUID]
     tasks: dict[uuid.UUID, _TaskRef]
-    #: `visit_id → (task_id, progress_pct, quantities, version)` de las visitas validadas
+    #: `record_id → (task_id, progress_pct, quantities, version)` de los registros validados
     #: que el lote cambia de tarea, % o cantidades, o borra (ver `_validated_progress`).
     validated: dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]
     #: Costos, pieza 4: ítem → (proyecto de su presupuesto, si es un capítulo).
@@ -296,11 +296,11 @@ class _References:
                 return field
         return None
 
-    def task_rejection(self, parsed: VisitWrite) -> Rejection | None:
+    def task_rejection(self, parsed: RecordWrite) -> Rejection | None:
         """La tarea existe (lo comprobó `missing`); ¿se le puede reportar avance?
 
         Solo cuando se **pone** una tarea: desvincular (`null`) no exige ser
-        responsable, basta con poder modificar la visita (ya comprobado).
+        responsable, basta con poder modificar el registro (ya comprobado).
         """
         task_id = parsed.fields.get("task_id")
         if task_id is None:
@@ -329,13 +329,13 @@ class _References:
             )
         return None
 
-    def quantities_rejection(self, parsed: VisitWrite) -> Rejection | None:
+    def quantities_rejection(self, parsed: RecordWrite) -> Rejection | None:
         """Solo los errores estructurales: cada cantidad nombra un ítem que mide en un
         presupuesto del proyecto de la tarea, y una ubicación de ese proyecto.
         `payloads` ya garantizó que hay tarea si hay cantidades, y `missing` que la
         tarea existe.
 
-        Lo demás se acepta y se resalta en la revisión (`VisitAdmin.quantities_pretty`):
+        Lo demás se acepta y se resalta en la revisión (`RecordAdmin.quantities_pretty`):
         entre la captura sin conexión y la sincronización la oficina pudo quitar el ítem
         del plan o mover la tarea, y lo registrado nunca se pierde. La nota de un ítem
         no planeado o de un ajuste negativo la exige la app al capturar (pieza 4b)."""
@@ -376,8 +376,8 @@ class _References:
                     )
         return None
 
-    def validated_rejection(self, parsed: VisitWrite) -> Rejection | None:
-        """Una visita validada no cambia su tarea, su % ni sus cantidades sin una
+    def validated_rejection(self, parsed: RecordWrite) -> Rejection | None:
+        """Un registro validado no cambia su tarea, su % ni sus cantidades sin una
         nueva revisión, y no se borra.
 
         Una operación con `base_version` distinto al guardado no se rechaza aquí:
@@ -392,8 +392,8 @@ class _References:
         if parsed.op_type == "delete":
             return Rejection(
                 code=CODE_VALIDATION_ERROR,
-                message="The visit was validated: it cannot be deleted.",
-                details={"field": "id", "reason": "visit_validated"},
+                message="The record was validated: it cannot be deleted.",
+                details={"field": "id", "reason": "record_validated"},
                 entity_id=parsed.entity_id,
             )
         # `quantities` ya viene en la forma guardada (`payloads.stored_quantities`).
@@ -406,23 +406,23 @@ class _References:
                 return Rejection(
                     code=CODE_VALIDATION_ERROR,
                     message=(
-                        "The visit was validated: its task, progress and quantities cannot change."
+                        "The record was validated: its task, progress and quantities cannot change."
                     ),
-                    details={"field": field, "reason": "visit_validated"},
+                    details={"field": field, "reason": "record_validated"},
                     entity_id=parsed.entity_id,
                 )
         return None
 
 
 def _validated_progress(
-    ctx: RequestContext, writes: list[VisitWrite]
+    ctx: RequestContext, writes: list[RecordWrite]
 ) -> dict[uuid.UUID, tuple[uuid.UUID | None, Decimal | None, list[Any], int]]:
-    """Visitas validadas que el lote podría cambiar de tarea, % o cantidades, o borrar.
+    """Registros validados que el lote podría cambiar de tarea, % o cantidades, o borrar.
 
     Una query para todo el lote, y ninguna si ninguna operación lo intenta.
     Las filas se **bloquean** (`select_for_update`, dentro de la transacción del
     push): una revisión creada a la vez (el Admin usa `select_for_update` sobre
-    la visita al revisar) no puede colarse entre esta comprobación y el
+    el registro al revisar) no puede colarse entre esta comprobación y el
     `UPDATE`. Devuelve también `version` para que una operación obsoleta acabe
     en `conflict` y no en un rechazo.
     """
@@ -438,7 +438,7 @@ def _validated_progress(
     if not ids:
         return {}
     rows = (
-        approved(scoped_qs(ctx, Visit).filter(pk__in=ids))
+        approved(scoped_qs(ctx, Record).filter(pk__in=ids))
         .select_for_update()
         .values_list("pk", "task_id", "progress_pct", "quantities", "version")
     )
@@ -447,10 +447,10 @@ def _validated_progress(
     }
 
 
-def _visit_template_versions(
-    ctx: RequestContext, writes: list[VisitWrite]
+def _record_template_versions(
+    ctx: RequestContext, writes: list[RecordWrite]
 ) -> dict[uuid.UUID, uuid.UUID]:
-    """`visit_id → template_version_id` de los `update` que reescriben `answers`.
+    """`record_id → template_version_id` de los `update` que reescriben `answers`.
 
     Solo para las operaciones que cambian `answers` sin decir contra qué
     plantilla: sin este dato no habría con qué validarlas, y dejarlas pasar
@@ -469,11 +469,11 @@ def _visit_template_versions(
     }
     if not ids:
         return {}
-    rows = scoped_qs(ctx, Visit).filter(pk__in=ids).values_list("pk", "template_version_id")
+    rows = scoped_qs(ctx, Record).filter(pk__in=ids).values_list("pk", "template_version_id")
     return dict(rows)
 
 
-def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID, _TaskRef]:
+def _task_refs(ctx: RequestContext, writes: list[RecordWrite]) -> dict[uuid.UUID, _TaskRef]:
     """Tareas que el lote vincula: dos queries para todo el lote, cero si ninguna."""
     ids = {w.fields["task_id"] for w in writes if w.fields.get("task_id") is not None}
     if not ids:
@@ -498,7 +498,7 @@ def _task_refs(ctx: RequestContext, writes: list[VisitWrite]) -> dict[uuid.UUID,
 
 
 def _quantity_refs(
-    ctx: RequestContext, writes: list[VisitWrite]
+    ctx: RequestContext, writes: list[RecordWrite]
 ) -> tuple[
     dict[uuid.UUID, tuple[uuid.UUID, bool]],
     dict[uuid.UUID, uuid.UUID],
@@ -546,7 +546,7 @@ def _quantity_refs(
     return items, nodes, planned
 
 
-def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _References:
+def _resolve_references(ctx: RequestContext, writes: list[RecordWrite]) -> _References:
     wanted: dict[str, set[uuid.UUID]] = {
         "template_version_id": set(),
         "assignment_id": set(),
@@ -558,9 +558,9 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
             if value is not None:
                 bucket.add(value)
 
-    visit_template_versions = _visit_template_versions(ctx, writes)
+    record_template_versions = _record_template_versions(ctx, writes)
     definitions: dict[uuid.UUID, Any] = {}
-    known = wanted["template_version_id"] | set(visit_template_versions.values())
+    known = wanted["template_version_id"] | set(record_template_versions.values())
     if known:
         definitions = dict(
             scoped_qs(ctx, FormTemplateVersion).filter(pk__in=known).values_list("pk", "definition")
@@ -571,7 +571,7 @@ def _resolve_references(ctx: RequestContext, writes: list[VisitWrite]) -> _Refer
         template_versions=definitions,
         assignments=_existing_ids(ctx, Assignment, wanted["assignment_id"]),
         devices=_existing_ids(ctx, Device, wanted["device_id"]),
-        visit_template_versions=visit_template_versions,
+        record_template_versions=record_template_versions,
         tasks=_task_refs(ctx, writes),
         validated=_validated_progress(ctx, writes),
         items=items,
@@ -601,13 +601,13 @@ class _AnswersGate:
     puerta la deja pasar.
 
     Compila cada definición **una vez por lote** y la cachea: un lote de 500
-    visitas de la misma plantilla compila una plantilla, no quinientas. Cero
+    registros de la misma plantilla compila una plantilla, no quinientas. Cero
     queries — las definiciones llegan ya resueltas en `_References`, como el
     resto de referencias (RD-07).
 
     **Retrocompatibilidad histórica**: se valida contra la definición de la
     versión que la operación referencia, nunca contra "la última". Publicar una
-    versión nueva no puede por tanto invalidar una visita antigua ni obliga a
+    versión nueva no puede por tanto invalidar un registro antiguo ni obliga a
     migrar nada (ADR-012, estrategia de rollback del Paso 20).
     """
 
@@ -641,7 +641,7 @@ class _AnswersGate:
             self._compiled[template_version_id] = compiled
         return self._compiled[template_version_id]
 
-    def check(self, parsed: VisitWrite, references: _References) -> Rejection | None:
+    def check(self, parsed: RecordWrite, references: _References) -> Rejection | None:
         """`None` si `answers` es aceptable; el `Rejection` del contrato si no."""
         if "answers" not in parsed.fields:
             return None
@@ -650,7 +650,7 @@ class _AnswersGate:
             # `update` que reescribe `answers` sin repetir la plantilla: es la
             # de la fila existente. Si la fila no existe, no hay nada que
             # validar y el CAS contestará `not_found` unas líneas más abajo.
-            template_version_id = references.visit_template_versions.get(parsed.entity_id)
+            template_version_id = references.record_template_versions.get(parsed.entity_id)
         if template_version_id is None:
             return None
 
@@ -736,7 +736,7 @@ def apply_push(
         raise DeviceMismatch
     # Autorización: una vez, antes del bucle (ADR-013, RD-07). Cero queries:
     # los roles ya vienen resueltos en el contexto.
-    check_write_visit(ctx, _OrgResource(ctx.org_id))
+    check_write_record(ctx, _OrgResource(ctx.org_id))
 
     with transaction.atomic():
         acquire_org_lock(ctx.org_id)
@@ -744,7 +744,7 @@ def apply_push(
         saved = _saved_results(ctx, [op.op_uuid for op in ops])
 
         # Paso puro: validar todo lo que no venga ya resuelto del log.
-        parsed: dict[str, VisitWrite | AttachmentWrite | Rejection] = {}
+        parsed: dict[str, RecordWrite | AttachmentWrite | Rejection] = {}
         for op in ops:
             key = str(op.op_uuid)
             if key in saved or key in parsed:
@@ -752,21 +752,21 @@ def apply_push(
             parsed[key] = parse_op(op.entity, op.op_type, op.base_version, op.payload)
 
         references = _resolve_references(
-            ctx, [item for item in parsed.values() if isinstance(item, VisitWrite)]
+            ctx, [item for item in parsed.values() if isinstance(item, RecordWrite)]
         )
         answers_gate = _AnswersGate(references.template_versions)
-        # Visitas vivas a las que apuntan los adjuntos del lote: una query, y
-        # ninguna si el lote no trae adjuntos. Las que se crean dentro de este
-        # mismo lote se añaden en el bucle (el cliente envía la visita antes
+        # Registros vivos a los que apuntan los adjuntos del lote: una query, y
+        # ninguna si el lote no trae adjuntos. Los que se crean dentro de este
+        # mismo lote se añaden en el bucle (el cliente envía el registro antes
         # que sus adjuntos).
-        live_visits = _live_visit_ids(
+        live_records = _live_record_ids(
             ctx, [item for item in parsed.values() if isinstance(item, AttachmentWrite)]
         )
-        # Autores de las visitas que el lote edita o borra: una query, y
-        # ninguna si el lote solo trae altas. Una visita creada en este mismo
-        # lote la añade el bucle (su autor es quien la envía).
+        # Autores de los registros que el lote edita o borra: una query, y
+        # ninguna si el lote solo trae altas. Un registro creado en este mismo
+        # lote lo añade el bucle (su autor es quien lo envía).
         authors = _authors_of_modifications(
-            ctx, [item for item in parsed.values() if isinstance(item, VisitWrite)]
+            ctx, [item for item in parsed.values() if isinstance(item, RecordWrite)]
         )
         allocator = ChangeSeqAllocator.for_org(ctx)
         now = timezone.now()
@@ -788,20 +788,20 @@ def apply_push(
                     parsed=parsed[key],
                     references=references,
                     answers_gate=answers_gate,
-                    live_visits=live_visits,
+                    live_records=live_records,
                     authors=authors,
                     allocator=allocator,
                     now=now,
                 )
                 results.append(outcome)
                 if (
-                    op.entity == "visit"
+                    op.entity == "record"
                     and op.op_type == "create"
                     and outcome["status"] == STATUS_APPLIED
                 ):
                     authors[uuid.UUID(outcome["entity_id"])] = ctx.user_id
                 saved[key] = outcome  # un `op_uuid` repetido en el mismo lote
-                _track_visit(live_visits, op, outcome)
+                _track_record(live_records, op, outcome)
 
                 entity_id = outcome["entity_id"]
                 if entity_id is not None:
@@ -835,36 +835,36 @@ def apply_push(
 
 
 def _authors_of_modifications(
-    ctx: RequestContext, writes: list[VisitWrite]
+    ctx: RequestContext, writes: list[RecordWrite]
 ) -> dict[uuid.UUID, uuid.UUID]:
-    """`visit_id → created_by_id` de las visitas que el lote edita o borra."""
+    """`record_id → created_by_id` de los registros que el lote edita o borra."""
     ids = {write.entity_id for write in writes if write.op_type != "create"}
     if not ids:
         return {}
-    return dict(scoped_qs(ctx, Visit).filter(pk__in=ids).values_list("pk", "created_by_id"))
+    return dict(scoped_qs(ctx, Record).filter(pk__in=ids).values_list("pk", "created_by_id"))
 
 
-def _live_visit_ids(ctx: RequestContext, writes: list[AttachmentWrite]) -> set[uuid.UUID]:
-    """Visitas **vivas de esta organización** a las que apuntan los adjuntos."""
-    ids = {write.fields["visit_id"] for write in writes}
+def _live_record_ids(ctx: RequestContext, writes: list[AttachmentWrite]) -> set[uuid.UUID]:
+    """Registros **vivos de esta organización** a los que apuntan los adjuntos."""
+    ids = {write.fields["record_id"] for write in writes}
     if not ids:
         return set()
     return set(
-        scoped_qs(ctx, Visit)
+        scoped_qs(ctx, Record)
         .filter(pk__in=ids, deleted_at__isnull=True)
         .values_list("pk", flat=True)
     )
 
 
-def _track_visit(live_visits: set[uuid.UUID], op: RawSyncOp, outcome: dict[str, Any]) -> None:
-    """Mantiene `live_visits` al día con lo que el propio lote acaba de aplicar."""
-    if op.entity != "visit" or outcome["status"] != STATUS_APPLIED:
+def _track_record(live_records: set[uuid.UUID], op: RawSyncOp, outcome: dict[str, Any]) -> None:
+    """Mantiene `live_records` al día con lo que el propio lote acaba de aplicar."""
+    if op.entity != "record" or outcome["status"] != STATUS_APPLIED:
         return
-    visit_id = uuid.UUID(outcome["entity_id"])
+    record_id = uuid.UUID(outcome["entity_id"])
     if op.op_type == "create":
-        live_visits.add(visit_id)
+        live_records.add(record_id)
     elif op.op_type == "delete":
-        live_visits.discard(visit_id)
+        live_records.discard(record_id)
 
 
 def _process_attachment(
@@ -873,23 +873,23 @@ def _process_attachment(
     cursor: Any,
     op: RawSyncOp,
     parsed: AttachmentWrite,
-    live_visits: set[uuid.UUID],
+    live_records: set[uuid.UUID],
     allocator: ChangeSeqAllocator,
 ) -> dict[str, Any]:
-    """Alta de `visit_attachment` (Paso 22). Misma forma que la de `visit`.
+    """Alta de `record_attachment` (Paso 22). Misma forma que la de `record`.
 
-    La visita tiene que existir y estar viva **en esta organización**, o
+    El registro tiene que existir y estar vivo **en esta organización**, o
     haberse creado antes en este mismo lote. Si no, `rejected` con
     `not_found`: dejarlo al `INSERT` sería un `IntegrityError` de la FK
     compuesta, que dentro de la transacción tumbaría el lote entero.
     """
-    if parsed.fields["visit_id"] not in live_visits:
+    if parsed.fields["record_id"] not in live_records:
         return _rejected_result(
             op,
             Rejection(
                 code=CODE_NOT_FOUND,
-                message="Referenced visit_id does not exist in this organization.",
-                details={"field": "visit_id", "reason": "unknown_reference"},
+                message="Referenced record_id does not exist in this organization.",
+                details={"field": "record_id", "reason": "unknown_reference"},
                 entity_id=parsed.entity_id,
             ),
         )
@@ -904,9 +904,9 @@ def _process_attachment(
     if applied is not None:
         return _applied_result(op, parsed.entity_id, version=applied[0])
 
-    server_row = scoped_qs(ctx, VisitAttachment).filter(pk=parsed.entity_id).first()
+    server_row = scoped_qs(ctx, RecordAttachment).filter(pk=parsed.entity_id).first()
     if server_row is None:
-        # El `id` pertenece a otra organización: mismo trato que en `visit`
+        # El `id` pertenece a otra organización: mismo trato que en `record`
         # (RD-11, sin oráculo de existencia).
         return _rejected_result(
             op,
@@ -925,10 +925,10 @@ def _process(
     *,
     cursor: Any,
     op: RawSyncOp,
-    parsed: VisitWrite | AttachmentWrite | Rejection,
+    parsed: RecordWrite | AttachmentWrite | Rejection,
     references: _References,
     answers_gate: _AnswersGate,
-    live_visits: set[uuid.UUID],
+    live_records: set[uuid.UUID],
     authors: dict[uuid.UUID, uuid.UUID],
     allocator: ChangeSeqAllocator,
     now: datetime,
@@ -938,19 +938,19 @@ def _process(
         return _rejected_result(op, parsed)
     if isinstance(parsed, AttachmentWrite):
         return _process_attachment(
-            ctx, cursor=cursor, op=op, parsed=parsed, live_visits=live_visits, allocator=allocator
+            ctx, cursor=cursor, op=op, parsed=parsed, live_records=live_records, allocator=allocator
         )
 
-    # Editar o borrar una visita ajena: solo supervisión (`can_modify_visit`).
-    # El autor ya se leyó en lote, así que esto no cuesta queries. Una visita
+    # Editar o borrar un registro ajeno: solo supervisión (`can_modify_record`).
+    # El autor ya se leyó en lote, así que esto no cuesta queries. Un registro
     # que no existe sigue su camino y acaba en `not_found` por el CAS.
     author = authors.get(parsed.entity_id) if parsed.op_type != "create" else None
-    if author is not None and not can_modify_visit(ctx, _AuthoredVisit(ctx.org_id, author)):
+    if author is not None and not can_modify_record(ctx, _AuthoredRecord(ctx.org_id, author)):
         return _rejected_result(
             op,
             Rejection(
                 code=CODE_FORBIDDEN,
-                message="Only the visit's author or a supervisor can modify it.",
+                message="Only the record's author or a supervisor can modify it.",
                 details={"field": "created_by", "reason": "not_author"},
                 entity_id=parsed.entity_id,
             ),
@@ -1000,7 +1000,7 @@ def _process(
     if parsed.op_type == "create":
         statement = sql.build_insert(
             org_id=ctx.org_id,
-            visit_id=parsed.entity_id,
+            record_id=parsed.entity_id,
             change_seq=change_seq,
             created_by=ctx.user_id,
             fields=parsed.fields,
@@ -1023,7 +1023,7 @@ def _process(
     else:
         statement = sql.build_update(
             org_id=ctx.org_id,
-            visit_id=parsed.entity_id,
+            record_id=parsed.entity_id,
             base_version=parsed.base_version,
             change_seq=change_seq,
             fields=parsed.fields,
@@ -1034,10 +1034,10 @@ def _process(
     if applied is not None:
         return _applied_result(op, parsed.entity_id, version=applied[0])
 
-    server_row = scoped_qs(ctx, Visit).filter(pk=parsed.entity_id).first()
+    server_row = scoped_qs(ctx, Record).filter(pk=parsed.entity_id).first()
     if server_row is None:
         # El CAS falló y la fila no existe **en esta organización**. O el
-        # `update` apunta a una visita que nunca existió, o el `create` chocó
+        # `update` apunta a un registro que nunca existió, o el `create` chocó
         # con un `id` que pertenece a otra organización. Los dos casos se
         # contestan igual y sin distinguirlos (RD-11: confirmar la existencia
         # de una fila ajena sería el oráculo de enumeración de H-16), y como

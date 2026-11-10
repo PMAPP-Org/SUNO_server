@@ -20,7 +20,7 @@ class Organization(models.Model):
 
     No hereda de `OrgScopedModel`: es la propia raíz del scoping, no una
     tabla scopeada. Es la única tabla de negocio sin `org_id` junto con
-    `Blob` (ver la nota de RD-08 en `visit.py`).
+    `Blob` (ver la nota de RD-08 en `record.py`).
     """
 
     # Generado en el servidor: una organización no nace en un dispositivo.

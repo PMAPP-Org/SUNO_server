@@ -6,13 +6,13 @@ El archivo tiene **dos mitades deliberadamente separadas**:
    Verifican por `Model._meta` y por el grafo de migraciones los criterios de
    aceptación que son estructurales — `org_id NOT NULL` en toda tabla de
    negocio (ADR-011), `Blob` sin ningún campo mutable (RD-08), campos de
-   `visit` según doc 08 §4.4, y reversibilidad de toda operación de migración
+   `record` según doc 08 §4.4, y reversibilidad de toda operación de migración
    (patrón C-18). Corren **siempre**, también en CI.
 
 2. **Tests de integración contra PostgreSQL** (`TestCase`): comprueban lo que
-   solo la BD puede garantizar — que una `Visit` válida persiste, que un
+   solo la BD puede garantizar — que una `Record` válida persiste, que un
    `lat`/`lon` fuera de rango lo rechaza el `CHECK` (ADR-005) y que un
-   `VisitAttachment` cruzado entre organizaciones lo rechaza la FK compuesta
+   `RecordAttachment` cruzado entre organizaciones lo rechaza la FK compuesta
    de la migración `0002` (tarea 12 del brief). Estos **necesitan una
    PostgreSQL alcanzable**.
 
@@ -79,9 +79,9 @@ from suno.core.models import (
     MimeType,
     Organization,
     Platform,
+    Record,
+    RecordAttachment,
     Role,
-    Visit,
-    VisitAttachment,
 )
 
 # --- Detección de PostgreSQL ------------------------------------------------
@@ -207,7 +207,7 @@ class OrgIsolationSchemaTests(SimpleTestCase):
     # Excepciones documentadas, ambas justificadas en el código:
     #   - `Organization` es la raíz del scoping (no se scopea a sí misma).
     #   - `Blob` es contenido direccionado por hash, deduplicado a propósito
-    #     entre organizaciones (docstring de `models/visit.py`).
+    #     entre organizaciones (docstring de `models/record.py`).
     #   - `RateLimitBucket` cuenta peticiones de login y refresh **antes** de
     #     saber a qué organización pertenece nadie; solo guarda un HMAC de la
     #     identidad, nunca datos de negocio (docstring de `models/ops.py`).
@@ -252,9 +252,9 @@ class Doc08TableInventoryTests(SimpleTestCase):
         "form_template",
         "form_template_version",
         "assignment",
-        "visit",
+        "record",
         "blob",
-        "visit_attachment",
+        "record_attachment",
         "sync_op_log",
         "job",
         "audit_event",
@@ -267,11 +267,11 @@ class Doc08TableInventoryTests(SimpleTestCase):
         self.assertEqual(tables & self.EXPECTED_TABLES, self.EXPECTED_TABLES)
 
 
-class VisitSchemaTests(SimpleTestCase):
-    """`visit` con **exactamente** los campos de doc 08 §4.4 (tarea 4 del brief)."""
+class RecordSchemaTests(SimpleTestCase):
+    """`record` con **exactamente** los campos de doc 08 §4.4 (tarea 4 del brief)."""
 
     def test_has_every_documented_column(self) -> None:
-        columns = {f.column for f in Visit._meta.fields}
+        columns = {f.column for f in Record._meta.fields}
         expected = {
             "id",
             "org_id",
@@ -300,26 +300,26 @@ class VisitSchemaTests(SimpleTestCase):
         """ADR-003: el UUID lo genera el cliente; el servidor nunca lo inventa."""
         from django.db.models.fields import NOT_PROVIDED
 
-        self.assertIs(Visit._meta.pk.default, NOT_PROVIDED)
+        self.assertIs(Record._meta.pk.default, NOT_PROVIDED)
 
     def test_declares_lat_lon_check_constraints(self) -> None:
-        names = {c.name for c in Visit._meta.constraints}
-        self.assertIn("visit_lat_range", names)
-        self.assertIn("visit_lon_range", names)
+        names = {c.name for c in Record._meta.constraints}
+        self.assertIn("record_lat_range", names)
+        self.assertIn("record_lon_range", names)
 
     def test_declares_bounding_box_index(self) -> None:
         """ADR-005: índice B-tree compuesto `(org_id, lat, lon)`."""
-        by_name = {i.name: i.fields for i in Visit._meta.indexes}
-        self.assertEqual(by_name.get("visit_org_lat_lon_idx"), ["org", "lat", "lon"])
+        by_name = {i.name: i.fields for i in Record._meta.indexes}
+        self.assertEqual(by_name.get("record_org_lat_lon_idx"), ["org", "lat", "lon"])
 
     def test_declares_composite_unique_for_org_isolation_fk(self) -> None:
         """Destino obligatorio de la FK compuesta de la migración 0002."""
-        names = {c.name for c in Visit._meta.constraints}
-        self.assertIn("visit_id_org_uq", names)
+        names = {c.name for c in Record._meta.constraints}
+        self.assertIn("record_id_org_uq", names)
 
 
-class VisitFloatFinitenessTests(SimpleTestCase):
-    """Ningún `float` de `visit` puede almacenar `NaN` ni `±Infinity` (C-2).
+class RecordFloatFinitenessTests(SimpleTestCase):
+    """Ningún `float` de `record` puede almacenar `NaN` ni `±Infinity` (C-2).
 
     Sin base de datos: se comprueba el **texto** del `CHECK` que Django genera,
     igual que `sync/tests/test_sql.py` hace con las sentencias del push. Es lo
@@ -328,7 +328,7 @@ class VisitFloatFinitenessTests(SimpleTestCase):
     aquí y no en la primera migración de CI.
 
     El equivalente que sí ejercita a PostgreSQL —`IntegrityError` al insertar—
-    está en `VisitPersistenceTests`, y como el resto de esa clase requiere BD.
+    está en `RecordPersistenceTests`, y como el resto de esa clase requiere BD.
     """
 
     #: `NaN` no aparece en el SQL a propósito: en PostgreSQL se ordena como
@@ -337,15 +337,15 @@ class VisitFloatFinitenessTests(SimpleTestCase):
     FINITE_BOUNDS = ("> '-Infinity'::float8", "< 'Infinity'::float8")
 
     def _check_sql(self, constraint_name: str) -> str:
-        constraint = next(c for c in Visit._meta.constraints if c.name == constraint_name)
+        constraint = next(c for c in Record._meta.constraints if c.name == constraint_name)
         # `collect_sql=True` + `atomic=False`: genera DDL sin abrir conexión.
         with connection.schema_editor(collect_sql=True, atomic=False) as editor:
-            return str(constraint.create_sql(Visit, editor))
+            return str(constraint.create_sql(Record, editor))
 
     def test_altitude_and_accuracy_declare_a_finiteness_check(self) -> None:
         for name, column in (
-            ("visit_altitude_finite", "altitude_m"),
-            ("visit_accuracy_finite_non_negative", "accuracy_m"),
+            ("record_altitude_finite", "altitude_m"),
+            ("record_accuracy_finite_non_negative", "accuracy_m"),
         ):
             with self.subTest(constraint=name):
                 sql = self._check_sql(name)
@@ -355,7 +355,7 @@ class VisitFloatFinitenessTests(SimpleTestCase):
 
     def test_accuracy_keeps_its_non_negative_guard(self) -> None:
         """La finitud se **suma** al `>= 0` de la migración 0001, no lo sustituye."""
-        self.assertIn('"accuracy_m" >= 0', self._check_sql("visit_accuracy_finite_non_negative"))
+        self.assertIn('"accuracy_m" >= 0', self._check_sql("record_accuracy_finite_non_negative"))
 
     def test_latitude_and_longitude_are_covered_by_their_range(self) -> None:
         """Por qué `lat`/`lon` no llevan `finite_q` y no es un olvido.
@@ -364,13 +364,13 @@ class VisitFloatFinitenessTests(SimpleTestCase):
         `false` (NaN se ordena por encima de todo), `Infinity <= 90` también, y
         `-Infinity >= -90` igual. Añadirles `finite_q` sería redundante.
         """
-        for name, column in (("visit_lat_range", "lat"), ("visit_lon_range", "lon")):
+        for name, column in (("record_lat_range", "lat"), ("record_lon_range", "lon")):
             with self.subTest(constraint=name):
                 sql = self._check_sql(name)
                 self.assertIn(f'"{column}" >=', sql)
                 self.assertIn(f'"{column}" <=', sql)
 
-    def test_every_nullable_float_column_of_visit_has_a_finiteness_guard(self) -> None:
+    def test_every_nullable_float_column_of_record_has_a_finiteness_guard(self) -> None:
         """La red que impide que un `float` futuro se quede sin guarda.
 
         Un campo `FloatField` nuevo sin `CHECK` que lo acote reproduce
@@ -378,11 +378,11 @@ class VisitFloatFinitenessTests(SimpleTestCase):
         `jsonb` imposible de escribir. Este test obliga a pasar por aquí.
         """
         float_columns = {
-            field.column for field in Visit._meta.fields if isinstance(field, models.FloatField)
+            field.column for field in Record._meta.fields if isinstance(field, models.FloatField)
         }
         self.assertEqual(float_columns, {"lat", "lon", "accuracy_m", "altitude_m"})
 
-        guarded = " ".join(self._check_sql(c.name) for c in Visit._meta.constraints)
+        guarded = " ".join(self._check_sql(c.name) for c in Record._meta.constraints)
         for column in float_columns:
             with self.subTest(column=column):
                 self.assertIn(f'"{column}"', guarded)
@@ -426,8 +426,8 @@ class MigrationReversibilityTests(SimpleTestCase):
 
 
 @unittest.skipUnless(_SKIP_REASON is None, _SKIP_REASON or "")
-class VisitPersistenceTests(TestCase):
-    """Alta de `Organization`/`AppUser`/`Membership`/`Device` + `Visit` válida."""
+class RecordPersistenceTests(TestCase):
+    """Alta de `Organization`/`AppUser`/`Membership`/`Device` + `Record` válida."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -450,7 +450,7 @@ class VisitPersistenceTests(TestCase):
             platform=Platform.ANDROID,
             app_version="1.0.0",
         )
-        cls.template = FormTemplate.objects.create(org=cls.org, name="Visita estándar")
+        cls.template = FormTemplate.objects.create(org=cls.org, name="Registro estándar")
         cls.template_version = FormTemplateVersion.objects.create(
             org=cls.org,
             template=cls.template,
@@ -458,7 +458,7 @@ class VisitPersistenceTests(TestCase):
             change_seq=1,
         )
 
-    def _visit_kwargs(self, **overrides: object) -> dict[str, object]:
+    def _record_kwargs(self, **overrides: object) -> dict[str, object]:
         kwargs: dict[str, object] = {
             "id": uuid.uuid4(),
             "org": self.org,
@@ -481,39 +481,39 @@ class VisitPersistenceTests(TestCase):
         self.assertEqual(Membership.objects.get(pk=self.membership.pk).role, Role.FIELD_AGENT)
         self.assertEqual(Device.objects.get(pk=self.device.pk).org_id, self.org.pk)
 
-    def test_valid_visit_persists(self) -> None:
-        visit = Visit.objects.create(**self._visit_kwargs())
-        stored = Visit.objects.get(pk=visit.pk)
+    def test_valid_record_persists(self) -> None:
+        record = Record.objects.create(**self._record_kwargs())
+        stored = Record.objects.get(pk=record.pk)
         self.assertEqual(stored.org_id, self.org.pk)
         self.assertEqual(stored.version, 1)
         self.assertEqual(stored.change_seq, 10)
         self.assertIsNone(stored.deleted_at)
         self.assertEqual(stored.answers, {"pregunta_1": "sí"})
 
-    def test_visit_without_location_persists(self) -> None:
+    def test_record_without_location_persists(self) -> None:
         """La ubicación es opcional: el `CHECK` es `IS NULL OR (rango)`."""
-        visit = Visit.objects.create(**self._visit_kwargs(lat=None, lon=None, accuracy_m=None))
-        self.assertIsNone(Visit.objects.get(pk=visit.pk).lat)
+        record = Record.objects.create(**self._record_kwargs(lat=None, lon=None, accuracy_m=None))
+        self.assertIsNone(Record.objects.get(pk=record.pk).lat)
 
     def test_boundary_coordinates_are_accepted(self) -> None:
-        visit = Visit.objects.create(**self._visit_kwargs(lat=LAT_MAX, lon=LON_MIN))
-        self.assertEqual(Visit.objects.get(pk=visit.pk).lat, LAT_MAX)
+        record = Record.objects.create(**self._record_kwargs(lat=LAT_MAX, lon=LON_MIN))
+        self.assertEqual(Record.objects.get(pk=record.pk).lat, LAT_MAX)
 
     def test_latitude_out_of_range_is_rejected_by_check(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Visit.objects.create(**self._visit_kwargs(lat=LAT_MAX + 1))
+            Record.objects.create(**self._record_kwargs(lat=LAT_MAX + 1))
 
     def test_negative_latitude_out_of_range_is_rejected_by_check(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Visit.objects.create(**self._visit_kwargs(lat=LAT_MIN - 1))
+            Record.objects.create(**self._record_kwargs(lat=LAT_MIN - 1))
 
     def test_longitude_out_of_range_is_rejected_by_check(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Visit.objects.create(**self._visit_kwargs(lon=LON_MAX + 1))
+            Record.objects.create(**self._record_kwargs(lon=LON_MAX + 1))
 
     def test_negative_accuracy_is_rejected_by_check(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Visit.objects.create(**self._visit_kwargs(accuracy_m=-1))
+            Record.objects.create(**self._record_kwargs(accuracy_m=-1))
 
     def test_non_finite_floats_are_rejected_by_check(self) -> None:
         """C-2: `NaN`/`±Infinity` son legales en `double precision`; aquí no.
@@ -530,14 +530,14 @@ class VisitPersistenceTests(TestCase):
             ):
                 with self.subTest(field=field, value=label):
                     with self.assertRaises(IntegrityError), transaction.atomic():
-                        Visit.objects.create(**self._visit_kwargs(**{field: value}))
+                        Record.objects.create(**self._record_kwargs(**{field: value}))
 
     def test_a_finite_altitude_still_persists(self) -> None:
         """Incluidas las que un rango de altitud arbitrario habría descartado."""
         for altitude in (-430.0, 0.0, 2625.0, 11_000.0):
             with self.subTest(altitude=altitude):
-                visit = Visit.objects.create(**self._visit_kwargs(altitude_m=altitude))
-                self.assertEqual(Visit.objects.get(pk=visit.pk).altitude_m, altitude)
+                record = Record.objects.create(**self._record_kwargs(altitude_m=altitude))
+                self.assertEqual(Record.objects.get(pk=record.pk).altitude_m, altitude)
 
 
 @unittest.skipUnless(_SKIP_REASON is None, _SKIP_REASON or "")
@@ -568,7 +568,7 @@ class CrossOrgAttachmentTests(TestCase):
             version_number=1,
             change_seq=1,
         )
-        cls.visit_a = Visit.objects.create(
+        cls.record_a = Record.objects.create(
             id=uuid.uuid4(),
             org=cls.org_a,
             change_seq=2,
@@ -589,7 +589,7 @@ class CrossOrgAttachmentTests(TestCase):
             "id": uuid.uuid4(),
             "org": self.org_a,
             "change_seq": 3,
-            "visit": self.visit_a,
+            "record": self.record_a,
             "blob": self.blob,
             "role": AttachmentRole.FOTO,
             "captured_at": timezone.now(),
@@ -610,13 +610,13 @@ class CrossOrgAttachmentTests(TestCase):
             cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
 
     def test_same_org_attachment_is_accepted(self) -> None:
-        attachment = VisitAttachment.objects.create(**self._attachment_kwargs())
+        attachment = RecordAttachment.objects.create(**self._attachment_kwargs())
         self._force_deferred_constraint_check()
-        self.assertEqual(VisitAttachment.objects.get(pk=attachment.pk).org_id, self.org_a.pk)
+        self.assertEqual(RecordAttachment.objects.get(pk=attachment.pk).org_id, self.org_a.pk)
 
     def test_cross_org_attachment_is_rejected_by_composite_fk(self) -> None:
         with self.assertRaises(IntegrityError), transaction.atomic():
-            VisitAttachment.objects.create(**self._attachment_kwargs(org=self.org_b))
+            RecordAttachment.objects.create(**self._attachment_kwargs(org=self.org_b))
             self._force_deferred_constraint_check()
 
     def test_the_composite_fk_actually_exists_in_the_database(self) -> None:
@@ -626,9 +626,9 @@ class CrossOrgAttachmentTests(TestCase):
                 """
                 SELECT conname
                 FROM pg_constraint
-                WHERE conrelid = 'visit_attachment'::regclass
+                WHERE conrelid = 'record_attachment'::regclass
                   AND contype = 'f'
-                  AND conname = 'visit_attachment_visit_org_fk'
+                  AND conname = 'record_attachment_record_org_fk'
                 """
             )
             self.assertIsNotNone(cursor.fetchone())

@@ -24,7 +24,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from suno.core.models import INITIAL_VERSION, Role, SyncOpLog, Visit
+from suno.core.models import INITIAL_VERSION, Record, Role, SyncOpLog
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -38,8 +38,8 @@ from .factories import (
     create_op,
     delete_op,
     push,
+    record_of,
     update_op,
-    visit_of,
 )
 
 setUpModule = setup_test_database
@@ -48,26 +48,26 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 
-#: `INSERT INTO "visit"` / `UPDATE "visit"`: la tabla en posición de tabla,
+#: `INSERT INTO "record"` / `UPDATE "record"`: la tabla en posición de tabla,
 #: no en cualquier otra parte de la sentencia.
-_VISIT_TABLE_WRITE = re.compile(r'(?:INSERT INTO|UPDATE)\s+"visit"\b')
+_RECORD_TABLE_WRITE = re.compile(r'(?:INSERT INTO|UPDATE)\s+"record"\b')
 
 
-def visit_writes(captured: CaptureQueriesContext) -> list[str]:
-    """Sentencias que **escriben** en la tabla `visit`. El "contador de escrituras" del brief.
+def record_writes(captured: CaptureQueriesContext) -> list[str]:
+    """Sentencias que **escriben** en la tabla `record`. El "contador de escrituras" del brief.
 
-    Ancla la búsqueda a `INSERT INTO "visit"`/`UPDATE "visit"` (la tabla,
+    Ancla la búsqueda a `INSERT INTO "record"`/`UPDATE "record"` (la tabla,
     entrecomillada por Postgres, justo tras el verbo) y no a la subcadena
-    `visit` en cualquier parte: un `INSERT INTO "sync_op_log"` para una
+    `record` en cualquier parte: un `INSERT INTO "sync_op_log"` para una
     operación rechazada guarda `result` como `jsonb`, y ese JSON serializado
-    contiene literalmente `"entity": "visit"` — la subcadena `"visit"`
+    contiene literalmente `"entity": "record"` — la subcadena `"record"`
     (incluso ya entrecomillada) aparece ahí como **dato**, no como nombre de
     tabla, y un helper menos anclado la contaría por error.
     """
     return [
         query["sql"]
         for query in captured.captured_queries
-        if _VISIT_TABLE_WRITE.search(query["sql"])
+        if _RECORD_TABLE_WRITE.search(query["sql"])
     ]
 
 
@@ -79,8 +79,8 @@ class AppliedTests(TestCase):
         self.scenario = build_scenario()
 
     def test_a_new_create_is_applied(self) -> None:
-        visit_id = uuid.uuid4()
-        response = push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
+        record_id = uuid.uuid4()
+        response = push(self.scenario, [create_op(self.scenario, record_id=record_id)])
         self.assertEqual(response.status_code, 200, response.content)
 
         body = response.json()
@@ -90,48 +90,48 @@ class AppliedTests(TestCase):
 
         result = body["results"][0]
         self.assertEqual(result["status"], "applied")
-        self.assertEqual(result["entity"], "visit")
-        self.assertEqual(result["entity_id"], str(visit_id))
+        self.assertEqual(result["entity"], "record")
+        self.assertEqual(result["entity_id"], str(record_id))
         self.assertEqual(result["server_version"], INITIAL_VERSION)
         self.assertIsNone(result["error"])
 
     def test_the_row_lands_with_the_server_authoritative_columns(self) -> None:
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id, lat=4.6, lon=-74.1)])
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id, lat=4.6, lon=-74.1)])
 
-        visit = visit_of(visit_id)
-        self.assertEqual(visit.org_id, self.scenario.org.pk)
-        self.assertEqual(visit.created_by_id, self.scenario.user.pk)
-        self.assertEqual(visit.version, INITIAL_VERSION)
-        self.assertIsNone(visit.deleted_at)
-        self.assertEqual(visit.answers, {"altura_cm": 12})
-        self.assertEqual(visit.lat, 4.6)
+        record = record_of(record_id)
+        self.assertEqual(record.org_id, self.scenario.org.pk)
+        self.assertEqual(record.created_by_id, self.scenario.user.pk)
+        self.assertEqual(record.version, INITIAL_VERSION)
+        self.assertIsNone(record.deleted_at)
+        self.assertEqual(record.answers, {"altura_cm": 12})
+        self.assertEqual(record.lat, 4.6)
 
     def test_change_seq_continues_after_every_synced_entity(self) -> None:
         """El cursor es uno por organización, no uno por tabla (doc 08 §4.4)."""
-        push(self.scenario, [create_op(self.scenario, visit_id=(first := uuid.uuid4()))])
-        self.assertEqual(visit_of(first).change_seq, TEMPLATE_CHANGE_SEQ + 1)
+        push(self.scenario, [create_op(self.scenario, record_id=(first := uuid.uuid4()))])
+        self.assertEqual(record_of(first).change_seq, TEMPLATE_CHANGE_SEQ + 1)
 
     def test_each_applied_row_of_a_batch_gets_its_own_change_seq(self) -> None:
         """Empatar dos filas haría que una página del pull se saltara una."""
         ids = [uuid.uuid4() for _ in range(5)]
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id) for visit_id in ids])
-        seqs = [visit_of(visit_id).change_seq for visit_id in ids]
+        push(self.scenario, [create_op(self.scenario, record_id=record_id) for record_id in ids])
+        seqs = [record_of(record_id).change_seq for record_id in ids]
         self.assertEqual(len(set(seqs)), 5)
         self.assertEqual(seqs, sorted(seqs))
         self.assertGreater(min(seqs), TEMPLATE_CHANGE_SEQ)
 
     def test_an_update_with_the_right_base_version_is_applied(self) -> None:
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        before = visit_of(visit_id)
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        before = record_of(record_id)
 
-        response = push(self.scenario, [update_op(visit_id, base_version=before.version)])
+        response = push(self.scenario, [update_op(record_id, base_version=before.version)])
         result = response.json()["results"][0]
         self.assertEqual(result["status"], "applied")
         self.assertEqual(result["server_version"], before.version + 1)
 
-        after = visit_of(visit_id)
+        after = record_of(record_id)
         self.assertEqual(after.version, before.version + 1)
         self.assertGreater(after.change_seq, before.change_seq)
         self.assertEqual(after.lat, 4.61)
@@ -139,14 +139,14 @@ class AppliedTests(TestCase):
         self.assertEqual(after.answers, {"altura_cm": 12})
 
     def test_a_delete_writes_a_tombstone_and_bumps_the_cursor(self) -> None:
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        before = visit_of(visit_id)
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        before = record_of(record_id)
 
-        response = push(self.scenario, [delete_op(visit_id, base_version=before.version)])
+        response = push(self.scenario, [delete_op(record_id, base_version=before.version)])
         self.assertEqual(response.json()["results"][0]["status"], "applied")
 
-        after = visit_of(visit_id)
+        after = record_of(record_id)
         self.assertIsNotNone(after.deleted_at)
         self.assertEqual(after.version, before.version + 1)
         self.assertGreater(after.change_seq, before.change_seq)
@@ -165,7 +165,7 @@ class AppliedTests(TestCase):
         self.assertEqual(row.org_id, self.scenario.org.pk)
         self.assertEqual(row.device_id, self.scenario.device_id)
         self.assertEqual(row.batch_uuid, batch_uuid)
-        self.assertEqual(row.entity, "visit")
+        self.assertEqual(row.entity, "record")
         self.assertEqual(row.result["status"], "applied")
 
 
@@ -177,45 +177,45 @@ class IdempotencyTests(TestCase):
         self.scenario = build_scenario()
 
     def test_a_resent_op_returns_the_saved_result_without_writing_again(self) -> None:
-        visit_id = uuid.uuid4()
-        op = create_op(self.scenario, visit_id=visit_id)
+        record_id = uuid.uuid4()
+        op = create_op(self.scenario, record_id=record_id)
 
         first = push(self.scenario, [op]).json()["results"][0]
-        after_first = visit_of(visit_id)
+        after_first = record_of(record_id)
 
         with CaptureQueriesContext(connection) as captured:
             second = push(self.scenario, [op]).json()["results"][0]
 
         # El contador de escrituras que pide el brief: ni una sola sentencia
-        # de escritura sobre `visit` en el reenvío.
-        self.assertEqual(visit_writes(captured), [])
+        # de escritura sobre `record` en el reenvío.
+        self.assertEqual(record_writes(captured), [])
         self.assertEqual(second, first)
 
-        after_second = visit_of(visit_id)
+        after_second = record_of(record_id)
         self.assertEqual(after_second.version, after_first.version)
         self.assertEqual(after_second.change_seq, after_first.change_seq)
         self.assertEqual(SyncOpLog.objects.filter(op_uuid=uuid.UUID(op["op_uuid"])).count(), 1)
 
     def test_a_resent_update_does_not_bump_the_version_twice(self) -> None:
         """El caso que de verdad duele: una escritura idempotente re-aplicada."""
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        op = update_op(visit_id, base_version=visit_of(visit_id).version)
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        op = update_op(record_id, base_version=record_of(record_id).version)
 
         push(self.scenario, [op])
-        expected = visit_of(visit_id).version
+        expected = record_of(record_id).version
 
         push(self.scenario, [op])
-        self.assertEqual(visit_of(visit_id).version, expected)
+        self.assertEqual(record_of(record_id).version, expected)
 
     def test_a_duplicated_op_inside_one_batch_is_applied_once(self) -> None:
-        visit_id = uuid.uuid4()
-        op = create_op(self.scenario, visit_id=visit_id)
+        record_id = uuid.uuid4()
+        op = create_op(self.scenario, record_id=record_id)
         results = push(self.scenario, [op, op]).json()["results"]
 
         self.assertEqual([result["status"] for result in results], ["applied", "applied"])
         self.assertEqual(results[0], results[1])
-        self.assertEqual(visit_of(visit_id).version, INITIAL_VERSION)
+        self.assertEqual(record_of(record_id).version, INITIAL_VERSION)
 
     def test_the_batch_uuid_is_not_the_idempotency_key(self) -> None:
         """ADR-003: la unidad de idempotencia es la operación, nunca el lote."""
@@ -244,26 +244,26 @@ class ConflictTests(TestCase):
 
     def setUp(self) -> None:
         self.scenario = build_scenario()
-        self.visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=self.visit_id)])
+        self.record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=self.record_id)])
         # Alguien más ya modificó la fila: la versión del cliente queda vieja.
-        push(self.scenario, [update_op(self.visit_id, base_version=INITIAL_VERSION)])
+        push(self.scenario, [update_op(self.record_id, base_version=INITIAL_VERSION)])
 
     def test_a_stale_base_version_conflicts(self) -> None:
-        response = push(self.scenario, [update_op(self.visit_id, base_version=INITIAL_VERSION)])
+        response = push(self.scenario, [update_op(self.record_id, base_version=INITIAL_VERSION)])
         self.assertEqual(response.status_code, 200, response.content)
 
         result = response.json()["results"][0]
         self.assertEqual(result["status"], "conflict")
         self.assertEqual(result["error"]["code"], "conflict")
-        self.assertEqual(result["server_version"], visit_of(self.visit_id).version)
+        self.assertEqual(result["server_version"], record_of(self.record_id).version)
 
     def test_the_conflict_carries_the_full_authoritative_row(self) -> None:
         result = push(
-            self.scenario, [update_op(self.visit_id, base_version=INITIAL_VERSION)]
+            self.scenario, [update_op(self.record_id, base_version=INITIAL_VERSION)]
         ).json()["results"][0]
 
-        self.assertEqual(result["server_row"]["entity"], "visit")
+        self.assertEqual(result["server_row"]["entity"], "record")
         data = result["server_row"]["data"]
         self.assertEqual(
             set(data),
@@ -288,23 +288,23 @@ class ConflictTests(TestCase):
                 "quantities",
             },
         )
-        visit = visit_of(self.visit_id)
-        self.assertEqual(data["id"], str(visit.pk))
-        self.assertEqual(data["version"], visit.version)
-        self.assertEqual(data["change_seq"], visit.change_seq)
+        record = record_of(self.record_id)
+        self.assertEqual(data["id"], str(record.pk))
+        self.assertEqual(data["version"], record.version)
+        self.assertEqual(data["change_seq"], record.change_seq)
         self.assertEqual(data["org_id"], str(self.scenario.org.pk))
         self.assertEqual(data["created_by"], str(self.scenario.user.pk))
         self.assertTrue(data["captured_at"].endswith("Z"))
 
     def test_a_conflict_leaves_the_row_untouched(self) -> None:
-        before = visit_of(self.visit_id)
-        push(self.scenario, [update_op(self.visit_id, base_version=INITIAL_VERSION)])
-        after = visit_of(self.visit_id)
+        before = record_of(self.record_id)
+        push(self.scenario, [update_op(self.record_id, base_version=INITIAL_VERSION)])
+        after = record_of(self.record_id)
         self.assertEqual((after.version, after.change_seq), (before.version, before.change_seq))
 
     def test_a_create_over_an_existing_id_conflicts(self) -> None:
         """Un alta sobre un `id` que ya existe es un fallo de CAS, no un 500."""
-        result = push(self.scenario, [create_op(self.scenario, visit_id=self.visit_id)]).json()[
+        result = push(self.scenario, [create_op(self.scenario, record_id=self.record_id)]).json()[
             "results"
         ][0]
         self.assertEqual(result["status"], "conflict")
@@ -315,12 +315,12 @@ class ConflictTests(TestCase):
         results = push(
             self.scenario,
             [
-                update_op(self.visit_id, base_version=INITIAL_VERSION),
-                create_op(self.scenario, visit_id=fresh),
+                update_op(self.record_id, base_version=INITIAL_VERSION),
+                create_op(self.scenario, record_id=fresh),
             ],
         ).json()["results"]
         self.assertEqual([result["status"] for result in results], ["conflict", "applied"])
-        self.assertTrue(Visit.objects.filter(pk=fresh).exists())
+        self.assertTrue(Record.objects.filter(pk=fresh).exists())
 
 
 @skip_without_db
@@ -386,14 +386,14 @@ class RejectionTests(TestCase):
         conflicto: dentro de la transacción única del lote abortaría **todas**
         las operaciones con un `500`. Se ataja en `payloads.py`.
         """
-        visit_id = uuid.uuid4()
-        push(self.scenario, [create_op(self.scenario, visit_id=visit_id)])
-        base = visit_of(visit_id).version
+        record_id = uuid.uuid4()
+        push(self.scenario, [create_op(self.scenario, record_id=record_id)])
+        base = record_of(record_id).version
 
-        result = self._reject(update_op(visit_id, base_version=base, template_version_id=None))
+        result = self._reject(update_op(record_id, base_version=base, template_version_id=None))
         self.assertEqual(result["error"]["code"], "validation_error")
         # La fila no se tocó y el lote siguió vivo.
-        self.assertEqual(visit_of(visit_id).version, base)
+        self.assertEqual(record_of(record_id).version, base)
 
     def test_an_answers_value_that_jsonb_cannot_store_is_rejected_not_a_500(self) -> None:
         """`NaN` y `U+0000` son JSON para `json.loads` y `DataError` para `jsonb`."""
@@ -408,28 +408,28 @@ class RejectionTests(TestCase):
             self.scenario,
             [
                 create_op(self.scenario, answers={"a": "\x00"}),
-                create_op(self.scenario, visit_id=good),
+                create_op(self.scenario, record_id=good),
             ],
         ).json()["results"]
         self.assertEqual([result["status"] for result in results], ["rejected", "applied"])
-        self.assertTrue(Visit.objects.filter(pk=good).exists())
+        self.assertTrue(Record.objects.filter(pk=good).exists())
 
     def test_a_rejected_op_writes_nothing(self) -> None:
-        visit_id = uuid.uuid4()
-        op = create_op(self.scenario, visit_id=visit_id, lat=91.0)
+        record_id = uuid.uuid4()
+        op = create_op(self.scenario, record_id=record_id, lat=91.0)
         with CaptureQueriesContext(connection) as captured:
             push(self.scenario, [op])
-        self.assertEqual(visit_writes(captured), [])
-        self.assertFalse(Visit.objects.filter(pk=visit_id).exists())
+        self.assertEqual(record_writes(captured), [])
+        self.assertFalse(Record.objects.filter(pk=record_id).exists())
 
     def test_a_rejected_op_does_not_abort_the_rest_of_the_batch(self) -> None:
         good = uuid.uuid4()
         results = push(
             self.scenario,
-            [create_op(self.scenario, lat=91.0), create_op(self.scenario, visit_id=good)],
+            [create_op(self.scenario, lat=91.0), create_op(self.scenario, record_id=good)],
         ).json()["results"]
         self.assertEqual([result["status"] for result in results], ["rejected", "applied"])
-        self.assertTrue(Visit.objects.filter(pk=good).exists())
+        self.assertTrue(Record.objects.filter(pk=good).exists())
 
     def test_the_error_details_never_echo_the_offending_value(self) -> None:
         """RD-12: el cuerpo de error no devuelve el dato que falló."""
@@ -453,14 +453,14 @@ class BatchLimitTests(TestCase):
 
         body = response.json()
         self.assertEqual(body["code"], "payload_too_large")
-        self.assertEqual(Visit.objects.count(), 0, "un lote rechazado no escribe nada")
+        self.assertEqual(Record.objects.count(), 0, "un lote rechazado no escribe nada")
 
     def test_a_batch_exactly_at_the_limit_is_accepted(self) -> None:
         """El límite es inclusivo: 500 operaciones son legales."""
         ops = [create_op(self.scenario) for _ in range(caps.SYNC_PUSH_MAX_OPS)]
         response = push(self.scenario, ops)
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(Visit.objects.count(), caps.SYNC_PUSH_MAX_OPS)
+        self.assertEqual(Record.objects.count(), caps.SYNC_PUSH_MAX_OPS)
 
     def test_an_empty_batch_is_422(self) -> None:
         response = push(self.scenario, [])
@@ -479,6 +479,12 @@ class BatchGateTests(TestCase):
         self.assertEqual(response.status_code, 422, response.content)
         self.assertEqual(response.json()["code"], "schema_unsupported")
 
+    def test_a_schema_1_client_is_422(self) -> None:
+        """El contrato 1 ya no se acepta: la app anterior deja de sincronizar."""
+        response = push(self.scenario, [create_op(self.scenario)], schema_version=1)
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertEqual(response.json()["code"], "schema_unsupported")
+
     def test_a_batch_from_another_device_is_403(self) -> None:
         response = push(self.scenario, [create_op(self.scenario)], device_id=uuid.uuid4())
         self.assertEqual(response.status_code, 403, response.content)
@@ -488,7 +494,7 @@ class BatchGateTests(TestCase):
         viewer = build_scenario(role=Role.VIEWER, username="observador")
         response = push(viewer, [create_op(viewer)])
         self.assertEqual(response.status_code, 403, response.content)
-        self.assertEqual(Visit.objects.count(), 0)
+        self.assertEqual(Record.objects.count(), 0)
 
     def test_without_a_token_it_is_401(self) -> None:
         response = self.scenario.client.post(
@@ -506,15 +512,17 @@ class TenantIsolationTests(TestCase):
         self.theirs = build_scenario(username="ajeno")
 
     def test_a_create_over_an_id_owned_by_another_org_is_rejected_without_leaking(self) -> None:
-        their_visit = uuid.uuid4()
-        push(self.theirs, [create_op(self.theirs, visit_id=their_visit)])
+        their_record = uuid.uuid4()
+        push(self.theirs, [create_op(self.theirs, record_id=their_record)])
 
-        result = push(self.mine, [create_op(self.mine, visit_id=their_visit)]).json()["results"][0]
+        result = push(self.mine, [create_op(self.mine, record_id=their_record)]).json()["results"][
+            0
+        ]
         # `rejected` y no `conflict`: un `conflict` tendría que adjuntar la
         # fila autoritativa, es decir la fila de la otra organización.
         self.assertEqual(result["status"], "rejected")
         self.assertIsNone(result["server_row"])
-        self.assertEqual(visit_of(their_visit).org_id, self.theirs.org.pk)
+        self.assertEqual(record_of(their_record).org_id, self.theirs.org.pk)
 
     def test_an_op_uuid_of_another_org_does_not_return_its_result(self) -> None:
         op = create_op(self.theirs)

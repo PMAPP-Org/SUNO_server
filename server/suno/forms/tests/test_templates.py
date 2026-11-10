@@ -553,7 +553,7 @@ class ImmutabilityTests(TestCase):
             self.version.full_clean()
 
     def test_renaming_a_published_version_is_allowed(self) -> None:
-        """`name` no cambia cómo se interpreta ninguna visita."""
+        """`name` no cambia cómo se interpreta ningún registro."""
         self.version.name = "Inspección (2026)"
         self.version.full_clean()
 

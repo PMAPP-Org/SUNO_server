@@ -25,7 +25,7 @@ class PlanLine:
     task_id: UUID
     item_id: UUID
     planned: Decimal
-    #: Suma de las cantidades de las visitas validadas (puede ser negativa).
+    #: Suma de las cantidades de los registros validados (puede ser negativa).
     executed: Decimal
     unit_price: Decimal | None
 

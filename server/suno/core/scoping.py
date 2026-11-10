@@ -2,10 +2,10 @@
 
 Todo acceso a datos de una organización empieza aquí::
 
-    for visit in scoped_qs(ctx, Visit).filter(change_seq__gt=cursor):
+    for record in scoped_qs(ctx, Record).filter(change_seq__gt=cursor):
         ...
 
-y **nunca** en `Visit.objects.all()` filtrado después. La diferencia no es de
+y **nunca** en `Record.objects.all()` filtrado después. La diferencia no es de
 estilo: un `objects.all()` al que se le olvide el `org_id` es una fuga entre
 tenants que ningún test funcional detecta (los datos "correctos" también
 salen). Con este módulo, el filtro por organización es el punto de partida y
@@ -55,7 +55,7 @@ class NotOrgScopedError(TypeError):
     Los dos modelos exentos del `org_id` de ADR-011 (`Organization`, raíz del
     scoping, y `Blob`, contenido deduplicado a propósito entre organizaciones
     — RD-08) llegan aquí por diseño: su autorización se resuelve por la tabla
-    que sí lleva `org_id` (`visit_attachment` en el caso de `Blob`, Paso 10).
+    que sí lleva `org_id` (`record_attachment` en el caso de `Blob`, Paso 10).
     """
 
 
@@ -72,7 +72,7 @@ def scoped_qs[M: models.Model](ctx: RequestContext, model: type[M]) -> QuerySet[
     if not (isinstance(model, type) and issubclass(model, models.Model)):
         raise TypeError(
             f"scoped_qs espera la clase de un modelo de Django, no {model!r}. "
-            "Se pasa el modelo (`scoped_qs(ctx, Visit)`), no una instancia."
+            "Se pasa el modelo (`scoped_qs(ctx, Record)`), no una instancia."
         )
     if not issubclass(model, OrgScopedModel):
         raise NotOrgScopedError(
@@ -115,7 +115,7 @@ def blob_registry() -> QuerySet[Blob]:
     `blob_registry(ctx)` sugeriría que el contexto acota algo, y no acota nada.
     Quien llame a esta función es responsable de haber resuelto la autorización
     **antes**, y solo hay una forma sancionada de hacerlo: comprobar con
-    `scoped_qs(ctx, VisitAttachment)` que existe un adjunto de la organización
+    `scoped_qs(ctx, RecordAttachment)` que existe un adjunto de la organización
     del solicitante que referencie ese `sha256` (Paso 10 / ADR-007 punto 6, y
     es exactamente lo que hace `attachments/services.py::download_url`). El
     riesgo real es acotado incluso si alguien se saltara ese paso: conocer un

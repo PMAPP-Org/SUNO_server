@@ -2,7 +2,7 @@
 
 **Por qué un paquete y no una app de Django** (la nota del controlador decía
 "crea la app … regístrala en `INSTALLED_APPS`"): este paquete **no define
-ningún modelo**. `Visit` y `SyncOpLog` ya existen en `suno.core`
+ningún modelo**. `Record` y `SyncOpLog` ya existen en `suno.core`
 (Paso 5) y este paso solo los escribe. La regla que el propio repositorio ya
 tenía escrita —`suno/authn/apps.py`: "por qué es una app de Django y
 no un paquete a secas: tiene un modelo propio"; `suno/serverinfo/api.py`:

@@ -20,7 +20,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from suno.core.access import Section
 from suno.core.context import Principal, RequestContext, resolve_request_context
-from suno.core.models import AppUser, Assignment, Membership, Visit
+from suno.core.models import AppUser, Assignment, Membership, Record
 from suno.core.navigation import platform_navigation
 from suno.core.scoping import scoped_qs
 from suno.projects.access import visible_projects
@@ -62,37 +62,37 @@ def platform_home(request: HttpRequest) -> HttpResponse:
         auth_logout(request)
         return redirect("platform_login")
 
-    visits = scoped_qs(request_context, Visit).filter(deleted_at__isnull=True)
+    records = scoped_qs(request_context, Record).filter(deleted_at__isnull=True)
     if not request_context.has_section_access(Section.FIELD_RECORDS):
-        visits = visits.none()
-    recent_visits = list(
-        visits.select_related("template_version__template", "created_by")
+        records = records.none()
+    recent_records = list(
+        records.select_related("template_version__template", "created_by")
         .annotate(review_count=Count("reviews"))
         .order_by("-captured_at")[:8]
     )
-    map_visits = visits if request_context.has_section_access(Section.GIS) else visits.none()
-    located_visits = list(
-        map_visits.exclude(lat__isnull=True)
+    map_records = records if request_context.has_section_access(Section.GIS) else records.none()
+    located_records = list(
+        map_records.exclude(lat__isnull=True)
         .exclude(lon__isnull=True)
         .select_related("template_version__template", "created_by")
         .order_by("-captured_at")[:80]
     )
     map_points = [
         {
-            "id": str(visit.pk),
-            "lat": visit.lat,
-            "lon": visit.lon,
-            "title": visit.template_version.template.name,
-            "author": visit.created_by.display_name or visit.created_by.username,
-            "captured_at": visit.captured_at.isoformat(),
+            "id": str(record.pk),
+            "lat": record.lat,
+            "lon": record.lon,
+            "title": record.template_version.template.name,
+            "author": record.created_by.display_name or record.created_by.username,
+            "captured_at": record.captured_at.isoformat(),
         }
-        for visit in located_visits
+        for record in located_records
     ]
     pending_assignments = (
         scoped_qs(request_context, Assignment)
         .filter(deleted_at__isnull=True)
-        .annotate(visit_count=Count("visits"))
-        .filter(visit_count=0)
+        .annotate(record_count=Count("records"))
+        .filter(record_count=0)
         .count()
     )
     projects = visible_projects(request_context)
@@ -101,10 +101,10 @@ def platform_home(request: HttpRequest) -> HttpResponse:
     context = {
         "organization": user.org,
         "navigation": platform_navigation(request_context),
-        "recent_visits": recent_visits,
+        "recent_records": recent_records,
         "map_points": map_points,
-        "visit_count": visits.count(),
-        "pending_review_count": visits.filter(reviews__isnull=True).count(),
+        "record_count": records.count(),
+        "pending_review_count": records.filter(reviews__isnull=True).count(),
         "pending_assignment_count": pending_assignments,
         "member_count": scoped_qs(request_context, Membership).count(),
         "projects": list(projects.order_by("name")[:6]),

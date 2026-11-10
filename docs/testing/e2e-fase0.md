@@ -1,6 +1,6 @@
 # Prueba E2E de la Fase 0
 
-Demuestra el criterio de salida de la Fase 0 ([doc 08 §8](../08-arquitectura-propuesta-suno.md#8-plan-de-evolución-por-fases)): una visita creada
+Demuestra el criterio de salida de la Fase 0 ([doc 08 §8](../08-arquitectura-propuesta-suno.md#8-plan-de-evolución-por-fases)): un registro creado
 **en modo avión** en un emulador Android llega al servidor al reconectar.
 Cierra el Paso 14 del plan de construcción.
 
@@ -26,7 +26,7 @@ Desde un checkout de SUNO_client (el script vive allí, en `tool/e2e.sh`):
 Opciones por variable: `SUNO_SERVER_DIR` (por defecto `../SUNO_server`),
 `ANDROID_SERIAL` (si hay más de un dispositivo).
 
-**Borra los datos de la app en el emulador** (`pm clear`): sesión, visitas
+**Borra los datos de la app en el emulador** (`pm clear`): sesión, registros
 locales y certificados aprobados.
 
 ## Qué hace
@@ -44,11 +44,11 @@ locales y certificados aprobados.
    (con `flutter test`, el DDS no llega a conectarse al emulador API 36), que:
    acepta el aviso de privacidad, hace login, **acepta el certificado
    (TOFU)**, sincroniza, espera a que el script active el modo avión,
-   captura una visita con una marca única, la vincula a la tarea 1.1 con 35 % de avance
+   captura un registro con una marca única, lo vincula a la tarea 1.1 con 35 % de avance
    acumulado (requiere la Parte B del cliente), comprueba que queda *Pendiente*,
    y tras reconectar espera a *Sincronizada*.
-5. Verifica en el servidor que la visita existe en su organización con
-   `version` y `change_seq` asignados, vinculada a la tarea 1.1 con `progress_pct` 35 (requiere la Parte B del cliente).
+5. Verifica en el servidor que el registro existe en su organización con
+   `version` y `change_seq` asignados, vinculado a la tarea 1.1 con `progress_pct` 35 (requiere la Parte B del cliente).
 6. Siempre, también si falla: desactiva el modo avión, hace `down -v` y borra
    `infra/.env.e2e`.
 

@@ -43,8 +43,8 @@ class EnqueueTests(TestCase):
 
     def test_a_job_without_key_can_be_enqueued_twice(self) -> None:
         """Dos exportaciones pedidas a mano son dos trabajos, no uno."""
-        first = queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
-        second = queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
+        first = queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
+        second = queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
         self.assertIsNotNone(first)
         self.assertIsNotNone(second)
         self.assertNotEqual(first, second)
@@ -90,7 +90,7 @@ class EnqueueTests(TestCase):
         (doc 08 N-16), y si los trae no se guardan en claro."""
         job_id = queue.enqueue(
             org_id=self.org.pk,
-            job_type="export_visits_csv",
+            job_type="export_records_csv",
             payload={"destino": "s3://bucket", "token": "muy-secreto"},
         )
         assert job_id is not None
@@ -100,7 +100,7 @@ class EnqueueTests(TestCase):
 
     def test_the_default_max_attempts_matches_the_model(self) -> None:
         """El default del settings y el de la columna tienen que ser el mismo."""
-        job_id = queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
+        job_id = queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
         assert job_id is not None
         self.assertEqual(
             reload_job(job_id).max_attempts,
@@ -124,7 +124,7 @@ class TakeTests(TestCase):
         self.org = make_org()
 
     def enqueue(self, **kwargs) -> object:
-        return queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv", **kwargs)
+        return queue.enqueue(org_id=self.org.pk, job_type="export_records_csv", **kwargs)
 
     def test_an_empty_queue_returns_none(self) -> None:
         self.assertIsNone(queue.take(worker_id=WORKER, lease_seconds=60))
@@ -175,7 +175,7 @@ class TakeTests(TestCase):
     def test_a_worker_serves_every_organization(self) -> None:
         """Un worker no pertenece a ningún tenant (ver el docstring de queue.py)."""
         other = make_org("Otra")
-        queue.enqueue(org_id=other.pk, job_type="export_visits_csv")
+        queue.enqueue(org_id=other.pk, job_type="export_records_csv")
         record = queue.take(worker_id=WORKER, lease_seconds=60)
         assert record is not None
         self.assertEqual(record.org_id, other.pk)
@@ -192,7 +192,7 @@ class TakeTests(TestCase):
 class HeartbeatTests(TestCase):
     def setUp(self) -> None:
         self.org = make_org()
-        queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
+        queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
         record = queue.take(worker_id=WORKER, lease_seconds=10)
         assert record is not None
         self.record = record
@@ -223,7 +223,7 @@ class TerminalStateTests(TestCase):
         self.org = make_org()
 
     def take(self, **kwargs):
-        queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv", **kwargs)
+        queue.enqueue(org_id=self.org.pk, job_type="export_records_csv", **kwargs)
         record = queue.take(worker_id=WORKER, lease_seconds=60)
         assert record is not None
         return record
@@ -295,7 +295,7 @@ class TerminalStateTests(TestCase):
         siguiente `take` verlo. Adelantar el reloj de esa forma es lo que evita
         que el test tenga que dormir 5 segundos entre intentos.
         """
-        queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv", max_attempts=2)
+        queue.enqueue(org_id=self.org.pk, job_type="export_records_csv", max_attempts=2)
         executions = 0
         for _ in range(5):
             record = queue.take(worker_id=WORKER, lease_seconds=60)
@@ -332,7 +332,7 @@ class ReaperTests(TestCase):
         self.org = make_org()
 
     def take_and_expire(self, **kwargs):
-        queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv", **kwargs)
+        queue.enqueue(org_id=self.org.pk, job_type="export_records_csv", **kwargs)
         record = queue.take(worker_id=WORKER, lease_seconds=60)
         assert record is not None
         Job.objects.filter(pk=record.id).update(locked_until=timezone.now() - timedelta(seconds=1))
@@ -349,7 +349,7 @@ class ReaperTests(TestCase):
         self.assertEqual(row["attempts"], 1, "el reaper no vuelve a contar el intento")
 
     def test_a_live_lease_is_left_alone(self) -> None:
-        queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
+        queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
         record = queue.take(worker_id=WORKER, lease_seconds=600)
         assert record is not None
 
@@ -357,7 +357,7 @@ class ReaperTests(TestCase):
         self.assertEqual(job_row(record.id)["status"], JobStatus.RUNNING)
 
     def test_a_pending_job_is_not_touched(self) -> None:
-        job_id = queue.enqueue(org_id=self.org.pk, job_type="export_visits_csv")
+        job_id = queue.enqueue(org_id=self.org.pk, job_type="export_records_csv")
         assert job_id is not None
         self.assertEqual(queue.reap_expired_leases().total, 0)
 
@@ -383,7 +383,7 @@ class ReaperTests(TestCase):
         """Un lease es del worker, no del tenant."""
         other = make_org("Otra")
         self.take_and_expire()
-        queue.enqueue(org_id=other.pk, job_type="export_visits_csv")
+        queue.enqueue(org_id=other.pk, job_type="export_records_csv")
         second = queue.take(worker_id=OTHER_WORKER, lease_seconds=60)
         assert second is not None
         Job.objects.filter(pk=second.id).update(locked_until=timezone.now() - timedelta(seconds=1))

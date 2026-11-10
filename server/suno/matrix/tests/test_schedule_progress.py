@@ -12,7 +12,7 @@ from suno.core.tests.dbsupport import (
 from suno.projects.field_tasks import field_tasks
 from suno.projects.schedule import build_schedule
 
-from .factories import budget_world, item, plan, quantity_row, quantity_visit
+from .factories import budget_world, item, plan, quantity_record, quantity_row
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -25,8 +25,8 @@ class ScheduleProgressTests(TestCase):
         self.world, budget = budget_world()
         self.concrete = item(budget, "2.1")
         plan(self.world, 3, self.concrete, "10")
-        visit = quantity_visit(self.world, 3, quantity_row(self.concrete, "4"))
-        self.world.approve(visit)
+        record = quantity_record(self.world, 3, quantity_row(self.concrete, "4"))
+        self.world.approve(record)
 
     def test_schedule_uses_quantity_pct(self) -> None:
         schedule = build_schedule(self.world.ctx(), self.world.project)

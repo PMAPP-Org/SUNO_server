@@ -1,16 +1,16 @@
 """Back-office de SUNO sobre Django Admin (Paso 24; doc 08 §8 Fase 1).
 
 Cubre lo que pide el back-office del MVP:
-- listar y filtrar visitas, verlas con sus adjuntos (vista previa por URL
-  prefirmada) y validarlas o rechazarlas;
+- listar y filtrar registros, verlos con sus adjuntos (vista previa por URL
+  prefirmada) y validarlos o rechazarlos;
 - gestionar plantillas (publicar versiones nuevas) y asignaciones;
 - revocar dispositivos; ver jobs y dead-letters y relanzarlos;
-- exportar visitas a CSV/Excel;
+- exportar registros a CSV/Excel;
 - atender los derechos del titular (consulta y supresión, Ley 1581).
 
 **Reglas** (ver `suno/backoffice/`):
 - Todo está aislado por organización (`OrgScopedAdmin`).
-- Las entidades **sincronizadas** (`Visit`, `VisitAttachment`, `Assignment`,
+- Las entidades **sincronizadas** (`Record`, `RecordAttachment`, `Assignment`,
   `FormTemplateVersion`) no se editan con el formulario estándar: se
   escribirían sin `change_seq` y los teléfonos nunca verían el cambio. Se
   consultan, y se crean por los servicios que sí lo asignan.
@@ -39,26 +39,27 @@ from django.utils.html import format_html, format_html_join
 from suno.attachments.services import download_url
 from suno.backoffice.admin_base import OrgScopedAdmin, ReadOnlyAdmin, run_action
 from suno.backoffice.context import admin_context, is_platform_operator
-from suno.backoffice.export import ExportTooLarge, to_csv, to_xlsx, visit_table
+from suno.backoffice.export import ExportTooLarge, record_table, to_csv, to_xlsx
 from suno.backoffice.personal_data import export_personal_data, suppress_personal_data
+from suno.backoffice.record_pdf import record_pdf
 from suno.backoffice.services import (
     create_assignment,
     retry_job,
-    review_visit,
+    review_record,
     revoke_device_sessions,
 )
 from suno.backoffice.spatial_export import (
     ExportContentTooLarge,
-    export_visits,
+    export_records,
+    record_features,
     to_geojson,
     to_geopackage,
-    visit_features,
 )
-from suno.backoffice.visit_pdf import visit_pdf
 from suno.backoffice.xlsform_admin import import_view
 from suno.basemaps.services import retire as retire_basemap
+from suno.core import audit
 from suno.core.access import Section
-from suno.core.audit import AuditAction, record
+from suno.core.audit import AuditAction
 from suno.core.context import system_context
 from suno.core.models import (
     AppUser,
@@ -77,17 +78,17 @@ from suno.core.models import (
     Organization,
     PrivacyConsent,
     QuantityPlan,
+    Record,
+    RecordAttachment,
+    RecordReview,
+    RecordReviewStatus,
     ReferenceLayer,
     SyncOpLog,
     Task,
-    Visit,
-    VisitAttachment,
-    VisitReview,
-    VisitReviewStatus,
 )
 from suno.core.policies import (
     PolicyDenied,
-    can_export_visits,
+    can_export_records,
     can_publish_form_template,
     can_read_job_output,
 )
@@ -233,7 +234,7 @@ class DeviceAdmin(ReadOnlyAdmin):
         )
 
 
-# --- Visitas y adjuntos --------------------------------------------------------
+# --- Registros y adjuntos --------------------------------------------------------
 
 
 class ReviewStatusFilter(admin.SimpleListFilter):
@@ -241,32 +242,32 @@ class ReviewStatusFilter(admin.SimpleListFilter):
     parameter_name = "revision"
 
     def lookups(self, request: Any, model_admin: Any) -> Any:
-        return (*VisitReviewStatus.choices, ("pending", "Sin revisar"))
+        return (*RecordReviewStatus.choices, ("pending", "Sin revisar"))
 
-    def queryset(self, request: Any, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
+    def queryset(self, request: Any, queryset: QuerySet[Record]) -> QuerySet[Record]:
         value = self.value()
         if value == "pending":
             return queryset.filter(last_review_status__isnull=True)
-        if value in (VisitReviewStatus.APPROVED, VisitReviewStatus.REJECTED):
+        if value in (RecordReviewStatus.APPROVED, RecordReviewStatus.REJECTED):
             return queryset.filter(last_review_status=value)
         return queryset
 
 
-def _latest_review(visit: Visit) -> str | None:
+def _latest_review(record: Record) -> str | None:
     """Decisión vigente: la más reciente (`projects.field_progress.review_status`)."""
-    return review_status(visit)
+    return review_status(record)
 
 
 class ProgressRegressionFilter(admin.SimpleListFilter):
-    """Costos, etapa 1: visitas vinculadas a una tarea y las que retroceden."""
+    """Costos, etapa 1: registros vinculados a una tarea y los que retroceden."""
 
     title = "avance de cronograma"
     parameter_name = "avance"
 
     def lookups(self, request: Any, model_admin: Any) -> Any:
-        return (("tarea", "Vinculadas a una tarea"), ("menor", "Menor que el último validado"))
+        return (("tarea", "Vinculados a una tarea"), ("menor", "Menor que el último validado"))
 
-    def queryset(self, request: Any, queryset: QuerySet[Visit]) -> QuerySet[Visit]:
+    def queryset(self, request: Any, queryset: QuerySet[Record]) -> QuerySet[Record]:
         if self.value() == "tarea":
             return queryset.filter(task__isnull=False)
         if self.value() == "menor":
@@ -274,7 +275,7 @@ class ProgressRegressionFilter(admin.SimpleListFilter):
         return queryset
 
 
-def _preview(request: Any, attachment: VisitAttachment) -> Any:
+def _preview(request: Any, attachment: RecordAttachment) -> Any:
     """Vista previa por URL **prefirmada y con caducidad** (nunca el bucket)."""
     try:
         ticket = download_url(admin_context(request), sha256=attachment.blob_id)
@@ -288,8 +289,8 @@ def _preview(request: Any, attachment: VisitAttachment) -> Any:
     return format_html('<a href="{}" target="_blank" rel="noopener">Descargar</a>', ticket.url)
 
 
-class VisitAttachmentInline(admin.TabularInline):
-    model = VisitAttachment
+class RecordAttachmentInline(admin.TabularInline):
+    model = RecordAttachment
     fields = ("role", "captured_at", "order", "preview")
     readonly_fields = fields
     extra = 0
@@ -307,12 +308,12 @@ class VisitAttachmentInline(admin.TabularInline):
         return super().get_formset(request, obj, **kwargs)
 
     @admin.display(description="vista previa")
-    def preview(self, attachment: VisitAttachment) -> Any:
+    def preview(self, attachment: RecordAttachment) -> Any:
         return _preview(self._request, attachment)
 
 
-class VisitReviewInline(admin.TabularInline):
-    model = VisitReview
+class RecordReviewInline(admin.TabularInline):
+    model = RecordReview
     fields = ("status", "comment", "reviewer", "created_at")
     readonly_fields = fields
     extra = 0
@@ -325,8 +326,8 @@ class VisitReviewInline(admin.TabularInline):
         return False
 
 
-@admin.register(Visit)
-class VisitAdmin(ReadOnlyAdmin):
+@admin.register(Record)
+class RecordAdmin(ReadOnlyAdmin):
     domain_section = Section.FIELD_RECORDS
     list_display = ("captured_at", "template", "created_by", "progress", "review", "version")
     list_filter = (
@@ -357,7 +358,7 @@ class VisitAdmin(ReadOnlyAdmin):
         "deleted_at",
     )
     readonly_fields = fields
-    inlines = (VisitAttachmentInline, VisitReviewInline)
+    inlines = (RecordAttachmentInline, RecordReviewInline)
     actions = (
         "approve",
         "reject",
@@ -368,42 +369,42 @@ class VisitAdmin(ReadOnlyAdmin):
         "export_pdf",
     )
 
-    def get_queryset(self, request: Any) -> QuerySet[Visit]:
+    def get_queryset(self, request: Any) -> QuerySet[Record]:
         base = super().get_queryset(request)
         linked = base
         if request.GET.get(ProgressRegressionFilter.parameter_name) in ("tarea", "menor"):
-            # Solo las vinculadas: la subconsulta del "último validado" no se
-            # calcula para las demás visitas.
+            # Solo los vinculados: la subconsulta del "último validado" no se
+            # calcula para los demás registros.
             linked = base.filter(task__isnull=False)
         return with_previous_validated_pct(with_review(linked), base)
 
     @admin.display(description="avance de cronograma")
-    def progress(self, visit: Visit) -> str:
-        if visit.task_id is None or visit.progress_pct is None:
+    def progress(self, record: Record) -> str:
+        if record.task_id is None or record.progress_pct is None:
             return "—"
-        text = f"{visit.task} · {format_pct(visit.progress_pct)}"
-        previous = getattr(visit, "previous_validated_pct", None)
-        if previous is not None and is_regression(visit.progress_pct, previous):
+        text = f"{record.task} · {format_pct(record.progress_pct)}"
+        previous = getattr(record, "previous_validated_pct", None)
+        if previous is not None and is_regression(record.progress_pct, previous):
             text += f" ⚠ menor que el último validado ({format_pct(previous)})"
         return text
 
     @admin.display(description="cantidades")
-    def quantities_pretty(self, visit: Visit) -> Any:
-        """Las cantidades de la visita, con avisos para la supervisión: ítem fuera del
+    def quantities_pretty(self, record: Record) -> Any:
+        """Las cantidades del registro, con avisos para la supervisión: ítem fuera del
         plan de la tarea (sin nota), ajuste negativo sin nota, ubicación fuera de la
-        ubicación actual de la tarea, o lo validado más esta visita supera lo planeado.
+        ubicación actual de la tarea, o lo validado más este registro supera lo planeado.
 
         El push acepta todo eso a propósito (`quantities_rejection`): la oficina pudo
         cambiar el plan o la ubicación entre la captura sin conexión y la sincronización,
         y lo registrado nunca se pierde; aquí se resalta."""
-        if not visit.quantities or visit.task_id is None:
+        if not record.quantities or record.task_id is None:
             return "—"
-        item_ids = [row["item_id"] for row in visit.quantities]
-        # El Admin no tiene `RequestContext`: se acota a la organización de la visita.
+        item_ids = [row["item_id"] for row in record.quantities]
+        # El Admin no tiene `RequestContext`: se acota a la organización del registro.
         versions = (
             QuerySet(model=BudgetItemVersion)
             .filter(
-                org_id=visit.org_id,
+                org_id=record.org_id,
                 item_id__in=item_ids,
                 version__status=BudgetVersionStatus.APPLIED,
             )
@@ -415,17 +416,17 @@ class VisitAdmin(ReadOnlyAdmin):
         planned = {
             str(item_id): quantity
             for item_id, quantity in QuerySet(model=QuantityPlan)
-            .filter(org_id=visit.org_id, task_id=visit.task_id)
+            .filter(org_id=record.org_id, task_id=record.task_id)
             .values_list("item_id", "planned_quantity")
         }
         validated: dict[str, Decimal] = {}
         others = (
             approved(
-                QuerySet(model=Visit).filter(
-                    org_id=visit.org_id, task_id=visit.task_id, deleted_at__isnull=True
+                QuerySet(model=Record).filter(
+                    org_id=record.org_id, task_id=record.task_id, deleted_at__isnull=True
                 )
             )
-            .exclude(pk=visit.pk)
+            .exclude(pk=record.pk)
             .exclude(quantities=[])
             .values_list("quantities", flat=True)
         )
@@ -437,19 +438,19 @@ class VisitAdmin(ReadOnlyAdmin):
             str(pk): path
             for pk, path in QuerySet(model=LocationNode)
             .filter(
-                org_id=visit.org_id,
-                pk__in=[row["location_id"] for row in visit.quantities if row["location_id"]],
+                org_id=record.org_id,
+                pk__in=[row["location_id"] for row in record.quantities if row["location_id"]],
             )
             .values_list("pk", "path")
         }
         task_path = (
             QuerySet(model=Task)
-            .filter(org_id=visit.org_id, pk=visit.task_id)
+            .filter(org_id=record.org_id, pk=record.task_id)
             .values_list("location__path", flat=True)
             .first()
         )
         lines: list[str] = []
-        for row in visit.quantities:
+        for row in record.quantities:
             code, description, unit = facts.get(row["item_id"], ("?", "", ""))
             quantity = Decimal(row["quantity"])
             text = f"{code} {description}: {plain_quantity(quantity)} {unit}".rstrip()
@@ -473,60 +474,62 @@ class VisitAdmin(ReadOnlyAdmin):
             lines.append(text)
         # Mide por cantidades con la misma regla que `measured_by` (sin capítulos ni filas en
         # 0). `system_context` solo aísla por organización: es una lectura, sin políticas.
-        if visit.progress_pct is not None and visit.task_id in measured_progress(
-            system_context(visit.org_id), task_ids=[visit.task_id]
+        if record.progress_pct is not None and record.task_id in measured_progress(
+            system_context(record.org_id), task_ids=[record.task_id]
         ):
             lines.append("% manual ignorado: la tarea se mide por cantidades.")
         # Cada línea se escapa: códigos, descripciones y notas los escribe un usuario.
         return format_html_join("", "<p>{}</p>", ((line,) for line in lines))
 
     @admin.display(description="plantilla")
-    def template(self, visit: Visit) -> str:
-        version = visit.template_version
+    def template(self, record: Record) -> str:
+        version = record.template_version
         return f"{version.name or version.template_id} (v{version.version_number})"
 
     @admin.display(description="revisión")
-    def review(self, visit: Visit) -> str:
-        status = _latest_review(visit)
-        return VisitReviewStatus(status).label if status else "Sin revisar"
+    def review(self, record: Record) -> str:
+        status = _latest_review(record)
+        return RecordReviewStatus(status).label if status else "Sin revisar"
 
     @admin.display(description="respuestas")
-    def answers_pretty(self, visit: Visit) -> Any:
-        return format_html("<pre>{}</pre>", json.dumps(visit.answers, ensure_ascii=False, indent=2))
+    def answers_pretty(self, record: Record) -> Any:
+        return format_html(
+            "<pre>{}</pre>", json.dumps(record.answers, ensure_ascii=False, indent=2)
+        )
 
-    @admin.action(description="Validar las visitas seleccionadas", permissions=["view"])
-    def approve(self, request: Any, queryset: QuerySet[Visit]) -> None:
+    @admin.action(description="Validar los registros seleccionados", permissions=["view"])
+    def approve(self, request: Any, queryset: QuerySet[Record]) -> None:
         run_action(
             self,
             request,
             queryset,
-            lambda ctx, visit: review_visit(ctx, visit, status=str(VisitReviewStatus.APPROVED)),
-            done="Visitas validadas",
+            lambda ctx, record: review_record(ctx, record, status=str(RecordReviewStatus.APPROVED)),
+            done="Registros validados",
         )
 
-    @admin.action(description="Rechazar las visitas seleccionadas", permissions=["view"])
-    def reject(self, request: Any, queryset: QuerySet[Visit]) -> None:
+    @admin.action(description="Rechazar los registros seleccionados", permissions=["view"])
+    def reject(self, request: Any, queryset: QuerySet[Record]) -> None:
         run_action(
             self,
             request,
             queryset,
-            lambda ctx, visit: review_visit(ctx, visit, status=str(VisitReviewStatus.REJECTED)),
-            done="Visitas rechazadas (para añadir un comentario, usa «Revisiones de visita»)",
+            lambda ctx, record: review_record(ctx, record, status=str(RecordReviewStatus.REJECTED)),
+            done="Registros rechazados (para añadir un comentario, usa «Revisiones de registro»)",
         )
 
-    def _export(self, request: Any, queryset: QuerySet[Visit], fmt: str) -> Any:
+    def _export(self, request: Any, queryset: QuerySet[Record], fmt: str) -> Any:
         ctx = admin_context(request)
-        if not can_export_visits(ctx, ctx.org_id):
-            self.message_user(request, "Solo supervisión puede exportar visitas.", messages.ERROR)
+        if not can_export_records(ctx, ctx.org_id):
+            self.message_user(request, "Solo supervisión puede exportar registros.", messages.ERROR)
             return None
         try:
-            header, rows = visit_table(ctx, queryset)
+            header, rows = record_table(ctx, queryset)
         except ExportTooLarge as exc:
             self.message_user(request, str(exc), messages.ERROR)
             return None
-        record(
+        audit.record(
             ctx,
-            action=AuditAction.VISITS_EXPORTED,
+            action=AuditAction.RECORDS_EXPORTED,
             target=f"org:{ctx.org_id}",
             metadata={"rows": len(rows), "format": fmt},
             ip=request.META.get("REMOTE_ADDR"),
@@ -539,34 +542,34 @@ class VisitAdmin(ReadOnlyAdmin):
             )
         else:
             response = HttpResponse(to_csv(header, rows), content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="visitas-{stamp}.{fmt}"'
+        response["Content-Disposition"] = f'attachment; filename="registros-{stamp}.{fmt}"'
         return response
 
     @admin.action(description="Exportar a CSV", permissions=["view"])
-    def export_csv(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+    def export_csv(self, request: Any, queryset: QuerySet[Record]) -> Any:
         return self._export(request, queryset, "csv")
 
     @admin.action(description="Exportar a Excel (.xlsx)", permissions=["view"])
-    def export_xlsx(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+    def export_xlsx(self, request: Any, queryset: QuerySet[Record]) -> Any:
         return self._export(request, queryset, "xlsx")
 
-    def _document_export(self, request: Any, queryset: QuerySet[Visit], fmt: str) -> Any:
+    def _document_export(self, request: Any, queryset: QuerySet[Record], fmt: str) -> Any:
         ctx = admin_context(request)
         try:
-            visits = export_visits(ctx, queryset)
+            records = export_records(ctx, queryset)
         except (ExportTooLarge, PermissionDenied) as exc:
             self.message_user(request, str(exc), messages.ERROR)
             return None
-        if fmt == "pdf" and len(visits) != 1:
+        if fmt == "pdf" and len(records) != 1:
             self.message_user(
-                request, "Selecciona exactamente una visita para su informe PDF.", messages.ERROR
+                request, "Selecciona exactamente un registro para su informe PDF.", messages.ERROR
             )
             return None
         if fmt == "pdf":
-            data, mime = visit_pdf(visits[0]), "application/pdf"
+            data, mime = record_pdf(records[0]), "application/pdf"
         else:
             try:
-                collection = visit_features(visits)
+                collection = record_features(records)
             except ExportContentTooLarge as exc:
                 self.message_user(request, str(exc), messages.ERROR)
                 return None
@@ -575,39 +578,39 @@ class VisitAdmin(ReadOnlyAdmin):
                 if fmt == "geojson"
                 else (to_geopackage(collection), "application/geopackage+sqlite3")
             )
-        record(
+        audit.record(
             ctx,
-            action=AuditAction.VISITS_EXPORTED,
+            action=AuditAction.RECORDS_EXPORTED,
             target=f"org:{ctx.org_id}",
-            metadata={"rows": len(visits), "format": fmt},
+            metadata={"rows": len(records), "format": fmt},
             ip=request.META.get("REMOTE_ADDR"),
         )
         response = HttpResponse(data, content_type=mime)
         response["Content-Disposition"] = (
-            f'attachment; filename="visitas-{timezone.now():%Y%m%d-%H%M}.{fmt}"'
+            f'attachment; filename="registros-{timezone.now():%Y%m%d-%H%M}.{fmt}"'
         )
         response["Cache-Control"] = "private, no-store"
         return response
 
     @admin.action(description="Exportar a GeoJSON (EPSG:4326)", permissions=["view"])
-    def export_geojson(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+    def export_geojson(self, request: Any, queryset: QuerySet[Record]) -> Any:
         return self._document_export(request, queryset, "geojson")
 
     @admin.action(description="Exportar a GeoPackage (.gpkg)", permissions=["view"])
-    def export_gpkg(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+    def export_gpkg(self, request: Any, queryset: QuerySet[Record]) -> Any:
         return self._document_export(request, queryset, "gpkg")
 
-    @admin.action(description="Informe PDF de una visita", permissions=["view"])
-    def export_pdf(self, request: Any, queryset: QuerySet[Visit]) -> Any:
+    @admin.action(description="Informe PDF de un registro", permissions=["view"])
+    def export_pdf(self, request: Any, queryset: QuerySet[Record]) -> Any:
         return self._document_export(request, queryset, "pdf")
 
 
-@admin.register(VisitAttachment)
-class VisitAttachmentAdmin(ReadOnlyAdmin):
+@admin.register(RecordAttachment)
+class RecordAttachmentAdmin(ReadOnlyAdmin):
     domain_section = Section.FIELD_RECORDS
-    list_display = ("id", "visit", "role", "captured_at")
+    list_display = ("id", "record", "role", "captured_at")
     list_filter = ("role",)
-    fields = ("id", "visit", "role", "caption", "captured_at", "order", "blob", "preview")
+    fields = ("id", "record", "role", "caption", "captured_at", "order", "blob", "preview")
     readonly_fields = fields
 
     def get_form(self, request: Any, obj: Any = None, change: bool = False, **kwargs: Any) -> Any:
@@ -615,23 +618,23 @@ class VisitAttachmentAdmin(ReadOnlyAdmin):
         return super().get_form(request, obj, change, **kwargs)
 
     @admin.display(description="vista previa")
-    def preview(self, attachment: VisitAttachment) -> Any:
+    def preview(self, attachment: RecordAttachment) -> Any:
         return _preview(self._request, attachment)
 
 
-class VisitReviewForm(forms.ModelForm):
+class RecordReviewForm(forms.ModelForm):
     class Meta:
-        model = VisitReview
-        fields = ("visit", "status", "comment")
+        model = RecordReview
+        fields = ("record", "status", "comment")
 
 
-@admin.register(VisitReview)
-class VisitReviewAdmin(OrgScopedAdmin):
+@admin.register(RecordReview)
+class RecordReviewAdmin(OrgScopedAdmin):
     domain_section = Section.FIELD_RECORDS
     """Historial de decisiones. Se añaden (con comentario); nunca se editan."""
 
-    form = VisitReviewForm
-    list_display = ("created_at", "visit", "status", "reviewer", "comment")
+    form = RecordReviewForm
+    list_display = ("created_at", "record", "status", "reviewer", "comment")
     list_filter = ("status",)
     list_select_related = ("reviewer",)
 
@@ -641,10 +644,10 @@ class VisitReviewAdmin(OrgScopedAdmin):
     def has_delete_permission(self, request: Any, obj: Any = None) -> bool:
         return False
 
-    def save_model(self, request: Any, obj: VisitReview, form: Any, change: bool) -> None:
-        created = review_visit(
+    def save_model(self, request: Any, obj: RecordReview, form: Any, change: bool) -> None:
+        created = review_record(
             admin_context(request),
-            form.cleaned_data["visit"],
+            form.cleaned_data["record"],
             status=form.cleaned_data["status"],
             comment=form.cleaned_data.get("comment"),
         )
@@ -754,7 +757,7 @@ class FormTemplateVersionAdmin(OrgScopedAdmin):
             raise PermissionDenied(
                 "Solo la administración de la organización publica plantillas."
             ) from exc
-        record(
+        audit.record(
             ctx,
             action=AuditAction.TEMPLATE_PUBLISHED,
             target=f"form_template_version:{published.pk}",
