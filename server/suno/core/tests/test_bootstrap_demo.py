@@ -17,6 +17,7 @@ import unittest
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 
+from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     FormTemplateVersion,
     Membership,
@@ -27,6 +28,7 @@ from suno.core.models import (
     TaskResponsible,
 )
 from suno.forms.definition import validate_definition
+from suno.projects.field_tasks import field_tasks, project_items
 
 from .dbsupport import SKIP_REASON, setup_test_database, teardown_test_database
 
@@ -116,6 +118,40 @@ class BootstrapDemoTests(unittest.TestCase):
             TaskResponsible.objects.filter(task__uid=1, task__project=project, user=user).exists()
         )
         self.assertIn(str(leaf.id), out.getvalue())
+
+    def test_with_quantities_the_task_is_measured_by_quantities(self) -> None:
+        call_command(
+            "bootstrap_demo",
+            "--org-name=Org cantidades test",
+            "--username=agente-cantidades",
+            "--password=una-contraseña-de-prueba-larga-42",
+            "--with-schedule",
+            "--with-quantities",
+            stdout=io.StringIO(),
+        )
+        org = Organization.objects.get(name="Org cantidades test")
+        user = get_user_model().objects.get(username="agente-cantidades")
+        ctx = resolve_request_context(Principal(user_id=user.pk, org_id=org.pk))
+        task = next(t for t in field_tasks(ctx) if t["wbs"] == "1.1")
+        self.assertEqual(task["measured_by"], "quantities")
+        self.assertEqual(
+            [(i["code"], i["unit"], i["planned_quantity"]) for i in task["planned_items"]],
+            [("1.1", "m3", 100.0)],
+        )
+        project = Project.objects.get(org=org)
+        catalog = project_items(ctx, [project.pk])
+        self.assertEqual([i["code"] for i in catalog[0]["items"]], ["1.1", "1.2"])
+
+    def test_quantities_need_the_schedule(self) -> None:
+        with self.assertRaises(CommandError):
+            call_command(
+                "bootstrap_demo",
+                "--org-name=Org sin cronograma cantidades",
+                "--username=agente-sin-cronograma-cantidades",
+                "--password=una-contraseña-de-prueba-larga-42",
+                "--with-quantities",
+                stdout=io.StringIO(),
+            )
 
     def test_without_the_flag_there_is_no_project(self) -> None:
         call_command(

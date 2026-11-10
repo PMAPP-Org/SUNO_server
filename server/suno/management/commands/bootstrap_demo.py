@@ -31,6 +31,9 @@ prueba"). `core/models/tenancy.py` ya dejaba anotado que este comando
    entidad sincronizable: viaja por el pull).
 5. Con `--with-schedule`: un `Project` con la etapa 1 y la tarea 1.1, y la
    responsabilidad del agente sobre la etapa (avance de campo, costos etapa 1).
+6. Con `--with-quantities` (exige `--with-schedule`): un presupuesto aplicado con los ítems
+   1.1 "Excavación mecánica" y 1.2 "Retiro de sobrantes" (m3), y 100 m3 del 1.1 planeados en
+   la tarea 1.1, que pasa a medirse por cantidades (E2E de la pieza 4b de costos).
 
 **Contraseña**: nunca hardcodeada en el código fuente. Se toma de
 `--password` o, si se omite, se genera con `secrets.choice` y se imprime una
@@ -53,6 +56,7 @@ from __future__ import annotations
 
 import secrets
 import string
+from decimal import Decimal
 from typing import Any
 
 from django.contrib.auth import get_user_model
@@ -62,11 +66,18 @@ from django.utils import timezone
 
 from suno.core.context import RequestContext
 from suno.core.models import (
+    Budget,
+    BudgetItem,
+    BudgetItemVersion,
+    BudgetRowKind,
+    BudgetVersion,
+    BudgetVersionStatus,
     FormTemplate,
     FormTemplateVersion,
     Membership,
     Organization,
     Project,
+    QuantityPlan,
     Role,
     Task,
     TaskResponsible,
@@ -110,6 +121,81 @@ _PASSWORD_ALPHABET = string.ascii_letters + string.digits
 def _generate_password(length: int = 24) -> str:
     """Contraseña aleatoria criptográficamente segura (`secrets`, no `random`)."""
     return "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
+
+
+def _seed_quantities(*, org: Organization, project: Project, task: Task, user: Any) -> None:
+    """Presupuesto aplicado mínimo y el plan de la tarea 1.1 (E2E de la pieza 4b).
+
+    Se escribe directo (como el resto del comando) en vez de pasar por la importación de
+    Excel: lo que importa a la E2E es el estado final, no el flujo de la oficina."""
+    budget = Budget.objects.create(
+        org=org, project=project, name="Presupuesto E2E", code="E2E", created_by=user
+    )
+    version = BudgetVersion.objects.create(
+        org=org,
+        budget=budget,
+        number=1,
+        status=BudgetVersionStatus.APPLIED,
+        label="E2E",
+        file_name="e2e.xlsx",
+        source_file=b"",
+        uploaded_by=user,
+        applied_at=timezone.now(),
+        direct_cost=Decimal("3460000.00"),
+        total=Decimal("3460000.00"),
+    )
+    budget.contractual_version = version
+    budget.save(update_fields=["contractual_version"])
+    chapter = BudgetItem.objects.create(org=org, budget=budget, code="1")
+    excavation = BudgetItem.objects.create(org=org, budget=budget, code="1.1")
+    disposal = BudgetItem.objects.create(org=org, budget=budget, code="1.2")
+    BudgetItemVersion.objects.bulk_create(
+        [
+            BudgetItemVersion(
+                org=org,
+                version=version,
+                item=chapter,
+                kind=BudgetRowKind.CHAPTER,
+                sort_order=0,
+                description="Preliminares",
+                total=Decimal("3460000.00"),
+            ),
+            BudgetItemVersion(
+                org=org,
+                version=version,
+                item=excavation,
+                kind=BudgetRowKind.ITEM,
+                sort_order=1,
+                description="Excavación mecánica",
+                unit="m3",
+                quantity=Decimal("100"),
+                unit_price=Decimal("25000"),
+                total=Decimal("2500000.00"),
+                parent=chapter,
+            ),
+            BudgetItemVersion(
+                org=org,
+                version=version,
+                item=disposal,
+                kind=BudgetRowKind.ITEM,
+                sort_order=2,
+                description="Retiro de sobrantes",
+                unit="m3",
+                quantity=Decimal("80"),
+                unit_price=Decimal("12000"),
+                total=Decimal("960000.00"),
+                parent=chapter,
+            ),
+        ]
+    )
+    QuantityPlan.objects.create(
+        org=org,
+        project=project,
+        task=task,
+        item=excavation,
+        planned_quantity=Decimal("100"),
+        updated_by=user,
+    )
 
 
 class Command(BaseCommand):
@@ -168,6 +254,15 @@ class Command(BaseCommand):
                 "tarea). Lo usa la E2E del avance de campo."
             ),
         )
+        parser.add_argument(
+            "--with-quantities",
+            action="store_true",
+            help=(
+                "Con --with-schedule: un presupuesto aplicado con los ítems 1.1 'Excavación "
+                "mecánica' y 1.2 'Retiro de sobrantes', y 100 m3 del 1.1 planeados en la tarea "
+                "1.1 (se mide por cantidades). Lo usa la E2E de la pieza 4b."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         org_name: str = options["org_name"]
@@ -181,6 +276,8 @@ class Command(BaseCommand):
         if extra_agents < 0:
             raise CommandError("--extra-agents no puede ser negativo.")
         extra_usernames = [f"{username}-{n:02d}" for n in range(1, extra_agents + 1)]
+        if options["with_quantities"] and not options["with_schedule"]:
+            raise CommandError("--with-quantities necesita --with-schedule.")
 
         app_user_model = get_user_model()
 
@@ -279,6 +376,8 @@ class Command(BaseCommand):
                     name="Excavación",
                 )
                 TaskResponsible.objects.create(org=org, task=stage, user=user, assigned_by=user)
+                if options["with_quantities"]:
+                    _seed_quantities(org=org, project=project, task=leaf, user=user)
 
         self.stdout.write(self.style.SUCCESS("Demo inicializado correctamente:"))
         self.stdout.write(f"  Organization id: {org.id}")
@@ -301,3 +400,7 @@ class Command(BaseCommand):
         )
         if leaf is not None:
             self.stdout.write(f"  Tarea del cronograma (E2E): 1.1 Excavación ({leaf.id})")
+        if options["with_quantities"]:
+            self.stdout.write(
+                "  Cantidades (E2E): 1.1 planeado 100 m3 en la tarea 1.1; 1.2 sin plan"
+            )

@@ -55,6 +55,18 @@ locales y certificados aprobados.
 El script y la prueba se coordinan por marcas en `adb logcat`:
 `E2E:READY_FOR_OFFLINE`, `E2E:SAVED_OFFLINE`, `E2E:SYNCED`.
 
+## Variante de cantidades (costos, pieza 4b)
+
+    E2E_FLOW=quantities bash tool/e2e.sh
+
+Siembra con `bootstrap_demo --with-schedule --with-quantities`: la tarea 1.1 se mide por
+cantidades (1.1 "Excavación mecánica", 100 m3 planeados) y el catálogo del proyecto tiene además
+1.2 "Retiro de sobrantes". Lanza `integration_test/e2e_quantities_test.dart`, que (con red) captura
+12,5 m3 del 1.1 y 3 m3 del 1.2 con nota, sincroniza y marca `E2E:SYNCED`. El script valida
+entonces el registro en el servidor (una `RecordReview` aprobada); la prueba sincroniza hasta
+ver "validado 12,5 m3" en la tarea y marca `E2E:VALIDATED_SEEN`. Al final el script verifica en
+el servidor las dos filas, con `client_id` y `location_mode`, y la revisión aprobada.
+
 ## Si falla
 
 - Cada espera tiene límite: la API 120 s (script); en la prueba, cada pantalla
