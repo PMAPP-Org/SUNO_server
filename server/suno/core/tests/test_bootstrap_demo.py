@@ -143,7 +143,7 @@ class BootstrapDemoTests(unittest.TestCase):
         self.assertEqual([i["code"] for i in catalog[0]["items"]], ["1.1", "1.2"])
 
     def test_quantities_need_the_schedule(self) -> None:
-        with self.assertRaises(CommandError):
+        with self.assertRaises(CommandError) as caught:
             call_command(
                 "bootstrap_demo",
                 "--org-name=Org sin cronograma cantidades",
@@ -152,6 +152,7 @@ class BootstrapDemoTests(unittest.TestCase):
                 "--with-quantities",
                 stdout=io.StringIO(),
             )
+        self.assertEqual(str(caught.exception), "--with-quantities necesita --with-schedule.")
 
     def test_without_the_flag_there_is_no_project(self) -> None:
         call_command(

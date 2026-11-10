@@ -634,7 +634,8 @@ paths:
         Se entrega la lista **completa** y el cliente reemplaza la suya: una tarea retirada o una
         responsabilidad quitada desaparecen sin tombstones. Para no repetir la descarga, el cliente
         envía la `version` de la última lista; si nada cambió, la respuesta trae `changed: false`
-        e `items` vacío.
+        e `items` y `project_items` vacíos. Desde la pieza 4b de costos la respuesta trae también
+        `project_items`, el catálogo de ítems de los proyectos de la lista, que entra en `version`.
       parameters:
         - name: version
           in: query
@@ -1683,9 +1684,17 @@ components:
             La app la exige al capturar si la cantidad es negativa o el ítem no está en el plan
             de la tarea; el servidor la acepta vacía y la revisión lo resalta.
         client_id:
-          $ref: '#/components/schemas/Uuid'
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: |
+            Pieza 4b: identificador de la fila generado por la app, único dentro del registro
+            (`duplicate_client_id`). Ausente o `null` no se guarda.
         captured_at:
-          $ref: '#/components/schemas/Timestamp'
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Momento en que se digitó la cantidad. Ausente o `null` no se guarda.
         gps:
           oneOf:
             - $ref: '#/components/schemas/QuantityGps'
@@ -1696,8 +1705,8 @@ components:
             - $ref: '#/components/schemas/QuantitySeen'
             - type: 'null'
         location_mode:
-          type: string
-          enum: [task, refined]
+          type: [string, 'null']
+          enum: [task, refined, null]
 
     QuantityGps:
       type: object

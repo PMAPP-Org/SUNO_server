@@ -157,9 +157,9 @@ def project_items(ctx: RequestContext, project_ids: Iterable[UUID]) -> list[dict
     ]
 
 
-def list_version(items: list[dict[str, Any]], catalog: list[dict[str, Any]] | None = None) -> str:
+def list_version(items: list[dict[str, Any]], catalog: list[dict[str, Any]]) -> str:
     """Huella SHA-256 de la lista y del catálogo de ítems (`project_items`, pieza 4b):
     cambia si cambia cualquier dato entregado."""
-    payload = {"items": items, "project_items": catalog or []}
+    payload = {"items": items, "project_items": catalog}
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

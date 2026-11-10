@@ -382,7 +382,9 @@ def _stored_capture_fields(data: dict[str, Any]) -> dict[str, Any]:
         stored["client_id"] = str(data["client_id"])
     captured = data.get("captured_at")
     if captured is not None:
-        # Ya en UTC (`UtcDatetime`); el mismo formato que el resto del contrato.
+        # Del payload llega como `datetime` ya en UTC (`UtcDatetime`) y se formatea como el
+        # resto del contrato; un `str` solo viene de una fila ya guardada (que se vuelve a
+        # normalizar), y ese texto ya está en esa forma.
         stored["captured_at"] = captured if isinstance(captured, str) else rfc3339_utc(captured)
     gps = data.get("gps")
     if gps is not None:

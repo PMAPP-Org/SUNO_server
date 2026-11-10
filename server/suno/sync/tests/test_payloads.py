@@ -679,6 +679,15 @@ class QuantityCaptureFieldsTests(SimpleTestCase):
         self.assertNotIn("seen", row)
         self.assertEqual(row["location_mode"], "task")
 
+    def test_explicit_nulls_are_accepted_and_not_stored(self) -> None:
+        """El contrato los declara nulables: `null` es lo mismo que no enviarlos."""
+        write = self._create(self._row(client_id=None, captured_at=None, location_mode=None))
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [{"item_id": self.ITEM, "location_id": None, "quantity": "2.0000", "note": ""}],
+        )
+
     def test_seen_accepts_nulls(self) -> None:
         seen = {"planned": None, "validated": None, "location_id": None}
         write = self._create(self._row(seen=seen))

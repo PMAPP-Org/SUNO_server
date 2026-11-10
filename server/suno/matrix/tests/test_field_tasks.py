@@ -6,7 +6,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from suno.budgets.tests.factories import apply_rows, make_budget
+from suno.budgets.tests.factories import apply_rows, make_budget, stage_rows
 from suno.budgets.tests.samples import SPLIT_ROWS, V2_ROWS
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -81,9 +81,9 @@ class FieldTasksMatrixTests(TestCase):
         self.assertEqual([o["label"] for o in options], ["Tramo 2"])  # type: ignore[attr-defined]
 
     def test_version_changes_with_the_plan(self) -> None:
-        before = list_version(field_tasks(self.world.ctx(self.world.agent)))
+        before = list_version(field_tasks(self.world.ctx(self.world.agent)), [])
         plan(self.world, 3, item(self.budget, "2.2"), "5")
-        after = list_version(field_tasks(self.world.ctx(self.world.agent)))
+        after = list_version(field_tasks(self.world.ctx(self.world.agent)), [])
         self.assertNotEqual(before, after)
 
     def test_queries_are_bounded(self) -> None:
@@ -197,3 +197,13 @@ class ProjectItemsTests(TestCase):
         apply_rows(self.world.ctx(), self.budget, V2_ROWS)
         after = list_version(tasks, project_items(ctx, [self.world.project.pk]))
         self.assertNotEqual(before, after)
+
+    def test_a_pending_version_is_not_the_current_one(self) -> None:
+        stage_rows(self.world.ctx(), self.budget, V2_ROWS)
+        codes = [i["code"] for i in self.catalog()[0]["items"]]  # type: ignore[attr-defined]
+        self.assertEqual(codes, ["1.1", "1.2", "2.1", "2.2", "2.4"])
+
+    def test_another_organization_s_catalog_never_appears(self) -> None:
+        other, _ = budget_world("Otra")
+        catalog = project_items(self.world.ctx(self.world.agent), [other.project.pk])
+        self.assertEqual(catalog, [{"project_id": str(other.project.pk), "items": []}])
