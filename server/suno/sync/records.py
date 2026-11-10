@@ -94,13 +94,21 @@ def record_row(record: Record) -> dict[str, Any]:
 
 
 def quantity_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """`Record.quantities` como lo publica el contrato: la cantidad como número JSON."""
+    """`Record.quantities` como lo publica el contrato: la cantidad como número JSON.
+
+    Los datos automáticos de la pieza 4b salen siempre, `null` si la fila no los tiene
+    (captura de la app 0.12.0): lo opcional lo es en el valor, no en la presencia."""
     return [
         {
             "item_id": row["item_id"],
             "location_id": row["location_id"],
             "quantity": float(Decimal(row["quantity"])),
             "note": row["note"],
+            "client_id": row.get("client_id"),
+            "captured_at": row.get("captured_at"),
+            "gps": row.get("gps"),
+            "seen": row.get("seen"),
+            "location_mode": row.get("location_mode"),
         }
         for row in rows
     ]

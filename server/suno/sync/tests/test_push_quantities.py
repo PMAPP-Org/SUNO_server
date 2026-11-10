@@ -130,6 +130,11 @@ class QuantityPushTests(TestCase):
                     "location_id": str(self.pr.pk),
                     "quantity": 4.5,
                     "note": "",
+                    "client_id": None,
+                    "captured_at": None,
+                    "gps": None,
+                    "seen": None,
+                    "location_mode": None,
                 }
             ],
         )
@@ -428,3 +433,82 @@ class QuantityPushTests(TestCase):
         rows = record_of(record_id).quantities
         self.assertEqual([r["quantity"] for r in rows], ["1.0000", "2.0000"])
         self.assertEqual({r["location_id"] for r in rows}, {str(self.pr.pk)})
+
+    def capture_row(self, quantity: object, **extra: object) -> dict[str, Any]:
+        """Una fila como la envía la app 0.13 (pieza 4b), con sus datos automáticos."""
+        return self.row(
+            self.concrete,
+            quantity,
+            client_id=str(uuid.uuid4()),
+            captured_at="2026-07-30T09:00:00-05:00",
+            gps={"lat": 4.61, "lon": -74.08, "accuracy_m": 12.0},
+            seen={"planned": 10.0, "validated": 0.0, "location_id": str(self.tramo.pk)},
+            location_mode="task",
+            **extra,
+        )
+
+    def test_capture_fields_round_trip(self) -> None:
+        record_id = uuid.uuid4()
+        row = self.capture_row(3)
+        result = self.push_one(self.create(row, record_id=record_id))
+        self.assertEqual(result["status"], "applied", result)
+        stored = record_of(record_id).quantities[0]
+        self.assertEqual(stored["client_id"], row["client_id"])
+        self.assertEqual(stored["captured_at"], "2026-07-30T14:00:00.000Z")
+        rows = pull(self.scenario, CURSOR_ZERO).json()["rows"]
+        data = next(r["data"] for r in rows if r["data"].get("id") == str(record_id))
+        self.assertEqual(
+            data["quantities"],
+            [
+                {
+                    "item_id": str(self.concrete.pk),
+                    "location_id": None,
+                    "quantity": 3.0,
+                    "note": "",
+                    "client_id": row["client_id"],
+                    "captured_at": "2026-07-30T14:00:00.000Z",
+                    "gps": {"lat": 4.61, "lon": -74.08, "accuracy_m": 12.0},
+                    "seen": {
+                        "planned": 10.0,
+                        "validated": 0.0,
+                        "location_id": str(self.tramo.pk),
+                    },
+                    "location_mode": "task",
+                }
+            ],
+        )
+
+    def test_validated_record_capture_fields_cannot_change(self) -> None:
+        record_id = uuid.uuid4()
+        row = self.capture_row(4)
+        self.push_one(self.create(row, record_id=record_id))
+        RecordReview.objects.create(
+            org=self.scenario.org,
+            record=record_of(record_id),
+            status=str(RecordReviewStatus.APPROVED),
+            reviewer=self.admin,
+        )
+        version = record_of(record_id).version
+        moved = {**row, "gps": {"lat": 4.61, "lon": -74.08, "accuracy_m": 30.0}}
+        result = self.push_one(
+            update_op(
+                record_id,
+                version,
+                task_id=str(self.task(3).pk),
+                progress_pct=None,
+                quantities=[moved],
+            )
+        )
+        self.assertEqual(result["status"], "rejected", result)
+        self.assertEqual(
+            result["error"]["details"], {"field": "quantities", "reason": "record_validated"}
+        )
+        same = update_op(
+            record_id, version, task_id=str(self.task(3).pk), progress_pct=None, quantities=[row]
+        )
+        self.assertEqual(self.push_one(same)["status"], "applied")
+
+    def test_duplicate_client_id_is_rejected(self) -> None:
+        row = self.capture_row(1)
+        result = self.push_one(self.create(row, {**row, "quantity": 2}))
+        self.assertRejected(result, "duplicate_client_id")
