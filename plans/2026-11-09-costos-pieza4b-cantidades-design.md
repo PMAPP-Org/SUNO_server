@@ -153,3 +153,26 @@ Release normal de ambos (release-please), sin forzar actualización.
 - Fotos por fila de cantidad.
 - Control y valor ganado (pieza 5).
 - Captura de cantidades desde la web.
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-09-costos-pieza4b-cantidades-plan.md`; no cambian lo aprobado.
+
+- En `Record.quantities` los campos automáticos se guardan solo si vienen: una fila de la app
+  0.12.0 queda igual que hoy. En el pull salen siempre, `null` si la fila no los tiene.
+- `gps` exige `lat`, `lon` y `accuracy_m`; `seen` exige `planned`, `validated` y
+  `location_id` (nulables). `seen.location_id` es la ubicación de la tarea que la app mostraba.
+- El catálogo del proyecto sale de la versión vigente de cada presupuesto del proyecto (el push
+  ya acepta ítems de cualquiera de ellos). Con `changed: false`, `project_items` va vacía.
+- "Otro día" se mide en la hora de Colombia; "GPS impreciso" es precisión peor que 100 m.
+- `bootstrap_demo --with-quantities` siembra el presupuesto y el plan de la E2E de la 4b.
+- Las tareas por % no cambian su payload (sin `quantities`; el servidor guarda `[]`).
+- El rechazo no identifica la fila: la app la deduce (ítem fuera del plan y del catálogo,
+  ubicación fuera de las opciones de la tarea) y nombra su código con una tabla local de ítems
+  conocidos.
+- La app sabe que un registro está validado cuando el servidor rechaza un cambio con
+  `record_validated` (el contrato no publica la revisión); desde ahí sus cantidades son de solo
+  lectura.
+- "Agregar ítem no planeado" no ofrece los ítems ya planeados de la tarea.
+- La lectura GPS por fila no pide permiso, espera hasta 8 s y se reutiliza 30 s.
+- En el detalle del registro, a 390 px, cada fila de cantidad es un bloque; el PDF lleva tabla.
