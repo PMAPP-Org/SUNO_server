@@ -3484,7 +3484,7 @@ components:
 
     FieldTaskList:
       type: object
-      required: [version, changed, items]
+      required: [version, changed, items, project_items]
       properties:
         version:
           type: string
@@ -3492,11 +3492,19 @@ components:
           description: Huella de la lista. Se reenvía en `?version=` la próxima vez.
         changed:
           type: boolean
-          description: '`false` si la lista no cambió desde `?version=`; entonces `items` va vacío.'
+          description: '`false` si la lista no cambió desde `?version=`; entonces `items` y `project_items` van vacíos.'
         items:
           type: array
           items:
             $ref: '#/components/schemas/FieldTask'
+        project_items:
+          type: array
+          description: |
+            Pieza 4b: por cada proyecto con tareas en la lista, los ítems medibles (no capítulos)
+            de la versión vigente de cada uno de sus presupuestos, sin precios ni montos. La app
+            busca aquí al agregar un ítem no planeado. Entra en `version`.
+          items:
+            $ref: '#/components/schemas/FieldProjectItems'
 
     FieldLocation:
       type: object
@@ -3527,6 +3535,33 @@ components:
         executed_quantity:
           type: number
           description: Suma de las cantidades de los registros validados (puede pasar lo planeado).
+
+    FieldProjectItems:
+      type: object
+      required: [project_id, items]
+      properties:
+        project_id:
+          $ref: '#/components/schemas/Uuid'
+        items:
+          type: array
+          description: Vacía si el proyecto no tiene presupuesto vigente.
+          items:
+            $ref: '#/components/schemas/FieldProjectItem'
+
+    FieldProjectItem:
+      type: object
+      required: [item_id, code, description, unit]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+        unit:
+          type: string
+          maxLength: 30
 
     HealthStatus:
       type: object

@@ -6,15 +6,16 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from suno.budgets.tests.factories import apply_rows
-from suno.budgets.tests.samples import SPLIT_ROWS
+from suno.budgets.tests.factories import apply_rows, make_budget
+from suno.budgets.tests.samples import SPLIT_ROWS, V2_ROWS
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
 from suno.matrix.quantities import measured_progress, suno_pct_by_task
-from suno.projects.field_tasks import field_tasks, list_version
+from suno.projects.field_tasks import field_tasks, list_version, project_items
+from suno.projects.tests.factories import make_field_world
 
 from .factories import budget_world, item, locate, plan, quantity_record, quantity_row, suno_levels
 
@@ -128,3 +129,71 @@ class ItemThatBecameAChapterTests(TestCase):
         task_id = self.world.task(3).pk
         self.assertEqual(measured_progress(ctx, task_ids=[task_id]), {})
         self.assertEqual(suno_pct_by_task(ctx, task_ids=[task_id])[task_id], Decimal("30.00"))
+
+
+@skip_without_db
+class ProjectItemsTests(TestCase):
+    """Pieza 4b: el catálogo para "Agregar ítem no planeado"."""
+
+    def setUp(self) -> None:
+        self.world, self.budget = budget_world()
+
+    def catalog(self) -> list[dict[str, object]]:
+        return project_items(self.world.ctx(self.world.agent), [self.world.project.pk])
+
+    def test_current_items_without_chapters_nor_prices(self) -> None:
+        catalog = self.catalog()
+        self.assertEqual(len(catalog), 1)
+        self.assertEqual(catalog[0]["project_id"], str(self.world.project.pk))
+        items = catalog[0]["items"]
+        self.assertEqual(
+            [i["code"] for i in items],  # type: ignore[attr-defined]
+            ["1.1", "1.2", "2.1", "2.2", "2.4"],
+        )
+        self.assertEqual(
+            items[2],  # type: ignore[index]
+            {
+                "item_id": str(item(self.budget, "2.1").pk),
+                "code": "2.1",
+                "description": "Concreto zapatas",
+                "unit": "m3",
+            },
+        )
+        self.assertNotIn("price", str(catalog))
+        self.assertNotIn("total", str(catalog))
+
+    def test_follows_the_current_version(self) -> None:
+        apply_rows(self.world.ctx(), self.budget, V2_ROWS)
+        codes = [i["code"] for i in self.catalog()[0]["items"]]  # type: ignore[attr-defined]
+        self.assertEqual(codes, ["1.1", "2.1", "2.2", "2.3", "2.4"])
+
+    def test_every_budget_of_the_project(self) -> None:
+        other = make_budget(self.world.project, self.world.admin, code="C-02", name="Adicional")
+        rows: list[list[object]] = [["9", "Extras"], ["9.1", "Señalización", "un", 4, 1000, 4000]]
+        apply_rows(self.world.ctx(), other, rows)
+        codes = [i["code"] for i in self.catalog()[0]["items"]]  # type: ignore[attr-defined]
+        self.assertEqual(codes, ["1.1", "1.2", "2.1", "2.2", "2.4", "9.1"])
+
+    def test_project_without_current_budget(self) -> None:
+        world = make_field_world("Sin presupuesto")
+        catalog = project_items(world.ctx(world.agent), [world.project.pk])
+        self.assertEqual(catalog, [{"project_id": str(world.project.pk), "items": []}])
+
+    def test_no_projects_no_queries(self) -> None:
+        ctx = self.world.ctx(self.world.agent)
+        with self.assertNumQueries(0):
+            self.assertEqual(project_items(ctx, []), [])
+
+    def test_two_queries(self) -> None:
+        ctx = self.world.ctx(self.world.agent)
+        with self.assertNumQueries(2):
+            project_items(ctx, [self.world.project.pk])
+
+    def test_the_catalog_is_part_of_the_version(self) -> None:
+        self.world.responsible(3)
+        ctx = self.world.ctx(self.world.agent)
+        tasks = field_tasks(ctx)
+        before = list_version(tasks, project_items(ctx, [self.world.project.pk]))
+        apply_rows(self.world.ctx(), self.budget, V2_ROWS)
+        after = list_version(tasks, project_items(ctx, [self.world.project.pk]))
+        self.assertNotEqual(before, after)

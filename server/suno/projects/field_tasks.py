@@ -4,21 +4,28 @@ Tareas **vigentes de detalle** de las que quien llama es responsable efectivo
 (directo o por la rama, `access.covers`), con su % SUNO, su ubicación y sus
 ítems planeados (costos, pieza 4). Se entrega la lista completa con una huella
 (`list_version`): el teléfono la reemplaza, y cualquier cambio que la altere
-—importación, responsables, revisiones, la matriz— cambia la huella sin que
-nadie tenga que mover un cursor.
+—importación, responsables, revisiones, la matriz, el presupuesto vigente— cambia
+la huella sin que nadie tenga que mover un cursor.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from typing import Any
 from uuid import UUID
 
 from django.db.models import Q
 
 from suno.core.context import RequestContext
-from suno.core.models import Task
+from suno.core.models import (
+    BudgetItemVersion,
+    BudgetRowKind,
+    BudgetVersion,
+    BudgetVersionStatus,
+    Task,
+)
 from suno.core.policies import check_read_field_tasks
 from suno.core.scoping import scoped_qs
 from suno.matrix.diff import code_key
@@ -111,7 +118,48 @@ def field_tasks(ctx: RequestContext) -> list[dict[str, Any]]:
     ]
 
 
-def list_version(items: list[dict[str, Any]]) -> str:
-    """Huella SHA-256 de la lista: cambia si cambia cualquier dato entregado."""
-    canonical = json.dumps(items, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def project_items(ctx: RequestContext, project_ids: Iterable[UUID]) -> list[dict[str, Any]]:
+    """Contrato `FieldProjectItems` (pieza 4b): por proyecto, en el orden recibido, los ítems
+    medibles (no capítulos) de la versión vigente de cada uno de sus presupuestos, sin
+    precios ni montos. Lo usa la app para "Agregar ítem no planeado".
+
+    Un proyecto sin versión vigente va con `items` vacía. Dos queries; ninguna sin
+    proyectos."""
+    ids = list(dict.fromkeys(project_ids))
+    if not ids:
+        return []
+    current = list(
+        scoped_qs(ctx, BudgetVersion)
+        .filter(budget__project_id__in=ids, status=BudgetVersionStatus.APPLIED)
+        .order_by("budget_id", "-number")
+        .distinct("budget_id")
+        .values_list("pk", flat=True)
+    )
+    by_project: dict[UUID, list[dict[str, Any]]] = {project_id: [] for project_id in ids}
+    if current:
+        rows = (
+            scoped_qs(ctx, BudgetItemVersion)
+            .filter(version_id__in=current, kind=BudgetRowKind.ITEM)
+            .values_list(
+                "version__budget__project_id", "item_id", "item__code", "description", "unit"
+            )
+        )
+        for project_id, item_id, code, description, unit in rows:
+            by_project[project_id].append(
+                {"item_id": str(item_id), "code": code, "description": description, "unit": unit}
+            )
+    return [
+        {
+            "project_id": str(project_id),
+            "items": sorted(items, key=lambda i: (code_key(i["code"]), i["item_id"])),
+        }
+        for project_id, items in by_project.items()
+    ]
+
+
+def list_version(items: list[dict[str, Any]], catalog: list[dict[str, Any]] | None = None) -> str:
+    """Huella SHA-256 de la lista y del catálogo de ítems (`project_items`, pieza 4b):
+    cambia si cambia cualquier dato entregado."""
+    payload = {"items": items, "project_items": catalog or []}
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

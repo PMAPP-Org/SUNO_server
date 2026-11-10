@@ -7,7 +7,14 @@ from typing import Literal
 
 from ninja import Schema
 
-__all__ = ["FieldLocation", "FieldPlannedItem", "FieldTask", "FieldTaskList"]
+__all__ = [
+    "FieldLocation",
+    "FieldPlannedItem",
+    "FieldProjectItem",
+    "FieldProjectItems",
+    "FieldTask",
+    "FieldTaskList",
+]
 
 
 class FieldLocation(Schema):
@@ -22,6 +29,18 @@ class FieldPlannedItem(Schema):
     unit: str
     planned_quantity: float
     executed_quantity: float
+
+
+class FieldProjectItem(Schema):
+    item_id: uuid.UUID
+    code: str
+    description: str
+    unit: str
+
+
+class FieldProjectItems(Schema):
+    project_id: uuid.UUID
+    items: list[FieldProjectItem]
 
 
 class FieldTask(Schema):
@@ -42,3 +61,4 @@ class FieldTaskList(Schema):
     version: str
     changed: bool
     items: list[FieldTask]
+    project_items: list[FieldProjectItems]
