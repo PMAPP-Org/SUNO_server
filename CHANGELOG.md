@@ -4,6 +4,36 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.15.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.14.0...v0.15.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename visits to records across the server ([#60](https://github.com/PMAPP-Org/SUNO_server/issues/60))
+
+### Agregado
+
+* **equipment:** M&E module: datasheet, preoperational, maintenance, fuel, transport, usage reports ([5bdadcc](https://github.com/PMAPP-Org/SUNO_server/commit/5bdadcc177645e76f4d5e500a8badbea4ca991ff))
+* **equipment:** web registration of field records for operators ([68bd4d1](https://github.com/PMAPP-Org/SUNO_server/commit/68bd4d1852f081c1e5ac74e39dc6f09a441a519e))
+
+
+### Corregido
+
+* **api:** reject non-string timestamps ([897d466](https://github.com/PMAPP-Org/SUNO_server/commit/897d4669a267fe38f9aeddc74495954871d25e48))
+* **ci:** restore deployment and quality gates ([e13f822](https://github.com/PMAPP-Org/SUNO_server/commit/e13f8224391795e0a9267b8e3a25c9fd2d2a6f98))
+* **deploy:** continuously publish master to production ([e2e507e](https://github.com/PMAPP-Org/SUNO_server/commit/e2e507ef6b3cd298117e0837b42b2ac87a0efab0))
+* **deploy:** persist admin IP allowlist ([a720426](https://github.com/PMAPP-Org/SUNO_server/commit/a72042632798b862af915f2478988ff2dab8620b))
+
+
+### Dependencias y build
+
+* **deps:** bump the python group across 1 directory with 9 updates ([#59](https://github.com/PMAPP-Org/SUNO_server/issues/59)) ([ddbf47f](https://github.com/PMAPP-Org/SUNO_server/commit/ddbf47fc59cb9e719f82e295775e1144acd695ea))
+
+
+### Refactorización
+
+* rename visits to records across the server ([#60](https://github.com/PMAPP-Org/SUNO_server/issues/60)) ([390d7ed](https://github.com/PMAPP-Org/SUNO_server/commit/390d7eda38833b10f1b89d1ca3c22f8a1e50b74e))
+
 ## [0.14.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.13.0...v0.14.0) (2026-11-08)
 
 
