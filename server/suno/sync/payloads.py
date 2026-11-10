@@ -85,6 +85,7 @@ from pydantic import (
     field_validator,
 )
 
+from suno.authn.schemas import rfc3339_utc
 from suno.core.api_errors import redacted_validation_details
 from suno.core.models import LAT_MAX, LAT_MIN, LON_MAX, LON_MIN
 from suno.core.timestamps import UtcDatetime
@@ -300,6 +301,27 @@ MAX_QUANTITY_ROWS = 200
 _QUANTITY_STEP = Decimal("0.0001")
 
 
+class _QuantityGps(BaseModel):
+    """Contrato `QuantityGps`: una lectura puntual al digitar la cantidad (pieza 4b)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lat: Finite = Field(ge=LAT_MIN, le=LAT_MAX)
+    lon: Finite = Field(ge=LON_MIN, le=LON_MAX)
+    accuracy_m: Finite = Field(ge=0)
+
+
+class _QuantitySeen(BaseModel):
+    """Contrato `QuantitySeen`: lo que la app mostraba al capturar la fila (pieza 4b).
+    Las tres claves son obligatorias y nulables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    planned: Finite | None
+    validated: Finite | None
+    location_id: uuid.UUID | None
+
+
 class _QuantityPayload(BaseModel):
     """Contrato `RecordQuantityPayload`."""
 
@@ -309,6 +331,13 @@ class _QuantityPayload(BaseModel):
     location_id: uuid.UUID | None = None
     quantity: QuantityValue = Field(max_digits=18, decimal_places=4)
     note: QuantityNote = ""
+    # Costos, pieza 4b: datos automáticos de la fila. Opcionales: la app 0.12.0 no los
+    # envía. `client_id` es único dentro del registro (`_duplicate_client_id`).
+    client_id: uuid.UUID | None = None
+    captured_at: UtcDatetime | None = None
+    gps: _QuantityGps | None = None
+    seen: _QuantitySeen | None = None
+    location_mode: Literal["task", "refined"] | None = None
 
     @field_validator("quantity")
     @classmethod
@@ -321,7 +350,11 @@ class _QuantityPayload(BaseModel):
 def stored_quantities(rows: list[Any]) -> list[dict[str, Any]]:
     """La forma guardada en `Record.quantities`: ids como texto y la cantidad como
     decimal de 4 decimales en texto (exacto). Es también la forma con la que se
-    compara un registro validado (`services._References.validated_rejection`)."""
+    compara un registro validado (`services._References.validated_rejection`), así
+    que los datos automáticos de la pieza 4b también quedan protegidos.
+
+    Los datos automáticos se guardan solo si vienen: una fila de la app 0.12.0 queda
+    exactamente como antes."""
     stored: list[dict[str, Any]] = []
     for row in rows:
         data = row.model_dump() if isinstance(row, BaseModel) else row
@@ -332,8 +365,42 @@ def stored_quantities(rows: list[Any]) -> list[dict[str, Any]]:
                 "location_id": None if location is None else str(location),
                 "quantity": str(Decimal(data["quantity"]).quantize(_QUANTITY_STEP)),
                 "note": str(data.get("note") or "").strip(),
+                **_stored_capture_fields(data),
             }
         )
+    return stored
+
+
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
+def _stored_capture_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Los datos automáticos de una fila (pieza 4b) en tipos JSON, solo los presentes."""
+    stored: dict[str, Any] = {}
+    if data.get("client_id") is not None:
+        stored["client_id"] = str(data["client_id"])
+    captured = data.get("captured_at")
+    if captured is not None:
+        # Ya en UTC (`UtcDatetime`); el mismo formato que el resto del contrato.
+        stored["captured_at"] = captured if isinstance(captured, str) else rfc3339_utc(captured)
+    gps = data.get("gps")
+    if gps is not None:
+        stored["gps"] = {
+            "lat": float(gps["lat"]),
+            "lon": float(gps["lon"]),
+            "accuracy_m": float(gps["accuracy_m"]),
+        }
+    seen = data.get("seen")
+    if seen is not None:
+        seen_location = seen.get("location_id")
+        stored["seen"] = {
+            "planned": _optional_float(seen.get("planned")),
+            "validated": _optional_float(seen.get("validated")),
+            "location_id": None if seen_location is None else str(seen_location),
+        }
+    if data.get("location_mode") is not None:
+        stored["location_mode"] = str(data["location_mode"])
     return stored
 
 
@@ -532,6 +599,26 @@ def _task_pair_rejection(fields: dict[str, Any], entity_id: uuid.UUID) -> Reject
     return None
 
 
+def _duplicate_client_id(fields: dict[str, Any], entity_id: uuid.UUID) -> Rejection | None:
+    """Pieza 4b: `client_id` identifica la fila dentro del registro (la corrección de un
+    rechazo la señala por él). Dos filas con el mismo valor son un error del cliente.
+    Las filas sin `client_id` (app 0.12.0) no cuentan."""
+    seen: set[str] = set()
+    for row in fields.get("quantities") or []:
+        client_id = row.get("client_id")
+        if client_id is None:
+            continue
+        if client_id in seen:
+            return _rejection(
+                "client_id must be unique within the record.",
+                field="quantities",
+                reason="duplicate_client_id",
+                entity_id=entity_id,
+            )
+        seen.add(client_id)
+    return None
+
+
 def target_id(payload: Any) -> uuid.UUID | None:
     """`payload["id"]` si es un UUID legible; `None` si no (best-effort).
 
@@ -659,6 +746,9 @@ def parse_op(
     pair = _task_pair_rejection(fields, validated.id)
     if pair is not None:
         return pair
+    duplicate = _duplicate_client_id(fields, validated.id)
+    if duplicate is not None:
+        return duplicate
 
     return RecordWrite(
         entity_id=validated.id,
