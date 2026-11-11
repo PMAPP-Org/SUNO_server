@@ -165,6 +165,8 @@ def load_control_input(
         ],
         has_budget=bool(versions),
         contractual_direct_cost=sum(contractual, Decimal(0)) if contractual else None,
+        contractual_budgets=len(contractual),
+        applied_budgets=len({version.budget_id for version in versions}),
     )
 
 
@@ -182,14 +184,17 @@ def _priced_items(
         parents[item_id] = parent_id
     labels.update(names)
     items: dict[UUID, PricedItem] = {}
-    for item_id, _code, kind, _description, unit, price, _parent, _budget in rows:
+    for item_id, _code, kind, _description, unit, price, _parent, budget_id in rows:
         if kind == BudgetRowKind.ITEM and price is not None:
+            chapter = _top_chapter(item_id, parents, names)
+            if chapter == NO_CHAPTER and several:
+                chapter = f"{NO_CHAPTER} · {budget_names[budget_id]}"
             items[item_id] = PricedItem(
                 item_id=item_id,
                 label=names[item_id],
                 unit=unit,
                 unit_price=price,
-                chapter=_top_chapter(item_id, parents, names),
+                chapter=chapter,
             )
     return items
 

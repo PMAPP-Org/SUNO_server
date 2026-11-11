@@ -24,7 +24,7 @@
 {% else %}
 {% with ind=result.indicators m=result.indicators.at_cut %}
 <section class="metrics-strip ctl-metrics" aria-label="Indicadores a la fecha de corte">
-  <article class="bg-money"><span>BAC vigente</span><strong>${{ ind.bac|floatformat:"2g" }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: ${{ ind.contractual_direct_cost|floatformat:"2g" }}{% else %}Sin versión contractual{% endif %}</small></article>
+  <article class="bg-money"><span>BAC vigente</span><strong>${{ ind.bac|floatformat:"2g" }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: ${{ ind.contractual_direct_cost|floatformat:"2g" }}{% if ind.contractual_partial %} (parcial: {{ ind.contractual_budgets }} de {{ ind.applied_budgets }} presupuestos){% endif %}{% else %}Sin versión contractual{% endif %}</small></article>
   <article class="bg-money"><span>Valor planeado (PV)</span><strong>${{ m.pv|floatformat:"2g" }}</strong><small>{% if ind.pv_share is not None %}{{ ind.pv_share|floatformat:1 }} % del BAC{% endif %}</small></article>
   <article class="bg-money"><span>Valor ganado (EV)</span><strong>${{ m.ev|floatformat:"2g" }}</strong><small>{% if ind.ev_share is not None %}{{ ind.ev_share|floatformat:1 }} % del BAC{% endif %}</small></article>
   <article class="bg-money"><span>Variación del cronograma (SV)</span><strong>${{ m.sv|floatformat:"2g" }}</strong><small><b class="bg-label ctl-{{ m.status }}">SPI {% if m.spi is not None %}{{ m.spi|floatformat:2 }}{% else %}—{% endif %} · {{ m.status_label }}</b></small></article>

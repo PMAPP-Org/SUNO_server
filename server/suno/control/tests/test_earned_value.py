@@ -91,6 +91,7 @@ def control(
     labels: Mapping[uuid.UUID, str] | None = None,
     percent_tasks: Sequence[PercentTask] = (),
     contractual: Decimal | None = None,
+    contractual_of: tuple[int, int] = (0, 0),
 ) -> ControlResult:
     task_list = [window()] if tasks is None else list(tasks)
     item_list = [priced()] if items is None else list(items)
@@ -106,6 +107,8 @@ def control(
             executions=list(executions),
             percent_tasks=list(percent_tasks),
             contractual_direct_cost=contractual,
+            contractual_budgets=contractual_of[0],
+            applied_budgets=contractual_of[1],
         )
     )
 
@@ -265,6 +268,15 @@ class IndicatorTests(SimpleTestCase):
     def test_contractual_reference_is_passed_through(self) -> None:
         result = control(contractual=D("9130000.00"))
         self.assertEqual(result.indicators.contractual_direct_cost, D("9130000.00"))
+
+    def test_contractual_reference_can_be_partial(self) -> None:
+        indicators = control(contractual=D("9130000.00"), contractual_of=(1, 2)).indicators
+        self.assertTrue(indicators.contractual_partial)
+        self.assertEqual((indicators.contractual_budgets, indicators.applied_budgets), (1, 2))
+        self.assertFalse(
+            control(contractual=D("1"), contractual_of=(2, 2)).indicators.contractual_partial
+        )
+        self.assertFalse(control(contractual_of=(0, 2)).indicators.contractual_partial)
 
 
 class BreakdownTests(SimpleTestCase):

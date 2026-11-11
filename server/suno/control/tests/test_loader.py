@@ -13,6 +13,7 @@ from suno.budgets.tests.samples import V1_ROWS, V2_ROWS
 from suno.control.earned_value import ControlInput, Execution, PercentTask, TaskWindow
 from suno.control.loader import load_control_input
 from suno.control.periods import MONTH
+from suno.core.models import Budget
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -133,6 +134,22 @@ class LoaderTests(TestCase):
         data = self.load()
         self.assertEqual(data.items[self.concrete.pk].chapter, "2 Estructura · Contrato de obra")
         self.assertEqual(data.contractual_direct_cost, D("18260000.00"))
+
+    def test_several_budgets_name_the_missing_chapter(self) -> None:
+        other = make_budget(self.world.project, self.world.admin, name="Interventoría", code="C-02")
+        apply_rows(self.ctx, other, [["0.1", "Global inicial", "gl", 1, 1000, 1000], *V1_ROWS])
+        data = self.load()
+        self.assertEqual(data.items[item(other, "0.1").pk].chapter, "Sin capítulo · Interventoría")
+
+    def test_contractual_reference_counts_its_budgets(self) -> None:
+        data = self.load()
+        self.assertEqual((data.contractual_budgets, data.applied_budgets), (1, 1))
+        other = make_budget(self.world.project, self.world.admin, name="Interventoría", code="C-02")
+        apply_rows(self.ctx, other, V1_ROWS)
+        Budget.objects.filter(pk=other.pk).update(contractual_version=None)
+        data = self.load()
+        self.assertEqual(data.contractual_direct_cost, D("9130000.00"))
+        self.assertEqual((data.contractual_budgets, data.applied_budgets), (1, 2))
 
     def test_retired_tasks_are_left_out(self) -> None:
         import_schedule(self.world, v2())

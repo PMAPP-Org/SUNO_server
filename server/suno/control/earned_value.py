@@ -125,6 +125,9 @@ class ControlInput:
     has_budget: bool = True
     #: Suma del costo directo de las versiones contractuales; `None` si no hay.
     contractual_direct_cost: Decimal | None = None
+    #: Presupuestos con versión contractual y presupuestos con una versión aplicada.
+    contractual_budgets: int = 0
+    applied_budgets: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +211,13 @@ class Indicators:
     bac: Decimal
     at_cut: Measure
     contractual_direct_cost: Decimal | None = None
+    contractual_budgets: int = 0
+    applied_budgets: int = 0
+
+    @property
+    def contractual_partial(self) -> bool:
+        """Solo algunos de los presupuestos aplicados tienen versión contractual."""
+        return 0 < self.contractual_budgets < self.applied_budgets
 
     @property
     def pv_share(self) -> Decimal | None:
@@ -414,7 +424,11 @@ def _compute(data: ControlInput) -> ControlResult:
             has_budget=data.has_budget,
             has_plan=bool(planned_keys),
             indicators=Indicators(
-                money(ZERO), Measure(money(ZERO), money(ZERO)), data.contractual_direct_cost
+                money(ZERO),
+                Measure(money(ZERO), money(ZERO)),
+                data.contractual_direct_cost,
+                data.contractual_budgets,
+                data.applied_budgets,
             ),
             periods=(),
             by_chapter=(),
@@ -513,6 +527,8 @@ def _compute(data: ControlInput) -> ControlResult:
             money(total.bac),
             Measure(money(total.pv), money(total.ev)),
             data.contractual_direct_cost,
+            data.contractual_budgets,
+            data.applied_budgets,
         ),
         periods=tuple(rows),
         by_chapter=_worst_first(t.row(label) for label, t in chapters.items()),

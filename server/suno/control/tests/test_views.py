@@ -10,7 +10,9 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from suno.core.models import AuditEvent
+from suno.budgets.tests.factories import apply_rows, make_budget
+from suno.budgets.tests.samples import V1_ROWS
+from suno.core.models import AuditEvent, Budget
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -78,6 +80,14 @@ class ControlPageTests(TestCase):
         self.assertContains(response, "75,0 % del BAC")
         self.assertContains(response, "Costo directo contractual: $9.130.000,00")
         self.assertContains(response, "<polyline")
+
+    def test_partial_contractual_reference(self) -> None:
+        other = make_budget(self.world.project, self.world.admin, name="Interventoría", code="C-02")
+        apply_rows(self.world.ctx(), other, V1_ROWS)
+        Budget.objects.filter(pk=other.pk).update(contractual_version=None)
+        response = self.client.get(self.base + AT_CUT)
+        self.assertContains(response, "Costo directo contractual: $9.130.000,00")
+        self.assertContains(response, "(parcial: 1 de 2 presupuestos)")
 
     def test_defaults_and_unknown_values(self) -> None:
         response = self.client.get(self.base + "?corte=no-es-fecha&periodo=dia&desglose=x")
