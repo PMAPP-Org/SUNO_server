@@ -130,7 +130,7 @@ Precisiones del plan `2026-11-11-costos-pieza5-control-plan.md`; no cambian lo a
   ejecución tampoco entra.
 - La fecha de un registro es su `captured_at` en hora de Colombia.
 - Tareas medidas por %: hojas vigentes (ni resumen ni hito) sin filas en la matriz, con su
-  último % validado.
+  último % validado hasta la fecha de corte.
 - Desglose por capítulo de primer nivel y por la ubicación completa de la tarea, en filas
   planas; con varios presupuestos, ítems y capítulos llevan el nombre del presupuesto.
 - Referencia contractual: suma del costo directo de la versión contractual de cada presupuesto

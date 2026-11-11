@@ -101,7 +101,7 @@ class Execution:
 
 @dataclass(frozen=True)
 class PercentTask:
-    """Tarea sin plan en la matriz: se mide por %. `pct`: su último % validado."""
+    """Tarea sin plan en la matriz: se mide por %. `pct`: su último % validado hasta el corte."""
 
     label: str
     pct: Decimal | None

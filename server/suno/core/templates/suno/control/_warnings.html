@@ -38,7 +38,7 @@
   {% if w.percent_tasks %}
   <details class="ctl-warning"><summary>Tareas medidas por % ({{ w.percent_tasks|length }}): sin plan en la matriz, no tienen valor planeado ni ganado</summary>
     <div class="pj-scroll"><table class="pj-table">
-      <thead><tr><th>Tarea</th><th class="num">Último % validado</th></tr></thead>
+      <thead><tr><th>Tarea</th><th class="num">Último % validado al corte</th></tr></thead>
       <tbody>{% for r in w.percent_tasks %}<tr><td class="pj-wrap">{{ r.label }}</td><td class="num">{% if r.pct is not None %}{{ r.pct|floatformat:"-2" }} %{% else %}sin registro validado{% endif %}</td></tr>{% endfor %}</tbody>
     </table></div>
   </details>

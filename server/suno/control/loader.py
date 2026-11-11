@@ -3,7 +3,7 @@
 Nueve queries sin importar el tamaño del proyecto (ocho si no hay presupuesto aplicado):
 árbol de ubicaciones, tareas vigentes, presupuestos (costo directo contractual), versiones
 vigentes, sus filas, códigos de los ítems, plan de la matriz, cantidades validadas hasta el
-corte y el último % validado por tarea.
+corte y el último % validado por tarea hasta el corte.
 """
 
 from __future__ import annotations
@@ -147,7 +147,9 @@ def load_control_input(
     ]
 
     planned_tasks = {p.task_id for p in plans}
-    validated = validated_pct_by_task(scoped_qs(ctx, Record), project_ids=[project.pk])
+    validated = validated_pct_by_task(
+        scoped_qs(ctx, Record).filter(captured_at__date__lte=cut), project_ids=[project.pk]
+    )
     contractual = [direct for _, _, direct in budgets if direct is not None]
     return ControlInput(
         cut=cut,

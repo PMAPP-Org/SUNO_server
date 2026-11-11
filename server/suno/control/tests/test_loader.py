@@ -142,6 +142,14 @@ class LoaderTests(TestCase):
         self.world.approve(self.world.record(2, "40"))
         self.assertEqual(self.load().percent_tasks, [PercentTask("1.1 Localización", D("40"))])
 
+    def test_percent_tasks_use_the_last_validated_pct_until_the_cut(self) -> None:
+        self.world.approve(self.world.record(2, "40"))
+        self.world.approve(self.world.record(2, "90", hours=24 * 15))  # 25 de marzo
+        self.assertEqual(self.load().percent_tasks, [PercentTask("1.1 Localización", D("40"))])
+        self.assertEqual(
+            self.load(date(2026, 3, 9)).percent_tasks, [PercentTask("1.1 Localización", None)]
+        )
+
     def test_project_without_budget(self) -> None:
         world = make_field_world("Sin presupuesto")
         ctx = world.ctx()
