@@ -22,7 +22,8 @@ ONE_DAY = timedelta(days=1)
 
 
 class PeriodRangeError(ValueError):
-    """El rango de fechas da demasiados periodos; el mensaje es para el usuario."""
+    """El rango de fechas da demasiados periodos o sale del calendario; el mensaje es para
+    el usuario."""
 
 
 @dataclass(frozen=True)
@@ -41,9 +42,16 @@ def period_start(day: date, kind: str) -> date:
 
 
 def next_start(start: date, kind: str) -> date:
-    if kind == WEEK:
-        return start + timedelta(days=7)
-    return date(start.year + start.month // 12, start.month % 12 + 1, 1)
+    """Inicio del periodo siguiente. Pasado el año 9999 es un error de rango, no un 500."""
+    try:
+        if kind == WEEK:
+            return start + timedelta(days=7)
+        return date(start.year + start.month // 12, start.month % 12 + 1, 1)
+    except (OverflowError, ValueError) as exc:
+        raise PeriodRangeError(
+            "Las fechas del cronograma o la fecha de corte están fuera del calendario. "
+            "Revisa las fechas."
+        ) from exc
 
 
 def period_label(start: date, kind: str) -> str:

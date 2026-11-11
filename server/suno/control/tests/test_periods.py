@@ -86,3 +86,9 @@ class BuildPeriodsTests(SimpleTestCase):
     def test_unknown_kind(self) -> None:
         with self.assertRaises(ValueError):
             build_periods(date(2026, 3, 2), date(2026, 3, 13), date(2026, 3, 31), "dia")
+
+    def test_dates_past_the_calendar_are_a_range_error(self) -> None:
+        with self.assertRaises(PeriodRangeError):
+            build_periods(date(9999, 12, 1), date(9999, 12, 31), date(9999, 12, 31), MONTH)
+        with self.assertRaises(PeriodRangeError):
+            build_periods(date(9999, 12, 27), date(9999, 12, 31), date(9999, 12, 31), WEEK)
