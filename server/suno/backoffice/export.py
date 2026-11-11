@@ -42,6 +42,7 @@ __all__ = [
     "safe_cell",
     "to_csv",
     "to_xlsx",
+    "to_xlsx_book",
     "record_table",
 ]
 
@@ -176,22 +177,49 @@ def _xlsx_cell(ref: str, value: Any) -> str:
     return f'<c r="{ref}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>'
 
 
-def to_xlsx(
-    header: Sequence[str], rows: Iterable[Sequence[Any]], *, sheet_name: str = "Registros"
-) -> bytes:
-    """Libro `.xlsx` mínimo válido: una hoja (`sheet_name`), cadenas en línea y números."""
-    name = _xml_text(sheet_name).replace('"', "&quot;")
+_SHEET_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
+
+
+def _sheet_xml(header: Sequence[str], rows: Iterable[Sequence[Any]]) -> str:
     sheet_rows = []
     for row_index, row in enumerate([list(header), *rows], start=1):
         cells = "".join(
             _xlsx_cell(f"{_column_name(col)}{row_index}", value) for col, value in enumerate(row)
         )
         sheet_rows.append(f'<row r="{row_index}">{cells}</row>')
-    sheet = (
+    return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         f"<sheetData>{''.join(sheet_rows)}</sheetData></worksheet>"
     )
+
+
+def to_xlsx(
+    header: Sequence[str], rows: Iterable[Sequence[Any]], *, sheet_name: str = "Registros"
+) -> bytes:
+    """Libro `.xlsx` mínimo válido: una hoja (`sheet_name`), cadenas en línea y números."""
+    return to_xlsx_book([(sheet_name, header, rows)])
+
+
+def to_xlsx_book(sheets: Sequence[tuple[str, Sequence[str], Iterable[Sequence[Any]]]]) -> bytes:
+    """Libro `.xlsx` mínimo válido con una hoja por `(nombre, cabecera, filas)`, en orden."""
+    if not sheets:
+        raise ValueError("Un libro necesita al menos una hoja.")
+    overrides: list[str] = []
+    entries: list[str] = []
+    relations: list[str] = []
+    worksheets: dict[str, str] = {}
+    for number, (sheet_name, header, rows) in enumerate(sheets, start=1):
+        name = _xml_text(sheet_name).replace('"', "&quot;")
+        worksheets[f"xl/worksheets/sheet{number}.xml"] = _sheet_xml(header, rows)
+        overrides.append(
+            f'<Override PartName="/xl/worksheets/sheet{number}.xml" ContentType="{_SHEET_TYPE}"/>'
+        )
+        entries.append(f'<sheet name="{name}" sheetId="{number}" r:id="rId{number}"/>')
+        relations.append(
+            f'<Relationship Id="rId{number}" Type="{_REL_TYPES}/worksheet" '
+            f'Target="worksheets/sheet{number}.xml"/>'
+        )
     files = {
         "[Content_Types].xml": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -201,9 +229,7 @@ def to_xlsx(
             '<Default Extension="xml" ContentType="application/xml"/>'
             '<Override PartName="/xl/workbook.xml" '
             'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-            '<Override PartName="/xl/worksheets/sheet1.xml" '
-            'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-            "</Types>"
+            f"{''.join(overrides)}</Types>"
         ),
         "_rels/.rels": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -216,19 +242,17 @@ def to_xlsx(
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            f'<sheets><sheet name="{name}" sheetId="1" r:id="rId1"/></sheets></workbook>'
+            f"<sheets>{''.join(entries)}</sheets></workbook>"
         ),
         "xl/_rels/workbook.xml.rels": (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            '<Relationship Id="rId1" '
-            f'Type="{_REL_TYPES}/worksheet" '
-            'Target="worksheets/sheet1.xml"/></Relationships>'
+            f"{''.join(relations)}</Relationships>"
         ),
-        "xl/worksheets/sheet1.xml": sheet,
+        **worksheets,
     }
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, content in files.items():
-            archive.writestr(name, content)
+        for path, content in files.items():
+            archive.writestr(path, content)
     return buffer.getvalue()
