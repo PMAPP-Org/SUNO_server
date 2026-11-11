@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import unittest
 import zipfile
+from unittest import mock
 
 from django.test import TestCase
 from django.utils import timezone
@@ -125,6 +126,13 @@ class ControlPageTests(TestCase):
         response = self.client.get(f"/plataforma/proyectos/{world.project.pk}/control/")
         self.assertContains(response, "no tiene cantidades planeadas")
 
+    def test_dates_out_of_range_show_a_banner(self) -> None:
+        response = self.client.get(self.base + "?corte=9999-12-31&periodo=semana")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'role="alert"')
+        self.assertContains(response, "más de 1000 periodos")
+        self.assertNotContains(response, "<polyline")
+
 
 @skip_without_db
 class ControlExportTests(TestCase):
@@ -163,4 +171,18 @@ class ControlExportTests(TestCase):
     def test_field_agent_gets_404(self) -> None:
         self.client.force_login(self.world.agent)
         self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertFalse(AuditEvent.objects.filter(action="control.exported").exists())
+
+    def test_dates_out_of_range_are_a_400(self) -> None:
+        response = self.client.get(self.url + "?corte=9999-12-31&periodo=semana")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("más de 1000 periodos", response.content.decode())
+        self.assertFalse(AuditEvent.objects.filter(action="control.exported").exists())
+
+    def test_without_export_permission_gets_403(self) -> None:
+        # Hoy ningún rol lee presupuestos sin poder exportarlos (matriz de capacidades):
+        # se simula la política para cubrir la rama de la vista.
+        with mock.patch("suno.control.views.can_export_budgets", return_value=False):
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
         self.assertFalse(AuditEvent.objects.filter(action="control.exported").exists())
