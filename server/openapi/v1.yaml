@@ -634,7 +634,8 @@ paths:
         Se entrega la lista **completa** y el cliente reemplaza la suya: una tarea retirada o una
         responsabilidad quitada desaparecen sin tombstones. Para no repetir la descarga, el cliente
         envía la `version` de la última lista; si nada cambió, la respuesta trae `changed: false`
-        e `items` vacío.
+        e `items` y `project_items` vacíos. Desde la pieza 4b de costos la respuesta trae también
+        `project_items`, el catálogo de ítems de los proyectos de la lista, que entra en `version`.
       parameters:
         - name: version
           in: query
@@ -1618,7 +1619,7 @@ components:
     RecordQuantity:
       type: object
       description: Cantidad ejecutada de un ítem del presupuesto en un registro (costos, pieza 4).
-      required: [item_id, location_id, quantity, note]
+      required: [item_id, location_id, quantity, note, client_id, captured_at, gps, seen, location_mode]
       properties:
         item_id:
           $ref: '#/components/schemas/Uuid'
@@ -1636,6 +1637,30 @@ components:
         note:
           type: string
           maxLength: 500
+        client_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: |
+            Pieza 4b: identificador de la fila generado por la app, único dentro del registro.
+            `null` en filas capturadas antes de la pieza 4b.
+        captured_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Momento en que se digitó la cantidad (UTC). `null` si no se envió.
+        gps:
+          oneOf:
+            - $ref: '#/components/schemas/QuantityGps'
+            - type: 'null'
+        seen:
+          oneOf:
+            - $ref: '#/components/schemas/QuantitySeen'
+            - type: 'null'
+        location_mode:
+          type: [string, 'null']
+          enum: [task, refined, null]
+          description: '`refined`: el agente precisó la ubicación; `task`: usó la de la tarea.'
 
     RecordQuantityPayload:
       type: object
@@ -1658,6 +1683,66 @@ components:
           description: |
             La app la exige al capturar si la cantidad es negativa o el ítem no está en el plan
             de la tarea; el servidor la acepta vacía y la revisión lo resalta.
+        client_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: |
+            Pieza 4b: identificador de la fila generado por la app, único dentro del registro
+            (`duplicate_client_id`). Ausente o `null` no se guarda.
+        captured_at:
+          oneOf:
+            - $ref: '#/components/schemas/Timestamp'
+            - type: 'null'
+          description: Momento en que se digitó la cantidad. Ausente o `null` no se guarda.
+        gps:
+          oneOf:
+            - $ref: '#/components/schemas/QuantityGps'
+            - type: 'null'
+          description: Lectura GPS puntual al digitar la cantidad, si había permiso y señal.
+        seen:
+          oneOf:
+            - $ref: '#/components/schemas/QuantitySeen'
+            - type: 'null'
+        location_mode:
+          type: [string, 'null']
+          enum: [task, refined, null]
+
+    QuantityGps:
+      type: object
+      additionalProperties: false
+      description: Lectura GPS puntual de una fila de cantidad (pieza 4b). Sin seguimiento continuo.
+      required: [lat, lon, accuracy_m]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+        accuracy_m:
+          type: number
+          minimum: 0
+
+    QuantitySeen:
+      type: object
+      additionalProperties: false
+      description: |
+        Lo que la app mostraba al capturar la fila (pieza 4b): la cantidad planeada y la
+        validada del ítem en la tarea (`null` si el ítem no estaba planeado) y la ubicación de
+        la tarea (`null` si no tenía).
+      required: [planned, validated, location_id]
+      properties:
+        planned:
+          type: [number, 'null']
+        validated:
+          type: [number, 'null']
+        location_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
 
     RecordAttachment:
       type: object
@@ -2122,7 +2207,8 @@ components:
             vacía. Rechazos (`validation_error`): `quantities_without_task`, `task_progress_pair`,
             `item_not_in_project` (el ítem no es de un presupuesto del proyecto de la tarea, o es
             un capítulo fuera del plan de la tarea),
-            `location_outside_task` (la ubicación no es un nodo del proyecto de la tarea) y
+            `location_outside_task` (la ubicación no es un nodo del proyecto de la tarea),
+            `duplicate_client_id` (dos filas con el mismo `client_id`) y
             `record_validated` (el registro validado no cambia sus cantidades). Lo demás se acepta y
             se resalta en la revisión, porque lo registrado sin conexión nunca se pierde: un ítem
             fuera del plan o un ajuste negativo sin nota (la nota la exige la app al capturar), y
@@ -3407,7 +3493,7 @@ components:
 
     FieldTaskList:
       type: object
-      required: [version, changed, items]
+      required: [version, changed, items, project_items]
       properties:
         version:
           type: string
@@ -3415,11 +3501,19 @@ components:
           description: Huella de la lista. Se reenvía en `?version=` la próxima vez.
         changed:
           type: boolean
-          description: '`false` si la lista no cambió desde `?version=`; entonces `items` va vacío.'
+          description: '`false` si la lista no cambió desde `?version=`; entonces `items` y `project_items` van vacíos.'
         items:
           type: array
           items:
             $ref: '#/components/schemas/FieldTask'
+        project_items:
+          type: array
+          description: |
+            Pieza 4b: por cada proyecto con tareas en la lista, los ítems medibles (no capítulos)
+            de la versión vigente de cada uno de sus presupuestos, sin precios ni montos. La app
+            busca aquí al agregar un ítem no planeado. Entra en `version`.
+          items:
+            $ref: '#/components/schemas/FieldProjectItems'
 
     FieldLocation:
       type: object
@@ -3450,6 +3544,33 @@ components:
         executed_quantity:
           type: number
           description: Suma de las cantidades de los registros validados (puede pasar lo planeado).
+
+    FieldProjectItems:
+      type: object
+      required: [project_id, items]
+      properties:
+        project_id:
+          $ref: '#/components/schemas/Uuid'
+        items:
+          type: array
+          description: Vacía si el proyecto no tiene presupuesto vigente.
+          items:
+            $ref: '#/components/schemas/FieldProjectItem'
+
+    FieldProjectItem:
+      type: object
+      required: [item_id, code, description, unit]
+      properties:
+        item_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          maxLength: 50
+        description:
+          type: string
+        unit:
+          type: string
+          maxLength: 30
 
     HealthStatus:
       type: object

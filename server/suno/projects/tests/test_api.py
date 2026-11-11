@@ -8,6 +8,8 @@ from typing import Any
 from django.test import TestCase
 
 from suno.authn.tests.factories import login
+from suno.budgets.tests.factories import apply_rows, make_budget
+from suno.budgets.tests.samples import V1_ROWS, V2_ROWS
 from suno.core.models import TaskResponsible
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -102,3 +104,21 @@ class FieldTasksApiTests(TestCase):
         other.responsible(1)
         self.world.responsible(5)
         self.assertEqual(self.names(self.get()), ["Columnas"])
+
+    def test_project_items_travel_with_the_list(self) -> None:
+        w = self.world
+        w.responsible(3)
+        budget = make_budget(w.project, w.admin)
+        apply_rows(w.ctx(), budget, V1_ROWS)
+        body = self.get()
+        self.assertEqual(len(body["project_items"]), 1)
+        catalog = body["project_items"][0]
+        self.assertEqual(catalog["project_id"], str(w.project.pk))
+        self.assertEqual([i["code"] for i in catalog["items"]], ["1.1", "1.2", "2.1", "2.2", "2.4"])
+        unchanged = self.get(version=body["version"])
+        self.assertEqual((unchanged["changed"], unchanged["project_items"]), (False, []))
+        apply_rows(w.ctx(), budget, V2_ROWS)
+        self.assertTrue(self.get(version=body["version"])["changed"])
+
+    def test_without_tasks_there_is_no_catalog(self) -> None:
+        self.assertEqual(self.get()["project_items"], [])

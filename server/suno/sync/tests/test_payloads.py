@@ -617,3 +617,127 @@ class QuantitiesPayloadTests(SimpleTestCase):
         rejection = self._update(task_id=self.TASK, progress_pct=20, quantities=None)
         assert isinstance(rejection, Rejection)
         self.assertEqual(rejection.code, "validation_error")
+
+
+class QuantityCaptureFieldsTests(SimpleTestCase):
+    """Costos, pieza 4b: datos automáticos por fila de cantidad (sin BD)."""
+
+    ITEM = str(uuid.uuid4())
+    TASK = str(uuid.uuid4())
+
+    def _create(self, *rows: dict[str, object]) -> RecordWrite | Rejection:
+        payload = _create_payload(task_id=self.TASK, progress_pct=None, quantities=list(rows))
+        parsed = parse_op("record", "create", None, payload)
+        assert not isinstance(parsed, AttachmentWrite)
+        return parsed
+
+    def _row(self, **values: object) -> dict[str, object]:
+        return {"item_id": self.ITEM, "quantity": 2, **values}
+
+    def test_capture_fields_are_stored(self) -> None:
+        client_id, location = str(uuid.uuid4()), str(uuid.uuid4())
+        write = self._create(
+            self._row(
+                client_id=client_id,
+                captured_at="2026-11-09T09:03:00-05:00",
+                gps={"lat": 4.61, "lon": -74.08, "accuracy_m": 8.5},
+                seen={"planned": 10, "validated": 4.5, "location_id": location},
+                location_mode="refined",
+            )
+        )
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [
+                {
+                    "item_id": self.ITEM,
+                    "location_id": None,
+                    "quantity": "2.0000",
+                    "note": "",
+                    "client_id": client_id,
+                    "captured_at": "2026-11-09T14:03:00.000Z",
+                    "gps": {"lat": 4.61, "lon": -74.08, "accuracy_m": 8.5},
+                    "seen": {"planned": 10.0, "validated": 4.5, "location_id": location},
+                    "location_mode": "refined",
+                }
+            ],
+        )
+
+    def test_rows_without_them_keep_the_old_shape(self) -> None:
+        write = self._create(self._row())
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [{"item_id": self.ITEM, "location_id": None, "quantity": "2.0000", "note": ""}],
+        )
+
+    def test_null_gps_and_seen_are_not_stored(self) -> None:
+        write = self._create(self._row(gps=None, seen=None, location_mode="task"))
+        assert isinstance(write, RecordWrite)
+        row = write.fields["quantities"][0]
+        self.assertNotIn("gps", row)
+        self.assertNotIn("seen", row)
+        self.assertEqual(row["location_mode"], "task")
+
+    def test_explicit_nulls_are_accepted_and_not_stored(self) -> None:
+        """El contrato los declara nulables: `null` es lo mismo que no enviarlos."""
+        write = self._create(self._row(client_id=None, captured_at=None, location_mode=None))
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(
+            write.fields["quantities"],
+            [{"item_id": self.ITEM, "location_id": None, "quantity": "2.0000", "note": ""}],
+        )
+
+    def test_seen_accepts_nulls(self) -> None:
+        seen = {"planned": None, "validated": None, "location_id": None}
+        write = self._create(self._row(seen=seen))
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(write.fields["quantities"][0]["seen"], seen)
+
+    def test_invalid_capture_fields_are_rejected(self) -> None:
+        bad_values: list[dict[str, object]] = [
+            {"client_id": "no-es-un-uuid"},
+            {"captured_at": "2026-11-09T09:03:00"},
+            {"captured_at": 1762700000},
+            {"gps": {"lat": 91, "lon": 0, "accuracy_m": 1}},
+            {"gps": {"lat": 0, "lon": 181, "accuracy_m": 1}},
+            {"gps": {"lat": 0, "lon": 0, "accuracy_m": -1}},
+            {"gps": {"lat": 0, "lon": 0}},
+            {"gps": {"lat": 0, "lon": 0, "accuracy_m": 1, "altitude_m": 3}},
+            {"gps": {"lat": float("nan"), "lon": 0, "accuracy_m": 1}},
+            {"seen": {"planned": 1, "validated": None}},
+            {"seen": {"planned": float("inf"), "validated": None, "location_id": None}},
+            {"seen": {"planned": 1, "validated": 1, "location_id": "x"}},
+            {"location_mode": "gps"},
+        ]
+        for bad in bad_values:
+            with self.subTest(bad=bad):
+                rejection = self._create(self._row(**bad))
+                assert isinstance(rejection, Rejection)
+                self.assertEqual(rejection.code, "validation_error")
+
+    def test_duplicate_client_id_is_rejected(self) -> None:
+        client_id = str(uuid.uuid4())
+        rejection = self._create(self._row(client_id=client_id), self._row(client_id=client_id))
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(rejection.code, "validation_error")
+        self.assertEqual(
+            rejection.details, {"field": "quantities", "reason": "duplicate_client_id"}
+        )
+
+    def test_rows_without_client_id_are_not_duplicates(self) -> None:
+        write = self._create(self._row(), self._row(quantity=3))
+        assert isinstance(write, RecordWrite)
+        self.assertEqual(len(write.fields["quantities"]), 2)
+
+    def test_update_also_checks_duplicates(self) -> None:
+        client_id = str(uuid.uuid4())
+        payload = {
+            "id": str(uuid.uuid4()),
+            "task_id": self.TASK,
+            "progress_pct": None,
+            "quantities": [self._row(client_id=client_id), self._row(client_id=client_id)],
+        }
+        rejection = parse_op("record", "update", 1, payload)
+        assert isinstance(rejection, Rejection)
+        self.assertEqual(rejection.details["reason"], "duplicate_client_id")  # type: ignore[index]

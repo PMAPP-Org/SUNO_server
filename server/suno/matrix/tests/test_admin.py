@@ -102,3 +102,31 @@ class RecordAdminQuantitiesTests(TestCase):
     def test_record_without_quantities(self) -> None:
         record = self.world.record(3, "40")
         self.assertEqual(self.admin.quantities_pretty(record), "—")
+
+    def test_capture_time_and_gps_with_warnings(self) -> None:
+        """El registro es de T0 (2026-03-10 04:00 en Bogotá)."""
+        plan(self.world, 3, self.concrete, "10")
+        record = quantity_record(
+            self.world,
+            3,
+            {
+                **quantity_row(self.concrete, "1"),
+                "captured_at": "2026-03-10T15:30:00.000Z",
+                "gps": {"lat": 4.61, "lon": -74.08, "accuracy_m": 8.0},
+            },
+            {
+                **quantity_row(self.concrete, "2"),
+                "captured_at": "2026-03-09T20:00:00.000Z",
+                "gps": {"lat": 4.6, "lon": -74.1, "accuracy_m": 150.0},
+            },
+            quantity_row(self.concrete, "3"),
+        )
+        lines = str(self.admin.quantities_pretty(record)).split("</p>")
+        self.assertIn("hora de captura 10:30", lines[0])
+        self.assertNotIn("otro día", lines[0])
+        self.assertIn("GPS 4.61000, -74.08000 (±8 m)", lines[0])
+        self.assertNotIn("precisión baja", lines[0])
+        self.assertIn("hora de captura 09/03/2026 15:00 (otro día que el registro)", lines[1])
+        self.assertIn("(±150 m, precisión baja)", lines[1])
+        self.assertNotIn("hora de captura", lines[2])
+        self.assertNotIn("GPS", lines[2])

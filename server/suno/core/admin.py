@@ -34,6 +34,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 
 from suno.attachments.services import download_url
@@ -326,6 +327,30 @@ class RecordReviewInline(admin.TabularInline):
         return False
 
 
+#: Precisión GPS (m) a partir de la cual la revisión marca la fila (pieza 4b).
+GPS_ACCURACY_WARNING_M = 100
+
+
+def _capture_flags(row: dict[str, Any], record: Record) -> str:
+    """Hora de captura y GPS de una fila de cantidad (pieza 4b), con sus avisos: digitada
+    otro día que el del registro (hora de Colombia), o GPS con precisión peor que 100 m.
+    Son solo avisos: el push los acepta. Una fila sin esos datos no agrega nada."""
+    text = ""
+    captured = parse_datetime(row["captured_at"]) if row.get("captured_at") else None
+    if captured is not None:
+        local = timezone.localtime(captured)
+        if local.date() == timezone.localtime(record.captured_at).date():
+            text += f" — hora de captura {local:%H:%M}"
+        else:
+            text += f" — hora de captura {local:%d/%m/%Y %H:%M} (otro día que el registro)"
+    gps = row.get("gps")
+    if gps:
+        accuracy = gps["accuracy_m"]
+        text += f" — GPS {gps['lat']:.5f}, {gps['lon']:.5f} (±{round(accuracy)} m"
+        text += ", precisión baja)" if accuracy > GPS_ACCURACY_WARNING_M else ")"
+    return text
+
+
 @admin.register(Record)
 class RecordAdmin(ReadOnlyAdmin):
     domain_section = Section.FIELD_RECORDS
@@ -393,6 +418,7 @@ class RecordAdmin(ReadOnlyAdmin):
         """Las cantidades del registro, con avisos para la supervisión: ítem fuera del
         plan de la tarea (sin nota), ajuste negativo sin nota, ubicación fuera de la
         ubicación actual de la tarea, o lo validado más este registro supera lo planeado.
+        Muestra también la hora de captura y el GPS de cada fila (pieza 4b).
 
         El push acepta todo eso a propósito (`quantities_rejection`): la oficina pudo
         cambiar el plan o la ubicación entre la captura sin conexión y la sincronización,
@@ -469,6 +495,7 @@ class RecordAdmin(ReadOnlyAdmin):
                 path = node_paths.get(row["location_id"])
                 if task_path is None or path is None or not path.startswith(task_path):
                     text += " — ubicación fuera de la ubicación actual de la tarea"
+            text += _capture_flags(row, record)
             if row["note"]:
                 text += f" — nota: {row['note']}"
             lines.append(text)

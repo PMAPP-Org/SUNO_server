@@ -108,13 +108,35 @@ class PushRequest(Schema):
     ops: Annotated[list[RawSyncOp], Field(min_length=1)]
 
 
+class RecordQuantityGps(Schema):
+    """Contrato `QuantityGps`."""
+
+    lat: float
+    lon: float
+    accuracy_m: float
+
+
+class RecordQuantitySeen(Schema):
+    """Contrato `QuantitySeen`."""
+
+    planned: float | None
+    validated: float | None
+    location_id: uuid.UUID | None
+
+
 class RecordQuantityRow(Schema):
-    """Contrato `RecordQuantity`."""
+    """Contrato `RecordQuantity`. Los datos automáticos (pieza 4b) son `null` en las
+    filas capturadas sin ellos."""
 
     item_id: uuid.UUID
     location_id: uuid.UUID | None
     quantity: float
     note: str
+    client_id: uuid.UUID | None
+    captured_at: Timestamp | None
+    gps: RecordQuantityGps | None
+    seen: RecordQuantitySeen | None
+    location_mode: Literal["task", "refined"] | None
 
 
 class RecordData(Schema):

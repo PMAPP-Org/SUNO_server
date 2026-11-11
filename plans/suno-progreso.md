@@ -1,7 +1,19 @@
 # Progreso de ejecución — SUNO
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-11-06 (renombre: SUNO y registros; servidor en dos PR, la app después. Anterior: módulo de costos, pieza 4a; ver «Estado al 2026-10-29» abajo)
+**Última actualización**: 2026-11-10 (módulo de costos, pieza 4b: cantidades en la app, servidor. Anterior: renombre a SUNO y registros; ver «Estado al 2026-10-29» abajo)
+
+## Módulo de costos — Pieza 4b (cantidades en la app), servidor — 2026-11-10
+
+**PR**: pendiente (rama `feat/costos-cantidades-campo`). Plan: [2026-11-09-costos-pieza4b-cantidades-plan.md](2026-11-09-costos-pieza4b-cantidades-plan.md) (Parte A). Spec: [2026-11-09-costos-pieza4b-cantidades-design.md](2026-11-09-costos-pieza4b-cantidades-design.md).
+
+**Qué entra**: (1) **campos automáticos por fila** en `RecordQuantityPayload` (`client_id`, `captured_at`, `gps`, `seen`, `location_mode`), opcionales y nulables, guardados dentro de `Record.quantities` solo si vienen; `client_id` repetido en un registro se rechaza con `duplicate_client_id`; en el pull (`RecordQuantity`) salen siempre, `null` si la fila no los tiene; esquemas nuevos `QuantityGps` y `QuantitySeen`; (2) **`FieldTaskList.project_items`**: por proyecto con tareas en la lista, los ítems medibles (sin capítulos ni precios) de la versión vigente de cada presupuesto del proyecto, dentro de la huella `version` (dos queries); (3) **avisos de la revisión** en el Admin del registro: hora de captura y GPS de cada fila, con "otro día que el registro" (hora de Colombia) y "precisión baja" (> 100 m); (4) **`bootstrap_demo --with-quantities`** (con `--with-schedule`) para la E2E de la app, documentado en `docs/testing/e2e-fase0.md`. Aditivo: sin cambio de `SCHEMA_VERSION`, compatible con la app 0.12.0.
+
+**Decisiones del plan** (anotadas en la spec): los campos automáticos se guardan solo si vienen (una fila de 0.12.0 queda igual); el catálogo sale de la versión vigente de cada presupuesto del proyecto y va vacío con `changed: false`; "otro día" en hora de Colombia y GPS impreciso > 100 m; las tareas por % no cambian su payload; el rechazo no identifica la fila (la app la deduce); la app sabe que un registro está validado por el rechazo `record_validated`. **Para la app**: las filas que bajan sin campos automáticos se reenvían sin cambios (sin `client_id` nuevo), o la actualización de un registro validado se rechaza con `record_validated`.
+
+**Verificación real**: `pytest` completo **1792 passed** (+1856 subtests), 4 fallos conocidos del entorno en `sync/tests/test_load_script.py`; cobertura **93 %** (suelo 90 %); `ruff check` limpio y `ruff format --check` solo marca `healthcheck.py`, que ya fallaba en master; `mypy` limpio (358 archivos); `makemigrations --check` sin cambios (no toca modelos); bandit sin hallazgos; guardia de nombres (`check_naming.py concept`) en verde; `openapi/v1.yaml` valida como OpenAPI 3.1.
+
+**Siguiente**: la app (Parte B del plan) copia el contrato del merge de este PR.
 
 ## Renombre: SUNO y registros — 2026-11-06
 
