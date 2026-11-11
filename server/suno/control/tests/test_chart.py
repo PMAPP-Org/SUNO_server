@@ -54,3 +54,25 @@ class SCurveTests(SimpleTestCase):
 
     def test_no_rows_no_curve(self) -> None:
         self.assertIsNone(build_s_curve([], D(0)))
+
+    def test_x_is_spaced_by_time_not_by_period(self) -> None:
+        # Marzo partido el 18 por el corte: 18 días medidos, 13 tras el corte y abril (30).
+        rows = [
+            PeriodRow(
+                Period(date(2026, 3, 1), date(2026, 3, 18), "Mar", True), D(0), D(30), D(0), D(20)
+            ),
+            PeriodRow(
+                Period(date(2026, 3, 19), date(2026, 3, 31), "Mar+", False), D(0), D(50), None, None
+            ),
+            PeriodRow(
+                Period(date(2026, 4, 1), date(2026, 4, 30), "Abr", False), D(0), D(100), None, None
+            ),
+        ]
+        curve = build_s_curve(rows, D(100))
+        assert curve is not None
+        # 61 días en total: los finales caen en 18/61, 31/61 y 61/61.
+        self.assertEqual(curve.pv_points, "0,100 29.51,70.00 50.82,50.00 100.00,0.00")
+        self.assertEqual(curve.ev_points, "0,100 29.51,80.00")
+        self.assertEqual(curve.cut_x, D("29.51"))
+        # Etiqueta en el centro de su tramo: 9/61, 24,5/61 y 46/61.
+        self.assertEqual([pos for pos, _ in curve.x_labels], [D("14.75"), D("40.16"), D("75.41")])

@@ -45,21 +45,29 @@ def build_s_curve(rows: Sequence[PeriodRow], bac: Decimal) -> SCurve | None:
         if period_row.ev_cum is not None:
             measured.append((index, period_row.ev_cum))
     axis = money_axis(max([bac, *(r.pv_cum for r in rows), *(v for _, v in measured)]))
-    count = Decimal(len(rows))
+    # Eje X en el tiempo (días desde el inicio del primer periodo), no por periodo: un periodo
+    # partido por el corte puede durar un día y no debe ocupar lo mismo que un mes.
+    origin = rows[0].period.start
+    span = Decimal((rows[-1].period.end - origin).days + 1)
+
+    def at(days: Decimal) -> Decimal:
+        return (days / span * HUNDRED).quantize(COORD)
 
     def x(index: int) -> Decimal:
-        return (Decimal(index + 1) / count * HUNDRED).quantize(COORD)
+        return at(Decimal((rows[index].period.end - origin).days + 1))
 
     def y(value: Decimal) -> Decimal:
         return (HUNDRED - value / axis.maximum * HUNDRED).quantize(COORD)
 
+    def center(index: int) -> Decimal:
+        period = rows[index].period
+        length = Decimal((period.end - period.start).days + 1)
+        return at(Decimal((period.start - origin).days) + length * HALF)
+
     pv_points = " ".join(["0,100", *(f"{x(i)},{y(r.pv_cum)}" for i, r in enumerate(rows))])
     ev_points = " ".join(["0,100", *(f"{x(i)},{y(v)}" for i, v in measured)]) if measured else ""
     step = -(-len(rows) // MAX_X_LABELS)  # división hacia arriba
-    x_labels = tuple(
-        (((Decimal(i) + HALF) / count * HUNDRED).quantize(COORD), rows[i].period.label)
-        for i in range(0, len(rows), step)
-    )
+    x_labels = tuple((center(i), rows[i].period.label) for i in range(0, len(rows), step))
     return SCurve(
         axis=axis,
         pv_points=pv_points,
