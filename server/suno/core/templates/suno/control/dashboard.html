@@ -24,7 +24,7 @@
 <section class="pj-panel"><p class="pj-empty">Ningún par de la matriz tiene precio vigente y fechas en el cronograma. Revisa los avisos.</p></section>
 {% else %}
 {% with ind=result.indicators m=result.indicators.at_cut %}
-<section class="metrics-strip ctl-metrics" aria-label="Indicadores a la fecha de corte">
+<section class="metrics-strip ctl-metrics{% if ind.bac|money|length > 17 %} ctl-long{% endif %}" aria-label="Indicadores a la fecha de corte">
   <article class="bg-money"><span>BAC vigente</span><strong>{{ ind.bac|money }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: {{ ind.contractual_direct_cost|money }}{% if ind.contractual_partial %} (parcial: {{ ind.contractual_budgets }} de {{ ind.applied_budgets }} presupuestos){% endif %}{% else %}Sin versión contractual{% endif %}</small></article>
   <article class="bg-money"><span>Valor planeado (PV)</span><strong>{{ m.pv|money }}</strong><small>{% if ind.pv_share is not None %}{{ ind.pv_share|floatformat:1 }} % del BAC{% endif %}</small></article>
   <article class="bg-money"><span>Valor ganado (EV)</span><strong>{{ m.ev|money }}</strong><small>{% if ind.ev_share is not None %}{{ ind.ev_share|floatformat:1 }} % del BAC{% endif %}</small></article>
@@ -39,7 +39,7 @@
     <li><i class="ctl-key ctl-key-ev"></i> Valor ganado (EV){% if curve.ev_last %} · {{ curve.ev_last }}{% endif %}</li>
     <li><i class="ctl-key ctl-key-cut"></i> Fecha de corte</li>
   </ul>
-  <div class="ctl-chart">
+  <div class="ctl-chart" style="--ctl-tick-chars: {{ curve.tick_chars }}">
     <div class="ctl-ticks" aria-hidden="true">{% for pos, label in curve.axis.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
     <div class="ctl-plot" role="img" aria-label="Curva S del valor planeado y del valor ganado acumulados. Los números están en la tabla de la curva.">
       {% for pos, label in curve.axis.ticks %}<i class="ctl-grid" style="bottom: {{ pos|stringformat:'s' }}%"></i>{% endfor %}

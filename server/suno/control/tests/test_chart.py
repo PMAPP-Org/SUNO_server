@@ -32,6 +32,7 @@ class SCurveTests(SimpleTestCase):
         )
         assert curve is not None
         self.assertEqual(curve.axis.maximum, D(100))
+        self.assertEqual(curve.tick_chars, 3)
         self.assertEqual(curve.pv_points, "0,100 50.00,50.00 100.00,0.00")
         self.assertEqual(curve.ev_points, "0,100 50.00,60.00")
         self.assertEqual(curve.cut_x, D("50.00"))
@@ -76,3 +77,10 @@ class SCurveTests(SimpleTestCase):
         self.assertEqual(curve.cut_x, D("29.51"))
         # Etiqueta en el centro de su tramo: 9/61, 24,5/61 y 46/61.
         self.assertEqual([pos for pos, _ in curve.x_labels], [D("14.75"), D("40.16"), D("75.41")])
+
+    def test_large_amounts_group_their_thousands(self) -> None:
+        curve = build_s_curve([row(0, "Mar-2026", "29630048262880", "23148434369750")], D(1))
+        assert curve is not None
+        self.assertEqual(curve.axis.ticks[-1][1], "40.000.000")
+        self.assertEqual(curve.tick_chars, 10)
+        self.assertEqual((curve.pv_last, curve.ev_last), ("$29.630.048,3 M", "$23.148.434,4 M"))
