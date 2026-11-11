@@ -330,7 +330,7 @@ class WarningTests(SimpleTestCase):
         result = control(plans=[plan(task_id=uuid.uuid4())])
         self.assertEqual(result.indicators.bac, D("0.00"))
         self.assertEqual(result.warnings.count, 0)
-        self.assertTrue(result.has_plan)
+        self.assertFalse(result.has_plan)
 
     def test_percent_tasks_are_listed(self) -> None:
         tasks = [PercentTask("1.3 Aseo", D("40.00")), PercentTask("1.4 Cierre", None)]

@@ -282,7 +282,7 @@ class ControlResult:
     cut: date
     kind: str
     has_budget: bool
-    #: La matriz tiene al menos una fila (aunque ninguna mida).
+    #: La matriz tiene al menos una fila en una tarea vigente (aunque ninguna mida).
     has_plan: bool
     indicators: Indicators
     #: Vacía si ningún par tiene precio vigente y fechas.
@@ -412,7 +412,7 @@ def _compute(data: ControlInput) -> ControlResult:
             cut=data.cut,
             kind=data.kind,
             has_budget=data.has_budget,
-            has_plan=bool(data.plans),
+            has_plan=bool(planned_keys),
             indicators=Indicators(
                 money(ZERO), Measure(money(ZERO), money(ZERO)), data.contractual_direct_cost
             ),

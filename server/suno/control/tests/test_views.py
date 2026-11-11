@@ -18,6 +18,7 @@ from suno.core.tests.dbsupport import (
 )
 from suno.matrix.tests.factories import (
     budget_world,
+    import_schedule,
     item,
     locate,
     plan,
@@ -26,6 +27,7 @@ from suno.matrix.tests.factories import (
     suno_levels,
 )
 from suno.projects.tests.factories import make_field_world
+from suno.projects.tests.samples import v2
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -125,6 +127,15 @@ class ControlPageTests(TestCase):
         self.client.force_login(world.admin)
         response = self.client.get(f"/plataforma/proyectos/{world.project.pk}/control/")
         self.assertContains(response, "no tiene cantidades planeadas")
+
+    def test_plans_only_on_retired_tasks_count_as_no_plan(self) -> None:
+        world, budget = budget_world("Tarea retirada")
+        plan(world, 5, item(budget, "2.1"), "8")
+        import_schedule(world, v2())
+        self.client.force_login(world.admin)
+        response = self.client.get(f"/plataforma/proyectos/{world.project.pk}/control/")
+        self.assertContains(response, "no tiene cantidades planeadas")
+        self.assertNotContains(response, "Revisa los avisos")
 
     def test_dates_out_of_range_show_a_banner(self) -> None:
         response = self.client.get(self.base + "?corte=9999-12-31&periodo=semana")
