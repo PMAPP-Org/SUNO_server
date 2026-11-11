@@ -1,0 +1,47 @@
+{% if w.count %}
+<section class="pj-panel" aria-labelledby="ctl-warnings-title">
+  <h2 id="ctl-warnings-title">Avisos</h2>
+  {% if w.no_baseline %}
+  <details class="ctl-warning"><summary>Tareas sin línea base ({{ w.no_baseline|length }}): su valor planeado usa las fechas actuales</summary>
+    <ul>{% for label in w.no_baseline %}<li>{{ label }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if w.undated %}
+  <details class="ctl-warning"><summary>Tareas sin fechas ({{ w.undated|length }}): no suman al control</summary>
+    <ul>{% for label in w.undated %}<li>{{ label }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if w.unpriced %}
+  <details class="ctl-warning"><summary>Ítems sin precio vigente ({{ w.unpriced|length }}): no suman al control</summary>
+    <div class="pj-scroll"><table class="pj-table">
+      <thead><tr><th>Tarea</th><th>Ítem</th><th class="num">Planeado</th><th class="num">Ejecutado</th></tr></thead>
+      <tbody>{% for r in w.unpriced %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td class="num">{{ r.planned|floatformat:"-4g" }}</td><td class="num">{{ r.executed|floatformat:"-4g" }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  {% if w.overrun %}
+  <details class="ctl-warning"><summary>Sobreejecución ({{ w.overrun|length }}): el exceso sobre lo planeado no entra al valor ganado</summary>
+    <div class="pj-scroll"><table class="pj-table">
+      <thead><tr><th>Tarea</th><th>Ítem</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th><th class="num">Exceso</th><th class="num">Valor del exceso ($)</th></tr></thead>
+      <tbody>{% for r in w.overrun %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.planned|floatformat:"-4g" }}</td><td class="num">{{ r.executed|floatformat:"-4g" }}</td><td class="num">{{ r.excess|floatformat:"-4g" }}</td><td class="num">{{ r.value|floatformat:"2g" }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  {% if w.outside_plan %}
+  <details class="ctl-warning"><summary>Ejecutado fuera del plan ({{ w.outside_plan|length }}): ítems sin cantidad planeada en su tarea</summary>
+    <div class="pj-scroll"><table class="pj-table">
+      <thead><tr><th>Tarea</th><th>Ítem</th><th>Und</th><th class="num">Cantidad</th><th class="num">Valor ($)</th></tr></thead>
+      <tbody>{% for r in w.outside_plan %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.quantity|floatformat:"-4g" }}</td><td class="num">{% if r.value is not None %}{{ r.value|floatformat:"2g" }}{% else %}sin precio vigente{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  {% if w.percent_tasks %}
+  <details class="ctl-warning"><summary>Tareas medidas por % ({{ w.percent_tasks|length }}): sin plan en la matriz, no tienen valor planeado ni ganado</summary>
+    <div class="pj-scroll"><table class="pj-table">
+      <thead><tr><th>Tarea</th><th class="num">Último % validado</th></tr></thead>
+      <tbody>{% for r in w.percent_tasks %}<tr><td class="pj-wrap">{{ r.label }}</td><td class="num">{% if r.pct is not None %}{{ r.pct|floatformat:"-2" }} %{% else %}sin registro validado{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
