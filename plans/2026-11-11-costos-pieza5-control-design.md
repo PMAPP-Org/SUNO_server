@@ -111,3 +111,32 @@ normal con release-please.
 - Reparto por periodos de MS Project (*timephased*) o curvas no lineales.
 - Valor ganado por ubicación precisada en campo.
 - Control en la app móvil.
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-11-costos-pieza5-control-plan.md`; no cambian lo aprobado.
+
+- URL: `corte` (por defecto hoy), `periodo` (`mes` por defecto o `semana`) y `desglose`
+  (`capitulo` por defecto, `tarea`, `ubicacion`); un valor desconocido cae al de por defecto.
+- El periodo que contiene el corte termina en él; si la serie sigue, el resto de ese periodo es
+  una fila aparte "(tras el corte)" sin EV. La serie empieza en el menor entre el primer
+  inicio, el corte y el primer registro contado. Tope de 1000 periodos.
+- El EV de cada par se acota a [0, planeada]: un ajuste negativo resta, pero el par no baja de
+  0. La sobreejecución es lo acumulado al corte menos lo planeado.
+- Un hito, o una ventana sin días laborables, carga todo en su fin (como el % programado).
+- Una tarea con plan y sin fechas (ni de línea base ni actuales) se avisa y no suma.
+- Las tareas retiradas del cronograma no cuentan.
+- Sin precio vigente: el ítem no es `item` en la versión vigente de su presupuesto; su
+  ejecución tampoco entra.
+- La fecha de un registro es su `captured_at` en hora de Colombia.
+- Tareas medidas por %: hojas vigentes (ni resumen ni hito) sin filas en la matriz, con su
+  último % validado.
+- Desglose por capítulo de primer nivel y por la ubicación completa de la tarea, en filas
+  planas; con varios presupuestos, ítems y capítulos llevan el nombre del presupuesto.
+- Referencia contractual: suma del costo directo de la versión contractual de cada presupuesto
+  (el BAC es costo directo).
+- SPI a dos decimales; el color se decide sobre el valor redondeado. Desglose de peor a mejor
+  SPI, sin SPI al final.
+- Excel: pide `can_export_budgets` (los roles que leen presupuestos ya la tienen) y queda en la
+  auditoría como `control.exported`.
+- Datos de ejemplo para la revisión visual: `python manage.py seed_control_demo`.
