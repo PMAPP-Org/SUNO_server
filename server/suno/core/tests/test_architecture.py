@@ -82,6 +82,8 @@ ALLOWED = {
     # Datos de ejemplo del panel de costos: siembra offline para desarrollo y demos,
     # fuera de una request y con una organización ya existente (sin `ctx` que scopear).
     "suno/management/commands/seed_equipment_demo.py": "siembra offline de datos de ejemplo",
+    # Datos de ejemplo de la página "Control" (costos, pieza 5): misma razón que el anterior.
+    "suno/management/commands/seed_control_demo.py": "siembra offline del ejemplo del control",
 }
 
 
@@ -240,6 +242,7 @@ class WalkerTests(SimpleTestCase):
                 "suno/management/commands/bootstrap_demo.py",
                 "suno/management/commands/enroll_admin_totp.py",
                 "suno/management/commands/seed_equipment_demo.py",
+                "suno/management/commands/seed_control_demo.py",
             },
         )
 
