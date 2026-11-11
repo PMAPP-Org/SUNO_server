@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import unittest
+import zipfile
 
 from django.test import TestCase
 from django.utils import timezone
 
+from suno.core.models import AuditEvent
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -121,3 +124,43 @@ class ControlPageTests(TestCase):
         self.client.force_login(world.admin)
         response = self.client.get(f"/plataforma/proyectos/{world.project.pk}/control/")
         self.assertContains(response, "no tiene cantidades planeadas")
+
+
+@skip_without_db
+class ControlExportTests(TestCase):
+    def setUp(self) -> None:
+        self.world, self.budget = budget_world()
+        concrete = item(self.budget, "2.1")
+        plan(self.world, 3, concrete, "4")
+        plan(self.world, 5, concrete, "8")
+        self.world.approve(quantity_record(self.world, 5, quantity_row(concrete, "2")))
+        self.url = f"/plataforma/proyectos/{self.world.project.pk}/control/control.xlsx"
+        self.client.force_login(self.world.supervisor)
+
+    def test_export_has_both_sheets_and_is_audited(self) -> None:
+        response = self.client.get(self.url + "?corte=2026-03-20&periodo=semana")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("2026-03-20", response["Content-Disposition"])
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            periods = book.read("xl/worksheets/sheet1.xml").decode()
+            breakdown = book.read("xl/worksheets/sheet2.xml").decode()
+        self.assertIn(">09-mar-2026<", periods)
+        self.assertIn(">2.1 Columnas<", breakdown)
+        event = AuditEvent.objects.get(action="control.exported")
+        self.assertEqual(event.target, f"project:{self.world.project.pk}")
+        self.assertEqual(event.metadata, {"cut": "2026-03-20", "period": "semana"})
+
+    def test_link_on_the_page(self) -> None:
+        page = self.client.get(f"/plataforma/proyectos/{self.world.project.pk}/control/")
+        self.assertContains(page, "Exportar a Excel")
+        self.assertContains(page, "control.xlsx?corte=")
+
+    def test_field_agent_gets_404(self) -> None:
+        self.client.force_login(self.world.agent)
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertFalse(AuditEvent.objects.filter(action="control.exported").exists())
