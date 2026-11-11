@@ -1,3 +1,4 @@
+{% load money_tags %}
 {% if w.count %}
 <section class="pj-panel" aria-labelledby="ctl-warnings-title">
   <h2 id="ctl-warnings-title">Avisos</h2>
@@ -23,7 +24,7 @@
   <details class="ctl-warning"><summary>Sobreejecución ({{ w.overrun|length }}): el exceso sobre lo planeado no entra al valor ganado</summary>
     <div class="pj-scroll"><table class="pj-table">
       <thead><tr><th>Tarea</th><th>Ítem</th><th>Und</th><th class="num">Planeado</th><th class="num">Ejecutado</th><th class="num">Exceso</th><th class="num">Valor del exceso ($)</th></tr></thead>
-      <tbody>{% for r in w.overrun %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.planned|floatformat:"-4g" }}</td><td class="num">{{ r.executed|floatformat:"-4g" }}</td><td class="num">{{ r.excess|floatformat:"-4g" }}</td><td class="num">{{ r.value|floatformat:"2g" }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for r in w.overrun %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.planned|floatformat:"-4g" }}</td><td class="num">{{ r.executed|floatformat:"-4g" }}</td><td class="num">{{ r.excess|floatformat:"-4g" }}</td><td class="num">{{ r.value|signed }}</td></tr>{% endfor %}</tbody>
     </table></div>
   </details>
   {% endif %}
@@ -31,7 +32,7 @@
   <details class="ctl-warning"><summary>Ejecutado fuera del plan ({{ w.outside_plan|length }}): ítems sin cantidad planeada en su tarea</summary>
     <div class="pj-scroll"><table class="pj-table">
       <thead><tr><th>Tarea</th><th>Ítem</th><th>Und</th><th class="num">Cantidad</th><th class="num">Valor ($)</th></tr></thead>
-      <tbody>{% for r in w.outside_plan %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.quantity|floatformat:"-4g" }}</td><td class="num">{% if r.value is not None %}{{ r.value|floatformat:"2g" }}{% else %}sin precio vigente{% endif %}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for r in w.outside_plan %}<tr><td class="pj-wrap">{{ r.task }}</td><td class="pj-wrap">{{ r.item }}</td><td>{{ r.unit }}</td><td class="num">{{ r.quantity|floatformat:"-4g" }}</td><td class="num">{% if r.value is not None %}{{ r.value|signed }}{% else %}sin precio vigente{% endif %}</td></tr>{% endfor %}</tbody>
     </table></div>
   </details>
   {% endif %}

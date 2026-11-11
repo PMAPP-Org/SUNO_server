@@ -74,7 +74,8 @@ class ControlPageTests(TestCase):
         self.assertContains(response, "$5.400.000,00")  # BAC
         self.assertContains(response, "$4.050.000,00")  # PV
         self.assertContains(response, "$900.000,00")  # EV
-        self.assertContains(response, "-3.150.000,00")  # SV
+        self.assertContains(response, "−$3.150.000,00")  # SV, con el signo antes del símbolo
+        self.assertNotContains(response, "$-")
         self.assertContains(response, "SPI 0,22")
         self.assertContains(response, "Atrasado")
         self.assertContains(response, "75,0 % del BAC")

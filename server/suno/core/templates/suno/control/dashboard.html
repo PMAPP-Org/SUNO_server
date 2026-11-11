@@ -1,4 +1,5 @@
 {% extends "suno/projects/base.html" %}
+{% load money_tags %}
 {% block title %}Control · {{ project.name }}{% endblock %}
 {% block content %}
 {% include "suno/projects/_header.html" with tab="control" %}
@@ -24,10 +25,10 @@
 {% else %}
 {% with ind=result.indicators m=result.indicators.at_cut %}
 <section class="metrics-strip ctl-metrics" aria-label="Indicadores a la fecha de corte">
-  <article class="bg-money"><span>BAC vigente</span><strong>${{ ind.bac|floatformat:"2g" }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: ${{ ind.contractual_direct_cost|floatformat:"2g" }}{% if ind.contractual_partial %} (parcial: {{ ind.contractual_budgets }} de {{ ind.applied_budgets }} presupuestos){% endif %}{% else %}Sin versión contractual{% endif %}</small></article>
-  <article class="bg-money"><span>Valor planeado (PV)</span><strong>${{ m.pv|floatformat:"2g" }}</strong><small>{% if ind.pv_share is not None %}{{ ind.pv_share|floatformat:1 }} % del BAC{% endif %}</small></article>
-  <article class="bg-money"><span>Valor ganado (EV)</span><strong>${{ m.ev|floatformat:"2g" }}</strong><small>{% if ind.ev_share is not None %}{{ ind.ev_share|floatformat:1 }} % del BAC{% endif %}</small></article>
-  <article class="bg-money"><span>Variación del cronograma (SV)</span><strong>${{ m.sv|floatformat:"2g" }}</strong><small><b class="bg-label ctl-{{ m.status }}">SPI {% if m.spi is not None %}{{ m.spi|floatformat:2 }}{% else %}—{% endif %} · {{ m.status_label }}</b></small></article>
+  <article class="bg-money"><span>BAC vigente</span><strong>{{ ind.bac|money }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: {{ ind.contractual_direct_cost|money }}{% if ind.contractual_partial %} (parcial: {{ ind.contractual_budgets }} de {{ ind.applied_budgets }} presupuestos){% endif %}{% else %}Sin versión contractual{% endif %}</small></article>
+  <article class="bg-money"><span>Valor planeado (PV)</span><strong>{{ m.pv|money }}</strong><small>{% if ind.pv_share is not None %}{{ ind.pv_share|floatformat:1 }} % del BAC{% endif %}</small></article>
+  <article class="bg-money"><span>Valor ganado (EV)</span><strong>{{ m.ev|money }}</strong><small>{% if ind.ev_share is not None %}{{ ind.ev_share|floatformat:1 }} % del BAC{% endif %}</small></article>
+  <article class="bg-money"><span>Variación del cronograma (SV)</span><strong>{{ m.sv|money }}</strong><small><b class="bg-label ctl-{{ m.status }}">SPI {% if m.spi is not None %}{{ m.spi|floatformat:2 }}{% else %}—{% endif %} · {{ m.status_label }}</b></small></article>
 </section>
 {% endwith %}
 
@@ -64,11 +65,11 @@
       <tr{% if not row.period.measured %} class="pj-muted"{% endif %}>
         <td>{{ row.period.label }}</td>
         <td>{{ row.period.end|date:"d/m/Y" }}</td>
-        <td class="num">{{ row.pv|floatformat:"2g" }}</td>
-        <td class="num">{{ row.pv_cum|floatformat:"2g" }}</td>
-        <td class="num">{% if row.ev is not None %}{{ row.ev|floatformat:"2g" }}{% else %}—{% endif %}</td>
-        <td class="num">{% if row.ev_cum is not None %}{{ row.ev_cum|floatformat:"2g" }}{% else %}—{% endif %}</td>
-        <td class="num">{% if row.sv is not None %}{{ row.sv|floatformat:"2g" }}{% else %}—{% endif %}</td>
+        <td class="num">{{ row.pv|signed }}</td>
+        <td class="num">{{ row.pv_cum|signed }}</td>
+        <td class="num">{% if row.ev is not None %}{{ row.ev|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.ev_cum is not None %}{{ row.ev_cum|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.sv is not None %}{{ row.sv|signed }}{% else %}—{% endif %}</td>
         <td class="num">{% if row.spi is not None %}{{ row.spi|floatformat:2 }}{% else %}—{% endif %}</td>
       </tr>
     {% endfor %}
@@ -90,10 +91,10 @@
     {% for row in rows %}
       <tr>
         <td class="pj-name">{% if row.task_id %}<a href="{% url 'projects:task' project.pk row.task_id %}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
-        <td class="num">{{ row.bac|floatformat:"2g" }}</td>
-        <td class="num">{{ row.measure.pv|floatformat:"2g" }}</td>
-        <td class="num">{{ row.measure.ev|floatformat:"2g" }}</td>
-        <td class="num">{{ row.measure.sv|floatformat:"2g" }}</td>
+        <td class="num">{{ row.bac|signed }}</td>
+        <td class="num">{{ row.measure.pv|signed }}</td>
+        <td class="num">{{ row.measure.ev|signed }}</td>
+        <td class="num">{{ row.measure.sv|signed }}</td>
         <td class="num">{% if row.measure.spi is not None %}{{ row.measure.spi|floatformat:2 }}{% else %}—{% endif %}</td>
         <td><span class="bg-label ctl-{{ row.measure.status }}">{{ row.measure.status_label }}</span></td>
       </tr>
