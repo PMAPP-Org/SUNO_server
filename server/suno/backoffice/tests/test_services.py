@@ -17,14 +17,21 @@ from xml.etree import ElementTree
 
 from django.core.exceptions import PermissionDenied
 from django.db import connection
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from suno.authn.models import RefreshToken
 from suno.backoffice import export
-from suno.backoffice.export import ExportTooLarge, record_table, safe_cell, to_csv, to_xlsx
+from suno.backoffice.export import (
+    ExportTooLarge,
+    record_table,
+    safe_cell,
+    to_csv,
+    to_xlsx,
+    to_xlsx_book,
+)
 from suno.backoffice.personal_data import (
     SUPPRESSED_PREFIX,
     export_personal_data,
@@ -336,3 +343,43 @@ class PersonalDataTests(TestCase):
         supervised = make_tenant("Org S", staff_role=Role.SUPERVISOR)
         with self.assertRaises(PermissionDenied):
             export_personal_data(supervised.ctx(), supervised.agent)
+
+
+class XlsxBookTests(SimpleTestCase):
+    """Costos, pieza 5: el Excel del control lleva dos hojas."""
+
+    def test_book_with_several_sheets(self) -> None:
+        data = to_xlsx_book([("Uno", ["a"], [[1]]), ("Dos & tres", ["b"], [["x"]])])
+        with zipfile.ZipFile(io.BytesIO(data)) as book:
+            self.assertIsNone(book.testzip())
+            workbook = book.read("xl/workbook.xml").decode()
+            relations = book.read("xl/_rels/workbook.xml.rels").decode()
+            types = book.read("[Content_Types].xml").decode()
+            first = book.read("xl/worksheets/sheet1.xml").decode()
+            second = book.read("xl/worksheets/sheet2.xml").decode()
+        self.assertIn('<sheet name="Uno" sheetId="1" r:id="rId1"/>', workbook)
+        self.assertIn('<sheet name="Dos &amp; tres" sheetId="2" r:id="rId2"/>', workbook)
+        self.assertIn('Id="rId2"', relations)
+        self.assertIn('Target="worksheets/sheet2.xml"', relations)
+        self.assertIn('PartName="/xl/worksheets/sheet2.xml"', types)
+        self.assertIn("<v>1</v>", first)
+        self.assertIn(">x<", second)
+
+    def test_single_sheet_keeps_its_layout(self) -> None:
+        with zipfile.ZipFile(io.BytesIO(to_xlsx(["a"], [["b"]], sheet_name="Hoja"))) as book:
+            self.assertEqual(
+                sorted(book.namelist()),
+                [
+                    "[Content_Types].xml",
+                    "_rels/.rels",
+                    "xl/_rels/workbook.xml.rels",
+                    "xl/workbook.xml",
+                    "xl/worksheets/sheet1.xml",
+                ],
+            )
+            workbook = book.read("xl/workbook.xml").decode()
+        self.assertIn('<sheet name="Hoja" sheetId="1" r:id="rId1"/>', workbook)
+
+    def test_a_book_needs_a_sheet(self) -> None:
+        with self.assertRaises(ValueError):
+            to_xlsx_book([])

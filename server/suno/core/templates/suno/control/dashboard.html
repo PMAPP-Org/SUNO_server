@@ -1,0 +1,109 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Control · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="control" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Fecha de corte y periodos">
+    <label>Fecha de corte <input type="date" name="corte" value="{{ options.cut|date:'Y-m-d' }}"></label>
+    <label>Periodos <select name="periodo">{% for key, label in period_kinds.items %}<option value="{{ key }}" {% if options.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <input type="hidden" name="desglose" value="{{ options.tab }}">
+    <button class="button" type="submit">Ver</button>
+    {% if can_export_control and result.periods %}<a class="text-link" href="{% url 'control:export' project.pk %}?{{ options.query }}">Exportar a Excel</a>{% endif %}
+  </form>
+</section>
+
+{% if error %}
+<p class="pj-warning" role="alert">{{ error }}</p>
+{% elif not result.has_budget %}
+<section class="pj-panel"><p class="pj-empty">El proyecto no tiene un presupuesto aplicado. El control valora el avance con los precios vigentes: carga uno en <a href="{% url 'budgets:list' project.pk %}">Presupuestos</a>.</p></section>
+{% elif not result.has_plan %}
+<section class="pj-panel"><p class="pj-empty">La matriz no tiene cantidades planeadas. El valor planeado sale de ellas: cárgalas en <a href="{% url 'matrix:items' project.pk %}">Matriz</a>.</p></section>
+{% else %}
+{% if not result.periods %}
+<section class="pj-panel"><p class="pj-empty">Ningún par de la matriz tiene precio vigente y fechas en el cronograma. Revisa los avisos.</p></section>
+{% else %}
+{% with ind=result.indicators m=result.indicators.at_cut %}
+<section class="metrics-strip ctl-metrics{% if ind.bac|money|length > 17 %} ctl-long{% endif %}" aria-label="Indicadores a la fecha de corte">
+  <article class="bg-money"><span>BAC vigente</span><strong>{{ ind.bac|money }}</strong><small>{% if ind.contractual_direct_cost is not None %}Costo directo contractual: {{ ind.contractual_direct_cost|money }}{% if ind.contractual_partial %} (parcial: {{ ind.contractual_budgets }} de {{ ind.applied_budgets }} presupuestos){% endif %}{% else %}Sin versión contractual{% endif %}</small></article>
+  <article class="bg-money"><span>Valor planeado (PV)</span><strong>{{ m.pv|money }}</strong><small>{% if ind.pv_share is not None %}{{ ind.pv_share|floatformat:1 }} % del BAC{% endif %}</small></article>
+  <article class="bg-money"><span>Valor ganado (EV)</span><strong>{{ m.ev|money }}</strong><small>{% if ind.ev_share is not None %}{{ ind.ev_share|floatformat:1 }} % del BAC{% endif %}</small></article>
+  <article class="bg-money"><span>Variación del cronograma (SV)</span><strong>{{ m.sv|money }}</strong><small><b class="bg-label ctl-{{ m.status }}">SPI {% if m.spi is not None %}{{ m.spi|floatformat:2 }}{% else %}—{% endif %} · {{ m.status_label }}</b></small></article>
+</section>
+{% endwith %}
+
+<figure class="pj-panel ctl-figure" aria-labelledby="ctl-curve-title">
+  <figcaption id="ctl-curve-title"><strong>Curva S: valor planeado y valor ganado acumulados</strong></figcaption>
+  <ul class="ctl-legend" aria-label="Leyenda">
+    <li><i class="ctl-key"></i> Valor planeado (PV) · {{ curve.pv_last }}</li>
+    <li><i class="ctl-key ctl-key-ev"></i> Valor ganado (EV){% if curve.ev_last %} · {{ curve.ev_last }}{% endif %}</li>
+    <li><i class="ctl-key ctl-key-cut"></i> Fecha de corte</li>
+  </ul>
+  <div class="ctl-chart" style="--ctl-tick-chars: {{ curve.tick_chars }}">
+    <div class="ctl-ticks" aria-hidden="true">{% for pos, label in curve.axis.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
+    <div class="ctl-plot" role="img" aria-label="Curva S del valor planeado y del valor ganado acumulados. Los números están en la tabla de la curva.">
+      {% for pos, label in curve.axis.ticks %}<i class="ctl-grid" style="bottom: {{ pos|stringformat:'s' }}%"></i>{% endfor %}
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {% if curve.cut_x is not None %}<line class="ctl-cut" x1="{{ curve.cut_x|stringformat:'s' }}" x2="{{ curve.cut_x|stringformat:'s' }}" y1="0" y2="100"/>{% endif %}
+        <polyline class="ctl-pv" points="{{ curve.pv_points }}"/>
+        {% if curve.ev_points %}<polyline class="ctl-ev" points="{{ curve.ev_points }}"/>{% endif %}
+      </svg>
+    </div>
+    <div class="ctl-xlabels" aria-hidden="true">{% for pos, label in curve.x_labels %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
+  </div>
+  <p class="pj-muted ctl-source">Eje vertical: {{ curve.axis.unit }}. PV repartido por días laborables de la línea base; EV con las cantidades validadas hasta el {{ result.cut|date:"d/m/Y" }}. Precios del presupuesto vigente.</p>
+</figure>
+
+<details class="pj-panel ctl-table">
+  <summary>Tabla de la curva ({{ result.periods|length }} periodos)</summary>
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <caption class="sr-only">Valor planeado y valor ganado por periodo</caption>
+    <thead><tr><th>Periodo</th><th>Hasta</th><th class="num">PV del periodo</th><th class="num">PV acumulado</th><th class="num">EV del periodo</th><th class="num">EV acumulado</th><th class="num">SV</th><th class="num">SPI</th></tr></thead>
+    <tbody>
+    {% for row in result.periods %}
+      <tr{% if not row.period.measured %} class="pj-muted"{% endif %}>
+        <td>{{ row.period.label }}</td>
+        <td>{{ row.period.end|date:"d/m/Y" }}</td>
+        <td class="num">{{ row.pv|signed }}</td>
+        <td class="num">{{ row.pv_cum|signed }}</td>
+        <td class="num">{% if row.ev is not None %}{{ row.ev|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.ev_cum is not None %}{{ row.ev_cum|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.sv is not None %}{{ row.sv|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.spi is not None %}{{ row.spi|floatformat:2 }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+
+<section class="pj-panel" aria-labelledby="ctl-breakdown-title">
+  <h2 id="ctl-breakdown-title">Desglose a la fecha de corte</h2>
+  <nav class="pj-tabs ctl-tabs" aria-label="Desglose">
+    {% for key, label in tabs.items %}<a href="?{{ options.query }}&amp;desglose={{ key }}" {% if options.tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+  <p class="pj-muted">De peor a mejor SPI; sin valor planeado a la fecha, al final.</p>
+  <div class="pj-scroll">
+  <table class="pj-table ctl-breakdown">
+    <thead><tr><th>{% if options.tab == "tarea" %}Tarea{% elif options.tab == "ubicacion" %}Ubicación{% else %}Capítulo{% endif %}</th><th class="num">BAC</th><th class="num">PV</th><th class="num">EV</th><th class="num">SV</th><th class="num">SPI</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="pj-name">{% if row.task_id %}<a href="{% url 'projects:task' project.pk row.task_id %}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+        <td class="num">{{ row.bac|signed }}</td>
+        <td class="num">{{ row.measure.pv|signed }}</td>
+        <td class="num">{{ row.measure.ev|signed }}</td>
+        <td class="num">{{ row.measure.sv|signed }}</td>
+        <td class="num">{% if row.measure.spi is not None %}{{ row.measure.spi|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td><span class="bg-label ctl-{{ row.measure.status }}">{{ row.measure.status_label }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+{% include "suno/control/_warnings.html" with w=result.warnings %}
+{% endif %}
+{% endblock %}

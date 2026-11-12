@@ -25,6 +25,10 @@ urlpatterns = [
         "plataforma/proyectos/<uuid:project_id>/matriz/",
         include("suno.matrix.urls"),
     ),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/control/",
+        include("suno.control.urls"),
+    ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),
 ]

@@ -152,6 +152,8 @@ class AuditAction:
     MATRIX_IMPORT_DISCARDED = "matrix.import_discarded"
     MATRIX_PLAN_CHANGED = "matrix.plan_changed"
     MATRIX_TASK_LOCATION_CHANGED = "matrix.task_location_changed"
+    # Control con valor ganado (costos, pieza 5).
+    CONTROL_EXPORTED = "control.exported"
 
 
 def hash_ip(ip: str | None) -> str | None:
