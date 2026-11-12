@@ -115,11 +115,15 @@ button.text-link:hover { color: var(--suno-red); }
 
 /* Control con valor ganado (costos, pieza 5). */
 .ctl-metrics { margin: 24px 0 0; }
-/* Montos de 14 cifras o más: parten la línea antes que pisar la tarjeta vecina. */
-.metrics-strip.ctl-metrics .bg-money strong { white-space: normal; overflow-wrap: anywhere; }
+/* Montos de 14 cifras o más: parten la línea antes que pisar la tarjeta vecina, llenando la
+   línea (`break-all`) para que el signo menos no quede solo en la primera. */
+.metrics-strip.ctl-metrics .bg-money strong { white-space: normal; word-break: break-all; }
 .ctl-metrics small { overflow-wrap: anywhere; }
 .metrics-strip.ctl-long .bg-money strong { font-size: clamp(13px, 1.1vw, 17px); }
-@media (max-width: 767px) { .metrics-strip.ctl-long .bg-money strong { font-size: 12px; } }
+@media (max-width: 767px) {
+  .metrics-strip.ctl-long .bg-money strong { font-size: 12px; }
+  .metrics-strip.ctl-metrics article { padding: 16px 14px; }
+}
 .bg-label.ctl-green { background: var(--suno-green); }
 .bg-label.ctl-amber { background: var(--suno-amber); color: var(--suno-ink); }
 .bg-label.ctl-red { background: var(--suno-red); }
