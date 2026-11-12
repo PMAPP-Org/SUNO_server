@@ -21,9 +21,35 @@ MAX_PERIODS = 1000
 ONE_DAY = timedelta(days=1)
 
 
+OUT_OF_CALENDAR = "fuera_de_calendario"
+TOO_MANY_PERIODS = "demasiados_periodos"
+#: Textos para el usuario. Las vistas muestran estos textos fijos, nunca `str(exc)`.
+RANGE_MESSAGES = {
+    OUT_OF_CALENDAR: (
+        "Las fechas del cronograma o la fecha de corte están fuera del calendario. "
+        "Revisa las fechas."
+    ),
+    TOO_MANY_PERIODS: (
+        f"Las fechas del cronograma dan más de {MAX_PERIODS} periodos. Revisa las "
+        "fechas de las tareas o usa periodos mensuales."
+    ),
+}
+
+
 class PeriodRangeError(ValueError):
-    """El rango de fechas da demasiados periodos o sale del calendario; el mensaje es para
-    el usuario."""
+    """El rango de fechas da demasiados periodos o sale del calendario.
+
+    `reason` es una llave de `RANGE_MESSAGES`, donde está el texto para el usuario.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(RANGE_MESSAGES[reason])
+        self.reason = reason
+
+
+def range_message(exc: PeriodRangeError) -> str:
+    """Texto fijo para el usuario; no se devuelve el texto de la excepción."""
+    return RANGE_MESSAGES.get(exc.reason, RANGE_MESSAGES[OUT_OF_CALENDAR])
 
 
 @dataclass(frozen=True)
@@ -48,10 +74,7 @@ def next_start(start: date, kind: str) -> date:
             return start + timedelta(days=7)
         return date(start.year + start.month // 12, start.month % 12 + 1, 1)
     except (OverflowError, ValueError) as exc:
-        raise PeriodRangeError(
-            "Las fechas del cronograma o la fecha de corte están fuera del calendario. "
-            "Revisa las fechas."
-        ) from exc
+        raise PeriodRangeError(OUT_OF_CALENDAR) from exc
 
 
 def period_label(start: date, kind: str) -> str:
@@ -80,9 +103,6 @@ def build_periods(first: date, last: date, cut: date, kind: str) -> list[Period]
         else:
             periods.append(Period(start, end, label, measured=end <= cut))
         if len(periods) > MAX_PERIODS:
-            raise PeriodRangeError(
-                f"Las fechas del cronograma dan más de {MAX_PERIODS} periodos. Revisa las "
-                "fechas de las tareas o usa periodos mensuales."
-            )
+            raise PeriodRangeError(TOO_MANY_PERIODS)
         start = following
     return periods
