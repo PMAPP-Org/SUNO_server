@@ -30,7 +30,7 @@ from .chart import build_s_curve
 from .earned_value import BreakdownRow, ControlResult, compute
 from .export import control_workbook
 from .loader import load_control_input
-from .periods import DEFAULT_KIND, PERIOD_KINDS, PeriodRangeError
+from .periods import DEFAULT_KIND, PERIOD_KINDS, PeriodRangeError, range_message
 
 BREAKDOWN_TABS = {"capitulo": "Por capítulo", "tarea": "Por tarea", "ubicacion": "Por ubicación"}
 DEFAULT_TAB = "capitulo"
@@ -78,7 +78,7 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
     try:
         result = compute(load_control_input(ctx, project, cut=options.cut, kind=options.kind))
     except PeriodRangeError as exc:
-        error = str(exc)
+        error = range_message(exc)
     return _render(
         request,
         ctx,
@@ -110,7 +110,9 @@ def export(request: HttpRequest, project_id: UUID) -> HttpResponse:
     try:
         result = compute(load_control_input(ctx, project, cut=options.cut, kind=options.kind))
     except PeriodRangeError as exc:
-        return HttpResponse(str(exc), status=400, content_type="text/plain; charset=utf-8")
+        return HttpResponse(
+            range_message(exc), status=400, content_type="text/plain; charset=utf-8"
+        )
     content = control_workbook(result)
     with transaction.atomic():
         audit.record(
