@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.17.1](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.0...v0.17.1) (2026-11-12)
+
+
+### Corregido
+
+* **control:** show fixed range-error texts instead of the exception message ([#70](https://github.com/PMAPP-Org/SUNO_server/issues/70)) ([854e3ce](https://github.com/PMAPP-Org/SUNO_server/commit/854e3ce380cd40838206d24cb8829fc300be52f0))
+
 ## [0.17.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.16.0...v0.17.0) (2026-11-12)
 
 
