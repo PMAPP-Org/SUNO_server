@@ -4,6 +4,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.17.2](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.1...v0.17.2) (2026-11-12)
+
+
+### Dependencias y build
+
+* **deps:** bump grafana/grafana from 13.2.4 to 13.3.0 in /infra ([#63](https://github.com/PMAPP-Org/SUNO_server/issues/63)) ([f842779](https://github.com/PMAPP-Org/SUNO_server/commit/f8427794e8ab93c101ea223adee0ac811eb74b08))
+* **deps:** bump prom/alertmanager from v0.34.1 to v0.34.2 in /infra ([#62](https://github.com/PMAPP-Org/SUNO_server/issues/62)) ([4ddf9ad](https://github.com/PMAPP-Org/SUNO_server/commit/4ddf9ad67654424ab513823acf87343776ffd4f2))
+
 ## [0.17.1](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.0...v0.17.1) (2026-11-12)
 
 
