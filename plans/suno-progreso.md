@@ -1,7 +1,23 @@
 # Progreso de ejecución — SUNO
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-11-10 (módulo de costos, pieza 4b: cantidades en la app, servidor. Anterior: renombre a SUNO y registros; ver «Estado al 2026-10-29» abajo)
+**Última actualización**: 2026-11-11 (módulo de costos, pieza 5: control con valor ganado, servidor. Anterior: pieza 4b, cantidades en la app; renombre a SUNO y registros; ver «Estado al 2026-10-29» abajo)
+
+## Módulo de costos — Pieza 5 (control con valor ganado), servidor — 2026-11-11
+
+**PR**: pendiente (rama `feat/costos-control`). Plan: [2026-11-11-costos-pieza5-control-plan.md](2026-11-11-costos-pieza5-control-plan.md). Spec: [2026-11-11-costos-pieza5-control-design.md](2026-11-11-costos-pieza5-control-design.md).
+
+**Qué entra**: (1) paquete **`suno/control`**: cálculo puro del valor planeado (PV, repartido parejo por días laborables de la línea base) y del valor ganado (EV, cantidades validadas × precio vigente, acotado por par a [0, planeada]), SV, SPI y estado (0,95 / 0,85), periodos semanales y mensuales partidos en el corte; cargador con **9 queries fijas** (`scoped_qs` en todas); (2) **página "Control"** y pestaña del proyecto (mismo acceso que la Matriz): indicadores con BAC vigente y referencia contractual, **curva S** en SVG del servidor (eje X por tiempo) con su tabla, desglose por capítulo, tarea y ubicación de peor a mejor SPI, y avisos (sin línea base, sin fechas, sin precio vigente, sobreejecución, fuera del plan, tareas por %); (3) **Excel auditado** (`control.exported`, pide `can_export_budgets`) con hojas Periodos y Desglose, `safe_cell` en todo; `to_xlsx_book` en `backoffice/export.py` para libros de varias hojas; filtros `money`/`signed` (signo menos antes del símbolo); (4) **`seed_control_demo`** para la revisión visual. Sin migraciones ni cambios de contrato.
+
+**Decisiones del plan** (anotadas en la spec): URL con `corte`, `periodo` y `desglose` (valores desconocidos caen al de por defecto); el periodo del corte termina en él y el resto es una fila "(tras el corte)"; tope de 1000 periodos (y fechas más allá del año 9999) como error de rango; hitos y ventanas sin días laborables cargan en su fin; tareas con plan y sin fechas se avisan y no suman; tareas retiradas no cuentan; fecha del registro = `captured_at` en hora de Colombia; tareas por % con su % validado al corte; con varios presupuestos, ítems y capítulos llevan el nombre del presupuesto y la referencia contractual parcial se marca; SPI a dos decimales y color sobre el redondeado.
+
+**Revisión de código**: sin hallazgos críticos ni importantes; se corrigieron los menores (pruebas del error de rango, 400 y 403 del Excel; % de tareas al corte; fechas > 9999; eje X por tiempo; matriz solo en tareas retiradas = sin plan; "Sin capítulo" por presupuesto y referencia contractual parcial; signo de los montos negativos).
+
+**Revisión visual** (1440 y 390 px, montos de 14–15 cifras y nombres de 120 caracteres, capturas con Playwright): sin desbordes de página ni etiquetas del eje que se pisen; se corrigieron montos largos en los indicadores (parten la línea sin pisar la tarjeta), ancho del eje Y según sus etiquetas, menos etiquetas del eje X en teléfono y, al final, el signo menos que quedaba solo en una línea a 390 px.
+
+**Verificación real**: `pytest` completo **1875 passed** (+1857 subtests), 4 fallos conocidos del entorno en `sync/tests/test_load_script.py`; cobertura **93 %** (`suno/control` al 100 %); prueba de carga (5000 pares, 1000 registros, semanal, desglose por tarea) en **~0,25 s** por request (límite 1 s); `ruff check` limpio y `ruff format --check` solo marca `healthcheck.py`, como en master; `mypy` limpio (378 archivos); `makemigrations --check` sin cambios; bandit sin hallazgos; guardia de nombres en verde.
+
+**Siguiente**: costo real (AC), CPI y EAC en una pieza posterior.
 
 ## Módulo de costos — Pieza 4b (cantidades en la app), servidor — 2026-11-10
 
