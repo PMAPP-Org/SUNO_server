@@ -593,9 +593,9 @@ rich==15.0.0 \
     --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb \
     --hash=sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36
     # via schemathesis
-schemathesis==4.32.7 \
-    --hash=sha256:d52484f577dd8b91c778cfb0f6569570030a8822fde47baa7c87a53d0d81e245 \
-    --hash=sha256:d9b85738621f860e03cb69c66529bfebe6e20474b13c2e57d946aa4ed23c729f
+schemathesis==4.33.1 \
+    --hash=sha256:409ecaa3ade87e9c7a4f417c9efb88bc60e7535252881f54f27e476c34b5c18c \
+    --hash=sha256:610f2027ef2e60bf287971d5b299e6d25ab9725e2933f4425c41858593b06d79
     # via -r requirements-dast.txt
 sortedcontainers==2.4.0 \
     --hash=sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88 \

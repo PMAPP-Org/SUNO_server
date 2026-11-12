@@ -11,7 +11,7 @@ pytest==9.2.0
 # SAST, auditoría de dependencias contra advisories y SBOM CycloneDX.
 bandit==1.9.4
 pip-audit==2.10.1
-cyclonedx-bom==7.6.0
+cyclonedx-bom==8.0.1
 
 # Gate de calidad: cobertura de ramas con suelo en pyproject.toml.
 pytest-cov==7.1.0
@@ -19,4 +19,4 @@ pytest-cov==7.1.0
 pypdf==6.21.4
 # SAST de los workflows de GitHub Actions (OWASP A03/A08: inyección en
 # expresiones, permisos excesivos, actions sin fijar).
-zizmor==1.31.1
+zizmor==1.32.0
