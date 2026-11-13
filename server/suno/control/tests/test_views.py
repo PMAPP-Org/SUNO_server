@@ -5,10 +5,10 @@ from __future__ import annotations
 import io
 import unittest
 import zipfile
+from datetime import date
 from unittest import mock
 
 from django.test import TestCase
-from django.utils import timezone
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import V1_ROWS
@@ -36,6 +36,8 @@ tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 AT_CUT = "?corte=2026-03-20"
+#: "Hoy" fijo para las pruebas del corte por defecto: la vista usa `timezone.localdate()`.
+TODAY = date(2026, 3, 20)
 
 
 @skip_without_db
@@ -91,9 +93,11 @@ class ControlPageTests(TestCase):
         self.assertContains(response, "(parcial: 1 de 2 presupuestos)")
 
     def test_defaults_and_unknown_values(self) -> None:
-        response = self.client.get(self.base + "?corte=no-es-fecha&periodo=dia&desglose=x")
+        with mock.patch("django.utils.timezone.localdate", return_value=TODAY):
+            response = self.client.get(self.base + "?corte=no-es-fecha&periodo=dia&desglose=x")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f'value="{timezone.localdate().isoformat()}"')
+        self.assertContains(response, 'value="2026-03-20"')
+        self.assertContains(response, "$900.000,00")  # EV al corte por defecto (hoy)
         self.assertContains(response, '<option value="mes" selected>')
         self.assertContains(response, 'aria-current="page">Por capítulo</a>')
 
@@ -186,9 +190,10 @@ class ControlExportTests(TestCase):
         self.assertEqual(event.metadata, {"cut": "2026-03-20", "period": "semana"})
 
     def test_link_on_the_page(self) -> None:
-        page = self.client.get(f"/plataforma/proyectos/{self.world.project.pk}/control/")
+        with mock.patch("django.utils.timezone.localdate", return_value=TODAY):
+            page = self.client.get(f"/plataforma/proyectos/{self.world.project.pk}/control/")
         self.assertContains(page, "Exportar a Excel")
-        self.assertContains(page, "control.xlsx?corte=")
+        self.assertContains(page, "control.xlsx?corte=2026-03-20&amp;periodo=mes")
 
     def test_field_agent_gets_404(self) -> None:
         self.client.force_login(self.world.agent)
