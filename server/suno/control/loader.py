@@ -25,6 +25,7 @@ from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
+from suno.budgets.labels import row_label, several_budgets, with_budget
 from suno.budgets.mapping import fold
 from suno.core.context import RequestContext
 from suno.core.models import (
@@ -156,7 +157,12 @@ def load_control_input(
         scoped_qs(ctx, BudgetItem).filter(budget__project=project).values_list("pk", "code")
     )
     budget_names = {pk: name for pk, name, _ in budgets}
-    items = _priced_items(version_rows, budget_names, item_labels)
+    items = _priced_items(
+        version_rows,
+        budget_names,
+        item_labels,
+        several=several_budgets(version.budget_id for version in versions),
+    )
 
     plans = [
         PlanPair(task_id, item_id, planned)
@@ -208,24 +214,27 @@ def load_control_input(
 
 
 def _priced_items(
-    rows: Sequence[tuple[Any, ...]], budget_names: dict[UUID, str], labels: dict[UUID, str]
+    rows: Sequence[tuple[Any, ...]],
+    budget_names: dict[UUID, str],
+    labels: dict[UUID, str],
+    *,
+    several: bool,
 ) -> dict[UUID, PricedItem]:
     """Los ítems con precio vigente. Completa `labels` con "código descripción" (y el
-    presupuesto, si el proyecto tiene más de uno) para todo lo de las versiones vigentes."""
-    several = len(budget_names) > 1
+    presupuesto, si hay dos o más con versión aplicada: `budgets.labels`) para todo lo de las
+    versiones vigentes."""
     parents: dict[UUID, UUID | None] = {}
     names: dict[UUID, str] = {}
     for item_id, code, _kind, description, _unit, _price, parent_id, budget_id in rows:
-        text = f"{code} {description}".strip()
-        names[item_id] = f"{text} · {budget_names[budget_id]}" if several else text
+        names[item_id] = row_label(code, description, budget_names[budget_id], several=several)
         parents[item_id] = parent_id
     labels.update(names)
     items: dict[UUID, PricedItem] = {}
     for item_id, _code, kind, _description, unit, price, _parent, budget_id in rows:
         if kind == BudgetRowKind.ITEM and price is not None:
             chapter = _top_chapter(item_id, parents, names)
-            if chapter == NO_CHAPTER and several:
-                chapter = f"{NO_CHAPTER} · {budget_names[budget_id]}"
+            if chapter == NO_CHAPTER:
+                chapter = with_budget(NO_CHAPTER, budget_names[budget_id], several=several)
             items[item_id] = PricedItem(
                 item_id=item_id,
                 label=names[item_id],

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from uuid import UUID
 
+from suno.budgets.labels import row_label, several_budgets
 from suno.core.context import RequestContext
 from suno.core.models import BudgetItemVersion, BudgetRowKind, Project, Task
 from suno.core.scoping import scoped_qs
@@ -94,7 +95,7 @@ def load_catalog(ctx: RequestContext, project: Project) -> Catalog:
     versions = current_versions(ctx, project)
     if not versions:
         return Catalog({})
-    several = len(versions) > 1
+    several = several_budgets(version.budget_id for version in versions)
     rows: dict[UUID, CatalogRow] = {}
     for item_id, code, description, kind, parent_id, budget_id, budget in (
         scoped_qs(ctx, BudgetItemVersion)
@@ -110,7 +111,6 @@ def load_catalog(ctx: RequestContext, project: Project) -> Catalog:
             "version__budget__name",
         )
     ):
-        text = f"{code} {description}".strip()
         rows[item_id] = CatalogRow(
             item_id=item_id,
             code=code,
@@ -119,7 +119,7 @@ def load_catalog(ctx: RequestContext, project: Project) -> Catalog:
             parent_id=parent_id,
             budget_id=budget_id,
             budget=budget,
-            label=f"{text} · {budget}" if several else text,
+            label=row_label(code, description, budget, several=several),
         )
     return Catalog(rows)
 

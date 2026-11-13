@@ -334,3 +334,14 @@ class CostLoaderTests(TestCase):
             data = load_control_input(ctx, world.project, cut=CUT, kind=MONTH, costs=True)
         assert data.costs is not None
         self.assertEqual((list(data.costs.admin), dict(data.costs.chapters)), ([], {}))
+
+    def test_the_budget_suffix_follows_the_applied_budgets(self) -> None:
+        """Mismo criterio que el catálogo del libro: el sufijo solo si hay dos o más
+        presupuestos con versión aplicada (un presupuesto sin aplicar no cuenta)."""
+        make_budget(self.world.project, self.world.admin, name="Interventoría", code="C-02")
+        label = self.load().items[self.concrete.pk].label
+        self.assertEqual(label, "2.1 Concreto zapatas")
+        from suno.costs.catalog import load_catalog
+
+        catalog = load_catalog(self.ctx, self.world.project)
+        self.assertEqual(catalog.label_of(self.concrete.pk), label)
