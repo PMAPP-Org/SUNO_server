@@ -1,4 +1,8 @@
 <nav class="pj-tabs cst-nav" aria-label="Libro de costos">
   <a href="{% url 'costs:list' project.pk %}" {% if sub == "list" %}aria-current="page"{% endif %}>Libro</a>
+  {% if can_decide_cost %}<a href="{% url 'costs:inbox' project.pk %}" {% if sub == "inbox" %}aria-current="page"{% endif %}>Por aprobar ({{ pending_count }})</a>{% endif %}
+  {% if rejected_count or sub == "rejected" %}<a href="{% url 'costs:rejected' project.pk %}" {% if sub == "rejected" %}aria-current="page"{% endif %}>Mis rechazados ({{ rejected_count }})</a>{% endif %}
   {% if can_create_cost %}<a href="{% url 'costs:new' project.pk %}" {% if sub == "new" %}aria-current="page"{% endif %}>Nuevo costo</a>{% endif %}
+  {% if can_import_cost %}<a href="{% url 'costs:import' project.pk %}" {% if sub == "import" %}aria-current="page"{% endif %}>Importar Excel</a>{% endif %}
+  {% if can_export_cost %}<a href="{% url 'costs:export' project.pk %}{% if filters.query %}?{{ filters.query }}{% endif %}">Exportar a Excel</a>{% endif %}
 </nav>

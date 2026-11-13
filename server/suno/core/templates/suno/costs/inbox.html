@@ -1,0 +1,34 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Por aprobar · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="inbox" %}
+<section class="pj-panel">
+  <h2>Por aprobar</h2>
+  <p class="pj-muted">Borradores de otras personas. Aprobar exige el soporte; rechazar, un motivo.</p>
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Fecha</th><th>Descripción</th><th>Asignación</th><th class="num">Valor</th><th>Registró</th><th>Soporte</th><th>Decisión</th></tr></thead>
+    <tbody>
+    {% for entry, assignment in rows %}
+      <tr>
+        <td>{{ entry.incurred_on|date:"d/m/Y" }}</td>
+        <td class="pj-name"><a href="{% url 'costs:detail' project.pk entry.pk %}">{{ entry.description }}</a><br><small class="pj-muted">{{ entry.get_kind_display }}{% if entry.third_party %} · {{ entry.third_party }}{% endif %}</small></td>
+        <td class="pj-wrap">{{ assignment }}</td>
+        <td class="num">{{ entry.amount|signed }}</td>
+        <td class="pj-wrap">{{ entry.created_by }}</td>
+        <td>{% if entry.attachment_id %}<a href="{% url 'costs:support' project.pk entry.pk %}" target="_blank" rel="noopener">Ver</a>{% else %}<span class="pj-late">Sin soporte</span>{% endif %}</td>
+        <td class="cst-decide">
+          <form method="post" action="{% url 'costs:approve' project.pk entry.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit"{% if not entry.attachment_id %} disabled{% endif %}>Aprobar</button></form>
+          <form method="post" action="{% url 'costs:reject' project.pk entry.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><label class="sr-only" for="motivo-{{ entry.pk }}">Motivo del rechazo</label><input id="motivo-{{ entry.pk }}" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
+</section>
+{% endblock %}

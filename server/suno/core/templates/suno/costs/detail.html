@@ -25,5 +25,12 @@
     {% if can_edit %}<a class="button" href="{% url 'costs:edit' project.pk entry.pk %}">{% if entry.status == "rejected" %}Corregir y reenviar{% else %}Editar{% endif %}</a>{% endif %}
     {% if can_delete %}<form method="post" action="{% url 'costs:delete' project.pk entry.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar</button></form>{% endif %}
   </div>
+  {% if can_decide %}
+  <div class="cst-decide">
+    <form method="post" action="{% url 'costs:approve' project.pk entry.pk %}">{% csrf_token %}<button class="button" type="submit"{% if not entry.attachment_id %} disabled title="Falta el soporte"{% endif %}>Aprobar</button></form>
+    <form method="post" action="{% url 'costs:reject' project.pk entry.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo del rechazo <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Rechazar</button></form>
+  </div>
+  {% endif %}
+  {% if can_reverse %}<p><a class="text-link" href="{% url 'costs:reverse' project.pk entry.pk %}">Reversar</a></p>{% endif %}
 </section>
 {% endblock %}

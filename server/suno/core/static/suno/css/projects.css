@@ -182,6 +182,10 @@ button.text-link:hover { color: var(--suno-red); }
 .cst-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 12px 0; font-size: 13px; }
 .cst-facts dt { color: var(--suno-muted); }
 .cst-facts dd { margin: 0; overflow-wrap: anywhere; }
+.cst-decide { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.cst-reject { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cst-reject input { min-height: 32px; padding: 4px 8px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); font: inherit; font-size: 12px; }
+.cst-check { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 767px) {
   .cst-facts { grid-template-columns: minmax(0, 1fr); }
   .cst-facts dd { margin-bottom: 6px; }
