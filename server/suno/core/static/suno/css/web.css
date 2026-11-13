@@ -183,6 +183,7 @@ h1, h2, h3, p { margin-top: 0; }
 /* Proyectos en la portada: mismas columnas que la cabecera de la tabla. */
 .project-row { display: grid; grid-template-columns: 2fr 1fr 1fr .5fr; gap: 12px; align-items: center; min-height: 56px; border-bottom: 1px solid var(--suno-line); font-size: 12px; }
 .project-row strong { font-weight: 600; }
+.project-row > * { min-width: 0; overflow-wrap: anywhere; }
 .project-row .text-link { min-height: 0; padding: 0; }
 
 /* Superficie estilo Notion: lienzo blanco, barra lateral gris cálida, acento rojo. */
