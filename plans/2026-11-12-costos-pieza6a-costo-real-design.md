@@ -283,3 +283,82 @@ Va junto a Cronograma, Presupuesto, Matriz y Control.
 - Costo por ubicación.
 - Costo en la app móvil.
 - Matriz de permisos configurable por organización.
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-12-costos-pieza6a-costo-real-plan.md`; no cambian lo aprobado.
+
+- Código: paquete `suno/costs` (catálogo de asignación, servicios, importación, consultas,
+  vistas) bajo `plataforma/proyectos/<id>/costos/`; el cálculo vive en
+  `suno/control/actual_cost.py` y los índices compartidos (SPI y CPI) en
+  `suno/control/indices.py`.
+- Migración `0028_costs_ledger`: tablas `cost_entry` y `cost_entry_item`, la sección `COSTS` en
+  las opciones de `SectionGrant` y en su restricción de roles, y Gestor de Costos (alcance
+  organización) para los Propietarios y Administradores que ya existen. Supervisor y Observador
+  no reciben acceso automático: lo asigna el administrador de accesos en la matriz.
+- Políticas por proyecto (el alcance por proyectos funciona como en Equipos): `can_read_costs`,
+  `can_create_costs`, `can_import_costs`, `can_export_costs`, `can_approve_costs`,
+  `can_reject_costs` y `can_reverse_costs`; y por movimiento `can_update_cost` y
+  `can_delete_cost` (Gestor y Revisor, cualquiera; Colaborador, solo los suyos).
+- Un movimiento `item` también guarda `chapter`: el capítulo padre del ítem en la versión
+  vigente al registrarlo. Es su "capítulo de origen" si el ítem deja de ser `item`.
+- Una selección son dos o más ítems con precio que cuelgan, a cualquier profundidad, del
+  capítulo elegido. La tarea es una hoja vigente (no resumen) del proyecto; los indirectos no
+  llevan tarea.
+- Fecha de causación: no futura y desde 2000. Valor mayor que cero, a centavos. El tipo de
+  documento es obligatorio; el número, opcional. Se guarda el nombre original del soporte.
+- Soporte: PDF, JPG, PNG o WebP (reconocidos por sus primeros bytes, como los adjuntos de campo),
+  hasta 25 MB; se guarda en el mismo almacén de adjuntos (`BlobStore.put_blob`) y se descarga
+  por URL prefirmada después de comprobar que se pueden leer los costos del proyecto.
+- Autoaprobación: tampoco aprueba ni rechaza quien hizo la última modificación del borrador
+  (además de quien lo registró).
+- Un rechazado solo lo edita o borra su autor; al guardarlo vuelve a borrador (eso es
+  "reenviar") y se limpian decisión y motivo, que quedan en la auditoría. Borrar un borrador lo
+  elimina; `cost.deleted` guarda sus datos.
+- Reverso: descripción "Reverso: …", fecha de hoy en Colombia. "Abrir un borrador con los mismos
+  datos" lleva al formulario precargado, sin soporte.
+- Importación: hoja "Costos" con las columnas Fecha, Tipo, Código de ítem o capítulo, Tarea,
+  Descripción, Valor, Tercero, Tipo de documento y Número de documento (más hojas de listas de
+  ayuda). Código vacío = indirecto; un código que exista en dos presupuestos del proyecto es un
+  error de la fila; la tarea se identifica por su número de esquema ("1.2"); tipos por su
+  nombre, sin importar mayúsculas ni tildes; hasta 2000 filas. La vista previa no usa tabla: las
+  filas validadas viajan firmadas en el formulario (una hora) y al aplicar se validan otra vez.
+  Una entrada `cost.imported` por importación.
+- Libro: 100 líneas por página; las automáticas se mezclan por fecha con las del libro; el
+  filtro "origen" (todos, libro, solo automáticos); un filtro de estado distinto de "aprobado" o
+  de tipo oculta las automáticas; el filtro de capítulo incluye sus subcapítulos e ítems. Totales
+  aprobados por tipo, más equipo propio y transporte.
+- Exportar el libro: hasta 50 000 líneas, con `cost.exported`.
+- Equipos: solo los de propiedad "Propio", usos completados o en curso, con el valor que se
+  guardó al registrar el uso (horas × tarifa vigente ese día, el mismo de los informes de
+  equipos). Los usos sin tarifa no suman y se avisan. Los alquilados o de contratista se
+  registran en el libro como "Equipo alquilado".
+- Transporte: viajes con vehículo de terceros (los de equipo propio ya están en sus horas), con
+  valor, en su fecha de Colombia, liquidados o no. Los viajes sin precio se avisan.
+- La curva y la tabla de periodos llevan el AC directo (comparable con PV y EV). Si hay un costo
+  directo antes del primer inicio, la serie empieza en él (un indirecto no la mueve).
+- CPI vacío si el AC directo es ≤ 0. Con EV 0 y AC > 0 el CPI es 0,00 y EAC y VAC quedan vacíos.
+  El EAC se calcula con el cociente sin redondear. Etiquetas del CPI: "En presupuesto",
+  "Atención", "Sobrecosto", "Sin costo".
+- Línea de Administración: la primera, por orden, cuyo nombre empiece por "administracion"; su
+  razón es su monto entre el costo directo de la versión vigente (una línea con 0 % da 0).
+- Desglose: pestaña nueva "Por ítem" (`desglose=item`). Los ítems unidos por movimientos de
+  capítulo o de selección forman un grupo (si se traslapan, se unen) con el nombre del capítulo
+  de mayor nivel; el AC del grupo suma también los movimientos de ítem de sus miembros. Cada ítem
+  del grupo muestra su AC propio y el CV y el CPI del grupo.
+- Usos de equipo con un ítem retirado van a "Sin capítulo"; un movimiento de un capítulo que ya
+  no está en la versión vigente, también. Ambos van al aviso de ítems retirados.
+- Costo por tarea: solo movimientos con tarea; el aviso "sin tarea" incluye los automáticos.
+- Estado vacío: AC directo e indirecto en 0 al corte.
+- Cargador: 14 consultas con costos (12 sin presupuesto aplicado); sin permiso de costos, las 9
+  de la pieza 5.
+- Orden por CPI (`orden=cpi`): peor primero, sin CPI al final; para un ítem de grupo cuenta el
+  CPI del grupo. Quien no lee costos siempre ve el orden por SPI.
+- Excel del control: la hoja "Indicadores" siempre; las filas y columnas de costo, solo para
+  quien lee costos.
+- Prueba de carga: 5000 pares, 20 000 movimientos aprobados (una cuarta parte a ítems) y la
+  página semanal por tarea en menos de 1 s.
+- `seed_control_demo`: cargos AIU con Administración del 8 %, un residente que registra y el
+  administrador que aprueba, movimientos de todos los tipos y asignaciones, un borrador, un
+  rechazado, un reverso, un equipo propio con y sin ítem y un viaje de terceros.
+- Los movimientos no se registran en el Admin de Django: se manejan solo desde la pestaña.
