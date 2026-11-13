@@ -1,31 +1,50 @@
-"""Lo que el control necesita de la BD, en un número fijo de queries (costos, pieza 5).
+"""Lo que el control necesita de la BD, en un número fijo de queries (costos, piezas 5 y 6a).
 
-Nueve queries sin importar el tamaño del proyecto (ocho si no hay presupuesto aplicado):
-árbol de ubicaciones, tareas vigentes, presupuestos (costo directo contractual), versiones
-vigentes, sus filas, códigos de los ítems, plan de la matriz, cantidades validadas hasta el
-corte y el último % validado por tarea hasta el corte.
+Pieza 5: nueve queries sin importar el tamaño del proyecto (ocho si no hay presupuesto
+aplicado): árbol de ubicaciones, tareas vigentes, presupuestos (costo directo contractual),
+versiones vigentes, sus filas, códigos de los ítems, plan de la matriz, cantidades validadas
+hasta el corte y el último % validado por tarea hasta el corte.
+
+Pieza 6a, solo con `costs=True` (quien lee costos): cinco más (cuatro sin presupuesto
+aplicado): cargos de las versiones vigentes (línea de Administración), movimientos aprobados
+y borradores hasta el corte, ítems de los aprobados, usos de equipos propios agregados por día
+e ítem, y viajes de terceros agregados por día. Las agregaciones llevan `.order_by()` para que
+el `ordering` del modelo no entre en el `GROUP BY`.
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 
+from suno.budgets.mapping import fold
 from suno.core.context import RequestContext
 from suno.core.models import (
     Budget,
+    BudgetCharge,
     BudgetItem,
     BudgetItemVersion,
     BudgetRowKind,
+    BudgetVersion,
+    CostEntry,
+    CostEntryItem,
+    CostStatus,
+    EquipmentOwnership,
+    EquipmentUsage,
+    EquipmentUsageStatus,
     Project,
     QuantityPlan,
     Record,
     Task,
+    Trip,
 )
 from suno.core.scoping import scoped_qs
 from suno.matrix.importer import current_versions
@@ -33,6 +52,17 @@ from suno.matrix.locations import load_tree
 from suno.projects.field_progress import approved, validated_pct_by_task
 from suno.projects.workdays import WorkCalendar
 
+from .actual_cost import (
+    EQUIPMENT,
+    ITEM,
+    LEDGER,
+    TRANSPORT,
+    UNASSIGNED,
+    AdminLine,
+    ChapterRef,
+    CostInput,
+    CostLine,
+)
 from .earned_value import (
     NO_CHAPTER,
     ControlInput,
@@ -43,9 +73,12 @@ from .earned_value import (
     TaskWindow,
 )
 
+COUNTED_USAGE = (EquipmentUsageStatus.COMPLETED, EquipmentUsageStatus.IN_PROGRESS)
+ADMINISTRATION = "administracion"
+
 
 def load_control_input(
-    ctx: RequestContext, project: Project, *, cut: date, kind: str
+    ctx: RequestContext, project: Project, *, cut: date, kind: str, costs: bool = False
 ) -> ControlInput:
     tree = load_tree(ctx, project)
     tasks: dict[UUID, TaskWindow] = {}
@@ -122,7 +155,8 @@ def load_control_input(
     item_labels: dict[UUID, str] = dict(
         scoped_qs(ctx, BudgetItem).filter(budget__project=project).values_list("pk", "code")
     )
-    items = _priced_items(version_rows, {pk: name for pk, name, _ in budgets}, item_labels)
+    budget_names = {pk: name for pk, name, _ in budgets}
+    items = _priced_items(version_rows, budget_names, item_labels)
 
     plans = [
         PlanPair(task_id, item_id, planned)
@@ -167,6 +201,9 @@ def load_control_input(
         contractual_direct_cost=sum(contractual, Decimal(0)) if contractual else None,
         contractual_budgets=len(contractual),
         applied_budgets=len({version.budget_id for version in versions}),
+        costs=_load_costs(ctx, project, cut, versions, version_rows, item_labels, budget_names)
+        if costs
+        else None,
     )
 
 
@@ -195,6 +232,7 @@ def _priced_items(
                 unit=unit,
                 unit_price=price,
                 chapter=chapter,
+                budget_id=budget_id,
             )
     return items
 
@@ -206,3 +244,158 @@ def _top_chapter(item_id: UUID, parents: dict[UUID, UUID | None], names: dict[UU
         seen.add(parent)
         top = parent
     return NO_CHAPTER if top == item_id else names.get(top, NO_CHAPTER)
+
+
+def _load_costs(
+    ctx: RequestContext,
+    project: Project,
+    cut: date,
+    versions: Sequence[BudgetVersion],
+    rows: Sequence[tuple[Any, ...]],
+    labels: dict[UUID, str],
+    budget_names: dict[UUID, str],
+) -> CostInput:
+    """Movimientos aprobados, borradores y costos automáticos hasta el corte."""
+    lines: list[CostLine] = []
+    pending_count = 0
+    pending_amount = Decimal(0)
+    approved: dict[UUID, tuple[date, Decimal, str, UUID | None, UUID | None]] = {}
+    for pk, status, day, amount, scope, chapter_id, task_id in (
+        scoped_qs(ctx, CostEntry)
+        .filter(
+            project=project,
+            incurred_on__lte=cut,
+            status__in=[CostStatus.APPROVED, CostStatus.DRAFT],
+        )
+        .values_list("pk", "status", "incurred_on", "amount", "scope", "chapter_id", "task_id")
+    ):
+        if status == CostStatus.DRAFT:
+            pending_count += 1
+            pending_amount += amount
+        else:
+            approved[pk] = (day, amount, scope, chapter_id, task_id)
+    links: dict[UUID, list[UUID]] = defaultdict(list)
+    for entry_id, item_id in (
+        scoped_qs(ctx, CostEntryItem)
+        .filter(
+            entry__project=project,
+            entry__status=CostStatus.APPROVED,
+            entry__incurred_on__lte=cut,
+        )
+        .values_list("entry_id", "item_id")
+    ):
+        links[entry_id].append(item_id)
+    for pk, (day, amount, scope, chapter_id, task_id) in approved.items():
+        items = tuple(sorted(links.get(pk, ())))
+        lines.append(CostLine(day, amount, scope, items, chapter_id, task_id, LEDGER))
+
+    unpriced_usages = 0
+    for day, item_id, total, unpriced in (
+        scoped_qs(ctx, EquipmentUsage)
+        .filter(
+            project=project,
+            usage_date__lte=cut,
+            status__in=COUNTED_USAGE,
+            equipment__ownership=EquipmentOwnership.OWN,
+        )
+        .order_by()
+        .values("usage_date", "budget_item_id")
+        .annotate(total=Sum("cost"), unpriced=Count("id", filter=Q(cost__isnull=True)))
+        .values_list("usage_date", "budget_item_id", "total", "unpriced")
+    ):
+        unpriced_usages += unpriced
+        if total:
+            if item_id is not None:
+                lines.append(CostLine(day, total, ITEM, (item_id,), origin=EQUIPMENT))
+            else:
+                lines.append(CostLine(day, total, UNASSIGNED, origin=EQUIPMENT))
+
+    unpriced_trips = 0
+    for day, total, unpriced in (
+        scoped_qs(ctx, Trip)
+        .filter(project=project, vehicle__isnull=False, recorded_at__date__lte=cut)
+        .annotate(day=TruncDate("recorded_at"))
+        .order_by()
+        .values("day")
+        .annotate(total=Sum("amount"), unpriced=Count("id", filter=Q(amount__isnull=True)))
+        .values_list("day", "total", "unpriced")
+    ):
+        unpriced_trips += unpriced
+        if total:
+            lines.append(CostLine(day, total, UNASSIGNED, origin=TRANSPORT))
+
+    return CostInput(
+        lines=lines,
+        chapters=_chapters(rows, labels),
+        admin=_admin_lines(ctx, versions, budget_names) if versions else [],
+        pending_count=pending_count,
+        pending_amount=pending_amount,
+        unpriced_usages=unpriced_usages,
+        unpriced_trips=unpriced_trips,
+    )
+
+
+def _chapters(rows: Sequence[tuple[Any, ...]], labels: dict[UUID, str]) -> dict[UUID, ChapterRef]:
+    """Cada capítulo de las versiones vigentes: su capítulo de primer nivel, su profundidad y
+    sus ítems con precio a cualquier profundidad. `labels` ya trae las etiquetas de
+    `_priced_items` (con el presupuesto si hay varios)."""
+    parents: dict[UUID, UUID | None] = {}
+    children: dict[UUID, list[UUID]] = defaultdict(list)
+    chapters: list[UUID] = []
+    priced: set[UUID] = set()
+    for item_id, _code, kind, _description, _unit, price, parent_id, _budget in rows:
+        parents[item_id] = parent_id
+        if parent_id is not None:
+            children[parent_id].append(item_id)
+        if kind == BudgetRowKind.CHAPTER:
+            chapters.append(item_id)
+        elif price is not None:
+            priced.add(item_id)
+    refs: dict[UUID, ChapterRef] = {}
+    for chapter_id in chapters:
+        top, depth, seen = chapter_id, 0, {chapter_id}
+        while (parent := parents.get(top)) is not None and parent not in seen:
+            seen.add(parent)
+            top = parent
+            depth += 1
+        inside: set[UUID] = set()
+        pending = list(children.get(chapter_id, ()))
+        while pending:
+            node = pending.pop()
+            if node not in inside:
+                inside.add(node)
+                pending.extend(children.get(node, ()))
+        refs[chapter_id] = ChapterRef(
+            label=labels.get(chapter_id, NO_CHAPTER),
+            top=labels.get(top, NO_CHAPTER),
+            depth=depth,
+            items=frozenset(inside & priced),
+        )
+    return refs
+
+
+def _admin_lines(
+    ctx: RequestContext, versions: Sequence[BudgetVersion], budget_names: dict[UUID, str]
+) -> list[AdminLine]:
+    """La primera línea de cada versión vigente cuyo nombre (sin mayúsculas ni tildes) empieza
+    por "administracion", como razón de su monto sobre el costo directo."""
+    amounts: dict[UUID, Decimal] = {}
+    for version_id, name, amount in (
+        scoped_qs(ctx, BudgetCharge)
+        .filter(version__in=versions)
+        .order_by("order")
+        .values_list("version_id", "name", "amount")
+    ):
+        if (
+            version_id not in amounts
+            and amount is not None
+            and fold(name).strip().startswith(ADMINISTRATION)
+        ):
+            amounts[version_id] = amount
+    lines: list[AdminLine] = []
+    for version in versions:
+        amount = amounts.get(version.pk)
+        direct = version.direct_cost
+        ratio = amount / direct if amount is not None and direct else None
+        lines.append(AdminLine(version.budget_id, budget_names.get(version.budget_id, ""), ratio))
+    return lines

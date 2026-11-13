@@ -6,19 +6,29 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from suno.budgets.tests.factories import apply_rows, make_budget
 from suno.budgets.tests.samples import V1_ROWS, V2_ROWS
-from suno.control.earned_value import ControlInput, Execution, PercentTask, TaskWindow
+from suno.control.actual_cost import AdminLine, ChapterRef
+from suno.control.earned_value import ControlInput, Execution, PercentTask, TaskWindow, compute
 from suno.control.loader import load_control_input
 from suno.control.periods import MONTH
-from suno.core.models import Budget
+from suno.core.models import (
+    Budget,
+    CostScope,
+    CostStatus,
+    EquipmentOwnership,
+    EquipmentUsageStatus,
+)
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
+from suno.costs.tests.factories import cost_world, entry, equipment, trip, usage
 from suno.matrix.tests.factories import (
     budget_world,
     import_schedule,
@@ -176,3 +186,151 @@ class LoaderTests(TestCase):
         self.assertEqual(data.items, {})
         self.assertEqual(data.plans, [])
         self.assertIsNone(data.contractual_direct_cost)
+
+
+@skip_without_db
+class CostLoaderTests(TestCase):
+    """Costos, pieza 6a: cinco consultas más, solo con `costs=True`."""
+
+    def setUp(self) -> None:
+        self.world, self.budget = cost_world()
+        self.ctx = self.world.ctx()
+        self.concrete = item(self.budget, "2.1")
+        self.steel = item(self.budget, "2.2")
+        self.structure = item(self.budget, "2")
+        plan(self.world, 5, self.concrete, "8")
+
+    def load(self, *, costs: bool = True) -> ControlInput:
+        return load_control_input(self.ctx, self.world.project, cut=CUT, kind=MONTH, costs=costs)
+
+    def test_query_count_does_not_grow_with_the_data(self) -> None:
+        with self.assertNumQueries(14):
+            self.load()
+        machine = equipment(self.world)
+        for day in range(2, 12):
+            entry(self.world, day=date(2026, 3, day), status=CostStatus.APPROVED)
+            usage(self.world, machine, date(2026, 3, day), "100.00", budget_item=self.concrete)
+            trip(self.world, date(2026, 3, day), "50.00")
+        entry(
+            self.world,
+            status=CostStatus.APPROVED,
+            scope=CostScope.SELECTION,
+            chapter=self.structure,
+            items=(self.concrete, self.steel),
+        )
+        with CaptureQueriesContext(connection) as queries:
+            self.load()
+        self.assertEqual(len(queries.captured_queries), 14)
+        # El combustible y el mantenimiento ya están en la tarifa horaria: no se leen.
+        tables = " ".join(query["sql"] for query in queries.captured_queries)
+        self.assertNotIn('"fuel_', tables)
+        self.assertNotIn('"work_order', tables)
+        with self.assertNumQueries(9):
+            self.assertIsNone(self.load(costs=False).costs)
+
+    def test_ledger_lines_drafts_and_automatic_costs(self) -> None:
+        task = self.world.task(5)
+        entry(
+            self.world,
+            amount="1000.00",
+            status=CostStatus.APPROVED,
+            scope=CostScope.ITEM,
+            items=(self.concrete,),
+            chapter=self.structure,
+            task=task,
+        )
+        entry(
+            self.world,
+            day=date(2026, 3, 11),
+            amount="500.00",
+            status=CostStatus.APPROVED,
+            scope=CostScope.SELECTION,
+            chapter=self.structure,
+            items=(self.concrete, self.steel),
+        )
+        entry(self.world, day=date(2026, 3, 12), amount="700.00")  # borrador
+        entry(self.world, day=date(2026, 3, 12), status=CostStatus.REJECTED)
+        entry(self.world, day=date(2026, 4, 2), status=CostStatus.APPROVED)  # tras el corte
+        machine = equipment(self.world)
+        usage(self.world, machine, date(2026, 3, 10), "800.00", budget_item=self.concrete)
+        usage(self.world, machine, date(2026, 3, 10), "200.00")
+        usage(self.world, machine, date(2026, 3, 11), None)
+        usage(
+            self.world, machine, date(2026, 3, 11), "50.00", status=EquipmentUsageStatus.SCHEDULED
+        )
+        rented = equipment(self.world, "AL-01", ownership=EquipmentOwnership.RENTED)
+        usage(self.world, rented, date(2026, 3, 10), "999.00")
+        trip(self.world, date(2026, 3, 8), "1400.00")
+        trip(self.world, date(2026, 3, 8), None)
+        trip(self.world, date(2026, 3, 8), "999.00", own=machine)
+        costs = self.load().costs
+        assert costs is not None
+        ledger = sorted(
+            (line.day, line.amount, line.scope, line.items, line.chapter_id, line.task_id)
+            for line in costs.lines
+            if line.origin == "ledger"
+        )
+        self.assertEqual(
+            ledger,
+            [
+                (
+                    date(2026, 3, 10),
+                    D("1000.00"),
+                    "item",
+                    (self.concrete.pk,),
+                    self.structure.pk,
+                    task.pk,
+                ),
+                (
+                    date(2026, 3, 11),
+                    D("500.00"),
+                    "selection",
+                    tuple(sorted((self.concrete.pk, self.steel.pk))),
+                    self.structure.pk,
+                    None,
+                ),
+            ],
+        )
+        automatic = sorted(
+            (line.origin, line.day, line.amount, line.scope, line.items)
+            for line in costs.lines
+            if line.origin != "ledger"
+        )
+        self.assertEqual(
+            automatic,
+            [
+                ("equipment", date(2026, 3, 10), D("200.00"), "unassigned", ()),
+                ("equipment", date(2026, 3, 10), D("800.00"), "item", (self.concrete.pk,)),
+                ("transport", date(2026, 3, 8), D("1400.00"), "unassigned", ()),
+            ],
+        )
+        self.assertEqual((costs.pending_count, costs.pending_amount), (1, D("700.00")))
+        self.assertEqual((costs.unpriced_usages, costs.unpriced_trips), (1, 1))
+
+    def test_chapters_admin_and_budget_of_each_item(self) -> None:
+        data = self.load()
+        costs = data.costs
+        assert costs is not None
+        self.assertEqual(
+            costs.chapters[self.structure.pk],
+            ChapterRef(
+                "2 Estructura",
+                "2 Estructura",
+                0,
+                frozenset({self.concrete.pk, self.steel.pk, item(self.budget, "2.4").pk}),
+            ),
+        )
+        # Administración 10 % del costo directo: 913.000 / 9.130.000.
+        self.assertEqual(
+            list(costs.admin), [AdminLine(self.budget.pk, "Contrato de obra", D("0.1"))]
+        )
+        self.assertEqual(data.items[self.concrete.pk].budget_id, self.budget.pk)
+        self.assertIsNotNone(compute(data).cost)
+
+    def test_project_without_budget(self) -> None:
+        world = make_field_world("Sin presupuesto en costos")
+        ctx = world.ctx()  # resolver el contexto cuesta dos consultas: fuera de la cuenta
+        with self.assertNumQueries(12):
+            data = load_control_input(ctx, world.project, cut=CUT, kind=MONTH, costs=True)
+        assert data.costs is not None
+        self.assertEqual((list(data.costs.admin), dict(data.costs.chapters)), ([], {}))
