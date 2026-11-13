@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.17.3](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.2...v0.17.3) (2026-11-13)
+
+
+### Corregido
+
+* **control:** pulido de la página de control a 390 px, nombres largos y pruebas sin fecha ([#73](https://github.com/PMAPP-Org/SUNO_server/issues/73)) ([600d746](https://github.com/PMAPP-Org/SUNO_server/commit/600d74686ee830cc1f58bcc15e07cc4daf9d74bb))
+
 ## [0.17.2](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.1...v0.17.2) (2026-11-12)
 
 
