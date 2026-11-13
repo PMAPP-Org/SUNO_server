@@ -586,7 +586,7 @@ class _Seeder:
         )  # fmt: skip
         self._cost(
             project, items, tasks,
-            Cost(0, K.OTHER, S.INDIRECT, (), "", "850000", "Viáticos de la visita técnica",
+            Cost(0, K.OTHER, S.INDIRECT, (), "", "850000", "Viáticos de la inspección técnica",
                  "", DOC.RECEIPT),
             self.today - timedelta(days=5), author=resident, status=CostStatus.REJECTED,
             note="Falta la factura",
