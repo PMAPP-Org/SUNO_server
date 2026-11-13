@@ -23,6 +23,7 @@
 <section class="pj-panel">
   <h2>Vista previa</h2>
   {% if result.errors %}<div class="pj-late" role="alert"><p>No se puede cargar el archivo:</p><ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if result.notes %}<div class="pj-warning" role="status"><p>Revisa estos valores antes de cargar:</p><ul>{% for n in result.notes %}<li>{{ n }}</li>{% endfor %}</ul></div>{% endif %}
   {% if result.rows %}
   <p>{{ result.rows|length }} costo{{ result.rows|length|pluralize }} por {{ result.total|money }}.</p>
   <div class="pj-scroll">

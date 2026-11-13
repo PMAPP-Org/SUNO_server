@@ -169,6 +169,7 @@ class CostEntry(OrgScopedModel):
                 | (
                     models.Q(attachment__isnull=False)
                     & ~models.Q(decided_by=models.F("created_by"))
+                    & ~models.Q(decided_by=models.F("updated_by"))
                 ),
                 name="cost_entry_approval_ok",
             ),
@@ -202,3 +203,19 @@ class CostEntryItem(OrgScopedModel):
         constraints = [
             models.UniqueConstraint(fields=["entry", "item"], name="cost_entry_item_uq"),
         ]
+
+
+class CostImportToken(OrgScopedModel):
+    """Una vista previa de importación ya cargada. Su `nonce` va firmado en la vista previa y es
+    único: cargar la misma vista previa otra vez (doble clic, volver atrás) no duplica nada."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    nonce = models.CharField(max_length=64, unique=True)
+    project = models.ForeignKey("core.Project", on_delete=models.PROTECT, related_name="+")
+    applied_by = models.ForeignKey("core.AppUser", on_delete=models.PROTECT, related_name="+")
+    applied_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "cost_import_token"
+        verbose_name = "importación de costos aplicada"
+        verbose_name_plural = "importaciones de costos aplicadas"

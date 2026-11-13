@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -22,12 +23,12 @@ from uuid import UUID
 
 from django.core import signing
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from suno.backoffice.export import safe_cell, to_xlsx_book
 from suno.budgets.excel import ExcelRejected, preview_sheet, read_rows
 from suno.budgets.mapping import fold, normalize_header
-from suno.budgets.totals import parse_number
+from suno.budgets.totals import money, parse_number_detail
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
@@ -36,6 +37,7 @@ from suno.core.models import (
     CostDocumentType,
     CostEntry,
     CostEntryItem,
+    CostImportToken,
     CostKind,
     CostScope,
     CostStatus,
@@ -68,6 +70,10 @@ TOKEN_SALT = "suno.costs.import"
 TOKEN_MAX_AGE = 3600
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y")
 INDIRECT_LABEL = "Indirecto (proyecto)"
+#: Diferencia con los centavos por debajo de la cual un número de Excel es ruido de coma
+#: flotante.
+FLOAT_NOISE = Decimal("0.000001")
+ALREADY_APPLIED = "Esta vista previa ya se cargó: revisa los borradores antes de importar otra vez."
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,8 @@ class PreviewRow:
     data: EntryData
     assignment: str
     task: str
+    #: Avisos que no impiden cargar la fila (un punto de miles ambiguo).
+    notes: tuple[str, ...] = ()
 
     @property
     def kind_label(self) -> str:
@@ -93,6 +101,10 @@ class ImportPreview:
     @property
     def total(self) -> Decimal:
         return sum((row.data.amount for row in self.rows), Decimal(0))
+
+    @property
+    def notes(self) -> tuple[str, ...]:
+        return tuple(f"Fila {row.line}: {note}" for row in self.rows for note in row.notes)
 
 
 def template_bytes(ctx: RequestContext, project: Project) -> bytes:
@@ -159,6 +171,26 @@ def _day(value: Any) -> date | None:
     return None
 
 
+def _amount(value: Any) -> tuple[Decimal | None, str]:
+    """El valor de una celda y, si se leyó "punto + 3 dígitos" como miles, el aviso.
+
+    Una celda numérica de Excel guarda el resultado de una fórmula con 17 cifras
+    (`119000.00000000001`): si está a menos de una millonésima de los centavos, es ruido de
+    coma flotante y se redondea. Un texto escrito a mano se valida estricto (dos decimales)."""
+    amount, guessed = parse_number_detail(value)
+    if isinstance(value, float) and amount is not None:
+        cents = money(amount)
+        if abs(amount - cents) < FLOAT_NOISE:
+            amount = cents
+    note = (
+        f"El valor «{_text(value)}» se leyó como {amount:,.0f} (el punto separa miles); "
+        "si eran decimales, escríbelos con coma."
+        if guessed and amount is not None
+        else ""
+    )
+    return amount, note
+
+
 def _choice(value: Any, choices: Sequence[tuple[str, str]]) -> str | None:
     wanted = fold(_text(value)).strip()
     for key, label in choices:
@@ -183,7 +215,7 @@ def _parse_row(
     catalog: Catalog,
     tasks: Mapping[UUID, Task],
     by_outline: Mapping[str, Task],
-) -> tuple[list[str], tuple[EntryData, str, str] | None]:
+) -> tuple[list[str], tuple[EntryData, str, str, tuple[str, ...]] | None]:
     def cell(name: str) -> Any:
         index = columns.get(name)
         return values[index] if index is not None and index < len(values) else None
@@ -199,9 +231,9 @@ def _parse_row(
     if document_type is None:
         errors.append(f"El tipo de documento «{_text(cell(H_DOC_TYPE))}» no existe.")
     try:
-        amount = parse_number(cell(H_AMOUNT))
+        amount, note = _amount(cell(H_AMOUNT))
     except ValueError:
-        amount = None
+        amount, note = None, ""
     if amount is None:
         errors.append("El valor no es un número.")
     scope: str = str(CostScope.INDIRECT)
@@ -249,7 +281,7 @@ def _parse_row(
     problems, checked = validate_entry(catalog, tasks, data)
     if checked is None:
         return problems, None
-    return [], (data, assignment, task_label)
+    return [], (data, assignment, task_label, (note,) if note else ())
 
 
 def preview(ctx: RequestContext, project: Project, data: bytes) -> ImportPreview:
@@ -325,6 +357,8 @@ def _sign(ctx: RequestContext, project: Project, rows: Sequence[PreviewRow]) -> 
     payload = {
         "project": str(project.pk),
         "user": str(ctx.user_id),
+        #: Una vista previa se carga una sola vez (`CostImportToken`).
+        "nonce": secrets.token_urlsafe(24),
         "rows": [_serialize(row) for row in rows],
     }
     return signing.dumps(payload, salt=TOKEN_SALT, compress=True)
@@ -342,6 +376,9 @@ def apply(ctx: RequestContext, project: Project, token: str) -> int:
         raise CostRejected(["La vista previa no es válida: vuelve a subir el archivo."]) from exc
     if payload.get("project") != str(project.pk) or payload.get("user") != str(ctx.user_id):
         raise CostRejected(["La vista previa no es tuya o no es de este proyecto."])
+    nonce = payload.get("nonce")
+    if not isinstance(nonce, str) or not nonce:
+        raise CostRejected(["La vista previa no es válida: vuelve a subir el archivo."])
     catalog = load_catalog(ctx, project)
     tasks = assignable_tasks(ctx, project)
     checked = []
@@ -356,6 +393,18 @@ def apply(ctx: RequestContext, project: Project, token: str) -> int:
     if errors or not checked:
         raise CostRejected(errors[:MAX_ERRORS] or ["La vista previa no tiene filas."])
     with transaction.atomic():
+        # El nonce es único: si otra petición ya cargó esta vista previa (o la está cargando),
+        # el INSERT espera a que termine y falla; así no se duplican los borradores.
+        try:
+            with transaction.atomic():
+                scoped_qs(ctx, CostImportToken).create(
+                    org_id=ctx.org_id,
+                    nonce=nonce,
+                    project=project,
+                    applied_by_id=ctx.user_id,
+                )
+        except IntegrityError as exc:
+            raise CostRejected([ALREADY_APPLIED]) from exc
         created = scoped_qs(ctx, CostEntry).bulk_create(
             [
                 CostEntry(

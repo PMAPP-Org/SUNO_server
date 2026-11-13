@@ -15,7 +15,7 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 
-from .factories import cost_world, entry, item
+from .factories import cost_world, entry, item, support_blob
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -96,3 +96,13 @@ class CostEntryConstraintTests(TestCase):
         self.assertEqual(
             entry(self.world, scope=CostScope.CHAPTER, chapter=chapter).scope, "chapter"
         )
+
+    def test_the_last_editor_does_not_approve(self) -> None:
+        draft = entry(self.world, attachment=support_blob())
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CostEntry.objects.filter(pk=draft.pk).update(
+                updated_by=self.world.supervisor,
+                status=CostStatus.APPROVED,
+                decided_by=self.world.supervisor,
+                decided_at=timezone.now(),
+            )

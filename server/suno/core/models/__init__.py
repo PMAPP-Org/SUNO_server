@@ -12,7 +12,7 @@ al del propio doc 08:
 - `project`  — `Project`, `ScheduleImport`, `Task` y sus tablas (costos, etapa 1).
 - `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
 - `access`   — roles funcionales por sección y alcance de proyecto.
-- `cost`     — `CostEntry`, `CostEntryItem` (costos, pieza 6a).
+- `cost`     — `CostEntry`, `CostEntryItem`, `CostImportToken` (costos, pieza 6a).
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
 import Record` funcione igual que con un `models.py` plano.
@@ -51,6 +51,7 @@ from .cost import (
     CostDocumentType,
     CostEntry,
     CostEntryItem,
+    CostImportToken,
     CostKind,
     CostScope,
     CostStatus,
@@ -192,6 +193,7 @@ __all__ = [
     "CostDocumentType",
     "CostEntry",
     "CostEntryItem",
+    "CostImportToken",
     "CostKind",
     "CostScope",
     "CostStatus",
