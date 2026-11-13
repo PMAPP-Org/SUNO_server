@@ -164,3 +164,26 @@ button.text-link:hover { color: var(--suno-red); }
   .ctl-xlabels span:not(:nth-child(3n+1)) { display: none; }
   .ctl-breakdown td.pj-name { min-width: 160px; max-width: 200px; }
 }
+
+/* Libro de costos (costos, pieza 6a). */
+.cst-nav { margin: 0 0 16px; }
+.cst-ledger td.pj-name { min-width: 200px; max-width: 320px; }
+.cst-ledger tr.cst-auto td { color: var(--suno-muted); }
+.cst-ledger tfoot th { text-align: right; font-weight: 600; }
+.bg-label.cst-draft { background: var(--suno-line-strong); color: var(--suno-ink); }
+.bg-label.cst-approved { background: var(--suno-green); }
+.bg-label.cst-rejected { background: var(--suno-red); }
+.bg-label.cst-auto { background: var(--chart-petrol); }
+.cst-mark { color: var(--suno-muted); font-size: 11px; }
+.cst-pages { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: 13px; }
+.cst-form { max-width: 640px; }
+.cst-items { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius-sm); }
+.cst-items ul { margin: 0; padding: 0; list-style: none; }
+.cst-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 12px 0; font-size: 13px; }
+.cst-facts dt { color: var(--suno-muted); }
+.cst-facts dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .cst-facts { grid-template-columns: minmax(0, 1fr); }
+  .cst-facts dd { margin-bottom: 6px; }
+  .cst-ledger td.pj-name { min-width: 160px; max-width: 200px; }
+}

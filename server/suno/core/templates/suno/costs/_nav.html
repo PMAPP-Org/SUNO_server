@@ -1,0 +1,4 @@
+<nav class="pj-tabs cst-nav" aria-label="Libro de costos">
+  <a href="{% url 'costs:list' project.pk %}" {% if sub == "list" %}aria-current="page"{% endif %}>Libro</a>
+  {% if can_create_cost %}<a href="{% url 'costs:new' project.pk %}" {% if sub == "new" %}aria-current="page"{% endif %}>Nuevo costo</a>{% endif %}
+</nav>

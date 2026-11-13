@@ -9,6 +9,7 @@
       {% if can_view_budgets %}<a href="{% url 'budgets:list' project.pk %}" {% if tab == "budgets" %}aria-current="page"{% endif %}>Presupuestos</a>{% endif %}
       {% if can_view_budgets %}<a href="{% url 'matrix:items' project.pk %}" {% if tab == "matrix" %}aria-current="page"{% endif %}>Matriz</a>{% endif %}
       {% if can_view_budgets %}<a href="{% url 'control:dashboard' project.pk %}" {% if tab == "control" %}aria-current="page"{% endif %}>Control</a>{% endif %}
+      {% if can_view_costs %}<a href="{% url 'costs:list' project.pk %}" {% if tab == "costs" %}aria-current="page"{% endif %}>Costos</a>{% endif %}
       {% if can_manage %}<a href="{% url 'projects:import' project.pk %}" {% if tab == "import" %}aria-current="page"{% endif %}>Importar XML</a>{% endif %}
     </nav>
   </div>
