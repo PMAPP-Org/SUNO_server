@@ -141,3 +141,14 @@ class CostActionPagesTests(TestCase):
         with mock.patch.object(ledger, "MAX_EXPORT_LINES", 0):
             refused = self.client.get(self.base + "libro.xlsx", follow=True)
         self.assertContains(refused, "filtra por fechas")
+
+    def test_a_reviewer_neither_reverses_nor_imports(self) -> None:
+        cost = entry(self.world, status=CostStatus.APPROVED)
+        self.client.force_login(self.world.supervisor)
+        self.assertEqual(self.client.get(f"{self.base}{cost.pk}/reversar/").status_code, 403)
+        self.assertEqual(
+            self.client.post(f"{self.base}{cost.pk}/reversar/", {"motivo": "x"}).status_code, 403
+        )
+        self.assertEqual(self.client.get(self.base + "importar/").status_code, 403)
+        self.assertEqual(self.client.post(self.base + "importar/aplicar/").status_code, 403)
+        self.assertFalse(CostEntry.objects.filter(reverses=cost).exists())

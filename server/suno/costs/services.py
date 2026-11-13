@@ -322,12 +322,19 @@ def update_draft(
     catalog: Catalog | None = None,
     tasks: Mapping[UUID, Task] | None = None,
 ) -> CostEntry:
-    """Guarda un borrador. Un rechazado (solo su autor) vuelve a borrador: eso es reenviarlo."""
+    """Guarda un borrador. Un rechazado (solo su autor) vuelve a borrador: eso es reenviarlo.
+
+    El soporte se sube antes de la transacción (no se tiene el bloqueo de la fila mientras se
+    escribe en el almacén); los permisos y el estado se miran antes y otra vez bajo el bloqueo."""
+    current = scoped_qs(ctx, CostEntry).filter(pk=entry_id, project=project).first()
+    if current is None:
+        raise Http404
+    _require_editable(ctx, current, can_update_cost)
+    assignment = _checked(ctx, project, data, catalog, tasks)
+    blob = _stored(upload)
     with transaction.atomic():
         entry = _locked(ctx, project, entry_id)
         _require_editable(ctx, entry, can_update_cost)
-        assignment = _checked(ctx, project, data, catalog, tasks)
-        blob = _stored(upload)
         resubmitted = entry.status == CostStatus.REJECTED
         for field, value in entry_fields(data, assignment).items():
             setattr(entry, field, value)

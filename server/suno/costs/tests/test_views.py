@@ -5,7 +5,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 from typing import Any
+from unittest import mock
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from suno.authn.tests.factories import make_user
@@ -160,3 +162,45 @@ class CostPagesTests(TestCase):
         self.assertContains(copy, 'value="Para borrar"')
         self.client.post(f"{self.base}{draft.pk}/borrar/")
         self.assertFalse(CostEntry.objects.filter(pk=draft.pk).exists())
+
+    def test_support_redirect_allows_only_safe_schemes(self) -> None:
+        cost = entry(self.world)
+        url = f"{self.base}{cost.pk}/soporte/"
+        with mock.patch(
+            "suno.costs.views.services.support_url", return_value="https://r2.example/b?sig=1"
+        ):
+            self.assertRedirects(
+                self.client.get(url), "https://r2.example/b?sig=1", fetch_redirect_response=False
+            )
+        for unsafe in ("javascript:alert(1)", "http://r2.example/b", "ftp://r2.example/b"):
+            with (
+                self.subTest(unsafe),
+                override_settings(DEBUG=False),
+                mock.patch("suno.costs.views.services.support_url", return_value=unsafe),
+            ):
+                self.assertEqual(self.client.get(url).status_code, 404)
+        with (
+            override_settings(DEBUG=True),
+            mock.patch("suno.costs.views.services.support_url", return_value="http://r2/b"),
+        ):
+            self.assertEqual(self.client.get(url)["Location"], "http://r2/b")
+
+    def test_another_organization_gets_404(self) -> None:
+        cost = entry(self.world, attachment=None)
+        other, _ = cost_world("Otra constructora")
+        self.client.force_login(other.admin)
+        for path in ("", f"{cost.pk}/", f"{cost.pk}/soporte/", f"{cost.pk}/editar/"):
+            with self.subTest(path):
+                self.assertEqual(self.client.get(self.base + path).status_code, 404)
+        for path in (f"{cost.pk}/aprobar/", "importar/aplicar/", f"{cost.pk}/borrar/"):
+            with self.subTest(path):
+                self.assertEqual(self.client.post(self.base + path).status_code, 404)
+
+    def test_the_form_explains_a_rejected_support(self) -> None:
+        bad = SimpleUploadedFile("factura.pdf", b"MZ\x90\x00" + b"\x00" * 40, "application/pdf")
+        response = self.client.post(self.base + "nuevo/", self.form(support=bad))
+        self.assertContains(response, "debe ser un PDF")
+        with mock.patch("suno.attachments.web.MAX_BYTES", 10):
+            response = self.client.post(self.base + "nuevo/", self.form())
+        self.assertContains(response, "pesa más de")
+        self.assertFalse(CostEntry.objects.exists())

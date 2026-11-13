@@ -8,14 +8,15 @@ autoaprobación viven en `services`: aquí solo se traducen a mensajes.
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -263,11 +264,16 @@ def support(request: HttpRequest, project_id: UUID, entry_id: UUID) -> HttpRespo
     ctx = _ctx(request)
     project = get_costs_project(ctx, project_id)
     url = services.support_url(ctx, project, get_entry(ctx, project, entry_id))
-    # A mano y no con `redirect`: `HttpResponseRedirect` rechaza el esquema `local://` del
-    # adaptador local (desarrollo y pruebas). La URL la firma el almacén, no el usuario.
-    response = HttpResponse(status=302)
-    response["Location"] = url
-    return response
+    scheme = urlsplit(url).scheme
+    if scheme == "local":
+        # El adaptador local (desarrollo y pruebas): `HttpResponseRedirect` no acepta su
+        # esquema, así que la respuesta se arma a mano. La URL la firma el almacén.
+        response = HttpResponse(status=302)
+        response["Location"] = url
+        return response
+    if scheme == "https" or (scheme == "http" and settings.DEBUG):
+        return redirect(url)
+    raise Http404
 
 
 def _back(request: HttpRequest, project: Project, entry_id: UUID) -> HttpResponse:

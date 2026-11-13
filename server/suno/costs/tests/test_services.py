@@ -7,8 +7,10 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from unittest import mock
 
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -280,3 +282,19 @@ class CostServiceTests(TestCase):
         tasks = assignable_tasks(self.world.ctx(), self.project)
         self.assertNotIn(self.world.task(4).pk, tasks)  # resumen
         self.assertIn(self.world.task(5).pk, tasks)
+
+    def test_the_support_is_stored_outside_the_row_lock(self) -> None:
+        cost = self.create()
+        depth: list[int] = []
+        real = services.store_upload
+
+        def spy(upload: Any) -> Any:
+            depth.append(len(connection.atomic_blocks))
+            return real(upload)
+
+        outer = len(connection.atomic_blocks)
+        with mock.patch.object(services, "store_upload", side_effect=spy):
+            services.update_draft(
+                self.world.ctx(), self.project, cost.pk, self.data(), upload=pdf_upload()
+            )
+        self.assertEqual(depth, [outer])
