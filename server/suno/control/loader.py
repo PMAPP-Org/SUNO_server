@@ -5,11 +5,12 @@ aplicado): árbol de ubicaciones, tareas vigentes, presupuestos (costo directo c
 versiones vigentes, sus filas, códigos de los ítems, plan de la matriz, cantidades validadas
 hasta el corte y el último % validado por tarea hasta el corte.
 
-Pieza 6a, solo con `costs=True` (quien lee costos): cinco más (cuatro sin presupuesto
-aplicado): cargos de las versiones vigentes (línea de Administración), movimientos aprobados
-y borradores hasta el corte, ítems de los aprobados, usos de equipos propios agregados por día
-e ítem, y viajes de terceros agregados por día. Las agregaciones llevan `.order_by()` para que
-el `ordering` del modelo no entre en el `GROUP BY`.
+Pieza 6a, solo con `costs=True` (quien lee costos): siete más (seis sin presupuesto
+aplicado): cargos de las versiones vigentes (línea de Administración); borradores e indirectos
+hasta el corte en un solo agregado; movimientos de capítulo agregados por día, capítulo y tarea;
+movimientos de ítem agregados por día, ítem y tarea; los ítems de cada selección; usos de
+equipos propios agregados por día e ítem; y viajes de terceros agregados por día. Las
+agregaciones llevan `.order_by()` para que el `ordering` del modelo no entre en el `GROUP BY`.
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ from suno.core.models import (
     BudgetVersion,
     CostEntry,
     CostEntryItem,
+    CostScope,
     CostStatus,
     EquipmentOwnership,
     EquipmentUsage,
@@ -54,9 +56,12 @@ from suno.projects.field_progress import approved, validated_pct_by_task
 from suno.projects.workdays import WorkCalendar
 
 from .actual_cost import (
+    CHAPTER,
     EQUIPMENT,
+    INDIRECT,
     ITEM,
     LEDGER,
+    SELECTION,
     TRANSPORT,
     UNASSIGNED,
     AdminLine,
@@ -264,40 +269,65 @@ def _load_costs(
     labels: dict[UUID, str],
     budget_names: dict[UUID, str],
 ) -> CostInput:
-    """Movimientos aprobados, borradores y costos automáticos hasta el corte."""
+    """Movimientos aprobados, borradores y costos automáticos hasta el corte.
+
+    El libro se lee agregado: borradores e indirectos en un total (no van a periodos, ítems ni
+    tareas), capítulos e ítems por día, capítulo o ítem y tarea; solo las selecciones van por
+    movimiento, porque necesitan sus ítems."""
     lines: list[CostLine] = []
-    pending_count = 0
-    pending_amount = Decimal(0)
-    approved: dict[UUID, tuple[date, Decimal, str, UUID | None, UUID | None]] = {}
-    for pk, status, day, amount, scope, chapter_id, task_id in (
-        scoped_qs(ctx, CostEntry)
-        .filter(
-            project=project,
-            incurred_on__lte=cut,
-            status__in=[CostStatus.APPROVED, CostStatus.DRAFT],
-        )
+    entries = scoped_qs(ctx, CostEntry).filter(project=project, incurred_on__lte=cut)
+    approved = entries.filter(status=CostStatus.APPROVED)
+    totals = entries.aggregate(
+        pending_count=Count("id", filter=Q(status=CostStatus.DRAFT)),
+        pending_amount=Sum("amount", filter=Q(status=CostStatus.DRAFT)),
+        indirect=Sum("amount", filter=Q(status=CostStatus.APPROVED, scope=CostScope.INDIRECT)),
+    )
+    if totals["indirect"]:
+        lines.append(CostLine(cut, totals["indirect"], INDIRECT, origin=LEDGER))
+    for day, chapter_id, task_id, total in (
+        approved.filter(scope=CostScope.CHAPTER)
         .order_by()
-        .values_list("pk", "status", "incurred_on", "amount", "scope", "chapter_id", "task_id")
+        .values("incurred_on", "chapter_id", "task_id")
+        .annotate(total=Sum("amount"))
+        .values_list("incurred_on", "chapter_id", "task_id", "total")
     ):
-        if status == CostStatus.DRAFT:
-            pending_count += 1
-            pending_amount += amount
-        else:
-            approved[pk] = (day, amount, scope, chapter_id, task_id)
-    links: dict[UUID, list[UUID]] = defaultdict(list)
-    for entry_id, item_id in (
-        scoped_qs(ctx, CostEntryItem)
-        .filter(
-            entry__project=project,
-            entry__status=CostStatus.APPROVED,
-            entry__incurred_on__lte=cut,
+        lines.append(CostLine(day, total, CHAPTER, (), chapter_id, task_id, LEDGER))
+    links = scoped_qs(ctx, CostEntryItem).filter(
+        entry__project=project,
+        entry__status=CostStatus.APPROVED,
+        entry__incurred_on__lte=cut,
+    )
+    for day, item_id, chapter_id, task_id, total in (
+        links.filter(entry__scope=CostScope.ITEM)
+        .order_by()
+        .values("entry__incurred_on", "item_id", "entry__chapter_id", "entry__task_id")
+        .annotate(total=Sum("entry__amount"))
+        .values_list(
+            "entry__incurred_on", "item_id", "entry__chapter_id", "entry__task_id", "total"
         )
-        .values_list("entry_id", "item_id")
     ):
-        links[entry_id].append(item_id)
-    for pk, (day, amount, scope, chapter_id, task_id) in approved.items():
-        items = tuple(sorted(links.get(pk, ())))
-        lines.append(CostLine(day, amount, scope, items, chapter_id, task_id, LEDGER))
+        lines.append(CostLine(day, total, ITEM, (item_id,), chapter_id, task_id, LEDGER))
+    selections: dict[UUID, tuple[date, Decimal, UUID | None, UUID | None]] = {}
+    members: dict[UUID, list[UUID]] = defaultdict(list)
+    for entry_id, day, amount, chapter_id, task_id, item_id in (
+        links.filter(entry__scope=CostScope.SELECTION)
+        .order_by()
+        .values_list(
+            "entry_id",
+            "entry__incurred_on",
+            "entry__amount",
+            "entry__chapter_id",
+            "entry__task_id",
+            "item_id",
+        )
+    ):
+        selections[entry_id] = (day, amount, chapter_id, task_id)
+        members[entry_id].append(item_id)
+    for entry_id, (day, amount, chapter_id, task_id) in selections.items():
+        items = tuple(sorted(members[entry_id]))
+        lines.append(CostLine(day, amount, SELECTION, items, chapter_id, task_id, LEDGER))
+    pending_count = totals["pending_count"] or 0
+    pending_amount = totals["pending_amount"] or Decimal(0)
 
     unpriced_usages = 0
     for day, item_id, total, unpriced in (

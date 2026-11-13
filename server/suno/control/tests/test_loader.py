@@ -190,7 +190,7 @@ class LoaderTests(TestCase):
 
 @skip_without_db
 class CostLoaderTests(TestCase):
-    """Costos, pieza 6a: cinco consultas más, solo con `costs=True`."""
+    """Costos, pieza 6a: siete consultas más, solo con `costs=True`."""
 
     def setUp(self) -> None:
         self.world, self.budget = cost_world()
@@ -204,7 +204,7 @@ class CostLoaderTests(TestCase):
         return load_control_input(self.ctx, self.world.project, cut=CUT, kind=MONTH, costs=costs)
 
     def test_query_count_does_not_grow_with_the_data(self) -> None:
-        with self.assertNumQueries(14):
+        with self.assertNumQueries(16):
             self.load()
         machine = equipment(self.world)
         for day in range(2, 12):
@@ -220,7 +220,7 @@ class CostLoaderTests(TestCase):
         )
         with CaptureQueriesContext(connection) as queries:
             self.load()
-        self.assertEqual(len(queries.captured_queries), 14)
+        self.assertEqual(len(queries.captured_queries), 16)
         # El combustible y el mantenimiento ya están en la tarifa horaria: no se leen.
         tables = " ".join(query["sql"] for query in queries.captured_queries)
         self.assertNotIn('"fuel_', tables)
@@ -330,7 +330,7 @@ class CostLoaderTests(TestCase):
     def test_project_without_budget(self) -> None:
         world = make_field_world("Sin presupuesto en costos")
         ctx = world.ctx()  # resolver el contexto cuesta dos consultas: fuera de la cuenta
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(14):
             data = load_control_input(ctx, world.project, cut=CUT, kind=MONTH, costs=True)
         assert data.costs is not None
         self.assertEqual((list(data.costs.admin), dict(data.costs.chapters)), ([], {}))
@@ -345,3 +345,37 @@ class CostLoaderTests(TestCase):
 
         catalog = load_catalog(self.ctx, self.world.project)
         self.assertEqual(catalog.label_of(self.concrete.pk), label)
+
+    def test_ledger_lines_are_aggregated(self) -> None:
+        """Indirectos en un total, capítulos e ítems agregados por día; solo las selecciones van
+        por movimiento (necesitan sus ítems)."""
+        for _ in range(3):
+            entry(self.world, amount="10.00", status=CostStatus.APPROVED)
+            entry(
+                self.world,
+                amount="20.00",
+                status=CostStatus.APPROVED,
+                scope=CostScope.CHAPTER,
+                chapter=self.structure,
+            )
+            entry(
+                self.world,
+                amount="30.00",
+                status=CostStatus.APPROVED,
+                scope=CostScope.ITEM,
+                items=(self.concrete,),
+                chapter=self.structure,
+            )
+        costs = self.load().costs
+        assert costs is not None
+        ledger = sorted(
+            (line.scope, line.amount, line.items) for line in costs.lines if line.origin == "ledger"
+        )
+        self.assertEqual(
+            ledger,
+            [
+                ("chapter", D("60.00"), ()),
+                ("indirect", D("30.00"), ()),
+                ("item", D("90.00"), (self.concrete.pk,)),
+            ],
+        )
