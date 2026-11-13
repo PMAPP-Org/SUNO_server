@@ -329,7 +329,8 @@ Precisiones del plan `2026-11-12-costos-pieza6a-costo-real-plan.md`; no cambian 
   de tipo oculta las automáticas; el filtro de capítulo incluye sus subcapítulos e ítems. Totales
   aprobados por tipo, más equipo propio y transporte.
 - Exportar el libro: hasta 50 000 líneas, con `cost.exported`.
-- Equipos: solo los de propiedad "Propio", usos completados o en curso, con el valor que se
+- Equipos: solo los de propiedad "Propio" (la propiedad se lee del valor actual del equipo, no
+  del que tenía el día del uso), usos completados o en curso, con el valor que se
   guardó al registrar el uso (horas × tarifa vigente ese día, el mismo de los informes de
   equipos). Los usos sin tarifa no suman y se avisan. Los alquilados o de contratista se
   registran en el libro como "Equipo alquilado".
@@ -350,7 +351,7 @@ Precisiones del plan `2026-11-12-costos-pieza6a-costo-real-plan.md`; no cambian 
   no está en la versión vigente, también. Ambos van al aviso de ítems retirados.
 - Costo por tarea: solo movimientos con tarea; el aviso "sin tarea" incluye los automáticos.
 - Estado vacío: AC directo e indirecto en 0 al corte.
-- Cargador: 14 consultas con costos (12 sin presupuesto aplicado); sin permiso de costos, las 9
+- Cargador: 16 consultas con costos (14 sin presupuesto aplicado); sin permiso de costos, las 9
   de la pieza 5.
 - Orden por CPI (`orden=cpi`): peor primero, sin CPI al final; para un ítem de grupo cuenta el
   CPI del grupo. Quien no lee costos siempre ve el orden por SPI.
