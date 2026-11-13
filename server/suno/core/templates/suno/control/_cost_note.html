@@ -1,0 +1,4 @@
+{% load money_tags %}
+{% if result.cost and not result.cost.empty %}
+<section class="pj-panel"><p class="pj-warning">Costo real al corte: directo {{ result.cost.ac_direct|money }} e indirecto {{ result.cost.ac_indirect|money }}. Sin pares de la matriz con precio y fechas no hay valor ganado con qué compararlo: el CPI no tiene valor.{% if can_view_costs %} Ver el <a href="{% url 'costs:list' project.pk %}">libro de costos</a>.{% endif %}</p></section>
+{% endif %}

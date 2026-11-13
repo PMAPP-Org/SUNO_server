@@ -1,0 +1,31 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Mis rechazados · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="rejected" %}
+<section class="pj-panel">
+  <h2>Mis rechazados</h2>
+  <p class="pj-muted">Corrígelos y guárdalos: vuelven a borrador para que otra persona los apruebe.</p>
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Fecha</th><th>Descripción</th><th>Asignación</th><th class="num">Valor</th><th>Motivo</th><th>Rechazó</th><th></th></tr></thead>
+    <tbody>
+    {% for entry, assignment in rows %}
+      <tr>
+        <td>{{ entry.incurred_on|date:"d/m/Y" }}</td>
+        <td class="pj-name">{{ entry.description }}</td>
+        <td class="pj-wrap">{{ assignment }}</td>
+        <td class="num">{{ entry.amount|signed }}</td>
+        <td class="pj-wrap">{{ entry.decision_note }}</td>
+        <td class="pj-wrap">{{ entry.decided_by }}</td>
+        <td><a class="text-link" href="{% url 'costs:edit' project.pk entry.pk %}">Corregir</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No tienes costos rechazados.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Reversar costo · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="detail" %}
+<section class="pj-panel">
+  <h2>Reversar costo</h2>
+  <p class="pj-name"><a href="{% url 'costs:detail' project.pk entry.pk %}">{{ entry.description }}</a> · {{ entry.incurred_on|date:"d/m/Y" }} · {{ entry.amount|signed }}</p>
+  <p class="pj-muted">Se registra hoy un movimiento aprobado por el mismo valor en negativo y con la misma asignación. Los periodos pasados del control no cambian.</p>
+  {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  <form method="post" class="pj-form">
+    {% csrf_token %}
+    <label>Motivo <textarea name="motivo" rows="3" maxlength="500" required></textarea></label>
+    <label class="cst-check"><input type="checkbox" name="reabrir" value="1"> Abrir un borrador nuevo con los mismos datos</label>
+    <button class="button" type="submit">Reversar</button>
+  </form>
+</section>
+{% endblock %}

@@ -6,7 +6,10 @@ base de unos diez meses alrededor de hoy), frentes de obra como ubicación, un p
 aplicado (que queda como contractual), la matriz y registros de avance validados semana a
 semana. Incluye los casos de los avisos: una tarea sin línea base, una tarea medida por %,
 sobreejecución, un ajuste negativo, una cantidad fuera del plan y un registro sin revisar
-(que no cuenta).
+(que no cuenta). Desde la pieza 6a también siembra el libro de costos: cargos AIU (Administración
+del 8 %), un residente que registra y el administrador que aprueba, movimientos de todos los
+tipos y asignaciones, un borrador, un rechazado, un reverso, un equipo propio con y sin ítem y
+viajes de un transportador.
 
 Escribe sin pasar por las importaciones (como `bootstrap_demo`): lo que interesa es el estado
 final. Es aprovisionamiento offline y por eso figura en `ALLOWED` de `test_architecture.py`.
@@ -21,23 +24,39 @@ from decimal import Decimal
 from typing import Any, NamedTuple
 
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
-from suno.budgets.totals import money
+from suno.attachments.web import store_upload
+from suno.budgets.totals import BASE_DIRECT, ChargeSpec, compute_charges, line_base, money
 from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     AppUser,
     Budget,
+    BudgetCharge,
     BudgetItem,
     BudgetItemVersion,
     BudgetRowKind,
     BudgetVersion,
     BudgetVersionStatus,
+    CostDocumentType,
+    CostEntry,
+    CostEntryItem,
+    CostKind,
+    CostScope,
+    CostStatus,
     Device,
+    Equipment,
+    EquipmentOwnership,
+    EquipmentType,
+    EquipmentUsage,
+    EquipmentUsageStatus,
     FormTemplate,
     FormTemplateVersion,
+    Membership,
     Organization,
     Project,
     QuantityPlan,
@@ -46,7 +65,13 @@ from suno.core.models import (
     RecordReviewStatus,
     Role,
     Task,
+    TransportContractor,
+    TransportMaterial,
+    TransportRoute,
+    TransportVehicle,
+    Trip,
 )
+from suno.equipment.costing import usage_cost, usage_hours
 from suno.management.commands.bootstrap_demo import DEMO_FORM_DEFINITION
 from suno.matrix.locations import LevelSpec, load_tree, project_levels, save_levels
 from suno.sync.changeseq import acquire_org_lock, highest_change_seq
@@ -108,6 +133,57 @@ LEAVES = [
     Leaf(3, "Tubería principal", NORTH, 154, 60, (("4.1", "900"),), Decimal("0.80")),
     Leaf(3, "Cámaras de inspección", SOUTH, 196, 60, (("4.2", "18"),), baseline=False),
 ]
+CHARGES = [
+    ChargeSpec(1, "Administración", Decimal("8"), BASE_DIRECT),
+    ChargeSpec(2, "Imprevistos", Decimal("3"), BASE_DIRECT),
+    ChargeSpec(3, "Utilidad", Decimal("5"), BASE_DIRECT),
+    ChargeSpec(4, "IVA sobre utilidad", Decimal("19"), line_base(3)),
+]
+#: Un PDF mínimo como soporte de ejemplo (se sube de verdad al almacén configurado).
+DEMO_PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+EQUIPMENT_RATE = Decimal("180000")
+TRIP_PRICE = Decimal("85000")
+
+
+class Cost(NamedTuple):
+    #: Días desde el inicio del proyecto.
+    offset: int
+    kind: Any
+    scope: Any
+    #: Códigos de los ítems (`item`, `selection`).
+    codes: tuple[str, ...]
+    #: Código del capítulo (`chapter`, `selection`).
+    chapter: str
+    amount: str
+    description: str
+    third_party: str
+    document_type: Any
+    #: Nombre de la tarea (opcional).
+    task: str = ""
+
+
+K, S, DOC = CostKind, CostScope, CostDocumentType
+COSTS = [
+    Cost(10, K.MATERIALS, S.ITEM, ("1.1",), "", "11800000", "Estacas, pintura y mojones",
+         "Topografía del Norte SAS", DOC.INVOICE, "Localización y replanteo"),
+    Cost(25, K.SUBCONTRACT, S.CHAPTER, (), "2", "46000000", "Acta 1: movimiento de tierras",
+         "Excavaciones Andinas SAS", DOC.COLLECTION_ACCOUNT),
+    Cost(60, K.SUBCONTRACT, S.CHAPTER, (), "2", "51500000", "Acta 2: movimiento de tierras",
+         "Excavaciones Andinas SAS", DOC.COLLECTION_ACCOUNT),
+    Cost(70, K.RENTED_EQUIPMENT, S.ITEM, ("2.1",), "", "18500000",
+         "Retroexcavadora alquilada (contratista)", "Alquileres del Valle", DOC.INVOICE,
+         "Excavación frente sur"),
+    Cost(105, K.MATERIALS, S.ITEM, ("3.1",), "", "86000000", "Concreto premezclado 3000 psi",
+         "Concretos SA", DOC.INVOICE, "Zapatas eje A"),
+    Cost(110, K.MATERIALS, S.ITEM, ("3.2",), "", "61000000", "Acero de refuerzo 60000 psi",
+         "Aceros de Colombia", DOC.INVOICE, "Zapatas eje A"),
+    Cost(130, K.LABOR, S.SELECTION, ("3.1", "3.2"), "3", "27000000",
+         "Cuadrilla de estructura (quincenas)", "Cuadrilla Pérez", DOC.COLLECTION_ACCOUNT),
+    Cost(160, K.MATERIALS, S.ITEM, ("4.1",), "", "54000000", "Tubería PVC de 6 pulgadas",
+         "Tuberías y Accesorios SAS", DOC.INVOICE, "Tubería principal"),
+    Cost(165, K.OTHER, S.CHAPTER, (), "1", "3500000", "Pólizas y trámites",
+         "Seguros del Sur", DOC.RECEIPT),
+]  # fmt: skip
 
 
 def _row(item: BudgetItem, quantity: Decimal, note: str = "") -> dict[str, Any]:
@@ -128,6 +204,8 @@ class _Seeder:
         self.seq = highest_change_seq(self.ctx)
         self.uid = 0
         self.records = 0
+        self.costs = 0
+        self.chapters: dict[str, BudgetItem] = {}
 
     def _next_seq(self) -> int:
         self.seq += 1
@@ -173,6 +251,7 @@ class _Seeder:
             [_row(items["2.2"], Decimal("40"), "Relleno puntual no planeado")],
         )
         self._record(tasks["Zapatas eje A"], self.today, [_row(items["3.1"], Decimal("5"))])
+        self._costs(project, start, items, tasks)
         return project
 
     def _budget(self, project: Project) -> dict[str, BudgetItem]:
@@ -183,6 +262,7 @@ class _Seeder:
             (Decimal(q) * Decimal(p) for _, _, rows in CHAPTERS for _, _, _, q, p in rows),
             Decimal(0),
         )
+        charges = compute_charges(money(direct), CHARGES)
         version = BudgetVersion.objects.create(
             org=self.org,
             budget=budget,
@@ -194,7 +274,21 @@ class _Seeder:
             uploaded_by=self.admin,
             applied_at=timezone.now(),
             direct_cost=money(direct),
-            total=money(direct),
+            total=charges.total,
+        )
+        BudgetCharge.objects.bulk_create(
+            [
+                BudgetCharge(
+                    org=self.org,
+                    version=version,
+                    order=line.order,
+                    name=line.name,
+                    pct=line.pct,
+                    base=line.base,
+                    amount=line.amount,
+                )
+                for line in charges.lines
+            ]
         )
         budget.contractual_version = version
         budget.save(update_fields=["contractual_version"])
@@ -202,6 +296,7 @@ class _Seeder:
         values: list[BudgetItemVersion] = []
         for code, description, rows in CHAPTERS:
             chapter = BudgetItem.objects.create(org=self.org, budget=budget, code=code)
+            self.chapters[code] = chapter
             values.append(
                 BudgetItemVersion(
                     org=self.org,
@@ -373,6 +468,214 @@ class _Seeder:
             reviewer=self.admin,
         )
 
+    def _resident(self) -> AppUser:
+        """Quien registra los costos de ejemplo: nadie aprueba lo suyo."""
+        username = f"residente-{self.org.pk.hex[:8]}"
+        user = AppUser.objects.filter(username=username).first()
+        if user is None:
+            user = AppUser.objects.create_user(
+                username=username,
+                email=f"{username}@example.com",
+                password=None,
+                org=self.org,
+                display_name="Residente de obra (ejemplo)",
+            )
+            Membership.objects.create(org=self.org, user=user, role=Role.SUPERVISOR)
+        return user
+
+    def _cost(
+        self,
+        project: Project,
+        items: dict[str, BudgetItem],
+        tasks: dict[str, Task],
+        cost: Cost,
+        day: date,
+        *,
+        author: AppUser,
+        status: Any = CostStatus.APPROVED,
+        support: Any = None,
+        note: str = "",
+    ) -> CostEntry:
+        self.costs += 1
+        decided = status != CostStatus.DRAFT
+        chapter = self.chapters[cost.chapter] if cost.chapter else None
+        if cost.scope == CostScope.ITEM:
+            chapter = self.chapters[cost.codes[0].split(".")[0]]
+        entry = CostEntry.objects.create(
+            org=self.org,
+            project=project,
+            incurred_on=day,
+            kind=cost.kind,
+            description=cost.description,
+            amount=Decimal(cost.amount),
+            third_party=cost.third_party,
+            document_type=cost.document_type,
+            document_number=f"D-{self.costs:04d}",
+            scope=cost.scope,
+            chapter=chapter,
+            task=tasks.get(cost.task) if cost.task else None,
+            status=status,
+            created_by=author,
+            updated_by=author,
+            decided_by=self.admin if decided else None,
+            decided_at=timezone.now() if decided else None,
+            decision_note=note,
+            attachment=support,
+            attachment_name="factura-ejemplo.pdf" if support is not None else "",
+        )
+        for code in cost.codes:
+            CostEntryItem.objects.create(org=self.org, entry=entry, item=items[code])
+        return entry
+
+    def _costs(
+        self,
+        project: Project,
+        start: date,
+        items: dict[str, BudgetItem],
+        tasks: dict[str, Task],
+    ) -> None:
+        resident = self._resident()
+        support = store_upload(
+            SimpleUploadedFile("factura-ejemplo.pdf", DEMO_PDF, content_type="application/pdf")
+        )
+        for cost in COSTS:
+            self._cost(
+                project, items, tasks, cost, start + timedelta(days=cost.offset),
+                author=resident, support=support,
+            )  # fmt: skip
+        payroll = Cost(0, K.PAYROLL, S.INDIRECT, (), "", "9200000",
+                       "Nómina de dirección de obra", "Nómina interna", DOC.PAYROLL)  # fmt: skip
+        day = start + timedelta(days=27)
+        while day <= self.today:
+            self._cost(project, items, tasks, payroll, day, author=resident, support=support)
+            day += timedelta(days=30)
+        # Un reverso: factura registrada dos veces.
+        duplicate = self._cost(
+            project, items, tasks,
+            Cost(90, K.MATERIALS, S.ITEM, ("2.2",), "", "7200000",
+                 "Material de relleno (factura duplicada)", "Agregados del Río", DOC.INVOICE),
+            start + timedelta(days=90), author=resident, support=support,
+        )  # fmt: skip
+        reversal = CostEntry.objects.create(
+            org=self.org,
+            project=project,
+            incurred_on=self.today - timedelta(days=10),
+            kind=duplicate.kind,
+            description=f"Reverso: {duplicate.description}",
+            amount=-duplicate.amount,
+            third_party=duplicate.third_party,
+            document_type=duplicate.document_type,
+            document_number=duplicate.document_number,
+            scope=duplicate.scope,
+            chapter=duplicate.chapter,
+            status=CostStatus.APPROVED,
+            created_by=self.admin,
+            updated_by=self.admin,
+            decided_by=self.admin,
+            decided_at=timezone.now(),
+            decision_note="Factura registrada dos veces",
+            reverses=duplicate,
+        )
+        CostEntryItem.objects.create(org=self.org, entry=reversal, item=items["2.2"])
+        # Uno por aprobar (sin soporte) y uno rechazado.
+        self._cost(
+            project, items, tasks,
+            Cost(0, K.MATERIALS, S.ITEM, ("4.1",), "", "6400000", "Accesorios de tubería",
+                 "Tuberías y Accesorios SAS", DOC.INVOICE, "Tubería principal"),
+            self.today - timedelta(days=3), author=resident, status=CostStatus.DRAFT,
+        )  # fmt: skip
+        self._cost(
+            project, items, tasks,
+            Cost(0, K.OTHER, S.INDIRECT, (), "", "850000", "Viáticos de la inspección técnica",
+                 "", DOC.RECEIPT),
+            self.today - timedelta(days=5), author=resident, status=CostStatus.REJECTED,
+            note="Falta la factura",
+        )  # fmt: skip
+        self._equipment(project, start, items)
+        self._trips(project, start, resident)
+
+    def _equipment(self, project: Project, start: date, items: dict[str, BudgetItem]) -> None:
+        """Una retroexcavadora propia: 8 h por semana en la excavación; una de cada tres
+        jornadas sin ítem (va a "sin asignar")."""
+        kind, _ = EquipmentType.objects.get_or_create(
+            org=self.org, code="RET-DEMO", defaults={"name": "Retroexcavadora (ejemplo)"}
+        )
+        machine, _ = Equipment.objects.get_or_create(
+            org=self.org,
+            code="RE-DEMO-01",
+            defaults={
+                "name": "Retroexcavadora de ejemplo",
+                "equipment_type": kind,
+                "ownership": EquipmentOwnership.OWN,
+                "created_by": self.admin,
+                "updated_by": self.admin,
+            },
+        )
+        begin, end = time(7), time(15)
+        hours = usage_hours(begin, end)
+        for week in range(16):
+            day = start + timedelta(days=37 + 7 * week)
+            if day > self.today:
+                break
+            EquipmentUsage.objects.create(
+                org=self.org,
+                equipment=machine,
+                project=project,
+                operator=self.admin,
+                usage_date=day,
+                start_time=begin,
+                end_time=end,
+                activity="Excavación mecánica",
+                status=EquipmentUsageStatus.COMPLETED,
+                budget_item=None if week % 3 == 2 else items["2.1"],
+                billable_hours=hours,
+                hourly_rate=EQUIPMENT_RATE,
+                cost=usage_cost(hours, EQUIPMENT_RATE),
+                created_by=self.admin,
+                updated_by=self.admin,
+            )
+
+    def _trips(self, project: Project, start: date, resident: AppUser) -> None:
+        """Tres viajes de gravas de un transportador (transporte de terceros)."""
+        material, _ = TransportMaterial.objects.get_or_create(org=self.org, name="Gravas (ejemplo)")
+        route, _ = TransportRoute.objects.get_or_create(
+            org=self.org,
+            origin="Cantera La Esperanza",
+            destination="Obra de ejemplo",
+            defaults={"distance_km": Decimal("12.5")},
+        )
+        contractor, _ = TransportContractor.objects.get_or_create(
+            org=self.org, name="Transportes de ejemplo"
+        )
+        vehicle, _ = TransportVehicle.objects.get_or_create(
+            org=self.org, plate="DEMO01", defaults={"contractor": contractor}
+        )
+        volume = Decimal("14")
+        for offset in (40, 55, 70):
+            number = (
+                Trip.objects.filter(org=self.org).aggregate(top=Max("number"))["top"] or 0
+            ) + 1
+            Trip.objects.create(
+                id=uuid.uuid4(),
+                org=self.org,
+                number=number,
+                recorded_at=timezone.make_aware(
+                    datetime.combine(start + timedelta(days=offset), time(9))
+                ),
+                vehicle=vehicle,
+                project=project,
+                route=route,
+                distance_km=route.distance_km,
+                material=material,
+                volume_m3=volume,
+                unit_price=TRIP_PRICE,
+                amount=money(volume * TRIP_PRICE),
+                requested_by=self.admin,
+                dispatched_by=resident,
+                received_by=self.admin,
+                created_by=self.admin,
+            )
+
 
 class Command(BaseCommand):
     help = (
@@ -415,7 +718,8 @@ class Command(BaseCommand):
             project = seeder.run(name)
         self.stdout.write(
             self.style.SUCCESS(
-                f"Proyecto de ejemplo listo: «{project.name}» ({seeder.records} registros). "
+                f"Proyecto de ejemplo listo: «{project.name}» ({seeder.records} registros, "
+                f"{seeder.costs} costos). "
                 f"Página: /plataforma/proyectos/{project.pk}/control/"
             )
         )

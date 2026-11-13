@@ -1,0 +1,58 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Costos · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="list" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros del libro">
+    <label>Estado <select name="estado"><option value="">Todos</option>{% for key, label in statuses %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Tipo <select name="tipo"><option value="">Todos</option>{% for key, label in kinds %}<option value="{{ key }}" {% if filters.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Desde <input type="date" name="desde" value="{{ filters.date_from|date:'Y-m-d' }}"></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ filters.date_to|date:'Y-m-d' }}"></label>
+    <label>Capítulo <select name="capitulo"><option value="">Todos</option>{% for row in catalog.chapters %}<option value="{{ row.item_id }}" {% if filters.chapter_id == row.item_id %}selected{% endif %}>{{ row.label|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <label>Ítem <select name="item"><option value="">Todos</option>{% for row in catalog.items %}<option value="{{ row.item_id }}" {% if filters.item_id == row.item_id %}selected{% endif %}>{{ row.label|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <label>Origen <select name="origen">{% for key, label in origins.items %}<option value="{{ key }}" {% if filters.origin == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Filtrar</button>
+  </form>
+</section>
+<section class="pj-panel">
+  {% if page.lines %}
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <caption class="sr-only">Libro de costos</caption>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Asignación</th><th>Tercero</th><th>Documento</th><th class="num">Valor</th><th>Estado</th><th>Registró</th><th>Aprobó</th></tr></thead>
+    <tbody>
+    {% for line in page.lines %}
+      <tr{% if line.automatic %} class="cst-auto"{% endif %}>
+        <td>{{ line.day|date:"d/m/Y" }}</td>
+        <td>{{ line.kind }}</td>
+        <td class="pj-name">{% if line.entry_id %}<a href="{% url 'costs:detail' project.pk line.entry_id %}">{{ line.description }}</a>{% else %}{{ line.description }}{% endif %}{% if line.reversed %} <small class="cst-mark">reversado</small>{% endif %}{% if line.is_reversal %} <small class="cst-mark">reverso</small>{% endif %}</td>
+        <td class="pj-wrap">{{ line.assignment }}</td>
+        <td class="pj-wrap">{{ line.third_party }}</td>
+        <td class="pj-wrap">{{ line.document }}</td>
+        <td class="num">{{ line.amount|signed }}</td>
+        <td><span class="bg-label cst-{{ line.status }}">{{ line.status_label }}</span></td>
+        <td class="pj-wrap">{{ line.created_by }}</td>
+        <td class="pj-wrap">{{ line.decided_by }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    {% if page.totals %}
+    <tfoot>
+      {% for label, amount in page.totals %}<tr><th colspan="6" scope="row">{{ label }}</th><td class="num">{{ amount|signed }}</td><td colspan="3"></td></tr>{% endfor %}
+      <tr><th colspan="6" scope="row">Total aprobado</th><td class="num">{{ page.total|signed }}</td><td colspan="3"></td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+  </div>
+  <nav class="cst-pages" aria-label="Páginas">
+    {% if page.has_previous %}<a href="?{{ filters.query }}&amp;pagina={{ page.number|add:'-1' }}">Anterior</a>{% endif %}
+    <span>Página {{ page.number }} de {{ page.pages }} · {{ page.count }} línea{{ page.count|pluralize:"s" }}</span>
+    {% if page.has_next %}<a href="?{{ filters.query }}&amp;pagina={{ page.number|add:'1' }}">Siguiente</a>{% endif %}
+  </nav>
+  {% else %}
+  <p class="pj-empty">No hay costos con estos filtros.{% if can_create_cost %} <a href="{% url 'costs:new' project.pk %}">Registra uno</a>.{% endif %}</p>
+  {% endif %}
+</section>
+{% endblock %}

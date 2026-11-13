@@ -1,0 +1,49 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Importar costos · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="import" %}
+<section class="pj-panel">
+  <h2>Importar costos desde Excel</h2>
+  <p><a href="{% url 'costs:template' project.pk %}">Descarga la plantilla</a>: una fila por costo en la hoja «Costos». Las otras hojas listan los tipos, los documentos, los códigos del presupuesto vigente y las tareas.</p>
+  <ul class="pj-muted">
+    <li>El código de un ítem asigna el ítem; el de un capítulo, el capítulo completo; sin código, el costo es indirecto (del proyecto, sin tarea).</li>
+    <li>La tarea va por su número de esquema (por ejemplo 1.2) y es opcional.</li>
+    <li>Todo entra en borrador; el soporte se adjunta después en cada costo. Si una fila tiene un error, no se carga ninguna.</li>
+  </ul>
+  <form method="post" enctype="multipart/form-data" class="pj-form">
+    {% csrf_token %}
+    <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
+    {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <button class="button" type="submit">Ver vista previa</button>
+  </form>
+</section>
+{% if result %}
+<section class="pj-panel">
+  <h2>Vista previa</h2>
+  {% if result.errors %}<div class="pj-late" role="alert"><p>No se puede cargar el archivo:</p><ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if result.notes %}<div class="pj-warning cst-notes" role="status"><p>Revisa estos valores antes de cargar:</p><ul>{% for n in result.notes %}<li>{{ n }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if result.rows %}
+  <p>{{ result.rows|length }} costo{{ result.rows|length|pluralize }} por {{ result.total|money }}.</p>
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Fila</th><th>Fecha</th><th>Tipo</th><th>Asignación</th><th>Tarea</th><th>Descripción</th><th class="num">Valor</th></tr></thead>
+    <tbody>
+    {% for row in result.rows %}
+      <tr><td>{{ row.line }}</td><td>{{ row.data.incurred_on|date:"d/m/Y" }}</td><td>{{ row.kind_label }}</td><td class="pj-wrap">{{ row.assignment }}</td><td class="pj-wrap">{{ row.task|default:"—" }}</td><td class="pj-name">{{ row.data.description }}</td><td class="num">{{ row.data.amount|signed }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if result.token %}
+  <form method="post" action="{% url 'costs:import_apply' project.pk %}" class="pj-filters">
+    {% csrf_token %}
+    <input type="hidden" name="token" value="{{ result.token }}">
+    <button class="button" type="submit">Cargar en borrador</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from datetime import date
 from decimal import Decimal
@@ -10,14 +11,14 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from suno.authn.tests.factories import make_org, make_user
 from suno.control.earned_value import compute
 from suno.control.loader import load_control_input
 from suno.control.periods import MONTH
 from suno.core.context import Principal, resolve_request_context
-from suno.core.models import Project, Role
+from suno.core.models import CostEntry, CostStatus, Project, Role
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -43,6 +44,11 @@ class SeedControlDemoTests(TestCase):
         patcher = mock.patch("django.utils.timezone.localdate", return_value=TODAY)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        storage = override_settings(STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name)
+        storage.enable()
+        self.addCleanup(storage.disable)
 
     def seed(self, *flags: str) -> None:
         call_command(
@@ -84,3 +90,32 @@ class SeedControlDemoTests(TestCase):
             call_command(
                 "seed_control_demo", "--org-name=No existe", "--allow-production", stdout=StringIO()
             )
+
+    def test_seeds_the_cost_ledger(self) -> None:
+        self.seed()
+        project = Project.objects.get(org=self.org, name=PROJECT_NAME)
+        ctx = resolve_request_context(Principal(user_id=self.admin.pk, org_id=self.org.pk))
+        result = compute(load_control_input(ctx, project, cut=TODAY, kind=MONTH, costs=True))
+        cost, warnings = result.cost, result.cost_warnings
+        assert cost is not None and warnings is not None
+        self.assertGreater(cost.ac_direct, Decimal(0))
+        self.assertGreater(cost.ac_indirect, Decimal(0))
+        self.assertIsNotNone(cost.cpi)
+        self.assertIsNotNone(cost.admin_earned)  # Administración 8 %
+        self.assertEqual(warnings.pending_count, 1)
+        self.assertEqual(
+            {u.origin for u in warnings.unassigned},
+            {"Equipos propios sin ítem", "Transporte de terceros"},
+        )
+        entries = CostEntry.objects.filter(project=project)
+        self.assertEqual(
+            set(entries.values_list("scope", flat=True)),
+            {"indirect", "item", "chapter", "selection"},
+        )
+        self.assertTrue(entries.filter(status=CostStatus.REJECTED).exists())
+        self.assertTrue(entries.filter(reverses__isnull=False).exists())
+        self.assertFalse(
+            entries.filter(
+                status=CostStatus.APPROVED, reverses__isnull=True, attachment=None
+            ).exists()
+        )

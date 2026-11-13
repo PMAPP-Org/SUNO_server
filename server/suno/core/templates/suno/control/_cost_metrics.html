@@ -1,0 +1,12 @@
+{% load money_tags %}
+{% if c.empty %}
+<section class="pj-panel ctl-cost-empty"><p class="pj-empty">Sin costos aprobados al corte.{% if can_view_costs %} Regístralos y apruébalos en el <a href="{% url 'costs:list' project.pk %}">libro de costos</a>.{% endif %}</p></section>
+{% else %}
+<section class="metrics-strip ctl-metrics ctl-cost{% if c.bac|money|length > 17 %} ctl-long{% endif %}{% if c.bac|money|length > 19 %} ctl-xlong{% endif %}" aria-label="Indicadores de costo a la fecha de corte">
+  <article class="bg-money"><span>Costo real directo (AC)</span><strong>{{ c.ac_direct|money }}</strong><small>{% if c.ac_share is not None %}{{ c.ac_share|floatformat:1 }} % del BAC{% endif %}{% if c.ac_unassigned %} · {{ c.ac_unassigned|money }} sin asignar{% endif %}</small></article>
+  <article class="bg-money"><span>Variación del costo (CV)</span><strong>{{ c.cv|money }}</strong><small><b class="bg-label ctl-{{ c.status }}">CPI {% if c.cpi is not None %}{{ c.cpi|floatformat:2 }}{% else %}—{% endif %} · {{ c.status_label }}</b></small></article>
+  <article class="bg-money"><span>Estimado al terminar (EAC)</span><strong{% if c.over_budget %} class="ctl-over"{% endif %}>{% if c.eac is not None %}{{ c.eac|money }}{% else %}—{% endif %}</strong><small>VAC {% if c.vac is not None %}{{ c.vac|money }}{% else %}—{% endif %}</small></article>
+  <article class="bg-money"><span>Índice para terminar (TCPI)</span><strong>{% if c.tcpi is not None %}{{ c.tcpi|floatformat:2 }}{% else %}—{% endif %}</strong><small>Rendimiento necesario para terminar en presupuesto</small></article>
+  <article class="bg-money"><span>Administración</span>{% if c.admin_earned is None %}<strong>—</strong><small>Sin línea de Administración · CPI total {% if c.total_cpi is not None %}{{ c.total_cpi|floatformat:2 }}{% else %}—{% endif %}</small>{% else %}<strong><b class="bg-label ctl-{{ c.admin_status }}">CPI adm. {% if c.admin_cpi is not None %}{{ c.admin_cpi|floatformat:2 }}{% else %}—{% endif %}</b></strong><small>Indirectos {{ c.ac_indirect|money }} · ganada {{ c.admin_earned|money }} · <b class="bg-label ctl-{{ c.total_status }}">CPI total {% if c.total_cpi is not None %}{{ c.total_cpi|floatformat:2 }}{% else %}—{% endif %}</b></small>{% endif %}</article>
+</section>
+{% endif %}

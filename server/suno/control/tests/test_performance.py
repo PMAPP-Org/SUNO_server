@@ -23,6 +23,12 @@ from suno.core.models import (
     BudgetRowKind,
     BudgetVersion,
     BudgetVersionStatus,
+    CostDocumentType,
+    CostEntry,
+    CostEntryItem,
+    CostKind,
+    CostScope,
+    CostStatus,
     QuantityPlan,
     Record,
     RecordReview,
@@ -34,6 +40,7 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from suno.costs.tests.factories import support_blob
 from suno.projects.tests.factories import FieldWorld, make_field_world, make_record
 
 setUpModule = setup_test_database
@@ -213,6 +220,80 @@ class ControlLoadTests(TestCase):
             response = self.client.get(url)
             timings.append(time.perf_counter() - started)
             self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Tarea de carga 499")
+        best = min(timings)
+        self.assertLess(best, LIMIT_SECONDS, f"la página tardó {best:.3f} s (mejor de {timings})")
+
+
+ENTRIES = 20_000
+
+
+def add_cost_entries(world: FieldWorld) -> None:
+    """20 000 movimientos aprobados antes del corte (25 de enero de 2026 el último)."""
+    org, project = world.org, world.project
+    rows = list(BudgetItem.objects.filter(budget__project=project).values_list("code", "pk"))
+    chapters = {code: pk for code, pk in rows if "." not in code}
+    items = [(code, pk) for code, pk in rows if "." in code]
+    blob = support_blob("carga del costo")
+    now = timezone.now()
+    entries: list[CostEntry] = []
+    links: list[CostEntryItem] = []
+    scopes = (CostScope.ITEM, CostScope.CHAPTER, CostScope.INDIRECT, CostScope.INDIRECT)
+    for n in range(ENTRIES):
+        scope = scopes[n % 4]
+        code, item_id = items[n % len(items)]
+        entry = CostEntry(
+            org=org,
+            project=project,
+            incurred_on=FIRST_START + timedelta(days=n % 385),
+            kind=CostKind.MATERIALS,
+            description=f"Costo de carga {n}",
+            amount=Decimal(1000 + n % 500),
+            document_type=CostDocumentType.INVOICE,
+            scope=scope,
+            chapter_id=chapters[code.split(".")[0]] if scope != CostScope.INDIRECT else None,
+            status=CostStatus.APPROVED,
+            created_by=world.admin,
+            updated_by=world.admin,
+            decided_by=world.supervisor,
+            decided_at=now,
+            attachment=blob,
+        )
+        entries.append(entry)
+        if scope == CostScope.ITEM:
+            links.append(CostEntryItem(org=org, entry=entry, item_id=item_id))
+    CostEntry.objects.bulk_create(entries, batch_size=2000)
+    CostEntryItem.objects.bulk_create(links, batch_size=2000)
+
+
+@skip_without_db
+class ControlCostLoadTests(TestCase):
+    """Costos, pieza 6a (spec, sección 6): la página con costo, también en menos de 1 s."""
+
+    world: FieldWorld
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.world = make_field_world("Carga del costo")
+        build_large_project(cls.world)
+        add_cost_entries(cls.world)
+
+    def test_page_with_5000_pairs_and_20000_entries_renders_under_a_second(self) -> None:
+        self.assertEqual(CostEntry.objects.filter(project=self.world.project).count(), ENTRIES)
+        self.client.force_login(self.world.admin)
+        url = (
+            f"/plataforma/proyectos/{self.world.project.pk}/control/"
+            "?corte=2026-01-30&periodo=semana&desglose=tarea&orden=cpi"
+        )
+        self.assertEqual(self.client.get(url).status_code, 200)  # calienta
+        # La mejor de varias mediciones, como la prueba de la pieza 5.
+        timings = []
+        for _ in range(MEASUREMENTS):
+            started = time.perf_counter()
+            response = self.client.get(url)
+            timings.append(time.perf_counter() - started)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Costo real directo (AC)")
             self.assertContains(response, "Tarea de carga 499")
         best = min(timings)
         self.assertLess(best, LIMIT_SECONDS, f"la página tardó {best:.3f} s (mejor de {timings})")

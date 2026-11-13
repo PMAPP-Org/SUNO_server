@@ -304,3 +304,13 @@ class BlobStore(Protocol):
     def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
         """URL de `GET` de corta duración de la capa."""
         ...
+
+    # --- soportes subidos desde la web (costos, pieza 6a) -----------------------
+
+    def put_blob(self, *, sha256: str, path: str, size: int, mime: str) -> None:
+        """Sube un adjunto **desde el servidor** a su clave de siempre (`bucket_key_for`).
+
+        Como `put_layer`: el store verifica el `sha256` al recibirlo, y guarda el
+        `Content-Type` para que el `HEAD` y la descarga lo devuelvan.
+        """
+        ...

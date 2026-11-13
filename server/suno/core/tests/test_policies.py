@@ -20,14 +20,16 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from typing import Any
 
 from django.test import SimpleTestCase
 from ninja.errors import HttpError
 
 from suno.core import policies
+from suno.core.access import AccessScope, Section, SectionRole
 from suno.core.access_services import LEGACY_GRANTS
 from suno.core.context import RequestContext, SectionAccess
-from suno.core.models import Device, FormTemplate, Job, Record, Role
+from suno.core.models import CostEntry, Device, FormTemplate, Job, Project, Record, Role
 from suno.core.policies import (
     can_manage_device,
     can_publish_form_template,
@@ -77,6 +79,14 @@ def form_template(org_id: uuid.UUID = ORG) -> FormTemplate:
 
 def job(org_id: uuid.UUID = ORG) -> Job:
     return Job(id=uuid.uuid4(), org_id=org_id, type="export_records_csv")
+
+
+def project(org_id: uuid.UUID = ORG) -> Project:
+    return Project(org_id=org_id)
+
+
+def cost_entry(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> CostEntry:
+    return CostEntry(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
 
 
 # --- La primitiva -----------------------------------------------------------
@@ -384,6 +394,16 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_view_budgets": ORG,
             "can_manage_budgets": ORG,
             "can_export_budgets": ORG,
+            # Costos, pieza 6a: libro de costos, por proyecto.
+            "can_read_costs": project(),
+            "can_create_costs": project(),
+            "can_import_costs": project(),
+            "can_export_costs": project(),
+            "can_approve_costs": project(),
+            "can_reject_costs": project(),
+            "can_reverse_costs": project(),
+            "can_update_cost": cost_entry(),
+            "can_delete_cost": cost_entry(),
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
@@ -409,3 +429,87 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
         for name in self._registry():
             with self.subTest(policy=name):
                 self.assertTrue(callable(getattr(policies, name.replace("can_", "check_", 1))))
+
+
+class CostPolicyTests(SimpleTestCase):
+    """Costos, pieza 6a: matriz por rol, alcance por proyecto y "solo propios"."""
+
+    def actor(
+        self,
+        role: Any,
+        *,
+        scope: Any = AccessScope.ORGANIZATION,
+        projects: frozenset[uuid.UUID] = frozenset(),
+    ) -> RequestContext:
+        return RequestContext(
+            user_id=USER,
+            org_id=ORG,
+            roles=frozenset({Role.SUPERVISOR}),
+            section_access=(
+                SectionAccess(section=Section.COSTS, role=role, scope=scope, project_ids=projects),
+            ),
+        )
+
+    def test_legacy_profiles(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_reverse_costs(ctx(role), project()))
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(policies.can_read_costs(ctx(role), project()))
+
+    def test_role_matrix(self) -> None:
+        site = project()
+        #: crear, importar, aprobar, reversar, exportar
+        cases = {
+            SectionRole.MANAGER: (True, True, True, True, True),
+            SectionRole.REVIEWER: (True, False, True, False, True),
+            SectionRole.CONTRIBUTOR: (True, True, False, False, True),
+            SectionRole.VIEWER: (False, False, False, False, True),
+        }
+        for role, expected in cases.items():
+            actor = self.actor(role)
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_read_costs(actor, site))
+                self.assertEqual(
+                    (
+                        policies.can_create_costs(actor, site),
+                        policies.can_import_costs(actor, site),
+                        policies.can_approve_costs(actor, site),
+                        policies.can_reverse_costs(actor, site),
+                        policies.can_export_costs(actor, site),
+                    ),
+                    expected,
+                )
+                self.assertEqual(policies.can_reject_costs(actor, site), expected[2])
+
+    def test_contributor_updates_and_deletes_only_its_own(self) -> None:
+        own, other = cost_entry(created_by_id=USER), cost_entry(created_by_id=OTHER_USER)
+        contributor = self.actor(SectionRole.CONTRIBUTOR)
+        self.assertTrue(policies.can_update_cost(contributor, own))
+        self.assertTrue(policies.can_delete_cost(contributor, own))
+        self.assertFalse(policies.can_update_cost(contributor, other))
+        self.assertFalse(policies.can_delete_cost(contributor, other))
+        for role in (SectionRole.MANAGER, SectionRole.REVIEWER):
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_update_cost(self.actor(role), other))
+                self.assertTrue(policies.can_delete_cost(self.actor(role), other))
+        self.assertFalse(policies.can_update_cost(self.actor(SectionRole.VIEWER), own))
+
+    def test_project_scope(self) -> None:
+        inside, outside = project(), project()
+        actor = self.actor(
+            SectionRole.MANAGER, scope=AccessScope.PROJECTS, projects=frozenset({inside.id})
+        )
+        self.assertTrue(policies.can_read_costs(actor, inside))
+        self.assertFalse(policies.can_read_costs(actor, outside))
+        entry = CostEntry(org_id=ORG, project_id=outside.id, created_by_id=USER)
+        self.assertFalse(policies.can_update_cost(actor, entry))
+
+    def test_check_variants_follow_rd11(self) -> None:
+        with self.assertRaises(HttpError) as denied:
+            policies.check_approve_costs(self.actor(SectionRole.VIEWER), project())
+        self.assertEqual(denied.exception.status_code, 403)
+        with self.assertRaises(HttpError) as hidden:
+            policies.check_read_costs(ctx(Role.ADMIN, org_id=OTHER_ORG), project())
+        self.assertEqual(hidden.exception.status_code, 404)

@@ -223,6 +223,16 @@ class LocalFsBlobStore:
     def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
         return self._presigned(layer_key_for(sha256), expires_in, filename)
 
+    # --- soportes subidos desde la web (costos, pieza 6a) -----------------------
+
+    def put_blob(self, *, sha256: str, path: str, size: int, mime: str) -> None:
+        digest = normalize_sha256(sha256)
+        self._put_verified(bucket_key_for(digest), sha256=digest, path=path, size=size)
+        target = self._path(digest)
+        target.with_name(target.name + _META_SUFFIX).write_text(
+            json.dumps({"content_type": mime}), encoding="utf-8"
+        )
+
     # --- interno ----------------------------------------------------------------
 
     def _url(self, sha256: str, expires_in: int, filename: str | None = None) -> str:

@@ -17,22 +17,28 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from decimal import Decimal, localcontext
 from uuid import UUID
 
-from suno.budgets.totals import HUNDRED, WIDE_PRECISION, money
+from suno.budgets.totals import WIDE_PRECISION, money
 from suno.projects.workdays import WorkCalendar
 
+from .actual_cost import (
+    INDIRECT,
+    CostIndicators,
+    CostInput,
+    CostMeasure,
+    CostWarnings,
+    ItemCost,
+    measure_costs,
+)
+from .indices import ratio_of, share_of, status_of
 from .periods import Period, build_periods
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
-SPI_STEP = Decimal("0.01")
-SHARE_STEP = Decimal("0.1")
-GREEN_FROM = Decimal("0.95")
-AMBER_FROM = Decimal("0.85")
 STATUS_LABELS = {
     "green": "Al día",
     "amber": "Atención",
@@ -80,6 +86,8 @@ class PricedItem:
     unit_price: Decimal
     #: Capítulo de primer nivel que lo contiene ("2 Estructura"), o `NO_CHAPTER`.
     chapter: str
+    #: Presupuesto del ítem: la administración ganada se calcula por presupuesto.
+    budget_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,8 @@ class ControlInput:
     #: Presupuestos con versión contractual y presupuestos con una versión aplicada.
     contractual_budgets: int = 0
     applied_budgets: int = 0
+    #: Costo real (pieza 6a); `None` si quien mira no lee costos.
+    costs: CostInput | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -137,31 +147,7 @@ class ControlInput:
 
 def spi_of(ev: Decimal, pv: Decimal) -> Decimal | None:
     """EV / PV a dos decimales; `None` sin valor planeado."""
-    if pv <= 0:
-        return None
-    with localcontext() as context:
-        context.prec = WIDE_PRECISION
-        return (ev / pv).quantize(SPI_STEP, rounding=ROUND_HALF_UP)
-
-
-def status_of(spi: Decimal | None) -> str:
-    """Verde desde 0,95; ámbar desde 0,85; rojo por debajo; "none" sin SPI."""
-    if spi is None:
-        return "none"
-    if spi >= GREEN_FROM:
-        return "green"
-    if spi >= AMBER_FROM:
-        return "amber"
-    return "red"
-
-
-def share_of(value: Decimal, total: Decimal) -> Decimal | None:
-    """% de `total` a un decimal; `None` si `total` es 0."""
-    if total <= 0:
-        return None
-    with localcontext() as context:
-        context.prec = WIDE_PRECISION
-        return (value * HUNDRED / total).quantize(SHARE_STEP, rounding=ROUND_HALF_UP)
+    return ratio_of(ev, pv)
 
 
 @dataclass(frozen=True)
@@ -196,6 +182,9 @@ class PeriodRow:
     #: `None` en los periodos posteriores al corte.
     ev: Decimal | None
     ev_cum: Decimal | None
+    #: AC directo del periodo y acumulado; `None` tras el corte o sin permiso de costos.
+    ac: Decimal | None = None
+    ac_cum: Decimal | None = None
 
     @property
     def sv(self) -> Decimal | None:
@@ -235,6 +224,10 @@ class BreakdownRow:
     measure: Measure
     #: Solo en el desglose por tarea (enlace a su ficha).
     task_id: UUID | None = None
+    #: AC, CV y CPI; `None` sin permiso de costos (y siempre en el desglose por ubicación).
+    cost: CostMeasure | None = None
+    #: Solo en el desglose por ítem.
+    item_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -301,6 +294,9 @@ class ControlResult:
     by_task: tuple[BreakdownRow, ...]
     by_location: tuple[BreakdownRow, ...]
     warnings: Warnings
+    by_item: tuple[BreakdownRow, ...] = ()
+    cost: CostIndicators | None = None
+    cost_warnings: CostWarnings | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -350,9 +346,15 @@ class _Totals:
         self.pv += pv
         self.ev += ev
 
-    def row(self, label: str, task_id: UUID | None = None) -> BreakdownRow:
+    def row(
+        self, label: str, task_id: UUID | None = None, item_id: UUID | None = None
+    ) -> BreakdownRow:
         return BreakdownRow(
-            label, money(self.bac), Measure(money(self.pv), money(self.ev)), task_id
+            label,
+            money(self.bac),
+            Measure(money(self.pv), money(self.ev)),
+            task_id,
+            item_id=item_id,
         )
 
 
@@ -360,6 +362,16 @@ def _worst_first(rows: Iterable[BreakdownRow]) -> tuple[BreakdownRow, ...]:
     def key(row: BreakdownRow) -> tuple[bool, Decimal, str]:
         spi = row.measure.spi
         return (spi is None, ZERO if spi is None else spi, row.label.lower())
+
+    return tuple(sorted(rows, key=key))
+
+
+def worst_cost_first(rows: Iterable[BreakdownRow]) -> tuple[BreakdownRow, ...]:
+    """Por CPI (el del grupo en un ítem de grupo), peor primero; sin CPI al final."""
+
+    def key(row: BreakdownRow) -> tuple[bool, Decimal, str]:
+        cpi = row.cost.cpi if row.cost is not None else None
+        return (cpi is None, ZERO if cpi is None else cpi, row.label.lower())
 
     return tuple(sorted(rows, key=key))
 
@@ -418,6 +430,23 @@ def _compute(data: ControlInput) -> ControlResult:
         percent_tasks=tuple(data.percent_tasks),
     )
     if not pairs:
+        # Sin pares que midan no hay valor ganado, pero el costo real se informa igual (BAC y EV
+        # en 0, CPI vacío).
+        no_plan_cost = (
+            measure_costs(
+                data.costs,
+                cut=data.cut,
+                starts=[],
+                items=data.items,
+                item_labels=data.item_labels,
+                ev_by_item={},
+                bac=money(ZERO),
+                ev=money(ZERO),
+                tasks=data.tasks,
+            )
+            if data.costs is not None
+            else None
+        )
         return ControlResult(
             cut=data.cut,
             kind=data.kind,
@@ -435,11 +464,18 @@ def _compute(data: ControlInput) -> ControlResult:
             by_task=(),
             by_location=(),
             warnings=base_warnings,
+            cost=no_plan_cost.indicators if no_plan_cost else None,
+            cost_warnings=no_plan_cost.warnings if no_plan_cost else None,
         )
 
     spreads = {p.task.task_id: _Spread(p.task, data.calendar) for p in pairs.values()}
     counted_days = [e.day for key in pairs for e in executions.get(key, ())]
-    first = min([s.start for s in spreads.values()] + counted_days)
+    cost_days = (
+        [line.day for line in data.costs.lines if line.day <= data.cut and line.scope != INDIRECT]
+        if data.costs is not None
+        else []
+    )
+    first = min([s.start for s in spreads.values()] + counted_days + cost_days)
     last = max(s.finish for s in spreads.values())
     periods = build_periods(first, last, data.cut, data.kind)
     starts = [p.start for p in periods]
@@ -488,24 +524,13 @@ def _compute(data: ControlInput) -> ControlResult:
                 )
             )
 
-    rows: list[PeriodRow] = []
-    pv_cum = ev_cum = ZERO
-    for i, period in enumerate(periods):
-        pv_cum += planned[i]
-        if period.measured:
-            ev_cum += earned[i]
-            rows.append(
-                PeriodRow(period, money(planned[i]), money(pv_cum), money(earned[i]), money(ev_cum))
-            )
-        else:
-            rows.append(PeriodRow(period, money(planned[i]), money(pv_cum), None, None))
-
     # A la fecha de corte: total y desglose.
     shares = {task_id: spread.share(data.cut) for task_id, spread in spreads.items()}
     total = _Totals()
     chapters: dict[str, _Totals] = defaultdict(_Totals)
     tasks: dict[UUID, _Totals] = defaultdict(_Totals)
     locations: dict[str, _Totals] = defaultdict(_Totals)
+    by_item: dict[UUID, _Totals] = defaultdict(_Totals)
     for key, pair in pairs.items():
         value = pair.value
         pv = value * shares[pair.task.task_id]
@@ -515,9 +540,68 @@ def _compute(data: ControlInput) -> ControlResult:
             chapters[pair.item.chapter],
             tasks[pair.task.task_id],
             locations[pair.task.location or NO_LOCATION],
+            by_item[pair.item.item_id],
         ):
             bucket.add(value, pv, ev)
 
+    cost = (
+        measure_costs(
+            data.costs,
+            cut=data.cut,
+            starts=starts,
+            items=data.items,
+            item_labels=data.item_labels,
+            ev_by_item={item_id: t.ev for item_id, t in by_item.items()},
+            bac=money(total.bac),
+            ev=money(total.ev),
+            tasks=data.tasks,
+        )
+        if data.costs is not None
+        else None
+    )
+
+    rows: list[PeriodRow] = []
+    pv_cum = ev_cum = ac_cum = ZERO
+    for i, period in enumerate(periods):
+        pv_cum += planned[i]
+        if not period.measured:
+            rows.append(PeriodRow(period, money(planned[i]), money(pv_cum), None, None))
+            continue
+        ev_cum += earned[i]
+        ac: Decimal | None = None
+        ac_total: Decimal | None = None
+        if cost is not None:
+            ac_cum += cost.per_period[i]
+            ac, ac_total = money(cost.per_period[i]), money(ac_cum)
+        rows.append(
+            PeriodRow(
+                period,
+                money(planned[i]),
+                money(pv_cum),
+                money(earned[i]),
+                money(ev_cum),
+                ac,
+                ac_total,
+            )
+        )
+
+    def costed(
+        row: BreakdownRow, ac: Decimal | None, group: ItemCost | None = None
+    ) -> BreakdownRow:
+        if cost is None:
+            return row
+        if group is not None and group.group:
+            measure = CostMeasure(
+                group.ac, row.measure.ev, group.group, group.group_ev, group.group_ac
+            )
+        else:
+            own = group.ac if group is not None else money(ac or ZERO)
+            measure = CostMeasure(own, row.measure.ev)
+        return replace(row, cost=measure)
+
+    chapter_labels = set(chapters) | (set(cost.by_chapter) if cost else set())
+    task_ids = set(tasks) | ({t for t in cost.by_task if t in data.tasks} if cost else set())
+    item_ids = set(by_item) | ({i for i in cost.by_item if i in data.items} if cost else set())
     return ControlResult(
         cut=data.cut,
         kind=data.kind,
@@ -531,11 +615,26 @@ def _compute(data: ControlInput) -> ControlResult:
             data.applied_budgets,
         ),
         periods=tuple(rows),
-        by_chapter=_worst_first(t.row(label) for label, t in chapters.items()),
+        by_chapter=_worst_first(
+            costed(chapters[label].row(label), cost.by_chapter.get(label) if cost else None)
+            for label in chapter_labels
+        ),
         by_task=_worst_first(
-            t.row(data.tasks[task_id].label, task_id) for task_id, t in tasks.items()
+            costed(
+                tasks[task_id].row(data.tasks[task_id].label, task_id),
+                cost.by_task.get(task_id) if cost else None,
+            )
+            for task_id in task_ids
         ),
         by_location=_worst_first(t.row(label) for label, t in locations.items()),
+        by_item=_worst_first(
+            costed(
+                by_item[item_id].row(data.items[item_id].label, item_id=item_id),
+                None,
+                cost.by_item.get(item_id) if cost else None,
+            )
+            for item_id in item_ids
+        ),
         warnings=Warnings(
             no_baseline=base_warnings.no_baseline,
             undated=base_warnings.undated,
@@ -544,6 +643,8 @@ def _compute(data: ControlInput) -> ControlResult:
             outside_plan=base_warnings.outside_plan,
             percent_tasks=base_warnings.percent_tasks,
         ),
+        cost=cost.indicators if cost else None,
+        cost_warnings=cost.warnings if cost else None,
     )
 
 

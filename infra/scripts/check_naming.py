@@ -81,6 +81,8 @@ _CONCEPT_COMPATIBILITY: dict[str, tuple[str, ...]] = {
         "'visit_attachment'",
         "'visit'",
     ),
+    # La migración del libro de costos depende de la del renombre: solo puede nombrarla.
+    "server/suno/core/migrations/0028_costs_ledger.py": ("0027_rename_visit_to_record",),
 }
 
 

@@ -47,11 +47,16 @@ __all__ = [
     "SUPERVISION_ROLES",
     "WRITE_RECORD_ROLES",
     "PolicyDenied",
+    "can_approve_costs",
     "can_assign_task_responsibles",
     "can_assign_work",
+    "can_create_costs",
+    "can_delete_cost",
     "can_export_budgets",
+    "can_export_costs",
     "can_export_schedule",
     "can_export_records",
+    "can_import_costs",
     "can_manage_basemaps",
     "can_manage_budgets",
     "can_manage_device",
@@ -60,20 +65,29 @@ __all__ = [
     "can_modify_record",
     "can_publish_form_template",
     "can_read_basemaps",
+    "can_read_costs",
     "can_read_field_tasks",
     "can_read_job_output",
     "can_read_members",
     "can_read_record",
     "can_record_consent",
+    "can_reject_costs",
+    "can_reverse_costs",
     "can_review_record",
+    "can_update_cost",
     "can_upload_attachment",
     "can_view_budgets",
     "can_write_record",
+    "check_approve_costs",
     "check_assign_task_responsibles",
     "check_assign_work",
+    "check_create_costs",
+    "check_delete_cost",
     "check_export_budgets",
+    "check_export_costs",
     "check_export_schedule",
     "check_export_records",
+    "check_import_costs",
     "check_manage_basemaps",
     "check_manage_budgets",
     "check_manage_device",
@@ -82,12 +96,16 @@ __all__ = [
     "check_modify_record",
     "check_publish_form_template",
     "check_read_basemaps",
+    "check_read_costs",
     "check_read_field_tasks",
     "check_read_job_output",
     "check_read_members",
     "check_read_record",
     "check_record_consent",
+    "check_reject_costs",
+    "check_reverse_costs",
     "check_review_record",
+    "check_update_cost",
     "check_upload_attachment",
     "check_view_budgets",
     "check_write_record",
@@ -153,6 +171,19 @@ class DeviceLike(OrgScopedResource, Protocol):
 class AuthoredResource(OrgScopedResource, Protocol):
     """Un recurso con autor (`created_by_id`), ya resuelto: sin navegar relaciones."""
 
+    created_by_id: UUID
+
+
+class ProjectResource(OrgScopedResource, Protocol):
+    """Un proyecto ya resuelto: su `id` decide el alcance por proyectos."""
+
+    id: UUID
+
+
+class CostEntryResource(OrgScopedResource, Protocol):
+    """Un movimiento del libro de costos ya resuelto (sin navegar relaciones)."""
+
+    project_id: UUID
     created_by_id: UUID
 
 
@@ -465,6 +496,70 @@ def can_manage_personal_data(ctx: RequestContext, org_id: UUID) -> bool:
     return user_has_section_capability(ctx, org_id, Section.USERS_ACCESS, Capability.MANAGE_ACCESS)
 
 
+def _costs(ctx: RequestContext, org_id: UUID, project_id: UUID, capability: Capability) -> bool:
+    """Libro de costos (costos, pieza 6a): capacidad de la sección Costos **en ese proyecto**,
+    para que un acceso limitado a algunos proyectos solo valga en ellos."""
+    return user_has_section_capability(
+        ctx, org_id, Section.COSTS, capability, project_id=project_id
+    )
+
+
+def can_read_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Ver el libro de costos y el control de costo del proyecto: todos los roles de Costos."""
+    return _costs(ctx, project.org_id, project.id, Capability.READ)
+
+
+def can_create_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Registrar un costo en borrador: Gestor, Revisor y Colaborador."""
+    return _costs(ctx, project.org_id, project.id, Capability.CREATE)
+
+
+def can_import_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Importar costos desde Excel (en borrador): Gestor y Colaborador."""
+    return _costs(ctx, project.org_id, project.id, Capability.IMPORT)
+
+
+def can_export_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Exportar el libro a Excel (queda en la auditoría): todos los roles de Costos."""
+    return _costs(ctx, project.org_id, project.id, Capability.EXPORT)
+
+
+def can_approve_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Aprobar borradores: Gestor y Revisor. Que nadie apruebe lo suyo lo exige el servicio
+    (y la base): esta política responde solo por el rol."""
+    return _costs(ctx, project.org_id, project.id, Capability.APPROVE)
+
+
+def can_reject_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Rechazar borradores, con motivo: Gestor y Revisor."""
+    return _costs(ctx, project.org_id, project.id, Capability.REJECT)
+
+
+def can_reverse_costs(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Reversar un costo aprobado: solo el Gestor."""
+    return _costs(ctx, project.org_id, project.id, Capability.REVERSE)
+
+
+def _own_or_any_cost(ctx: RequestContext, entry: CostEntryResource, capability: Capability) -> bool:
+    if not _costs(ctx, entry.org_id, entry.project_id, capability):
+        return False
+    return entry.created_by_id == ctx.user_id or _costs(
+        ctx, entry.org_id, entry.project_id, Capability.APPROVE
+    )
+
+
+def can_update_cost(ctx: RequestContext, entry: CostEntryResource) -> bool:
+    """Actualizar un borrador: Gestor y Revisor, el de cualquiera; Colaborador, solo los suyos.
+
+    Lo aprobado nunca se actualiza: eso lo comprueba el servicio, que conoce el estado."""
+    return _own_or_any_cost(ctx, entry, Capability.UPDATE)
+
+
+def can_delete_cost(ctx: RequestContext, entry: CostEntryResource) -> bool:
+    """Borrar un borrador: Gestor y Revisor, el de cualquiera; Colaborador, solo los suyos."""
+    return _own_or_any_cost(ctx, entry, Capability.DELETE)
+
+
 def check_read_record(ctx: RequestContext, record: OrgScopedResource) -> None:
     if not can_read_record(ctx, record):
         raise _denial(ctx, record.org_id)
@@ -573,3 +668,48 @@ def check_manage_budgets(ctx: RequestContext, org_id: UUID) -> None:
 def check_export_budgets(ctx: RequestContext, org_id: UUID) -> None:
     if not can_export_budgets(ctx, org_id):
         raise _denial(ctx, org_id)
+
+
+def check_read_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_read_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_create_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_create_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_import_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_import_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_export_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_export_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_approve_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_approve_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_reject_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_reject_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_reverse_costs(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_reverse_costs(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_update_cost(ctx: RequestContext, entry: CostEntryResource) -> None:
+    if not can_update_cost(ctx, entry):
+        raise _denial(ctx, entry.org_id)
+
+
+def check_delete_cost(ctx: RequestContext, entry: CostEntryResource) -> None:
+    if not can_delete_cost(ctx, entry):
+        raise _denial(ctx, entry.org_id)

@@ -114,6 +114,16 @@ class ConceptCompatibilityTests(unittest.TestCase):
             ["visita"],
         )
 
+    def test_the_costs_migration_may_name_only_its_dependency(self):
+        path = "server/suno/core/migrations/0028_costs_ledger.py"
+        allowed = check_naming._CONCEPT_COMPATIBILITY[path]
+        text = "dependencies = [('core', '0027_rename_visit_to_record')]"
+        self.assertEqual(check_naming.offenders(text, "concept", allowed_literals=allowed), [])
+        self.assertEqual(
+            check_naming.offenders("visit_id", "concept", allowed_literals=allowed), ["visit_id"]
+        )
+        self.assertNotIn(path, check_naming._MIGRATIONS_HISTORY)
+
 
 class MainTests(unittest.TestCase):
     def test_runs_from_the_repository_root_when_invoked_from_a_subdirectory(self):

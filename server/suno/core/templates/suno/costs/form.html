@@ -1,0 +1,45 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{% if entry %}Editar costo{% else %}Nuevo costo{% endif %} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="costs" %}
+{% include "suno/costs/_nav.html" with sub="new" %}
+<section class="pj-panel">
+  <h2>{% if entry %}Editar costo{% else %}Nuevo costo{% endif %}</h2>
+  {% if entry.status == "rejected" %}<p class="pj-warning">Rechazado: {{ entry.decision_note }}. Al guardarlo vuelve a borrador para que lo aprueben.</p>{% endif %}
+  <form method="get" class="pj-filters" aria-label="Paso 1: a qué se asigna">
+    {% if copy_id %}<input type="hidden" name="copiar" value="{{ copy_id }}">{% endif %}
+    <label>Asignar a <select name="alcance">{% for key, label in scopes %}<option value="{{ key }}" {% if step.scope == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Capítulo (solo para ítems de un capítulo) <select name="capitulo"><option value="">—</option>{% for row in catalog.chapters %}<option value="{{ row.item_id }}" {% if step.chapter_id == row.item_id %}selected{% endif %}>{{ row.label|truncatechars:60 }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Elegir</button>
+  </form>
+</section>
+<section class="pj-panel">
+  <form method="post" enctype="multipart/form-data" class="pj-form cst-form">
+    {% csrf_token %}
+    <input type="hidden" name="alcance" value="{{ step.scope }}">
+    <input type="hidden" name="capitulo" value="{{ step.chapter_id|default:'' }}">
+    {% if errors or form.errors %}<div class="pj-late" role="alert"><p>No se pudo guardar:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
+    {% if step.scope == "item" %}
+      <label>{{ form.item.label }} {{ form.item }}</label>
+      <datalist id="cst-items">{% for row in catalog.items %}<option value="{{ row.label }}">{% endfor %}</datalist>
+    {% elif step.scope == "chapter" %}
+      <label>{{ form.chapter.label }} {{ form.chapter }}</label>
+    {% elif step.scope == "selection" %}
+      {% if step.chapter_id %}<fieldset class="cst-items"><legend>{{ form.items.label }}</legend>{{ form.items }}</fieldset>{% else %}<p class="pj-warning">Elige el capítulo arriba y pulsa «Elegir» para ver sus ítems.</p>{% endif %}
+    {% else %}
+      <p class="pj-muted">Costo indirecto: va al proyecto, sin ítem ni tarea.</p>
+    {% endif %}
+    {% if step.scope != "indirect" %}<label>{{ form.task.label }} {{ form.task }}</label>{% endif %}
+    <label>{{ form.incurred_on.label }} {{ form.incurred_on }}</label>
+    <label>{{ form.kind.label }} {{ form.kind }}</label>
+    <label>{{ form.description.label }} {{ form.description }}</label>
+    <label>{{ form.amount.label }} {{ form.amount }}</label>
+    <label>{{ form.third_party.label }} {{ form.third_party }}</label>
+    <label>{{ form.document_type.label }} {{ form.document_type }}</label>
+    <label>{{ form.document_number.label }} {{ form.document_number }}</label>
+    <label>{{ form.support.label }}{% if entry.attachment_id %} <small>(ya tiene {{ entry.attachment_name|default:"un soporte" }}; otro lo reemplaza)</small>{% endif %} {{ form.support }}</label>
+    <p class="pj-muted">Se guarda en borrador. Para aprobarlo hacen falta el soporte y otra persona.</p>
+    <button class="button" type="submit">Guardar</button>
+  </form>
+</section>
+{% endblock %}
