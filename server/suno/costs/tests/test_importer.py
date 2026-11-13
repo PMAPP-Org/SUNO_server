@@ -197,4 +197,4 @@ class CostImportTests(TestCase):
         self.assertEqual(result.rows[0].data.amount, D("1234"))
         self.assertEqual(len(result.notes), 1)
         self.assertTrue(result.notes[0].startswith("Fila 2:"))
-        self.assertIn("1.234", result.notes[0])
+        self.assertIn("«1.234» se leyó como 1.234 (el punto separa miles)", result.notes[0])

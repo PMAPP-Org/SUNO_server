@@ -22,7 +22,7 @@
         <td>{% if entry.attachment_id %}<a href="{% url 'costs:support' project.pk entry.pk %}" target="_blank" rel="noopener">Ver</a>{% else %}<span class="pj-late">Sin soporte</span>{% endif %}</td>
         <td class="cst-decide">
           <form method="post" action="{% url 'costs:approve' project.pk entry.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit"{% if not entry.attachment_id %} disabled{% endif %}>Aprobar</button></form>
-          <form method="post" action="{% url 'costs:reject' project.pk entry.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><label class="sr-only" for="motivo-{{ entry.pk }}">Motivo del rechazo</label><input id="motivo-{{ entry.pk }}" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+          <form method="post" action="{% url 'costs:reject' project.pk entry.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><input id="motivo-{{ entry.pk }}" aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
         </td>
       </tr>
     {% endfor %}

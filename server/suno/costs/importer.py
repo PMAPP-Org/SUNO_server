@@ -172,6 +172,11 @@ def _day(value: Any) -> date | None:
     return None
 
 
+def _thousands(value: Decimal) -> str:
+    """`1234` → "1.234" (miles con punto, como se escriben en Colombia)."""
+    return f"{value:,.0f}".replace(",", ".")
+
+
 def _amount(value: Any) -> tuple[Decimal | None, str]:
     """El valor de una celda y, si se leyó "punto + 3 dígitos" como miles, el aviso.
 
@@ -184,7 +189,7 @@ def _amount(value: Any) -> tuple[Decimal | None, str]:
         if abs(amount - cents) < FLOAT_NOISE:
             amount = cents
     note = (
-        f"El valor «{_text(value)}» se leyó como {amount:,.0f} (el punto separa miles); "
+        f"El valor «{_text(value)}» se leyó como {_thousands(amount)} (el punto separa miles); "
         "si eran decimales, escríbelos con coma."
         if guessed and amount is not None
         else ""

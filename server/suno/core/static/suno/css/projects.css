@@ -167,6 +167,9 @@ button.text-link:hover { color: var(--suno-red); }
 
 /* Control de costo (costos, pieza 6a). */
 .metrics-strip.ctl-cost { margin-top: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+/* Cinco tarjetas: los montos van un punto más chicos que en la fila del cronograma. */
+.metrics-strip.ctl-cost article { padding: 18px 16px; }
+.metrics-strip.ctl-cost:not(.ctl-long) .bg-money strong { font-size: clamp(15px, 1.3vw, 21px); }
 .ctl-over { color: var(--suno-red); }
 .ctl-key-ac { border-top: 2px dashed var(--chart-petrol); }
 .ctl-plot .ctl-ac { stroke: var(--chart-petrol); stroke-width: 2; stroke-dasharray: 6 3; }
@@ -191,12 +194,15 @@ button.text-link:hover { color: var(--suno-red); }
 .cst-form { max-width: 640px; }
 .cst-items { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius-sm); }
 .cst-items ul { margin: 0; padding: 0; list-style: none; }
+.pj-form .cst-items label, .pj-form .cst-check { display: flex; align-items: center; gap: 8px; }
+.pj-form .cst-items input[type="checkbox"], .pj-form .cst-check input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; flex: none; }
 .cst-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 12px 0; font-size: 13px; }
 .cst-facts dt { color: var(--suno-muted); }
 .cst-facts dd { margin: 0; overflow-wrap: anywhere; }
 .cst-decide { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .cst-reject { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cst-reject input { min-height: 32px; padding: 4px 8px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); font: inherit; font-size: 12px; }
+.cst-notes { margin-bottom: 12px; }
 .cst-check { display: flex; gap: 8px; align-items: center; }
 @media (max-width: 767px) {
   .cst-facts { grid-template-columns: minmax(0, 1fr); }
