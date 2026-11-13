@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import unittest
+from datetime import date
 from decimal import Decimal
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
-from django.utils import timezone
 
 from suno.authn.tests.factories import make_org, make_user
 from suno.control.earned_value import compute
@@ -28,12 +29,20 @@ setUpModule = setup_test_database
 tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
+#: "Hoy" fijo: el comando ancla la demo a `timezone.localdate()` (seis meses hacia atrás) y la
+#: prueba la calcula con el mismo corte; fijarlo evita depender del día (y del cambio de día
+#: entre sembrar y calcular).
+TODAY = date(2026, 11, 12)
+
 
 @skip_without_db
 class SeedControlDemoTests(TestCase):
     def setUp(self) -> None:
         self.org = make_org("Org demo control")
         self.admin = make_user(self.org, username="admin-control", role=Role.ADMIN)
+        patcher = mock.patch("django.utils.timezone.localdate", return_value=TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def seed(self, *flags: str) -> None:
         call_command(
@@ -48,7 +57,7 @@ class SeedControlDemoTests(TestCase):
         self.seed()
         project = Project.objects.get(org=self.org, name=PROJECT_NAME)
         ctx = resolve_request_context(Principal(user_id=self.admin.pk, org_id=self.org.pk))
-        result = compute(load_control_input(ctx, project, cut=timezone.localdate(), kind=MONTH))
+        result = compute(load_control_input(ctx, project, cut=TODAY, kind=MONTH))
         self.assertTrue(result.has_budget and result.has_plan)
         self.assertGreater(result.indicators.bac, Decimal(0))
         self.assertGreater(result.indicators.at_cut.ev, Decimal(0))
