@@ -344,7 +344,11 @@ def _measure(
     by_task: dict[UUID, Decimal] = defaultdict(Decimal)
     own: dict[UUID, Decimal] = defaultdict(Decimal)
     retired: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
-    grouped: list[tuple[tuple[UUID, ...], CostLine, ChapterRef]] = []
+    #: Costo de cada conjunto de ítems de capítulo o de selección, con la profundidad y el
+    #: nombre de su capítulo. Agrupado aquí para que el cálculo de grupos no dependa del
+    #: número de movimientos.
+    grouped: dict[tuple[tuple[UUID, ...], int, str], Decimal] = defaultdict(Decimal)
+    chapter_members: dict[UUID, tuple[UUID, ...]] = {}
     for line in data.lines:
         if line.day > cut:
             continue
@@ -387,13 +391,14 @@ def _measure(
             retired[(label, NO_CHAPTER)] += amount
             continue
         by_chapter[ref.top] += amount
-        members = (
-            tuple(sorted(ref.items))
-            if line.scope == CHAPTER
-            else tuple(i for i in line.items if i in items)
-        )
+        if line.scope == CHAPTER and line.chapter_id is not None:
+            members = chapter_members.get(line.chapter_id)
+            if members is None:
+                members = chapter_members[line.chapter_id] = tuple(sorted(ref.items))
+        else:
+            members = tuple(i for i in line.items if i in items)
         if members:
-            grouped.append((members, line, ref))
+            grouped[(members, ref.depth, ref.label)] += amount
     admin_earned, no_admin = _admin(data.admin, items, ev_by_item)
     indicators = CostIndicators(
         bac=bac,
@@ -432,7 +437,7 @@ def _measure(
 
 
 def _groups(
-    grouped: Sequence[tuple[tuple[UUID, ...], CostLine, ChapterRef]],
+    grouped: Mapping[tuple[tuple[UUID, ...], int, str], Decimal],
     own: Mapping[UUID, Decimal],
     ev_by_item: Mapping[UUID, Decimal],
 ) -> dict[UUID, ItemCost]:
@@ -449,7 +454,7 @@ def _groups(
             node = following
         return root
 
-    for members, _line, _ref in grouped:
+    for members, _depth, _label in grouped:
         for member in members:
             parent.setdefault(member, member)
         first = find(members[0])
@@ -459,10 +464,10 @@ def _groups(
                 parent[root] = first
     group_ac: dict[UUID, Decimal] = defaultdict(Decimal)
     names: dict[UUID, tuple[int, str]] = {}
-    for members, line, ref in grouped:
+    for (members, depth, label), amount in grouped.items():
         root = find(members[0])
-        group_ac[root] += line.amount
-        candidate = (ref.depth, ref.label)
+        group_ac[root] += amount
+        candidate = (depth, label)
         if root not in names or candidate < names[root]:
             names[root] = candidate
     components: dict[UUID, list[UUID]] = defaultdict(list)

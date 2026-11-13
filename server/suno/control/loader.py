@@ -267,6 +267,7 @@ def _load_costs(
             incurred_on__lte=cut,
             status__in=[CostStatus.APPROVED, CostStatus.DRAFT],
         )
+        .order_by()
         .values_list("pk", "status", "incurred_on", "amount", "scope", "chapter_id", "task_id")
     ):
         if status == CostStatus.DRAFT:
