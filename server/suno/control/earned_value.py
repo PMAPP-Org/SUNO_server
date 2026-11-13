@@ -430,6 +430,23 @@ def _compute(data: ControlInput) -> ControlResult:
         percent_tasks=tuple(data.percent_tasks),
     )
     if not pairs:
+        # Sin pares que midan no hay valor ganado, pero el costo real se informa igual (BAC y EV
+        # en 0, CPI vacío).
+        no_plan_cost = (
+            measure_costs(
+                data.costs,
+                cut=data.cut,
+                starts=[],
+                items=data.items,
+                item_labels=data.item_labels,
+                ev_by_item={},
+                bac=money(ZERO),
+                ev=money(ZERO),
+                tasks=data.tasks,
+            )
+            if data.costs is not None
+            else None
+        )
         return ControlResult(
             cut=data.cut,
             kind=data.kind,
@@ -447,6 +464,8 @@ def _compute(data: ControlInput) -> ControlResult:
             by_task=(),
             by_location=(),
             warnings=base_warnings,
+            cost=no_plan_cost.indicators if no_plan_cost else None,
+            cost_warnings=no_plan_cost.warnings if no_plan_cost else None,
         )
 
     spreads = {p.task.task_id: _Spread(p.task, data.calendar) for p in pairs.values()}

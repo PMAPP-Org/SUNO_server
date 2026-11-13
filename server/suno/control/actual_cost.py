@@ -190,6 +190,8 @@ class CostIndicators:
 
     @property
     def cpi(self) -> Decimal | None:
+        if self.bac <= 0:  # sin pares que midan no hay con qué comparar
+            return None
         return ratio_of(self.ev, self.ac_direct)
 
     @property

@@ -364,3 +364,25 @@ class RetiredTests(SimpleTestCase):
         chapter = {row.label: row for row in result.by_chapter}["2 Estructura"].cost
         assert chapter is not None
         self.assertEqual(chapter.ac, D("100300.00"))
+
+    def test_cost_without_plan_pairs_is_still_reported(self) -> None:
+        result = compute(
+            ControlInput(
+                cut=CUT,
+                kind=WEEK,
+                calendar=WorkCalendar(),
+                tasks={},
+                items=ITEMS,
+                item_labels=LABELS,
+                plans=[],
+                executions=[],
+                costs=CostInput(lines=BASIC, chapters=CHAPTERS),
+            )
+        )
+        cost = result.cost
+        assert cost is not None
+        self.assertEqual((cost.ac_direct, cost.ac_indirect), (D("55000.00"), D("8000.00")))
+        self.assertEqual((cost.bac, cost.ev), (D("0.00"), D("0.00")))
+        self.assertIsNone(cost.cpi)
+        self.assertIsNone(cost.eac)
+        self.assertIsNone(cost.tcpi)

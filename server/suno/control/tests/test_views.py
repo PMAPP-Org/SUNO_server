@@ -316,3 +316,12 @@ class ControlCostTests(TestCase):
         self.assertNotIn(">ac_acumulado<", periods)
         self.assertIn(">SPI<", indicators)
         self.assertNotIn(">CPI<", indicators)
+
+    def test_cost_is_reported_without_plan_pairs(self) -> None:
+        world, _ = cost_world("Sin matriz")
+        cost_entry(world, amount="250000.00", status=CostStatus.APPROVED)
+        self.client.force_login(world.admin)
+        response = self.client.get(f"/plataforma/proyectos/{world.project.pk}/control/" + AT_CUT)
+        self.assertContains(response, "La matriz no tiene cantidades planeadas")
+        self.assertContains(response, "Costo real al corte")
+        self.assertContains(response, "$250.000,00")

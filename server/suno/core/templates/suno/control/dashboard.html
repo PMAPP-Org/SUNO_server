@@ -18,11 +18,14 @@
 <p class="pj-warning" role="alert">{{ error }}</p>
 {% elif not result.has_budget %}
 <section class="pj-panel"><p class="pj-empty">El proyecto no tiene un presupuesto aplicado. El control valora el avance con los precios vigentes: carga uno en <a href="{% url 'budgets:list' project.pk %}">Presupuestos</a>.</p></section>
+{% include "suno/control/_cost_note.html" %}
 {% elif not result.has_plan %}
 <section class="pj-panel"><p class="pj-empty">La matriz no tiene cantidades planeadas. El valor planeado sale de ellas: cárgalas en <a href="{% url 'matrix:items' project.pk %}">Matriz</a>.</p></section>
+{% include "suno/control/_cost_note.html" %}
 {% else %}
 {% if not result.periods %}
 <section class="pj-panel"><p class="pj-empty">Ningún par de la matriz tiene precio vigente y fechas en el cronograma. Revisa los avisos.</p></section>
+{% include "suno/control/_cost_note.html" %}
 {% else %}
 {% with ind=result.indicators m=result.indicators.at_cut %}
 <section class="metrics-strip ctl-metrics{% if ind.bac|money|length > 17 %} ctl-long{% endif %}{% if ind.bac|money|length > 19 %} ctl-xlong{% endif %}" aria-label="Indicadores a la fecha de corte">
