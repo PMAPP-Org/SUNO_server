@@ -535,6 +535,7 @@ def _compute(data: ControlInput) -> ControlResult:
             ev_by_item={item_id: t.ev for item_id, t in by_item.items()},
             bac=money(total.bac),
             ev=money(total.ev),
+            tasks=data.tasks,
         )
         if data.costs is not None
         else None

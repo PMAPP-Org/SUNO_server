@@ -20,6 +20,9 @@
     </table></div>
   </details>
   {% endif %}
+  {% if w.retired_tasks %}
+  <details class="ctl-warning"><summary>Costos de tareas que ya no están en el cronograma vigente ({{ w.retired_tasks|money }}): cuentan en el AC directo, no en el desglose por tarea</summary></details>
+  {% endif %}
   {% if w.pending_count %}
   <details class="ctl-warning"><summary>Borradores por aprobar hasta el corte ({{ w.pending_count }}, {{ w.pending_amount|money }}): no cuentan</summary>
     {% if can_view_costs %}<p><a href="{% url 'costs:list' project.pk %}?estado=draft">Ver los borradores</a></p>{% endif %}

@@ -323,3 +323,44 @@ class BreakdownTests(SimpleTestCase):
             (2, D("1500.00")),
         )
         self.assertEqual(actual_cost.NO_CHAPTER, earned_value.NO_CHAPTER)
+
+
+class RetiredTests(SimpleTestCase):
+    def test_cost_on_a_retired_task_is_not_lost(self) -> None:
+        gone = uuid.uuid4()
+        result = control(
+            [
+                line(date(2026, 3, 6), "40000", items=(EXC,), task=T1),
+                line(date(2026, 3, 6), "7000", items=(EXC,), task=gone),
+                line(date(2026, 3, 7), "3000", UNASSIGNED, origin=EQUIPMENT),
+            ]
+        )
+        cost, warnings = result.cost, result.cost_warnings
+        assert cost is not None and warnings is not None
+        self.assertEqual((warnings.retired_tasks, warnings.no_task), (D("7000.00"), D("3000.00")))
+        by_task = sum((row.cost.ac for row in result.by_task if row.cost), D(0))
+        self.assertEqual(by_task + warnings.no_task + warnings.retired_tasks, cost.ac_direct)
+        self.assertGreaterEqual(warnings.count, 2)
+
+    def test_retired_members_of_a_selection_are_warned(self) -> None:
+        unknown = uuid.uuid4()
+        result = control(
+            [
+                line(date(2026, 3, 9), "100000", SELECTION, items=(CONC, RETIRED), chapter=CH2),
+                line(date(2026, 3, 9), "300", SELECTION, items=(RETIRED, unknown), chapter=CH2),
+            ]
+        )
+        assert result.cost_warnings is not None
+        self.assertEqual(
+            result.cost_warnings.retired,
+            (
+                RetiredCost("2.9 Retirado", "2 Estructura", D("50150.00")),
+                RetiredCost("Ítem desconocido", "2 Estructura", D("150.00")),
+            ),
+        )
+        concrete = {row.label: row for row in result.by_item}["2.1.1 Concreto"].cost
+        assert concrete is not None
+        self.assertEqual((concrete.group, concrete.group_ac), ("2 Estructura", D("50000.00")))
+        chapter = {row.label: row for row in result.by_chapter}["2 Estructura"].cost
+        assert chapter is not None
+        self.assertEqual(chapter.ac, D("100300.00"))

@@ -100,7 +100,7 @@
     <button class="button" type="submit">Ordenar</button>
   </form>
   {% endif %}
-  <p class="pj-muted">{% if options.order == "cpi" %}De peor a mejor CPI; sin costo, al final.{% else %}De peor a mejor SPI; sin valor planeado a la fecha, al final.{% endif %}{% if options.tab == "tarea" and result.cost_warnings.no_task %} {{ result.cost_warnings.no_task|money }} de costo directo no indicó tarea y no está en esta tabla.{% endif %}{% if options.tab == "ubicacion" and result.cost %} El costo no se desglosa por ubicación en esta versión.{% endif %}</p>
+  <p class="pj-muted">{% if options.order == "cpi" %}De peor a mejor CPI; sin costo, al final.{% else %}De peor a mejor SPI; sin valor planeado a la fecha, al final.{% endif %}{% if options.tab == "tarea" and result.cost_warnings.no_task %} {{ result.cost_warnings.no_task|money }} de costo directo no indicó tarea y no está en esta tabla.{% endif %}{% if options.tab == "tarea" and result.cost_warnings.retired_tasks %} {{ result.cost_warnings.retired_tasks|money }} es de tareas que ya no están en el cronograma vigente.{% endif %}{% if options.tab == "ubicacion" and result.cost %} El costo no se desglosa por ubicación en esta versión.{% endif %}</p>
   <div class="pj-scroll">
   <table class="pj-table ctl-breakdown">
     <thead><tr><th>{% if options.tab == "tarea" %}Tarea{% elif options.tab == "ubicacion" %}Ubicación{% elif options.tab == "item" %}Ítem{% else %}Capítulo{% endif %}</th><th class="num">BAC</th><th class="num">PV</th><th class="num">EV</th><th class="num">SV</th><th class="num">SPI</th><th>Estado</th>{% if result.cost and options.tab != "ubicacion" %}<th class="num">AC</th><th class="num">CV</th><th class="num">CPI</th><th>Costo</th>{% endif %}</tr></thead>

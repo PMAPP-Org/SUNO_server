@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, localcontext
@@ -269,6 +269,8 @@ class CostWarnings:
     exhausted: bool = False
     #: Costo directo sin tarea (incluye los automáticos): se avisa en el desglose por tarea.
     no_task: Decimal = ZERO
+    #: Costo directo de tareas que ya no están en el cronograma vigente.
+    retired_tasks: Decimal = ZERO
     unpriced_usages: int = 0
     unpriced_trips: int = 0
 
@@ -284,6 +286,7 @@ class CostWarnings:
             + len(self.retired)
             + (1 if self.pending_count else 0)
             + (1 if self.exhausted else 0)
+            + (1 if self.retired_tasks else 0)
             + (1 if self.unpriced_usages or self.unpriced_trips else 0)
         )
 
@@ -315,11 +318,14 @@ def measure_costs(
     ev_by_item: Mapping[UUID, Decimal],
     bac: Decimal,
     ev: Decimal,
+    tasks: Collection[UUID] | None = None,
 ) -> CostResult:
-    """`starts`: inicio de cada periodo del control (ya incluye el primer costo contado)."""
+    """`starts`: inicio de cada periodo del control (ya incluye el primer costo contado).
+    `tasks`: las tareas vigentes; el costo de una tarea retirada va a su aviso (`None`: todas
+    cuentan como vigentes)."""
     with localcontext() as context:
         context.prec = WIDE_PRECISION
-        return _measure(data, cut, starts, items, item_labels, ev_by_item, bac, ev)
+        return _measure(data, cut, starts, items, item_labels, ev_by_item, bac, ev, tasks)
 
 
 def _top(chapters: Mapping[UUID, ChapterRef], chapter_id: UUID | None) -> str:
@@ -336,9 +342,10 @@ def _measure(
     ev_by_item: Mapping[UUID, Decimal],
     bac: Decimal,
     ev: Decimal,
+    tasks: Collection[UUID] | None,
 ) -> CostResult:
     per_period = [ZERO] * len(starts)
-    assigned = unassigned = indirect = no_task = ZERO
+    assigned = unassigned = indirect = no_task = retired_tasks = ZERO
     by_origin: dict[str, Decimal] = defaultdict(Decimal)
     by_chapter: dict[str, Decimal] = defaultdict(Decimal)
     by_task: dict[UUID, Decimal] = defaultdict(Decimal)
@@ -361,6 +368,8 @@ def _measure(
             per_period[index] += amount
         if line.task_id is None:
             no_task += amount
+        elif tasks is not None and line.task_id not in tasks:
+            retired_tasks += amount
         else:
             by_task[line.task_id] += amount
         if line.scope == UNASSIGNED:
@@ -397,6 +406,14 @@ def _measure(
                 members = chapter_members[line.chapter_id] = tuple(sorted(ref.items))
         else:
             members = tuple(i for i in line.items if i in items)
+            gone = [i for i in line.items if i not in items]
+            if gone:
+                # Sin reparto entre ítems, la parte de los que ya no están vigentes es la de su
+                # número: cuenta en el capítulo (arriba) y se avisa; el resto va al grupo.
+                share = amount / len(line.items)
+                for item_id in gone:
+                    retired[(item_labels.get(item_id, UNKNOWN), ref.top)] += share
+                amount -= share * len(gone)
         if members:
             grouped[(members, ref.depth, ref.label)] += amount
     admin_earned, no_admin = _admin(data.admin, items, ev_by_item)
@@ -423,6 +440,7 @@ def _measure(
         pending_amount=money(data.pending_amount),
         exhausted=indicators.exhausted,
         no_task=money(no_task),
+        retired_tasks=money(retired_tasks),
         unpriced_usages=data.unpriced_usages,
         unpriced_trips=data.unpriced_trips,
     )
