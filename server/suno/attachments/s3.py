@@ -231,6 +231,11 @@ class S3BlobStore:
     def presign_layer_download(self, *, sha256: str, expires_in: int, filename: str) -> str:
         return self._presign_get(layer_key_for(sha256), LAYER_MIME, expires_in, filename)
 
+    # --- soportes subidos desde la web (costos, pieza 6a) -----------------------
+
+    def put_blob(self, *, sha256: str, path: str, size: int, mime: str) -> None:
+        self._put_verified(bucket_key_for(sha256), sha256=sha256, path=path, size=size, mime=mime)
+
     # --- archivos del servidor (mapas base, capas) -------------------------------
 
     def _put_verified(self, key: str, *, sha256: str, path: str, size: int, mime: str) -> None:

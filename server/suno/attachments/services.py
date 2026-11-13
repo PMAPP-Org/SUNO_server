@@ -73,6 +73,7 @@ __all__ = [
     "commit",
     "download_url",
     "presign",
+    "register_server_upload",
     "unconfirmed_sha256",
 ]
 
@@ -421,6 +422,12 @@ def _register(digest: str, *, size: int, mime: str) -> CommitResult:
     stored = blob_registry().get(pk=digest)
     created = candidate.created_at is not None and stored.created_at == candidate.created_at
     return CommitResult(blob=stored, created=created)
+
+
+def register_server_upload(digest: str, *, size: int, mime: str) -> CommitResult:
+    """Registra el `Blob` de un archivo que el **servidor** ya subió y verificó
+    (`attachments.web.store_upload`). Mismo `INSERT … ON CONFLICT DO NOTHING` que el commit."""
+    return _register(normalize_sha256(digest), size=size, mime=mime)
 
 
 # --- 3. Descarga ---------------------------------------------------------------
