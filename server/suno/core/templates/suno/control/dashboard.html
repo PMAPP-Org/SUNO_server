@@ -8,6 +8,7 @@
     <label>Fecha de corte <input type="date" name="corte" value="{{ options.cut|date:'Y-m-d' }}"></label>
     <label>Periodos <select name="periodo">{% for key, label in period_kinds.items %}<option value="{{ key }}" {% if options.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
     <input type="hidden" name="desglose" value="{{ options.tab }}">
+    {% if options.order != "spi" %}<input type="hidden" name="orden" value="{{ options.order }}">{% endif %}
     <button class="button" type="submit">Ver</button>
     {% if can_export_control and result.periods %}<a class="text-link" href="{% url 'control:export' project.pk %}?{{ options.query }}">Exportar a Excel</a>{% endif %}
   </form>
@@ -31,35 +32,38 @@
   <article class="bg-money"><span>Variación del cronograma (SV)</span><strong>{{ m.sv|money }}</strong><small><b class="bg-label ctl-{{ m.status }}">SPI {% if m.spi is not None %}{{ m.spi|floatformat:2 }}{% else %}—{% endif %} · {{ m.status_label }}</b></small></article>
 </section>
 {% endwith %}
+{% if result.cost %}{% include "suno/control/_cost_metrics.html" with c=result.cost %}{% endif %}
 
 <figure class="pj-panel ctl-figure" aria-labelledby="ctl-curve-title">
-  <figcaption id="ctl-curve-title"><strong>Curva S: valor planeado y valor ganado acumulados</strong></figcaption>
+  <figcaption id="ctl-curve-title"><strong>Curva S: valor planeado{% if result.cost %}, valor ganado y costo real{% else %} y valor ganado{% endif %} acumulados</strong></figcaption>
   <ul class="ctl-legend" aria-label="Leyenda">
     <li><i class="ctl-key"></i> Valor planeado (PV) · {{ curve.pv_last }}</li>
     <li><i class="ctl-key ctl-key-ev"></i> Valor ganado (EV){% if curve.ev_last %} · {{ curve.ev_last }}{% endif %}</li>
+    {% if result.cost %}<li><i class="ctl-key ctl-key-ac"></i> Costo real directo (AC){% if curve.ac_last %} · {{ curve.ac_last }}{% endif %}</li>{% endif %}
     <li><i class="ctl-key ctl-key-cut"></i> Fecha de corte</li>
   </ul>
   <div class="ctl-chart" style="--ctl-tick-chars: {{ curve.tick_chars }}">
     <div class="ctl-ticks" aria-hidden="true">{% for pos, label in curve.axis.ticks %}<span style="bottom: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
-    <div class="ctl-plot" role="img" aria-label="Curva S del valor planeado y del valor ganado acumulados. Los números están en la tabla de la curva.">
+    <div class="ctl-plot" role="img" aria-label="Curva S acumulada{% if result.cost %} con el costo real{% endif %}. Los números están en la tabla de la curva.">
       {% for pos, label in curve.axis.ticks %}<i class="ctl-grid" style="bottom: {{ pos|stringformat:'s' }}%"></i>{% endfor %}
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         {% if curve.cut_x is not None %}<line class="ctl-cut" x1="{{ curve.cut_x|stringformat:'s' }}" x2="{{ curve.cut_x|stringformat:'s' }}" y1="0" y2="100"/>{% endif %}
         <polyline class="ctl-pv" points="{{ curve.pv_points }}"/>
         {% if curve.ev_points %}<polyline class="ctl-ev" points="{{ curve.ev_points }}"/>{% endif %}
+        {% if curve.ac_points %}<polyline class="ctl-ac" points="{{ curve.ac_points }}"/>{% endif %}
       </svg>
     </div>
     <div class="ctl-xlabels" aria-hidden="true">{% for pos, label in curve.x_labels %}<span style="left: {{ pos|stringformat:'s' }}%">{{ label }}</span>{% endfor %}</div>
   </div>
-  <p class="pj-muted ctl-source">Eje vertical: {{ curve.axis.unit }}. PV repartido por días laborables de la línea base; EV con las cantidades validadas hasta el {{ result.cut|date:"d/m/Y" }}. Precios del presupuesto vigente.</p>
+  <p class="pj-muted ctl-source">Eje vertical: {{ curve.axis.unit }}. PV repartido por días laborables de la línea base; EV con las cantidades validadas hasta el {{ result.cut|date:"d/m/Y" }}. Precios del presupuesto vigente.{% if result.cost %} AC: costos aprobados del libro y automáticos (equipos propios y transporte de terceros) hasta el corte, sin indirectos.{% endif %}</p>
 </figure>
 
 <details class="pj-panel ctl-table">
   <summary>Tabla de la curva ({{ result.periods|length }} periodos)</summary>
   <div class="pj-scroll">
   <table class="pj-table">
-    <caption class="sr-only">Valor planeado y valor ganado por periodo</caption>
-    <thead><tr><th>Periodo</th><th>Hasta</th><th class="num">PV del periodo</th><th class="num">PV acumulado</th><th class="num">EV del periodo</th><th class="num">EV acumulado</th><th class="num">SV</th><th class="num">SPI</th></tr></thead>
+    <caption class="sr-only">Valor planeado, valor ganado{% if result.cost %} y costo real{% endif %} por periodo</caption>
+    <thead><tr><th>Periodo</th><th>Hasta</th><th class="num">PV del periodo</th><th class="num">PV acumulado</th><th class="num">EV del periodo</th><th class="num">EV acumulado</th><th class="num">SV</th><th class="num">SPI</th>{% if result.cost %}<th class="num">AC del periodo</th><th class="num">AC acumulado</th>{% endif %}</tr></thead>
     <tbody>
     {% for row in result.periods %}
       <tr{% if not row.period.measured %} class="pj-muted"{% endif %}>
@@ -71,6 +75,10 @@
         <td class="num">{% if row.ev_cum is not None %}{{ row.ev_cum|signed }}{% else %}—{% endif %}</td>
         <td class="num">{% if row.sv is not None %}{{ row.sv|signed }}{% else %}—{% endif %}</td>
         <td class="num">{% if row.spi is not None %}{{ row.spi|floatformat:2 }}{% else %}—{% endif %}</td>
+        {% if result.cost %}
+        <td class="num">{% if row.ac is not None %}{{ row.ac|signed }}{% else %}—{% endif %}</td>
+        <td class="num">{% if row.ac_cum is not None %}{{ row.ac_cum|signed }}{% else %}—{% endif %}</td>
+        {% endif %}
       </tr>
     {% endfor %}
     </tbody>
@@ -81,22 +89,37 @@
 <section class="pj-panel" aria-labelledby="ctl-breakdown-title">
   <h2 id="ctl-breakdown-title">Desglose a la fecha de corte</h2>
   <nav class="pj-tabs ctl-tabs" aria-label="Desglose">
-    {% for key, label in tabs.items %}<a href="?{{ options.query }}&amp;desglose={{ key }}" {% if options.tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+    {% for key, label in tabs.items %}<a href="?{{ options.listing }}&amp;desglose={{ key }}" {% if options.tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
   </nav>
-  <p class="pj-muted">De peor a mejor SPI; sin valor planeado a la fecha, al final.</p>
+  {% if result.cost %}
+  <form method="get" class="pj-filters ctl-order" aria-label="Orden del desglose">
+    <input type="hidden" name="corte" value="{{ options.cut|date:'Y-m-d' }}">
+    <input type="hidden" name="periodo" value="{{ options.kind }}">
+    <input type="hidden" name="desglose" value="{{ options.tab }}">
+    <label>Ordenar por <select name="orden">{% for key, label in orders.items %}<option value="{{ key }}" {% if options.order == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Ordenar</button>
+  </form>
+  {% endif %}
+  <p class="pj-muted">{% if options.order == "cpi" %}De peor a mejor CPI; sin costo, al final.{% else %}De peor a mejor SPI; sin valor planeado a la fecha, al final.{% endif %}{% if options.tab == "tarea" and result.cost_warnings.no_task %} {{ result.cost_warnings.no_task|money }} de costo directo no indicó tarea y no está en esta tabla.{% endif %}{% if options.tab == "ubicacion" and result.cost %} El costo no se desglosa por ubicación en esta versión.{% endif %}</p>
   <div class="pj-scroll">
   <table class="pj-table ctl-breakdown">
-    <thead><tr><th>{% if options.tab == "tarea" %}Tarea{% elif options.tab == "ubicacion" %}Ubicación{% else %}Capítulo{% endif %}</th><th class="num">BAC</th><th class="num">PV</th><th class="num">EV</th><th class="num">SV</th><th class="num">SPI</th><th>Estado</th></tr></thead>
+    <thead><tr><th>{% if options.tab == "tarea" %}Tarea{% elif options.tab == "ubicacion" %}Ubicación{% elif options.tab == "item" %}Ítem{% else %}Capítulo{% endif %}</th><th class="num">BAC</th><th class="num">PV</th><th class="num">EV</th><th class="num">SV</th><th class="num">SPI</th><th>Estado</th>{% if result.cost and options.tab != "ubicacion" %}<th class="num">AC</th><th class="num">CV</th><th class="num">CPI</th><th>Costo</th>{% endif %}</tr></thead>
     <tbody>
     {% for row in rows %}
       <tr>
-        <td class="pj-name">{% if row.task_id %}<a href="{% url 'projects:task' project.pk row.task_id %}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+        <td class="pj-name">{% if row.task_id %}<a href="{% url 'projects:task' project.pk row.task_id %}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}{% if row.cost.group %}<br><small class="ctl-group">Índice del grupo: {{ row.cost.group }}</small>{% endif %}</td>
         <td class="num">{{ row.bac|signed }}</td>
         <td class="num">{{ row.measure.pv|signed }}</td>
         <td class="num">{{ row.measure.ev|signed }}</td>
         <td class="num">{{ row.measure.sv|signed }}</td>
         <td class="num">{% if row.measure.spi is not None %}{{ row.measure.spi|floatformat:2 }}{% else %}—{% endif %}</td>
         <td><span class="bg-label ctl-{{ row.measure.status }}">{{ row.measure.status_label }}</span></td>
+        {% if result.cost and options.tab != "ubicacion" %}
+        <td class="num">{{ row.cost.ac|signed }}</td>
+        <td class="num">{{ row.cost.cv|signed }}</td>
+        <td class="num">{% if row.cost.cpi is not None %}{{ row.cost.cpi|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td><span class="bg-label ctl-{{ row.cost.status }}">{{ row.cost.status_label }}</span></td>
+        {% endif %}
       </tr>
     {% endfor %}
     </tbody>
@@ -105,5 +128,6 @@
 </section>
 {% endif %}
 {% include "suno/control/_warnings.html" with w=result.warnings %}
+{% if result.cost_warnings %}{% include "suno/control/_cost_warnings.html" with w=result.cost_warnings %}{% endif %}
 {% endif %}
 {% endblock %}

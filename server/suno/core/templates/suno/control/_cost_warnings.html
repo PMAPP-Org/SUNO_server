@@ -1,0 +1,35 @@
+{% load money_tags %}
+{% if w.count %}
+<section class="pj-panel" aria-labelledby="ctl-cost-warnings-title">
+  <h2 id="ctl-cost-warnings-title">Avisos de costo</h2>
+  {% if w.unassigned %}
+  <details class="ctl-warning"><summary>Costo directo sin asignar ({{ w.unassigned_total|money }}): entra en el AC directo, no en el desglose por capítulo ni por ítem</summary>
+    <ul>{% for u in w.unassigned %}<li>{{ u.origin }}: {{ u.amount|money }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if w.no_admin %}
+  <details class="ctl-warning"><summary>Presupuestos sin línea de Administración ({{ w.no_admin|length }}): no aportan administración ganada</summary>
+    <ul>{% for name in w.no_admin %}<li>{{ name }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if w.retired %}
+  <details class="ctl-warning"><summary>Costos de ítems o capítulos que ya no están en la versión vigente ({{ w.retired|length }}): cuentan en su capítulo de origen</summary>
+    <div class="pj-scroll"><table class="pj-table">
+      <thead><tr><th>Ítem o capítulo</th><th>Cuenta en</th><th class="num">AC</th></tr></thead>
+      <tbody>{% for r in w.retired %}<tr><td class="pj-wrap">{{ r.item }}</td><td class="pj-wrap">{{ r.chapter }}</td><td class="num">{{ r.amount|signed }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endif %}
+  {% if w.pending_count %}
+  <details class="ctl-warning"><summary>Borradores por aprobar hasta el corte ({{ w.pending_count }}, {{ w.pending_amount|money }}): no cuentan</summary>
+    {% if can_view_costs %}<p><a href="{% url 'costs:list' project.pk %}?estado=draft">Ver los borradores</a></p>{% endif %}
+  </details>
+  {% endif %}
+  {% if w.exhausted %}
+  <details class="ctl-warning"><summary>Presupuesto agotado: el costo real directo ya alcanzó el BAC y el TCPI no tiene valor</summary></details>
+  {% endif %}
+  {% if w.unpriced_usages or w.unpriced_trips %}
+  <details class="ctl-warning"><summary>Costos automáticos sin valor: {{ w.unpriced_usages }} uso{{ w.unpriced_usages|pluralize }} de equipo sin tarifa y {{ w.unpriced_trips }} viaje{{ w.unpriced_trips|pluralize }} sin precio; no suman</summary></details>
+  {% endif %}
+</section>
+{% endif %}

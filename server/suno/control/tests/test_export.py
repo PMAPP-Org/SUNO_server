@@ -70,3 +70,20 @@ class ControlWorkbookTests(SimpleTestCase):
         self.assertIn(">tarea<", breakdown)
         self.assertIn(">'=SUM(A1)<", breakdown, "un nombre con fórmula sale como texto")
         self.assertIn(">Atrasado<", breakdown)
+        self.assertNotIn(">ac_acumulado<", periods)  # sin permiso de costos, sin columnas de AC
+
+    def test_cost_columns_and_indicators(self) -> None:
+        from suno.control.tests.test_actual_cost import BASIC, control
+
+        with zipfile.ZipFile(io.BytesIO(control_workbook(control(BASIC)))) as book:
+            workbook = book.read("xl/workbook.xml").decode()
+            periods = book.read("xl/worksheets/sheet1.xml").decode()
+            breakdown = book.read("xl/worksheets/sheet2.xml").decode()
+            indicators = book.read("xl/worksheets/sheet3.xml").decode()
+        self.assertIn('<sheet name="Indicadores"', workbook)
+        self.assertIn(">ac_acumulado<", periods)
+        self.assertIn("<v>55000.0</v>", periods)
+        self.assertIn(">indice_del_grupo<", breakdown)
+        self.assertIn(">ítem<", breakdown)
+        self.assertIn(">CPI<", indicators)
+        self.assertIn("<v>17.27</v>", indicators)

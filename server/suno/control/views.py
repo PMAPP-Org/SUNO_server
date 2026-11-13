@@ -3,6 +3,9 @@
 Mismo acceso que la Matriz (`get_matrix_project`: quien ve presupuestos; el agente de campo
 recibe 404). Exportar pide además `can_export_budgets` y queda en la auditoría
 (`control.exported`).
+
+Costos, pieza 6a: la fila de costo, la serie AC, sus columnas y el orden por CPI solo para quien
+lee costos del proyecto (`can_read_costs`); quien no, ve el control de cronograma como antes.
 """
 
 from __future__ import annotations
@@ -22,18 +25,25 @@ from django.views.decorators.http import require_http_methods
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.download import content_disposition
-from suno.core.policies import can_export_budgets
+from suno.core.policies import can_export_budgets, can_read_costs
 from suno.matrix.access import get_matrix_project
 from suno.projects.views import _ctx, _parse_date, _project_context, _render
 
 from .chart import build_s_curve
-from .earned_value import BreakdownRow, ControlResult, compute
+from .earned_value import BreakdownRow, ControlResult, compute, worst_cost_first
 from .export import control_workbook
 from .loader import load_control_input
 from .periods import DEFAULT_KIND, PERIOD_KINDS, PeriodRangeError, range_message
 
-BREAKDOWN_TABS = {"capitulo": "Por capítulo", "tarea": "Por tarea", "ubicacion": "Por ubicación"}
+BREAKDOWN_TABS = {
+    "capitulo": "Por capítulo",
+    "item": "Por ítem",
+    "tarea": "Por tarea",
+    "ubicacion": "Por ubicación",
+}
 DEFAULT_TAB = "capitulo"
+ORDERS = {"spi": "cronograma (SPI)", "cpi": "costo (CPI)"}
+DEFAULT_ORDER = "spi"
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -42,29 +52,41 @@ class Options:
     cut: date
     kind: str
     tab: str
+    order: str = DEFAULT_ORDER
 
     @property
     def query(self) -> str:
-        """Corte y periodo, para las pestañas del desglose y la exportación."""
+        """Corte y periodo, para la exportación."""
         return urlencode({"corte": self.cut.isoformat(), "periodo": self.kind})
 
+    @property
+    def listing(self) -> str:
+        """Corte, periodo y orden (si no es el de por defecto), para las pestañas del desglose."""
+        values = {"corte": self.cut.isoformat(), "periodo": self.kind}
+        if self.order != DEFAULT_ORDER:
+            values["orden"] = self.order
+        return urlencode(values)
 
-def _options(request: HttpRequest) -> Options:
+
+def _options(request: HttpRequest, *, costs: bool) -> Options:
     kind = request.GET.get("periodo", "")
     tab = request.GET.get("desglose", "")
+    order = request.GET.get("orden", "")
     return Options(
         cut=_parse_date(request.GET.get("corte")) or timezone.localdate(),
         kind=kind if kind in PERIOD_KINDS else DEFAULT_KIND,
         tab=tab if tab in BREAKDOWN_TABS else DEFAULT_TAB,
+        order=order if costs and order in ORDERS else DEFAULT_ORDER,
     )
 
 
-def _breakdown(result: ControlResult, tab: str) -> tuple[BreakdownRow, ...]:
-    if tab == "tarea":
-        return result.by_task
-    if tab == "ubicacion":
-        return result.by_location
-    return result.by_chapter
+def _breakdown(result: ControlResult, tab: str, order: str) -> tuple[BreakdownRow, ...]:
+    rows = {
+        "tarea": result.by_task,
+        "ubicacion": result.by_location,
+        "item": result.by_item,
+    }.get(tab, result.by_chapter)
+    return worst_cost_first(rows) if order == "cpi" else rows
 
 
 @login_required(login_url="platform_login")
@@ -72,11 +94,14 @@ def _breakdown(result: ControlResult, tab: str) -> tuple[BreakdownRow, ...]:
 def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_matrix_project(ctx, project_id)
-    options = _options(request)
+    costs = can_read_costs(ctx, project)
+    options = _options(request, costs=costs)
     result: ControlResult | None = None
     error = ""
     try:
-        result = compute(load_control_input(ctx, project, cut=options.cut, kind=options.kind))
+        result = compute(
+            load_control_input(ctx, project, cut=options.cut, kind=options.kind, costs=costs)
+        )
     except PeriodRangeError as exc:
         error = range_message(exc)
     return _render(
@@ -89,8 +114,9 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
             "options": options,
             "period_kinds": PERIOD_KINDS,
             "tabs": BREAKDOWN_TABS,
+            "orders": ORDERS,
             "result": result,
-            "rows": _breakdown(result, options.tab) if result else (),
+            "rows": _breakdown(result, options.tab, options.order) if result else (),
             "curve": build_s_curve(result.periods, result.indicators.bac) if result else None,
             "can_export_control": can_export_budgets(ctx, ctx.org_id),
             "error": error,
@@ -104,11 +130,14 @@ def export(request: HttpRequest, project_id: UUID) -> HttpResponse:
     """Periodos y desglose del corte, en Excel (auditado, como la comparación del presupuesto)."""
     ctx = _ctx(request)
     project = get_matrix_project(ctx, project_id)
+    costs = can_read_costs(ctx, project)
     if not can_export_budgets(ctx, ctx.org_id):
         raise PermissionDenied
-    options = _options(request)
+    options = _options(request, costs=costs)
     try:
-        result = compute(load_control_input(ctx, project, cut=options.cut, kind=options.kind))
+        result = compute(
+            load_control_input(ctx, project, cut=options.cut, kind=options.kind, costs=costs)
+        )
     except PeriodRangeError as exc:
         return HttpResponse(
             range_message(exc), status=400, content_type="text/plain; charset=utf-8"

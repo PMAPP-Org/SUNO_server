@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -84,3 +85,14 @@ class SCurveTests(SimpleTestCase):
         self.assertEqual(curve.axis.ticks[-1][1], "40.000.000")
         self.assertEqual(curve.tick_chars, 10)
         self.assertEqual((curve.pv_last, curve.ev_last), ("$29.630.048,3 M", "$23.148.434,4 M"))
+
+    def test_actual_cost_series(self) -> None:
+        first = replace(row(0, "Mar-2026", "50", "40"), ac=D("120"), ac_cum=D("120"))
+        curve = build_s_curve([first, row(1, "Abr-2026", "100", None)], D(100))
+        assert curve is not None
+        self.assertGreaterEqual(curve.axis.maximum, D(120))
+        self.assertTrue(curve.ac_points.startswith("0,100 50.00,"))
+        self.assertEqual(curve.ac_last, "$120")
+        plain = build_s_curve([row(0, "Mar-2026", "50", "40")], D(50))
+        assert plain is not None
+        self.assertEqual((plain.ac_points, plain.ac_last), ("", ""))

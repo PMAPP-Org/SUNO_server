@@ -165,6 +165,18 @@ button.text-link:hover { color: var(--suno-red); }
   .ctl-breakdown td.pj-name { min-width: 160px; max-width: 200px; }
 }
 
+/* Control de costo (costos, pieza 6a). */
+.metrics-strip.ctl-cost { margin-top: 12px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.ctl-over { color: var(--suno-red); }
+.ctl-key-ac { border-top: 2px dashed var(--chart-petrol); }
+.ctl-plot .ctl-ac { stroke: var(--chart-petrol); stroke-width: 2; stroke-dasharray: 6 3; }
+.ctl-group { color: var(--suno-muted); font-size: 11px; }
+.ctl-order { margin: 0 0 8px; }
+@media (max-width: 1100px) { .metrics-strip.ctl-cost { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .metrics-strip.ctl-cost article:nth-child(5) { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--suno-line); }
+}
+
 /* Libro de costos (costos, pieza 6a). */
 .cst-nav { margin: 0 0 16px; }
 .cst-ledger td.pj-name { min-width: 200px; max-width: 320px; }

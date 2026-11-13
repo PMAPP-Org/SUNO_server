@@ -48,16 +48,31 @@ class SCurve:
     ev_last: str
     #: Largo de la etiqueta más larga del eje Y: la plantilla le da ese ancho a la columna.
     tick_chars: int = 0
+    #: Costo real directo acumulado (pieza 6a); vacío sin permiso de costos.
+    ac_points: str = ""
+    ac_last: str = ""
 
 
 def build_s_curve(rows: Sequence[PeriodRow], bac: Decimal) -> SCurve | None:
     if not rows:
         return None
     measured: list[tuple[int, Decimal]] = []
+    actual: list[tuple[int, Decimal]] = []
     for index, period_row in enumerate(rows):
         if period_row.ev_cum is not None:
             measured.append((index, period_row.ev_cum))
-    raw = money_axis(max([bac, *(r.pv_cum for r in rows), *(v for _, v in measured)]))
+        if period_row.ac_cum is not None:
+            actual.append((index, period_row.ac_cum))
+    raw = money_axis(
+        max(
+            [
+                bac,
+                *(r.pv_cum for r in rows),
+                *(v for _, v in measured),
+                *(v for _, v in actual),
+            ]
+        )
+    )
     axis = Axis(raw.maximum, raw.unit, [(pos, _grouped(label)) for pos, label in raw.ticks])
     # Eje X en el tiempo (días desde el inicio del primer periodo), no por periodo: un periodo
     # partido por el corte puede durar un día y no debe ocupar lo mismo que un mes.
@@ -80,6 +95,7 @@ def build_s_curve(rows: Sequence[PeriodRow], bac: Decimal) -> SCurve | None:
 
     pv_points = " ".join(["0,100", *(f"{x(i)},{y(r.pv_cum)}" for i, r in enumerate(rows))])
     ev_points = " ".join(["0,100", *(f"{x(i)},{y(v)}" for i, v in measured)]) if measured else ""
+    ac_points = " ".join(["0,100", *(f"{x(i)},{y(v)}" for i, v in actual)]) if actual else ""
     step = -(-len(rows) // MAX_X_LABELS)  # división hacia arriba
     x_labels = tuple((center(i), rows[i].period.label) for i in range(0, len(rows), step))
     return SCurve(
@@ -91,4 +107,6 @@ def build_s_curve(rows: Sequence[PeriodRow], bac: Decimal) -> SCurve | None:
         pv_last=_grouped(short_money(rows[-1].pv_cum)),
         ev_last=_grouped(short_money(measured[-1][1])) if measured else "",
         tick_chars=max(len(label) for _, label in axis.ticks),
+        ac_points=ac_points,
+        ac_last=_grouped(short_money(actual[-1][1])) if actual else "",
     )
