@@ -34,6 +34,7 @@ class Section(models.TextChoices):
     FIELD_RECORDS = "FIELD_RECORDS", "Registros de campo"
     PROJECTS = "PROJECTS", "Proyectos"
     BUDGETS = "BUDGETS", "Presupuestos"
+    COSTS = "COSTS", "Costos"
     FORMS = "FORMS", "Formularios"
     EQUIPMENT = "EQUIPMENT", "Equipos"
     GIS = "GIS", "Mapas y capas GIS"
@@ -70,6 +71,8 @@ class Capability(StrEnum):
     REVIEW = "review"
     APPROVE = "approve"
     REJECT = "reject"
+    #: Anular un movimiento aprobado del libro de costos con otro de signo contrario.
+    REVERSE = "reverse"
     ASSIGN = "assign"
     IMPORT = "import"
     PUBLISH = "publish"
@@ -149,6 +152,39 @@ CAPABILITY_MATRIX: dict[Any, dict[Any, frozenset[Capability]]] = {
             Capability.EXPORT,
         ),
         SectionRole.REVIEWER: _caps(Capability.READ, Capability.EXPORT),
+        SectionRole.VIEWER: _caps(Capability.READ, Capability.EXPORT),
+    },
+    # Libro de costos (costos, pieza 6a, spec sección 5). "Solo propios" del Colaborador al
+    # actualizar o borrar lo decide `policies.can_update_cost`/`can_delete_cost`.
+    Section.COSTS: {
+        SectionRole.MANAGER: _caps(
+            Capability.CREATE,
+            Capability.IMPORT,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.APPROVE,
+            Capability.REJECT,
+            Capability.REVERSE,
+            Capability.EXPORT,
+        ),
+        SectionRole.REVIEWER: _caps(
+            Capability.CREATE,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.APPROVE,
+            Capability.REJECT,
+            Capability.EXPORT,
+        ),
+        SectionRole.CONTRIBUTOR: _caps(
+            Capability.CREATE,
+            Capability.IMPORT,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.EXPORT,
+        ),
         SectionRole.VIEWER: _caps(Capability.READ, Capability.EXPORT),
     },
     Section.FORMS: {

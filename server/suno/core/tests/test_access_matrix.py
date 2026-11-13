@@ -85,3 +85,24 @@ class AccessCatalogTests(SimpleTestCase):
 
     def test_scope_values_are_explicit(self) -> None:
         self.assertEqual(set(AccessScope.values), {"organization", "projects"})
+
+    def test_costs_profiles_match_the_approved_design(self) -> None:
+        """Costos, pieza 6a (spec, sección 5)."""
+        c = Capability
+        expected = {
+            SectionRole.MANAGER: {
+                c.CREATE, c.IMPORT, c.READ, c.UPDATE, c.DELETE,
+                c.APPROVE, c.REJECT, c.REVERSE, c.EXPORT,
+            },
+            SectionRole.REVIEWER: {
+                c.CREATE, c.READ, c.UPDATE, c.DELETE, c.APPROVE, c.REJECT, c.EXPORT,
+            },
+            SectionRole.CONTRIBUTOR: {c.CREATE, c.IMPORT, c.READ, c.UPDATE, c.DELETE, c.EXPORT},
+            SectionRole.VIEWER: {c.READ, c.EXPORT},
+        }  # fmt: skip
+        self.assertEqual(allowed_roles(Section.COSTS), set(expected))
+        for role, capabilities in expected.items():
+            with self.subTest(role=role):
+                self.assertEqual(capabilities_for(Section.COSTS, role), frozenset(capabilities))
+        self.assertTrue(role_has_capability(Section.COSTS, SectionRole.MANAGER, "reverse"))
+        self.assertFalse(role_has_capability(Section.BUDGETS, SectionRole.MANAGER, "reverse"))
