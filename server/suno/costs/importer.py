@@ -66,7 +66,8 @@ HEADER = [
 REQUIRED = (H_DATE, H_KIND, H_CODE, H_DESCRIPTION, H_AMOUNT, H_DOC_TYPE)
 MAX_IMPORT_ROWS = 2000
 MAX_ERRORS = 50
-TOKEN_SALT = "suno.costs.import"
+#: Sal de la firma de la vista previa (no es un secreto: la clave es `SECRET_KEY`).
+PREVIEW_SALT = "suno.costs.import"
 TOKEN_MAX_AGE = 3600
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y")
 INDIRECT_LABEL = "Indirecto (proyecto)"
@@ -361,7 +362,7 @@ def _sign(ctx: RequestContext, project: Project, rows: Sequence[PreviewRow]) -> 
         "nonce": secrets.token_urlsafe(24),
         "rows": [_serialize(row) for row in rows],
     }
-    return signing.dumps(payload, salt=TOKEN_SALT, compress=True)
+    return signing.dumps(payload, salt=PREVIEW_SALT, compress=True)
 
 
 def apply(ctx: RequestContext, project: Project, token: str) -> int:
@@ -369,7 +370,7 @@ def apply(ctx: RequestContext, project: Project, token: str) -> int:
     if not can_import_costs(ctx, project):
         raise PermissionDenied
     try:
-        payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+        payload = signing.loads(token, salt=PREVIEW_SALT, max_age=TOKEN_MAX_AGE)
     except signing.SignatureExpired as exc:
         raise CostRejected(["La vista previa caducó: vuelve a subir el archivo."]) from exc
     except signing.BadSignature as exc:
