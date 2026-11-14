@@ -13,6 +13,7 @@ al del propio doc 08:
 - `budget`   — `Budget`, `BudgetVersion`, `BudgetItem` y sus tablas (costos, pieza 3).
 - `access`   — roles funcionales por sección y alcance de proyecto.
 - `cost`     — `CostEntry`, `CostEntryItem`, `CostImportToken` (costos, pieza 6a).
+- `contract` — `Contract`, sus líneas, otrosíes y actas (costos, pieza 6b).
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
 import Record` funcione igual que con un `models.py` plano.
@@ -47,6 +48,22 @@ from .budget import (
     BudgetVersionStatus,
 )
 from .catalog import Assignment, FormTemplate, FormTemplateVersion
+from .contract import (
+    OPEN_STATES,
+    AmendmentStatus,
+    CertificateLine,
+    CertificateStatus,
+    Contract,
+    ContractAmendment,
+    ContractAmendmentLine,
+    ContractCertificate,
+    ContractCharge,
+    ContractDeduction,
+    ContractKind,
+    ContractLine,
+    ContractLineTask,
+    ContractStatus,
+)
 from .cost import (
     CostDocumentType,
     CostEntry,
@@ -157,6 +174,7 @@ __all__ = [
     "FuelType",
     "LiquidationStatus",
     "OPEN_ORDER_STATUSES",
+    "OPEN_STATES",
     "MaintenancePlan",
     "PlanKind",
     "WorkOrder",
@@ -190,6 +208,19 @@ __all__ = [
     "AttachmentRole",
     "AuditEvent",
     "Blob",
+    "AmendmentStatus",
+    "CertificateLine",
+    "CertificateStatus",
+    "Contract",
+    "ContractAmendment",
+    "ContractAmendmentLine",
+    "ContractCertificate",
+    "ContractCharge",
+    "ContractDeduction",
+    "ContractKind",
+    "ContractLine",
+    "ContractLineTask",
+    "ContractStatus",
     "CostDocumentType",
     "CostEntry",
     "CostEntryItem",
