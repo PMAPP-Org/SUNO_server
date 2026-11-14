@@ -31,10 +31,10 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
-    # Con el módulo de equipos, la suite completa tarda entre 29 y más de 35 minutos.
-    # Este límite evita que una prueba bloqueada consuma el runner durante horas y
-    # deje el gate abierto.
-    timeout-minutes: 55
+    # Con el libro de costos (pieza 6a), la suite completa tarda unos 40 minutos y
+    # llega a ~55 en un runner lento. Este límite evita que una prueba bloqueada
+    # consuma el runner durante horas y deje el gate abierto.
+    timeout-minutes: 75
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
     # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
