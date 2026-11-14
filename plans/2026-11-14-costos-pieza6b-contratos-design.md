@@ -209,3 +209,88 @@ vigente del contrato es el bruto directo de sus cantidades vigentes más sus car
 - Actas desde la app móvil.
 - Reajustes de precios por índices.
 - Materiales (6c), tareo y nómina (6d).
+
+## Decisiones tomadas al planear
+
+Precisiones del plan `2026-11-14-costos-pieza6b-contratos-plan.md`; no cambian lo aprobado. Las
+marcadas con ⚑ conviene revisarlas.
+
+- Código: paquete `suno/contracts` (cálculo puro en `calc.py`, propuesta en `proposal.py`,
+  servicios en `services.py` y `certificates.py`, consultas en `queries.py`, PDF, Excel y
+  vistas) bajo `plataforma/proyectos/<id>/contratos/`; modelos en `core/models/contract.py`.
+- Migración `0029_contracts`, aditiva: nueve tablas, `cost_entry.certificate` (nula) y el tipo
+  de documento "Acta de avance". Sin `RunPython`.
+- Permisos: sin políticas nuevas. Las de Costos por proyecto y `can_update_cost`/
+  `can_delete_cost` (estructurales) sobre contrato, otrosí y acta, que llevan `project`. Preparar
+  la acta de liquidación pide `reverse`; aprobarla, `approve`.
+- ⚑ Rechazar un contrato lo deja en borrador con el motivo a la vista (el contrato no tiene
+  estado "rechazado"); al editarlo se limpia. Otrosíes y actas sí se rechazan y solo su autor
+  los corrige; al guardarlos vuelven a borrador.
+- Se borran (capacidad `delete`; el Colaborador, lo suyo) el contrato en borrador, el otrosí
+  abierto y el acta abierta, con su evento `*.deleted`. Anular un contrato: aprobado, sin actas
+  aprobadas y sin otrosíes ni actas abiertos.
+- Lo vigente se guarda: `ContractLine.current_quantity` y `Contract.current_value`, que el
+  servicio recalcula al guardar el borrador y al aprobar un otrosí. Una línea nueva de un otrosí
+  es una `ContractLine` con `amendment` y cuenta solo con el otrosí aprobado.
+- ⚑ Otrosí: aumentos positivos de cantidad, líneas nuevas y nueva fecha de fin; ni precios ni
+  cargos. Uno abierto a la vez por contrato, con número consecutivo.
+- ⚑ Anticipo: su valor se fija al aprobar el contrato (valor vigente × %) y un otrosí no lo
+  cambia. Cada acta amortiza bruto × anticipo ÷ valor vigente (al aprobar el acta), sin pasar del
+  saldo.
+- ⚑ Bases de los descuentos: `direct` (bruto directo), `gross` (bruto) y `line:<n>`, la línea
+  `n` de los cargos (ReteIVA sobre el IVA). `subtotal` no aplica a los descuentos (sería el
+  bruto) y se rechaza. Porcentajes de los descuentos entre 0 y 100.
+- ⚑ Plantillas: "AIU con IVA sobre utilidad" (A, I y U en 0 % para llenar; IVA 19 %), "IVA
+  pleno" (19 % sobre el directo), "Sin cargos"; "Retenciones típicas" en 0 %: retención en la
+  fuente y ReteICA sobre el directo, ReteIVA sobre la primera línea de cargos que empiece por
+  "IVA" (o el bruto) y estampillas sobre el bruto. Un subcontrato nuevo arranca con AIU,
+  retenciones y anticipo y garantía en 0 %; un destajo, sin cargos ni descuentos.
+- ⚑ Cantidad propuesta: lo validado (revisión vigente aprobada) para el ítem y las tareas de la
+  línea, capturado en Colombia hasta el fin del periodo, menos lo pagado en actas aprobadas de la
+  línea, mínimo 0. Lo capturado dentro del periodo se muestra aparte. No se recorta al saldo: la
+  aprobación exige el tope y el formulario avisa que hace falta un otrosí.
+- ⚑ Una sola acta abierta (borrador o rechazada) por contrato. Su número se asigna al crearla
+  (para el PDF); borrar el borrador lo libera. Cada acta lleva una línea por línea vigente.
+- Periodo: desde ≤ hasta ≤ hoy, desde 2000, sin cruce con las actas no anuladas del contrato
+  (en el servicio con el contrato bloqueado; no se usa `btree_gist`). Por defecto, desde el día
+  siguiente al fin de la última acta no anulada (o el inicio del contrato) hasta hoy.
+- ⚑ Acta firmada: PDF, JPG, PNG o WebP hasta 25 MB, en el almacén de adjuntos. Subirla no es
+  editar (no cambia quién editó, así puede aprobar quien solo la escaneó) y queda como
+  `certificate.updated`. Editar el borrador la quita.
+- ⚑ Liquidación: amortiza todo el saldo del anticipo, no retiene y devuelve lo retenido; el neto
+  puede ser negativo. Al aprobarla, el contrato queda liquidado; anularla (si es la última) lo
+  vuelve a aprobado.
+- Libro: un movimiento por línea con valor, tipo de documento "Acta de avance", número
+  "SC-012 · Acta 3", descripción "Acta 3 · Contrato SC-012 · <ítem>", tercero el contratista,
+  capítulo de origen del ítem en la versión vigente y la tarea si la línea cubre una sola.
+  Registró y modificó: quien preparó y editó el acta; aprobó: quien aprobó; soporte: el acta
+  firmada. Anular: reversos con fecha de hoy, el motivo y el mismo `certificate`. El reverso
+  desde el libro rechaza los movimientos de acta.
+- ⚑ Sin JavaScript (como la 6a): líneas, cargos y descuentos en filas con "Agregar filas"; ítem
+  con buscador; tareas por números de esquema separados por comas (vacío: todas); el "cálculo en
+  vivo" es un botón "Recalcular" que calcula en el servidor sin guardar; el periodo del acta se
+  elige antes de las cantidades.
+- Traslape: mismo ítem y tareas que se cruzan (vacío = todas), contra las líneas vigentes de
+  contratos en borrador o aprobados y dentro del mismo contrato; se confirma con una casilla.
+- Comprometido en contratos (Control, "Por ítem", con permiso de costos): aprobados, cantidad
+  vigente × precio; liquidados, lo pagado × precio; directo, comparable con el BAC del ítem, y
+  aviso si lo supera.
+- Libro: origen Todos, Manual, Actas (`origen=actas`) y Solo automáticos. Un costo manual de
+  Subcontrato o Mano de obra en un ítem con contrato aprobado avisa al guardarse y en su ficha.
+- Avisos de la pestaña: actas en borrador creadas hace más de 15 días; validado sin pagar
+  (contratos aprobados, hasta hoy); aprobados vencidos; anticipo por amortizar con lo ejecutado
+  ≥ 100 % del vigente; traslapes.
+- Ficha: Resumen, Líneas, Actas, Otrosíes e Historial (los eventos del contrato y los de sus
+  otrosíes y actas, que llevan `metadata.contract`).
+- Excel: `contratos.xlsx` (la lista) y `contrato-<número>.xlsx` (Contrato, Líneas, Actas,
+  Otrosíes), con `contract.exported`; el PDF del acta, con `certificate.exported`. Ambos piden
+  `export`.
+- Números sugeridos `SC-001` y `DT-001`; únicos por proyecto sin distinguir mayúsculas. Hasta 200
+  líneas, 20 cargos y 20 descuentos por contrato.
+- Rendimiento: la lista son 2 consultas y la ficha 8 (más el catálogo). Prueba de carga: 200
+  contratos, 2000 líneas, 5000 actas aprobadas con 50 000 líneas; lista y ficha en menos de 1 s
+  (2 s con `CI=true`).
+- `seed_control_demo`: por los servicios, el residente (Revisor de Costos) prepara y el
+  administrador aprueba: SC-001 con un otrosí, dos actas, una anulada y una en borrador firmada;
+  el destajo DT-001; SC-002 liquidado; SC-003 en borrador. Las dos actas manuales de movimiento
+  de tierras de la 6a salen del ejemplo (las escribe ahora SC-001).
