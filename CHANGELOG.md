@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.18.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.3...v0.18.0) (2026-11-14)
+
+
+### Agregado
+
+* **costs:** cost ledger and cost control (CPI, EAC, TCPI) ([#75](https://github.com/PMAPP-Org/SUNO_server/issues/75)) ([54af3c0](https://github.com/PMAPP-Org/SUNO_server/commit/54af3c05bbb6a17506e47fe811d9c026f02882b3))
+
 ## [0.17.3](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.2...v0.17.3) (2026-11-13)
 
 
