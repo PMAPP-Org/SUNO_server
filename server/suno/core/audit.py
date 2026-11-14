@@ -163,6 +163,28 @@ class AuditAction:
     COST_REVERSED = "cost.reversed"
     COST_IMPORTED = "cost.imported"
     COST_EXPORTED = "cost.exported"
+    # Subcontratos y destajos (costos, pieza 6b). `metadata.contract` en todos: el historial
+    # de la ficha del contrato los reúne.
+    CONTRACT_CREATED = "contract.created"
+    CONTRACT_UPDATED = "contract.updated"
+    CONTRACT_DELETED = "contract.deleted"
+    CONTRACT_APPROVED = "contract.approved"
+    CONTRACT_REJECTED = "contract.rejected"
+    CONTRACT_VOIDED = "contract.voided"
+    CONTRACT_SETTLED = "contract.settled"
+    CONTRACT_EXPORTED = "contract.exported"
+    AMENDMENT_CREATED = "amendment.created"
+    AMENDMENT_UPDATED = "amendment.updated"
+    AMENDMENT_DELETED = "amendment.deleted"
+    AMENDMENT_APPROVED = "amendment.approved"
+    AMENDMENT_REJECTED = "amendment.rejected"
+    CERTIFICATE_CREATED = "certificate.created"
+    CERTIFICATE_UPDATED = "certificate.updated"
+    CERTIFICATE_DELETED = "certificate.deleted"
+    CERTIFICATE_APPROVED = "certificate.approved"
+    CERTIFICATE_REJECTED = "certificate.rejected"
+    CERTIFICATE_VOIDED = "certificate.voided"
+    CERTIFICATE_EXPORTED = "certificate.exported"
 
 
 def hash_ip(ip: str | None) -> str | None:
