@@ -26,3 +26,8 @@ reason = "Audiencia de tokens del servidor MCP; semgrep scan no arranca ese serv
 id = "GHSA-xcq7-p3pf-p88h" # CVE-2026-114603, opentelemetry-api 1.37.0 (vía semgrep, solo requirements-sast.lock)
 ignoreUntil = 2026-12-31T00:00:00Z
 reason = "Análisis de tracestate entrante; semgrep scan no recibe peticiones HTTP. Semgrep 1.182.1 fija opentelemetry-api 1.37.0. Ver docs/seguridad/excepciones.md EXC-004."
+
+[[IgnoredVulns]]
+id = "GHSA-mf5v-w3w3-f6cg" # CVE-2026-126360, opentelemetry-api 1.37.0 (vía semgrep, solo requirements-sast.lock)
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "Análisis de traceparent entrante (ReDoS); semgrep scan no recibe peticiones HTTP. Semgrep 1.185.0 sigue fijando opentelemetry-api~=1.37.0. Ver docs/seguridad/excepciones.md EXC-004."
