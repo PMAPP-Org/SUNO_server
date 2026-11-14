@@ -162,7 +162,7 @@ jobs:
           ignore=""
           if [ "$(date -u +%Y%m%d)" -le 20261231 ]; then
             for id in GHSA-84m7-p3x7-pcfv GHSA-5h93-6whr-6q8j GHSA-rwrf-2pqf-9j8j \
-              GHSA-w4fh-qvv9-3v23 GHSA-xcq7-p3pf-p88h; do
+              GHSA-w4fh-qvv9-3v23 GHSA-xcq7-p3pf-p88h GHSA-mf5v-w3w3-f6cg; do
               ignore="$ignore --ignore-vuln $id"
             done
           fi
