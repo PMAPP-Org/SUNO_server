@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -47,12 +48,18 @@ def executed_by_pair(
     task_ids: Iterable[UUID] | None = None,
     project_ids: Iterable[UUID] | None = None,
     include_pending: bool = False,
+    captured_from: date | None = None,
+    captured_to: date | None = None,
 ) -> dict[Pair, Decimal]:
     """(tarea, ítem) → suma de las cantidades de sus registros validados. Una query.
 
     `include_pending`: también los registros aún sin revisar (no los rechazados). Lo usa
     quien decide si un par "tiene ejecución" para no borrarlo del plan: un registro
-    pendiente puede validarse después."""
+    pendiente puede validarse después.
+
+    `captured_from`/`captured_to`: solo los registros capturados en ese rango de fechas (en la
+    zona horaria del servidor, Colombia, como el cargador del control). Lo usan las actas de
+    contratos (costos, pieza 6b)."""
     tasks, projects = _ids(task_ids), _ids(project_ids)
     if tasks == [] or projects == []:
         return {}
@@ -62,6 +69,10 @@ def executed_by_pair(
         .exclude(quantities=[])
     )
     records = _by_scope(records, tasks, projects, task="task")
+    if captured_from is not None:
+        records = records.filter(captured_at__date__gte=captured_from)
+    if captured_to is not None:
+        records = records.filter(captured_at__date__lte=captured_to)
     counted = not_rejected(records) if include_pending else approved(records)
     totals: dict[Pair, Decimal] = defaultdict(Decimal)
     for task_id, rows in counted.values_list("task_id", "quantities"):
