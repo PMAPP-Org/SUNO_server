@@ -9,6 +9,7 @@ Costos (señal), la supervisión Revisora; hay un Colaborador y un Consulta.
 from __future__ import annotations
 
 import unittest
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -22,16 +23,20 @@ from suno.core.context import RequestContext
 from suno.core.models import (
     AppUser,
     ConsumptionCut,
+    CostDocumentType,
     Material,
     MaterialIssue,
     MaterialPurchase,
     Organization,
     Project,
+    PurchaseKind,
     StockBalance,
     StockMovement,
     Warehouse,
 )
 from suno.costs.tests.factories import support_blob
+from suno.materials import purchases
+from suno.materials.purchases import PurchaseData, PurchaseLineData
 from suno.projects.tests.factories import FieldWorld
 
 D = Decimal
@@ -176,3 +181,33 @@ def assert_consistent(test: unittest.TestCase, mw: MaterialWorld) -> None:
         test.assertEqual((row.quantity, row.value), (sums["q"] or D("0"), sums["v"] or D("0.00")))
         last = moves.order_by("-sequence").values_list("sequence", flat=True).first()
         test.assertGreaterEqual(row.last_sequence, last or 0)
+
+
+def stock_in(
+    mw: MaterialWorld,
+    lines: Sequence[tuple[Material, str, str]],
+    *,
+    warehouse: Warehouse | None = None,
+    day: date = BOUGHT,
+) -> MaterialPurchase:
+    """Una compra a bodega aprobada por los servicios: la registra el Colaborador, se le pone un
+    soporte en la BD (sin almacén) y la aprueba la supervisión. `lines`: (material, cantidad,
+    valor unitario)."""
+    purchase = purchases.create_purchase(
+        mw.ctx(mw.cw.contributor),
+        mw.project,
+        PurchaseData(
+            kind=str(PurchaseKind.WAREHOUSE),
+            warehouse_id=(warehouse or mw.warehouse).pk,
+            supplier="Ferretería El Constructor",
+            supplier_tax_id="900123456",
+            document_type=str(CostDocumentType.INVOICE),
+            document_number="FE-100",
+            purchased_on=day,
+            lines=tuple(PurchaseLineData(m.pk, D(q), D(p)) for m, q, p in lines),
+        ),
+    )
+    MaterialPurchase.objects.filter(pk=purchase.pk).update(
+        attachment=support_blob("factura de materiales"), attachment_name="factura.pdf"
+    )
+    return purchases.approve_purchase(mw.ctx(mw.world.supervisor), mw.project, purchase.pk)
