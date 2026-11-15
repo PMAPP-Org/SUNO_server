@@ -9,7 +9,14 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from suno.core.models import CertificateStatus, ContractCertificate, CostEntry
+from suno.core.models import (
+    CertificateStatus,
+    ContractAmendment,
+    ContractCertificate,
+    ContractStatus,
+    CostEntry,
+    Project,
+)
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -17,7 +24,13 @@ from suno.core.tests.dbsupport import (
 )
 from suno.costs.tests.factories import pdf_upload
 
-from .factories import contract_line, contract_world, field_quantity, make_contract
+from .factories import (
+    contract_line,
+    contract_world,
+    field_quantity,
+    make_certificate,
+    make_contract,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -136,3 +149,80 @@ class CertificatePagesTests(TestCase):
         tab = self.client.get(self.base + "?pestana=actas")
         self.assertContains(tab, f"actas/{certificate.pk}/")
         self.assertNotContains(tab, "Nueva acta")  # ya hay una abierta
+
+    # Revisión de código.
+
+    def test_no_period_left_shows_a_message(self) -> None:  # M-2
+        make_certificate(self.cw, self.contract, start=date(2026, 3, 1), end=TODAY)
+        page = self.client.get(self.new)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "No hay periodo para una nueva acta")
+        self.assertNotContains(page, 'name="accion"')
+
+    def test_foreign_ids_are_404(self) -> None:  # M-7
+        certificate = self.save()
+        other = make_contract(self.cw, number="SC-002", lines=(("2.4", "1", "1.00", ()),))
+        amendment = ContractAmendment.objects.create(
+            org=self.world.org, contract=self.contract, project=self.world.project, number=1,
+            signed_on=date(2026, 4, 2), reason="Curado", created_by=self.cw.contributor,
+            updated_by=self.cw.contributor,
+        )  # fmt: skip
+        project = f"/plataforma/proyectos/{self.world.project.pk}/contratos/"
+        foreign = f"{project}{other.pk}/"
+        self.client.force_login(self.world.admin)
+        for url in (
+            f"{foreign}actas/{certificate.pk}/",
+            f"{foreign}actas/{certificate.pk}/soporte/",
+            f"{foreign}actas/{certificate.pk}/acta.pdf",
+            f"{foreign}otrosies/{amendment.pk}/editar/",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+        upload = self.client.post(f"{foreign}actas/{certificate.pk}/firmada/",
+                                  {"signed": pdf_upload()})  # fmt: skip
+        self.assertEqual(upload.status_code, 404)
+        certificate.refresh_from_db()
+        self.assertIsNone(certificate.attachment_id)
+        elsewhere = Project.objects.create(
+            org=self.world.org, name="Otra obra", created_by=self.world.admin
+        )
+        moved = f"/plataforma/proyectos/{elsewhere.pk}/contratos/{self.contract.pk}/"
+        for url in (
+            moved,
+            f"{moved}actas/{certificate.pk}/",
+            f"{moved}actas/{certificate.pk}/soporte/",
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_no_settle_link_while_an_amendment_is_open(self) -> None:  # I-2
+        self.client.force_login(self.world.admin)
+        tab = self.base + "?pestana=actas"
+        self.assertContains(self.client.get(tab), "?liquidacion=1")
+        ContractAmendment.objects.create(
+            org=self.world.org, contract=self.contract, project=self.world.project, number=1,
+            signed_on=date(2026, 4, 2), reason="Curado", created_by=self.cw.contributor,
+            updated_by=self.cw.contributor,
+        )  # fmt: skip
+        self.assertNotContains(self.client.get(tab), "?liquidacion=1")
+
+    def test_settlement_with_zero_quantities_and_a_negative_net(self) -> None:
+        make_certificate(
+            self.cw, self.contract, quantities={"2.1": "4", "2.2": "200"},
+            totals={"gross": "2781850.00", "amortization": "834555.00", "retention": "139092.50"},
+        )  # fmt: skip
+        self.client.force_login(self.world.admin)
+        self.client.post(self.new, {"accion": "guardar", "liquidacion": "1",
+                                    "desde": "2026-04-01", "hasta": "2026-04-15"})  # fmt: skip
+        settlement = ContractCertificate.objects.get(is_settlement=True)
+        self.assertEqual((settlement.gross, str(settlement.net)), (0, "-1493732.50"))
+        url = f"{self.base}actas/{settlement.pk}/"
+        self.client.post(url + "firmada/", {"signed": pdf_upload()})
+        self.client.force_login(self.world.supervisor)
+        self.client.post(url + "aprobar/")
+        settlement.refresh_from_db()
+        self.contract.refresh_from_db()
+        self.assertEqual(settlement.status, CertificateStatus.APPROVED)
+        self.assertEqual(self.contract.status, ContractStatus.SETTLED)
+        self.assertFalse(CostEntry.objects.filter(certificate=settlement).exists())
+        self.assertContains(self.client.get(url), "1.493.732,50")

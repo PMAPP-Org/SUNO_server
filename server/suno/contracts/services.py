@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -18,7 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Max, Q, QuerySet
 from django.http import Http404
 from django.utils import timezone
@@ -185,6 +186,23 @@ def require_open(contract: Contract) -> None:
         raise ContractRejected(["El contrato todavía no está aprobado."])
     if contract.status != ContractStatus.APPROVED:
         raise ContractRejected(["Un contrato liquidado o anulado no admite otrosíes ni actas."])
+
+
+def has_open_certificate(
+    ctx: RequestContext, contract: Contract, *, exclude: UUID | None = None
+) -> bool:
+    """Un acta en borrador o rechazada (sin contar `exclude`): mientras exista, nada debe
+    cambiar los valores con que se calculó y se firmó."""
+    rows = scoped_qs(ctx, ContractCertificate).filter(contract=contract, status__in=OPEN_STATES)
+    if exclude is not None:
+        rows = rows.exclude(pk=exclude)
+    return rows.exists()
+
+
+def has_open_amendment(ctx: RequestContext, contract: Contract) -> bool:
+    return (
+        scoped_qs(ctx, ContractAmendment).filter(contract=contract, status__in=OPEN_STATES).exists()
+    )
 
 
 def require_editable(
@@ -440,6 +458,26 @@ def _number_taken(
     return found.exists()
 
 
+NUMBER_CONSTRAINT = "contract_project_number_ci_uq"
+
+
+def _number_message(number: str) -> str:
+    return f"Ya hay un contrato {number.strip()} en el proyecto."
+
+
+@contextmanager
+def _unique_number(number: str) -> Iterator[None]:
+    """Otra persona guardó el mismo número entre la comprobación y la escritura: la restricción
+    de la base lo detiene y aquí se vuelve el mensaje de siempre. Va por fuera de
+    `transaction.atomic` para que la transacción ya esté deshecha."""
+    try:
+        yield
+    except IntegrityError as exc:
+        if NUMBER_CONSTRAINT not in str(exc):
+            raise
+        raise ContractRejected([_number_message(number)]) from exc
+
+
 def _require_draft(
     ctx: RequestContext, contract: Contract, policy: Callable[[RequestContext, Any], bool]
 ) -> None:
@@ -462,9 +500,9 @@ def create_contract(
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     tasks = tasks if tasks is not None else assignable_tasks(ctx, project)
     _checked_contract(ctx, project, data, catalog, tasks)
-    with transaction.atomic():
+    with _unique_number(data.number), transaction.atomic():
         if _number_taken(ctx, project, data.number):
-            raise ContractRejected([f"Ya hay un contrato {data.number.strip()} en el proyecto."])
+            raise ContractRejected([_number_message(data.number)])
         contract = scoped_qs(ctx, Contract).create(
             org_id=ctx.org_id,
             project=project,
@@ -503,11 +541,11 @@ def update_contract(
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     tasks = tasks if tasks is not None else assignable_tasks(ctx, project)
     _checked_contract(ctx, project, data, catalog, tasks, exclude=current)
-    with transaction.atomic():
+    with _unique_number(data.number), transaction.atomic():
         contract = locked_contract(ctx, project, contract_id)
         _require_draft(ctx, contract, can_update_cost)
         if _number_taken(ctx, project, data.number, exclude=contract.pk):
-            raise ContractRejected([f"Ya hay un contrato {data.number.strip()} en el proyecto."])
+            raise ContractRejected([_number_message(data.number)])
         for field, value in _contract_fields(data).items():
             setattr(contract, field, value)
         # Un borrador no tiene actas ni otrosíes: sus líneas se reemplazan enteras.
@@ -551,6 +589,13 @@ def approve_contract(ctx: RequestContext, project: Project, contract_id: UUID) -
             raise PermissionDenied
         if contract.status != ContractStatus.DRAFT:
             raise ContractRejected(["Solo se aprueba un contrato en borrador."])
+        if contract.rejected_by_id is not None:
+            raise ContractRejected(
+                [
+                    "El contrato fue devuelto con un motivo: su autor debe corregirlo antes "
+                    "de aprobarlo."
+                ]
+            )
         if ctx.user_id in (contract.created_by_id, contract.updated_by_id):
             raise ContractRejected([SELF_DECISION])
         if not scoped_qs(ctx, ContractLine).filter(contract=contract).exists():
@@ -665,8 +710,11 @@ def _amendment_errors(
         errors.append("La fecha del otrosí no puede ser futura ni anterior a 2000.")
     if not data.reason.strip() or len(data.reason.strip()) > MAX_NOTE:
         errors.append(f"El motivo es obligatorio y tiene máximo {MAX_NOTE} caracteres.")
-    if data.new_ends_on is not None and data.new_ends_on < contract.starts_on:
-        errors.append("La nueva fecha de fin no puede ser anterior al inicio del contrato.")
+    if data.new_ends_on is not None and data.new_ends_on < contract.ends_on:
+        errors.append(
+            f"Un otrosí solo amplía: la nueva fecha de fin no puede ser anterior al fin vigente "
+            f"del contrato ({contract.ends_on:%d/%m/%Y})."
+        )
     if not (data.increases or data.new_lines or data.new_ends_on):
         errors.append("Un otrosí cambia algo: cantidades, líneas nuevas o la fecha de fin.")
     seen: set[UUID] = set()
@@ -852,6 +900,13 @@ def approve_amendment(
             raise PermissionDenied
         require_decidable(ctx, amendment)
         require_open(contract)
+        if has_open_certificate(ctx, contract):
+            raise ContractRejected(
+                [
+                    "Hay un acta abierta en este contrato: apruébala o bórrala antes de aprobar "
+                    "el otrosí, que cambia el valor vigente y con él la amortización del acta."
+                ]
+            )
         for line_id, added in (
             scoped_qs(ctx, ContractAmendmentLine)
             .filter(amendment=amendment)

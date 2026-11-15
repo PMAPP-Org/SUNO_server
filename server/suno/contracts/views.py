@@ -348,6 +348,7 @@ def contract_detail(request: HttpRequest, project_id: UUID, contract_id: UUID) -
             and can_create_costs(ctx, project),
             "can_settle": approved
             and sheet.open_certificate is None
+            and sheet.open_amendment is None
             and can_reverse_costs(ctx, project),
             "can_new_amendment": approved
             and sheet.open_amendment is None
@@ -586,6 +587,17 @@ def _certificate_form(
         if certificate is not None
         else default_period(ctx, contract)
     )
+    if default is None and not params.get("desde") and not params.get("hasta"):
+        # Las actas ya cubren hasta hoy o el contrato aún no empieza: un aviso, sin formulario.
+        return _render(
+            request,
+            ctx,
+            "suno/contracts/certificate_form.html",
+            {**_context(ctx, project), "contract": contract, "settlement": settlement,
+             "no_period": True},
+        )  # fmt: skip
+    today = timezone.localdate()
+    default = default or (today, today)
     start = _parse_date(params.get("desde")) or default[0]
     end = _parse_date(params.get("hasta")) or default[1]
     initial: dict[str, Any] = {}

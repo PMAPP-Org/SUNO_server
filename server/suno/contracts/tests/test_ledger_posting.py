@@ -150,9 +150,16 @@ class CertificateApprovalTests(TestCase):
             AmendmentData(date(2026, 5, 2), "Mayor cantidad",
                           increases=(IncreaseData(self.concrete.pk, D("2")),)),
         )  # fmt: skip
+        # El otrosí cambia el valor vigente (y la amortización): el acta se rehace después.
+        certificates.delete_certificate(
+            self.world.ctx(self.cw.contributor), self.project, self.contract.pk, certificate.pk
+        )
         services.approve_amendment(self.world.ctx(self.world.supervisor), self.project,
                                    self.contract.pk, amendment.pk)  # fmt: skip
-        self.assertEqual(self.approve(certificate).status, CertificateStatus.APPROVED)
+        again = self.prepared(
+            MARCH, CertificateLineData(self.concrete.pk, D("11"), "Sobreejecución medida")
+        )
+        self.assertEqual(self.approve(again).status, CertificateStatus.APPROVED)
 
     def test_piecework_goes_to_labor_and_the_rounding_adds_up(self) -> None:
         piecework = make_contract(
@@ -243,3 +250,69 @@ class CertificateApprovalTests(TestCase):
         result = compute(load_control_input(ctx, self.project, cut=TODAY, kind=MONTH, costs=True))
         assert result.cost is not None
         self.assertEqual(result.cost.ac_direct, certificate.gross)
+
+    # Revisión de código, I-1: lo aprobado es lo firmado.
+
+    def test_the_previous_one_is_not_voided_while_a_draft_is_open(self) -> None:
+        first = self.approve(self.prepared())
+        self.prepared(APRIL, CertificateLineData(self.concrete.pk, D("2"), "Abril"))
+        with self.assertRaises(ContractRejected) as refused:
+            certificates.void_certificate(self.world.ctx(), self.project, self.contract.pk,
+                                          first.pk, "Error")  # fmt: skip
+        self.assertIn("acta abierta", refused.exception.errors[0])
+        first.refresh_from_db()
+        self.assertEqual(first.status, CertificateStatus.APPROVED)
+
+    def test_an_amendment_is_not_approved_while_a_certificate_is_open(self) -> None:
+        self.prepared()
+        amendment = services.create_amendment(
+            self.world.ctx(), self.project, self.contract.pk,
+            AmendmentData(date(2026, 5, 2), "Mayor cantidad",
+                          increases=(IncreaseData(self.concrete.pk, D("2")),)),
+        )  # fmt: skip
+        with self.assertRaises(ContractRejected) as refused:
+            services.approve_amendment(self.world.ctx(self.world.supervisor), self.project,
+                                       self.contract.pk, amendment.pk)  # fmt: skip
+        self.assertIn("acta abierta", refused.exception.errors[0])
+
+    def test_changed_values_are_refused_at_approval(self) -> None:
+        certificate = self.prepared()
+        ContractCertificate.objects.filter(pk=certificate.pk).update(net=D("1.00"))
+        with self.assertRaises(ContractRejected) as refused:
+            self.approve(certificate)
+        self.assertIn("Los valores del acta cambiaron", refused.exception.errors[0])
+        self.assertFalse(CostEntry.objects.filter(certificate=certificate).exists())
+        line = certificate.lines.get(line=self.concrete)
+        type(line).objects.filter(pk=line.pk).update(amount=D("1.00"))
+        ContractCertificate.objects.filter(pk=certificate.pk).update(net=D("1736707.00"))
+        with self.assertRaises(ContractRejected):
+            self.approve(certificate)
+
+    # Revisión de código, I-2: no se liquida con un otrosí abierto.
+
+    def open_amendment(self) -> None:
+        services.create_amendment(
+            self.world.ctx(), self.project, self.contract.pk,
+            AmendmentData(date(2026, 5, 2), "Mayor cantidad",
+                          increases=(IncreaseData(self.concrete.pk, D("2")),)),
+        )  # fmt: skip
+
+    def test_no_settlement_is_created_while_an_amendment_is_open(self) -> None:
+        self.approve(self.prepared())
+        self.open_amendment()
+        with self.assertRaises(ContractRejected) as refused:
+            self.prepared((date(2026, 4, 1), date(2026, 4, 15)), user=self.world.admin,
+                          settlement=True)  # fmt: skip
+        self.assertIn("otrosí abierto", refused.exception.errors[0])
+
+    def test_no_settlement_is_approved_while_an_amendment_is_open(self) -> None:
+        self.approve(self.prepared())
+        settlement = self.prepared(
+            (date(2026, 4, 1), date(2026, 4, 15)), user=self.world.admin, settlement=True
+        )
+        self.open_amendment()
+        with self.assertRaises(ContractRejected) as refused:
+            self.approve(settlement)
+        self.assertIn("otrosí abierto", refused.exception.errors[0])
+        self.contract.refresh_from_db()
+        self.assertEqual(self.contract.status, ContractStatus.APPROVED)

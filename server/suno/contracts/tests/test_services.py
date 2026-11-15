@@ -250,6 +250,34 @@ class ContractServiceTests(TestCase):
         self.assertEqual((voided.status, voided.close_note), ("voided", "Ya no va"))
         self.assertTrue(AuditEvent.objects.filter(action=AuditAction.CONTRACT_VOIDED).exists())
 
+    # Revisión de código, M-1 y M-3.
+
+    def test_a_returned_contract_is_not_approved_until_fixed(self) -> None:
+        contract = self.create()
+        services.reject_contract(
+            self.world.ctx(self.world.supervisor), self.project, contract.pk, "Falta la póliza"
+        )
+        with self.assertRaises(ContractRejected) as refused:
+            services.approve_contract(self.world.ctx(self.world.supervisor), self.project,
+                                      contract.pk)  # fmt: skip
+        self.assertIn("devuelto", refused.exception.errors[0])
+
+    def test_a_number_taken_in_a_race_is_a_rejection(self) -> None:
+        self.create()
+        with (
+            mock.patch.object(services, "_number_taken", return_value=False),
+            self.assertRaises(ContractRejected) as refused,
+        ):
+            self.create(number="sc-001", confirm_overlap=True)
+        self.assertIn("Ya hay un contrato sc-001", refused.exception.errors[0])
+        other = self.create(number="SC-002", confirm_overlap=True)
+        with (
+            mock.patch.object(services, "_number_taken", return_value=False),
+            self.assertRaises(ContractRejected),
+        ):
+            services.update_contract(self.world.ctx(), self.project, other.pk,
+                                     self.data(number="SC-001", confirm_overlap=True))  # fmt: skip
+
 
 @skip_without_db
 class AmendmentServiceTests(TestCase):
@@ -343,3 +371,16 @@ class AmendmentServiceTests(TestCase):
         )
         self.assertFalse(ContractLine.objects.filter(contract=self.contract,
                                                      item__code="2.4").exists())  # fmt: skip
+
+    def test_the_end_date_only_moves_later(self) -> None:  # revisión de código, M-4
+        with self.assertRaises(ContractRejected) as refused:
+            services.create_amendment(
+                self.world.ctx(), self.project, self.contract.pk,
+                self.data(new_ends_on=date(2026, 8, 30)),
+            )  # fmt: skip
+        self.assertIn("fin vigente", " ".join(refused.exception.errors))
+        same = services.create_amendment(
+            self.world.ctx(), self.project, self.contract.pk,
+            self.data(new_ends_on=date(2026, 8, 31)),
+        )  # fmt: skip
+        self.assertEqual(same.new_ends_on, date(2026, 8, 31))

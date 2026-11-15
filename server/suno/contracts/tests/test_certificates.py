@@ -139,6 +139,12 @@ class CertificateDraftTests(TestCase):
         self.assertEqual(default_period(ctx, self.contract), (date(2026, 3, 1), TODAY))
         make_certificate(self.cw, self.contract, start=date(2026, 3, 1), end=date(2026, 3, 15))
         self.assertEqual(default_period(ctx, self.contract), (date(2026, 3, 16), TODAY))
+        # Revisión de código, M-2: nunca un inicio posterior a hoy.
+        make_certificate(self.cw, self.contract, number=2, start=date(2026, 3, 16), end=TODAY)
+        self.assertIsNone(default_period(ctx, self.contract))
+        future = make_contract(self.cw, number="SC-009", starts_on=date(2026, 5, 1),
+                               lines=(("2.4", "1", "1.00", ()),))  # fmt: skip
+        self.assertIsNone(default_period(ctx, future))
 
     def test_the_signed_copy_is_not_an_edit_and_editing_removes_it(self) -> None:
         certificate = self.create()

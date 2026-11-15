@@ -77,6 +77,8 @@ from .services import (
     charge_specs,
     clean_note,
     deduction_specs,
+    has_open_amendment,
+    has_open_certificate,
     locked_contract,
     require_decidable,
     require_editable,
@@ -84,6 +86,12 @@ from .services import (
 )
 
 MAX_JUSTIFICATION = 300
+CHANGED_VALUES = (
+    "Los valores del acta cambiaron; edítala para recalcularla y vuelve a cargar la copia firmada."
+)
+OPEN_AMENDMENT = (
+    "Hay un otrosí abierto en este contrato: apruébalo, recházalo o bórralo antes de liquidar."
+)
 
 
 def quantity_text(value: Decimal) -> str:
@@ -148,9 +156,9 @@ class Draft:
 
 def default_period(
     ctx: RequestContext, contract: Contract, *, today: date | None = None
-) -> tuple[date, date]:
+) -> tuple[date, date] | None:
     """Desde el día siguiente al fin de la última acta no anulada (o el inicio del contrato)
-    hasta hoy."""
+    hasta hoy. `None` si ese inicio sería posterior a hoy: no hay periodo para un acta."""
     today = today or timezone.localdate()
     last = (
         scoped_qs(ctx, ContractCertificate)
@@ -159,7 +167,7 @@ def default_period(
         .aggregate(end=Max("period_end"))["end"]
     )
     start = last + timedelta(days=1) if last else contract.starts_on
-    return start, max(start, today)
+    return (start, today) if start <= today else None
 
 
 def balances(ctx: RequestContext, contract: Contract) -> Balances:
@@ -360,6 +368,8 @@ def create_certificate(
         existing = scoped_qs(ctx, ContractCertificate).filter(contract=contract)
         if existing.filter(status__in=OPEN_STATES).exists():
             raise ContractRejected(["Ya hay un acta abierta en este contrato: termínala primero."])
+        if settlement and has_open_amendment(ctx, contract):
+            raise ContractRejected([OPEN_AMENDMENT])
         draft = build_draft(ctx, project, contract, data, settlement=settlement, catalog=catalog)
         if draft.errors:
             raise ContractRejected(list(draft.errors))
@@ -602,8 +612,8 @@ def approve_certificate(
     catalog: Catalog | None = None,
 ) -> ContractCertificate:
     """Aprueba con el contrato bloqueado: comprueba el firmado, el periodo y el tope por línea,
-    recalcula los totales con los saldos de hoy, escribe el libro y, si es la liquidación,
-    cierra el contrato. Las cantidades y las propuestas son las guardadas en el borrador."""
+    recalcula los totales con los saldos de hoy y exige que sean los guardados (los del acta
+    firmada), escribe el libro y, si es la liquidación, cierra el contrato."""
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     with transaction.atomic():
         contract = locked_contract(ctx, project, contract_id)
@@ -614,6 +624,8 @@ def approve_certificate(
         require_open(contract)
         if certificate.attachment_id is None:
             raise ContractRejected(["Sube el acta firmada antes de aprobar."])
+        if certificate.is_settlement and has_open_amendment(ctx, contract):
+            raise ContractRejected([OPEN_AMENDMENT])
         lines = contract_lines(ctx, contract)
         stored = {
             row.line_id: row
@@ -634,8 +646,8 @@ def approve_certificate(
                 errors.append(
                     f"{catalog.label_of(line.item_id, line.item.code)}: con esta acta lo pagado "
                     f"({quantity_text(total)}) pasa lo contratado vigente "
-                    f"({quantity_text(line.current_quantity)}). Tramita un otrosí o ajusta el "
-                    "acta."
+                    f"({quantity_text(line.current_quantity)}). Ajusta el acta, o bórrala y "
+                    "tramita un otrosí."
                 )
         if errors:
             raise ContractRejected(errors)
@@ -650,8 +662,11 @@ def approve_certificate(
             balances=balances(ctx, contract),
             settlement=certificate.is_settlement,
         )
-        for field, value in totals.stored().items():
-            setattr(certificate, field, value)
+        amounts = {amount.line_id: amount.amount for amount in totals.lines}
+        if any(
+            getattr(certificate, field) != value for field, value in totals.stored().items()
+        ) or any(stored[line_id].amount != amount for line_id, amount in amounts.items()):
+            raise ContractRejected([CHANGED_VALUES])
         certificate.breakdown = totals.breakdown()
         certificate.status = CertificateStatus.APPROVED
         certificate.decided_by_id = ctx.user_id
@@ -696,6 +711,13 @@ def void_certificate(
             raise PermissionDenied
         if certificate.status != CertificateStatus.APPROVED:
             raise ContractRejected(["Solo se anula un acta aprobada."])
+        if has_open_certificate(ctx, contract, exclude=certificate.pk):
+            raise ContractRejected(
+                [
+                    "Hay un acta abierta en este contrato: apruébala o bórrala antes de anular, "
+                    "porque la anulación cambia el anticipo y la retención con que se calculó."
+                ]
+            )
         last = (
             scoped_qs(ctx, ContractCertificate)
             .filter(contract=contract, status=CertificateStatus.APPROVED)
