@@ -2,13 +2,14 @@
 
 from django.urls import path
 
-from . import views, views_movements, views_purchases
+from . import views, views_adjustments, views_movements, views_purchases
 
 app_name = "materials"
 
 K = "kardex/<uuid:warehouse_id>/<uuid:material_id>/"
 P = "compras/<uuid:purchase_id>/"
 S = "salidas/<uuid:issue_id>/"
+A = "ajustes/<uuid:adjustment_id>/"
 
 urlpatterns = [
     path("", views.inventory, name="inventory"),
@@ -35,4 +36,14 @@ urlpatterns = [
     path(S + "devolver/", views_movements.issue_return, name="return_issue"),
     path("traslados/", views_movements.transfer_list, name="transfers"),
     path("traslados/<uuid:transfer_id>/", views_movements.transfer_detail, name="transfer"),
+    path("ajustes/", views_adjustments.adjustment_list, name="adjustments"),
+    path("ajustes/nuevo/", views_adjustments.adjustment_new, name="new_adjustment"),
+    path(A, views_adjustments.adjustment_detail, name="adjustment"),
+    path(A + "editar/", views_adjustments.adjustment_edit, name="edit_adjustment"),
+    path(A + "borrar/", views_adjustments.adjustment_delete, name="delete_adjustment"),
+    path(A + "soporte/", views_adjustments.adjustment_support, name="adjustment_support"),
+    path(A + "soporte/ver/", views_adjustments.adjustment_support_file, name="adjustment_file"),
+    path(A + "aprobar/", views_adjustments.adjustment_approve, name="approve_adjustment"),
+    path(A + "rechazar/", views_adjustments.adjustment_reject, name="reject_adjustment"),
+    path(A + "anular/", views_adjustments.adjustment_void, name="void_adjustment"),
 ]

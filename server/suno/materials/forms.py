@@ -19,6 +19,8 @@ from suno.attachments.web import ACCEPT
 from suno.core.context import RequestContext
 from suno.core.models import (
     CostDocumentType,
+    InventoryAdjustment,
+    InventoryAdjustmentLine,
     Material,
     MaterialIssue,
     MaterialIssueLine,
@@ -31,6 +33,7 @@ from suno.core.models import (
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog
 
+from .adjustments import AdjustmentData, AdjustmentLineData
 from .catalog_services import MAX_CATEGORY, MAX_CODE, MAX_NAME, MAX_UNIT, MaterialData
 from .destination import DestinationData, destination_text, parse_destination
 from .movements import IssueData, IssueLineData, ReturnData, ReturnLineData, TransferData
@@ -432,3 +435,107 @@ class TransferForm(forms.Form):
             lines=tuple(lines),
             notes=data.get("notes") or "",
         )
+
+
+class AdjustmentForm(forms.Form):
+    warehouse = forms.ChoiceField(label="Bodega")
+    counted_on = forms.DateField(label="Fecha del conteo", widget=date_input())
+    destination = destination_field()
+    task = forms.ChoiceField(label="Tarea", required=False)
+    notes = forms.CharField(label="Notas", max_length=500, required=False)
+
+    def __init__(
+        self,
+        *args: Any,
+        warehouses: Sequence[Warehouse],
+        tasks: Mapping[UUID, Task],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["warehouse"].choices = warehouse_choices(warehouses)
+        self.fields["task"].choices = task_choices(tasks)
+
+    def adjustment_data(
+        self, lines: Sequence[AdjustmentLineData], catalog: Catalog
+    ) -> tuple[AdjustmentData | None, str]:
+        data = self.cleaned_data
+        task = data.get("task") or ""
+        destination, error = parse_destination(
+            data.get("destination") or "", catalog, UUID(task) if task else None
+        )
+        if destination is None:
+            return None, f"Destino del faltante: {error}"
+        return (
+            AdjustmentData(
+                warehouse_id=UUID(data["warehouse"]) if data.get("warehouse") else None,
+                counted_on=data["counted_on"],
+                destination=destination,
+                lines=tuple(lines),
+                notes=data.get("notes") or "",
+            ),
+            "",
+        )
+
+
+class AdjustmentLineForm(forms.Form):
+    material = material_field()
+    counted = forms.DecimalField(
+        label="Contado", required=False, max_digits=18, decimal_places=4, min_value=0
+    )
+    unit_cost = forms.DecimalField(
+        label="Costo unitario (solo si se pide)", required=False, max_digits=18,
+        decimal_places=2, min_value=0,
+    )  # fmt: skip
+
+
+AdjustmentLineFormSet = formset_factory(AdjustmentLineForm, extra=0)
+
+
+def read_adjustment_lines(
+    formset: Any, index: MaterialIndex
+) -> tuple[list[AdjustmentLineData], list[str]]:
+    lines: list[AdjustmentLineData] = []
+    errors: list[str] = []
+    for n, form in enumerate(formset.forms, start=1):
+        data = form.cleaned_data
+        text = (data.get("material") or "").strip()
+        if not text:
+            continue
+        material = index.find(text)
+        if material is None:
+            errors.append(f"Línea {n}: «{text}» no está en el catálogo; elígelo de la lista.")
+        elif data.get("counted") is None:
+            errors.append(f"Línea {n}: Escribe lo contado.")
+        else:
+            lines.append(AdjustmentLineData(material.pk, data["counted"], data.get("unit_cost")))
+    return lines, errors
+
+
+def adjustment_initial(
+    adjustment: InventoryAdjustment,
+    lines: Sequence[InventoryAdjustmentLine],
+    catalog: Catalog,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Con `prefetch_related("item_links")` en el ajuste y `select_related("material")` en
+    las líneas."""
+    header = {
+        "warehouse": str(adjustment.warehouse_id),
+        "counted_on": adjustment.counted_on,
+        "destination": destination_text(
+            catalog,
+            adjustment.scope,
+            adjustment.chapter_id,
+            [link.item_id for link in adjustment.item_links.all()],
+        ),
+        "task": str(adjustment.task_id or ""),
+        "notes": adjustment.notes,
+    }
+    rows = [
+        {
+            "material": line.material.label,
+            "counted": plain(line.counted),
+            "unit_cost": line.given_unit_cost,
+        }
+        for line in lines
+    ]
+    return header, rows
