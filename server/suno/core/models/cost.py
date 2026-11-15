@@ -8,12 +8,15 @@ Diseño: plans/2026-11-12-costos-pieza6a-costo-real-design.md, sección 1.
 - `CostEntryItem`: los ítems de un movimiento `item` (uno) o `selection` (dos o más del mismo
   capítulo), por su identidad estable (`BudgetItem`), no por versión.
 
+El acta (6b) y la compra, el corte o el ajuste (6c) que lo generaron se guardan como origen.
+
 El valor lleva IVA incluido, como los precios del presupuesto.
 """
 
 from __future__ import annotations
 
 import uuid
+from itertools import combinations
 
 from django.db import models
 
@@ -35,6 +38,8 @@ class CostDocumentType(models.TextChoices):
     PAYROLL = "payroll", "Nómina"
     RECEIPT = "receipt", "Recibo"
     CERTIFICATE = "certificate", "Acta de avance"
+    CONSUMPTION_CUT = "consumption_cut", "Corte de consumos"
+    INVENTORY_COUNT = "inventory_count", "Inventario físico"
     OTHER = "other", "Otro"
 
 
@@ -49,6 +54,20 @@ class CostStatus(models.TextChoices):
     DRAFT = "draft", "Borrador"
     APPROVED = "approved", "Aprobado"
     REJECTED = "rejected", "Rechazado"
+
+
+#: Los documentos que escriben movimientos del libro (6b y 6c). Un movimiento con uno de ellos
+#: no se edita ni se reversa desde el libro: se anula el documento.
+ORIGIN_FIELDS = ("certificate", "material_purchase", "consumption_cut", "inventory_adjustment")
+
+
+def _at_most_one_origin() -> models.Q:
+    condition = models.Q()
+    for first, second in combinations(ORIGIN_FIELDS, 2):
+        condition &= models.Q(**{f"{first}__isnull": True}) | models.Q(
+            **{f"{second}__isnull": True}
+        )
+    return condition
 
 
 class CostEntry(OrgScopedModel):
@@ -149,6 +168,32 @@ class CostEntry(OrgScopedModel):
         related_name="cost_entries",
         verbose_name="acta",
     )
+    #: Pieza 6c: la compra directa, el corte de consumos o el ajuste de inventario que lo
+    #: generó. Tampoco se reversan desde el libro: se anula el documento.
+    material_purchase = models.ForeignKey(
+        "core.MaterialPurchase",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cost_entries",
+        verbose_name="compra",
+    )
+    consumption_cut = models.ForeignKey(
+        "core.ConsumptionCut",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cost_entries",
+        verbose_name="corte",
+    )
+    inventory_adjustment = models.ForeignKey(
+        "core.InventoryAdjustment",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cost_entries",
+        verbose_name="ajuste",
+    )
 
     class Meta:
         db_table = "cost_entry"
@@ -160,9 +205,12 @@ class CostEntry(OrgScopedModel):
             models.Index(fields=["org", "project", "status"], name="cost_entry_status_idx"),
         ]
         constraints = [
+            # Pieza 6c: un corte escribe el neto de un destino, que puede ser negativo (se
+            # devolvió en el periodo material que salió en un corte anterior).
             models.CheckConstraint(
                 condition=models.Q(reverses__isnull=True, amount__gt=0)
-                | models.Q(reverses__isnull=False, amount__lt=0),
+                | models.Q(reverses__isnull=False, amount__lt=0)
+                | (models.Q(consumption_cut__isnull=False) & ~models.Q(amount=0)),
                 name="cost_entry_amount_sign",
             ),
             models.CheckConstraint(
@@ -198,10 +246,18 @@ class CostEntry(OrgScopedModel):
                 | models.Q(scope__in=["chapter", "selection"], chapter__isnull=False),
                 name="cost_entry_scope_fields",
             ),
+            models.CheckConstraint(
+                condition=_at_most_one_origin(), name="cost_entry_single_origin"
+            ),
         ]
 
     def __str__(self) -> str:
         return f"{self.incurred_on}:{self.description}"
+
+    @property
+    def from_document(self) -> bool:
+        """Viene de un acta, una compra, un corte o un ajuste."""
+        return any(getattr(self, f"{field}_id") is not None for field in ORIGIN_FIELDS)
 
 
 class CostEntryItem(OrgScopedModel):
