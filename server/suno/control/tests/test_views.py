@@ -325,3 +325,17 @@ class ControlCostTests(TestCase):
         self.assertContains(response, "La matriz no tiene cantidades planeadas")
         self.assertContains(response, "Costo real al corte")
         self.assertContains(response, "$250.000,00")
+
+    def test_committed_in_contracts_on_the_item_tab(self) -> None:
+        from suno.contracts.tests.factories import ContractWorld, make_contract
+
+        cw = ContractWorld(self.world, self.budget, self.world.admin, self.world.admin)
+        make_contract(cw, lines=(("2.1", "14", "400000.00", (5,)),))  # 5.600.000 > BAC 5.400.000
+        items = self.client.get(self.base + AT_CUT + "&desglose=item")
+        self.assertContains(items, "Comprometido en contratos")
+        self.assertContains(items, "5.600.000,00")
+        self.assertContains(items, "lo contratado supera el presupuesto vigente")
+        self.client.force_login(self.world.supervisor)  # sin costos: ni columna ni aviso
+        self.assertNotContains(
+            self.client.get(self.base + AT_CUT + "&desglose=item"), "Comprometido en contratos"
+        )

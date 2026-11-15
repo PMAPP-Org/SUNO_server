@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -22,6 +23,7 @@ from django.http import HttpRequest, HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from suno.contracts.queries import committed_by_item
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.download import content_disposition
@@ -104,6 +106,15 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
         )
     except PeriodRangeError as exc:
         error = range_message(exc)
+    rows = _breakdown(result, options.tab, options.order) if result else ()
+    committed = (
+        committed_by_item(ctx, project) if costs and options.tab == "item" and result else {}
+    )
+    over_budget = [
+        row.label
+        for row in rows
+        if row.item_id is not None and committed.get(row.item_id, Decimal(0)) > row.bac
+    ]
     return _render(
         request,
         ctx,
@@ -116,7 +127,9 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
             "tabs": BREAKDOWN_TABS,
             "orders": ORDERS,
             "result": result,
-            "rows": _breakdown(result, options.tab, options.order) if result else (),
+            "rows": [(row, committed.get(row.item_id) if row.item_id else None) for row in rows],
+            "show_committed": bool(costs and options.tab == "item"),
+            "committed_over_budget": over_budget,
             "curve": build_s_curve(result.periods, result.indicators.bac) if result else None,
             "can_export_control": can_export_budgets(ctx, ctx.org_id),
             "error": error,

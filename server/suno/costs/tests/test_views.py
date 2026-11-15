@@ -204,3 +204,26 @@ class CostPagesTests(TestCase):
             response = self.client.post(self.base + "nuevo/", self.form())
         self.assertContains(response, "pesa más de")
         self.assertFalse(CostEntry.objects.exists())
+
+    def test_certificate_entries_link_to_their_certificate_and_are_not_reversed(self) -> None:
+        from suno.contracts.tests.factories import ContractWorld, make_certificate, make_contract
+
+        cw = ContractWorld(self.world, self.budget, self.contributor, self.viewer)
+        certificate = make_certificate(cw, make_contract(cw), quantities={"2.1": "1"})
+        cost = entry(self.world, status=CostStatus.APPROVED, description="Del acta")
+        CostEntry.objects.filter(pk=cost.pk).update(certificate=certificate)
+        listing = self.client.get(self.base)
+        self.assertContains(listing, "Acta 1 · Contrato SC-001")
+        detail = self.client.get(f"{self.base}{cost.pk}/")
+        self.assertContains(detail, "Viene del acta")
+        self.assertNotContains(detail, ">Reversar</a>")
+
+    def test_a_manual_subcontract_on_a_contracted_item_warns(self) -> None:
+        from suno.contracts.tests.factories import ContractWorld, make_contract
+
+        make_contract(ContractWorld(self.world, self.budget, self.contributor, self.viewer))
+        response = self.client.post(self.base + "nuevo/", self.form(kind="subcontract"),
+                                    follow=True)  # fmt: skip
+        self.assertContains(response, "tiene contrato vigente (SC-001)")
+        cost = CostEntry.objects.get()
+        self.assertContains(self.client.get(f"{self.base}{cost.pk}/"), "SC-001")

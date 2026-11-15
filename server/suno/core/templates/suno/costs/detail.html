@@ -9,6 +9,8 @@
   <p><span class="bg-label cst-{{ entry.status }}">{{ entry.get_status_display }}</span>
     {% if reversal %}<a href="{% url 'costs:detail' project.pk reversal.pk %}">Reversado el {{ reversal.incurred_on|date:"d/m/Y" }}</a>{% endif %}
     {% if entry.reverses %}Reverso de <a href="{% url 'costs:detail' project.pk entry.reverses_id %}">{{ entry.reverses.description }}</a>{% endif %}</p>
+  {% if entry.certificate %}<p class="pj-muted">Viene del acta <a href="{% url 'contracts:certificate' project.pk entry.certificate.contract_id entry.certificate_id %}">Acta {{ entry.certificate.number }} · Contrato {{ entry.certificate.contract.number }}</a>: se anula desde el contrato.</p>{% endif %}
+  {% if contract_warning %}<p class="pj-warning">{{ contract_warning }}</p>{% endif %}
   {% if entry.status == "rejected" %}<p class="pj-warning">Motivo del rechazo: {{ entry.decision_note }}</p>{% elif entry.reverses %}<p class="pj-muted">Motivo: {{ entry.decision_note }}</p>{% endif %}
   <dl class="cst-facts">
     <dt>Fecha de causación</dt><dd>{{ entry.incurred_on|date:"d/m/Y" }}</dd>

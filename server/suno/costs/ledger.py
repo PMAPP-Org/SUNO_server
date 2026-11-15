@@ -41,8 +41,14 @@ from .catalog import Catalog
 
 PAGE_SIZE = 100
 MAX_EXPORT_LINES = 50_000
-ALL, LEDGER_ONLY, AUTOMATIC = "todos", "libro", "automaticos"
-ORIGINS = {ALL: "Todos", LEDGER_ONLY: "Libro", AUTOMATIC: "Solo automáticos"}
+ALL, LEDGER_ONLY, CERTIFICATES, AUTOMATIC = "todos", "libro", "actas", "automaticos"
+ORIGINS = {
+    ALL: "Todos",
+    LEDGER_ONLY: "Manual",
+    CERTIFICATES: "Actas",
+    AUTOMATIC: "Solo automáticos",
+}
+CERTIFICATE_LABEL = "Acta"
 LEDGER, EQUIPMENT, TRANSPORT = "libro", "equipo", "transporte"
 ORIGIN_LABELS = {LEDGER: "Libro", EQUIPMENT: "Equipo propio", TRANSPORT: "Transporte"}
 COUNTED_USAGE = (EquipmentUsageStatus.COMPLETED, EquipmentUsageStatus.IN_PROGRESS)
@@ -115,7 +121,7 @@ class LedgerFilters:
     @property
     def shows_automatic(self) -> bool:
         return (
-            self.origin != LEDGER_ONLY
+            self.origin not in (LEDGER_ONLY, CERTIFICATES)
             and not self.kind
             and self.status in ("", CostStatus.APPROVED)
         )
@@ -140,10 +146,17 @@ class LedgerLine:
     entry_id: UUID | None = None
     reversed: bool = False
     is_reversal: bool = False
+    certificate_id: UUID | None = None
+    contract_id: UUID | None = None
+    certificate_label: str = ""
 
     @property
     def automatic(self) -> bool:
         return self.origin != LEDGER
+
+    @property
+    def origin_label(self) -> str:
+        return CERTIFICATE_LABEL if self.certificate_id else ORIGIN_LABELS[self.origin]
 
 
 @dataclass(frozen=True)
@@ -172,6 +185,10 @@ def manual_entries(
     ctx: RequestContext, project: Project, filters: LedgerFilters, catalog: Catalog
 ) -> QuerySet[CostEntry]:
     entries = scoped_qs(ctx, CostEntry).filter(project=project)
+    if filters.origin == LEDGER_ONLY:
+        entries = entries.filter(certificate__isnull=True)
+    elif filters.origin == CERTIFICATES:
+        entries = entries.filter(certificate__isnull=False)
     if filters.status:
         entries = entries.filter(status=filters.status)
     if filters.kind:
@@ -194,7 +211,9 @@ def manual_entries(
 
 def _with_details(ctx: RequestContext, entries: QuerySet[CostEntry]) -> QuerySet[CostEntry]:
     return (
-        entries.select_related("created_by", "decided_by", "chapter", "task")
+        entries.select_related(
+            "created_by", "decided_by", "chapter", "task", "certificate__contract"
+        )
         .prefetch_related("item_links__item")
         .annotate(is_reversed=Exists(scoped_qs(ctx, CostEntry).filter(reverses=OuterRef("pk"))))
     )
@@ -236,6 +255,13 @@ def _entry_line(entry: CostEntry, catalog: Catalog) -> LedgerLine:
         entry_id=entry.pk,
         reversed=bool(getattr(entry, "is_reversed", False)),
         is_reversal=entry.reverses_id is not None,
+        certificate_id=entry.certificate_id,
+        contract_id=entry.certificate.contract_id if entry.certificate else None,
+        certificate_label=(
+            f"Acta {entry.certificate.number} · Contrato {entry.certificate.contract.number}"
+            if entry.certificate
+            else ""
+        ),
     )
 
 
