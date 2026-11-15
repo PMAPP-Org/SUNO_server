@@ -8,9 +8,9 @@
     {% for row in formset %}
       <tr>
         <td>{{ forloop.counter }}</td>
-        <td><label class="sr-only" for="{{ row.name.id_for_label }}">Nombre {{ forloop.counter }}</label>{{ row.name }}</td>
+        <td class="ctr-name"><label class="sr-only" for="{{ row.name.id_for_label }}">Nombre {{ forloop.counter }}</label>{{ row.name }}</td>
         <td class="ctr-num"><label class="sr-only" for="{{ row.pct.id_for_label }}">Porcentaje {{ forloop.counter }}</label>{{ row.pct }}</td>
-        <td><label class="sr-only" for="{{ row.base.id_for_label }}">Base {{ forloop.counter }}</label>{{ row.base }}</td>
+        <td class="ctr-base"><label class="sr-only" for="{{ row.base.id_for_label }}">Base {{ forloop.counter }}</label>{{ row.base }}</td>
       </tr>
     {% empty %}
       <tr><td colspan="4" class="pj-muted">Sin filas.</td></tr>
