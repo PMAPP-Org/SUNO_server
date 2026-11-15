@@ -2,7 +2,7 @@
 
 from django.urls import path
 
-from . import views, views_adjustments, views_movements, views_purchases
+from . import views, views_adjustments, views_cuts, views_movements, views_purchases
 
 app_name = "materials"
 
@@ -10,6 +10,7 @@ K = "kardex/<uuid:warehouse_id>/<uuid:material_id>/"
 P = "compras/<uuid:purchase_id>/"
 S = "salidas/<uuid:issue_id>/"
 A = "ajustes/<uuid:adjustment_id>/"
+C = "cortes/<uuid:cut_id>/"
 
 urlpatterns = [
     path("", views.inventory, name="inventory"),
@@ -46,4 +47,16 @@ urlpatterns = [
     path(A + "aprobar/", views_adjustments.adjustment_approve, name="approve_adjustment"),
     path(A + "rechazar/", views_adjustments.adjustment_reject, name="reject_adjustment"),
     path(A + "anular/", views_adjustments.adjustment_void, name="void_adjustment"),
+    path("cortes/", views_cuts.cut_list, name="cuts"),
+    path("cortes/nuevo/", views_cuts.cut_create, name="new_cut"),
+    path(C, views_cuts.cut_detail, name="cut"),
+    path(C + "recalcular/", views_cuts.cut_recalculate, name="recalculate_cut"),
+    path(C + "borrar/", views_cuts.cut_delete, name="delete_cut"),
+    path(C + "firmado/", views_cuts.cut_signed, name="cut_signed"),
+    path(C + "firmado/ver/", views_cuts.cut_signed_file, name="cut_file"),
+    path(C + "aprobar/", views_cuts.cut_approve, name="approve_cut"),
+    path(C + "rechazar/", views_cuts.cut_reject, name="reject_cut"),
+    path(C + "anular/", views_cuts.cut_void, name="void_cut"),
+    path(C + "corte.pdf", views_cuts.cut_document, name="cut_pdf"),
+    path(C + "corte.xlsx", views_cuts.cut_sheet, name="cut_xlsx"),
 ]

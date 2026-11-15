@@ -539,3 +539,7 @@ def adjustment_initial(
         for line in lines
     ]
     return header, rows
+
+
+class CutForm(forms.Form):
+    hasta = forms.DateField(label="Hasta", widget=date_input())

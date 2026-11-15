@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from suno.backoffice.export import safe_cell, to_xlsx
-from suno.core.models import MaterialIssueLine
+from suno.core.models import ConsumptionCut, MaterialIssueLine
 
 from .queries import InventoryRow, Kardex
 
@@ -96,3 +96,29 @@ def issues_workbook(lines: Sequence[tuple[MaterialIssueLine, str]]) -> bytes:
         ],
         sheet_name="Salidas",
     )
+
+
+CUT_HEADER = [
+    "destino", "codigo", "material", "unidad", "cantidad_salio", "valor_salio",
+    "cantidad_devuelta", "valor_devuelto", "neto",
+]  # fmt: skip
+
+
+def cut_workbook(cut: ConsumptionCut) -> bytes:
+    """El detalle del corte por destino y material, del resumen guardado."""
+    rows = [
+        [
+            safe_cell(group["label"]),
+            safe_cell(line["code"]),
+            safe_cell(line["name"]),
+            safe_cell(line["unit"]),
+            float(Decimal(line["issued_quantity"])),
+            float(Decimal(line["issued_value"])),
+            float(Decimal(line["returned_quantity"])),
+            float(Decimal(line["returned_value"])),
+            float(Decimal(line["issued_value"]) - Decimal(line["returned_value"])),
+        ]
+        for group in (cut.summary or {}).get("groups", [])
+        for line in group["materials"]
+    ]
+    return to_xlsx(CUT_HEADER, rows, sheet_name=f"Corte {cut.number}")
