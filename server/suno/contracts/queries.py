@@ -41,7 +41,7 @@ from suno.core.models.contract import OPEN_STATES
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog
 
-from .proposal import NONE, line_scopes, paid_by_line, validated_by_line
+from .proposal import NONE, line_scopes, paid_by_line, paid_by_project, validated_by_line
 from .services import active_lines, charge_specs, deduction_specs
 
 STALE_DAYS = 15
@@ -482,7 +482,7 @@ def tab_alerts(
     )
     live = [line for line in lines if contracts[line.contract_id].status == ContractStatus.APPROVED]
     validated = validated_by_line(ctx, project, line_scopes(live), until=today)
-    paid = paid_by_line(ctx, [line.pk for line in live])
+    paid = paid_by_project(ctx, project)
     for line in live:
         unpaid = validated[line.pk] - paid.get(line.pk, NONE)
         if unpaid > 0:
@@ -560,7 +560,7 @@ def committed_by_item(ctx: RequestContext, project: Project) -> dict[UUID, Decim
             )
         ).values_list("pk", "item_id", "current_quantity", "unit_price", "contract__status")
     )
-    paid = paid_by_line(ctx, [pk for pk, *_, status in rows if status == ContractStatus.SETTLED])
+    paid = paid_by_project(ctx, project)
     committed: dict[UUID, Decimal] = defaultdict(lambda: ZERO)
     for pk, item_id, current, price, status in rows:
         quantity = current if status == ContractStatus.APPROVED else paid.get(pk, NONE)
@@ -599,6 +599,8 @@ def _not_mine(ctx: RequestContext, rows: Any) -> Any:
 
 
 def _waiting(ctx: RequestContext, project: Project) -> tuple[Any, Any, Any]:
+    """Borradores de otras personas; otrosíes y actas solo de contratos aprobados (de uno
+    liquidado o anulado ya no se deciden)."""
     contracts = _not_mine(
         ctx,
         scoped_qs(ctx, Contract).filter(
@@ -606,10 +608,16 @@ def _waiting(ctx: RequestContext, project: Project) -> tuple[Any, Any, Any]:
         ),
     )
     amendments = _not_mine(
-        ctx, scoped_qs(ctx, ContractAmendment).filter(project=project, status="draft")
+        ctx,
+        scoped_qs(ctx, ContractAmendment).filter(
+            project=project, status="draft", contract__status=ContractStatus.APPROVED
+        ),
     )
     certificates = _not_mine(
-        ctx, scoped_qs(ctx, ContractCertificate).filter(project=project, status="draft")
+        ctx,
+        scoped_qs(ctx, ContractCertificate).filter(
+            project=project, status="draft", contract__status=ContractStatus.APPROVED
+        ),
     )
     return contracts, amendments, certificates
 

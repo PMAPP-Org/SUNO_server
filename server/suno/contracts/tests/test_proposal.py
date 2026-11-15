@@ -8,7 +8,13 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from suno.contracts.proposal import LineScope, line_scopes, paid_by_line, proposals
+from suno.contracts.proposal import (
+    LineScope,
+    line_scopes,
+    paid_by_line,
+    paid_by_project,
+    proposals,
+)
 from suno.core.models import CertificateStatus, ContractLine
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -106,3 +112,13 @@ class ProposalTests(TestCase):
         scopes = self.scopes()
         with self.assertNumQueries(3):
             proposals(self.ctx, self.cw.project, scopes, start=MARCH_1, end=MARCH_31)
+
+    def test_paid_by_project_without_an_id_list(self) -> None:  # revisión de código, I-3
+        make_certificate(self.cw, self.contract, quantities={"2.1": "3", "2.2": "10"})
+        make_certificate(self.cw, self.contract, number=2, start=date(2026, 4, 1),
+                         end=date(2026, 4, 30), quantities={"2.1": "1"},
+                         status=CertificateStatus.VOIDED)  # fmt: skip
+        with self.assertNumQueries(1):
+            paid = paid_by_project(self.ctx, self.cw.project)
+        self.assertEqual(paid, {self.concrete.pk: D(3), self.steel.pk: D(10)})
+        self.assertEqual(paid, paid_by_line(self.ctx, [self.concrete.pk, self.steel.pk]))

@@ -198,3 +198,17 @@ class ContractQueryTests(TestCase):
     def test_suggested_numbers(self) -> None:
         self.assertEqual(queries.suggest_number(self.ctx, self.project, "subcontract"), "SC-002")
         self.assertEqual(queries.suggest_number(self.ctx, self.project, "piecework"), "DT-002")
+
+    def test_inbox_only_from_approved_contracts(self) -> None:  # revisión de código, I-2
+        voided = make_contract(self.cw, number="SC-008", status=ContractStatus.VOIDED,
+                               lines=(("1.2", "1", "1.00", ()),))  # fmt: skip
+        make_certificate(self.cw, voided, status=CertificateStatus.DRAFT)
+        ContractAmendment.objects.create(
+            org=self.world.org, contract=voided, project=self.project, number=1,
+            signed_on=date(2026, 5, 2), reason="Huérfano", created_by=self.world.admin,
+            updated_by=self.world.admin,
+        )  # fmt: skip
+        theirs = queries.inbox_items(self.world.ctx(self.world.supervisor), self.project)
+        self.assertEqual((len(theirs.amendments), len(theirs.certificates)), (0, 0))
+        self.assertEqual(queries.inbox_count(self.world.ctx(self.world.supervisor), self.project),
+                         theirs.count)  # fmt: skip

@@ -16,7 +16,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from django.db.models import Sum
+from django.db.models import QuerySet, Sum
 
 from suno.core.context import RequestContext
 from suno.core.models import CertificateLine, CertificateStatus, ContractLine, Project
@@ -93,6 +93,21 @@ def paid_by_line(
     )
     if before_number is not None:
         rows = rows.filter(certificate__number__lt=before_number)
+    return _totals(rows)
+
+
+def paid_by_project(ctx: RequestContext, project: Project) -> dict[UUID, Decimal]:
+    """Lo pagado por línea en todas las actas aprobadas del proyecto, sin lista de ids (la
+    pestaña y el control: una lista de miles de ids hace frágil el plan de la consulta). Una
+    consulta; las líneas sin pagos no aparecen."""
+    return _totals(
+        scoped_qs(ctx, CertificateLine).filter(
+            certificate__project=project, certificate__status=CertificateStatus.APPROVED
+        )
+    )
+
+
+def _totals(rows: QuerySet[CertificateLine]) -> dict[UUID, Decimal]:
     return dict(
         rows.order_by()
         .values("line_id")
