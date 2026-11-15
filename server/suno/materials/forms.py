@@ -96,3 +96,7 @@ class SupportForm(forms.Form):
     file = forms.FileField(
         label="Archivo (PDF, JPG, PNG o WebP)", widget=forms.FileInput(attrs={"accept": ACCEPT})
     )
+
+
+class WarehouseForm(forms.Form):
+    name = forms.CharField(label="Nombre", max_length=120)

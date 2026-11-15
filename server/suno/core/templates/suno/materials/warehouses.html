@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Bodegas · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="warehouses" %}
+<section class="pj-panel">
+  <h2>Bodegas del proyecto</h2>
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Nombre</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for w, editable in rows %}
+      <tr>
+        <td class="pj-name">{{ w.name }}</td>
+        <td>{% if w.active %}Activa{% else %}<span class="pj-muted">Inactiva</span>{% endif %}</td>
+        <td class="cst-decide">{% if editable %}
+          <form method="post" action="{% url 'materials:warehouse_update' project.pk w.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="accion" value="renombrar"><input aria-label="Nuevo nombre de {{ w.name }}" name="name" maxlength="120" required placeholder="Nuevo nombre"><button class="text-link" type="submit">Renombrar</button></form>
+          <form method="post" action="{% url 'materials:warehouse_update' project.pk w.pk %}">{% csrf_token %}<input type="hidden" name="accion" value="{% if w.active %}desactivar{% else %}activar{% endif %}"><button class="text-link" type="submit">{% if w.active %}Desactivar{% else %}Activar{% endif %}</button></form>
+        {% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">El proyecto todavía no tiene bodegas.</p>{% endif %}
+  <p class="pj-muted">Solo se desactiva una bodega sin inventario.</p>
+</section>
+{% if can_create_material %}
+<section class="pj-panel">
+  <h2>Nueva bodega</h2>
+  <form method="post" class="pj-form ctr-head">
+    {% csrf_token %}
+    {% if form.errors %}<div class="pj-late" role="alert">{{ form.errors }}</div>{% endif %}
+    <label>{{ form.name.label }} {{ form.name }}</label>
+    <div class="ctr-actions"><button class="button" type="submit">Crear bodega</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
