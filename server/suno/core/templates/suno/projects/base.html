@@ -19,7 +19,7 @@
 <body class="workspace-page pj-page">
   <a class="skip-link" href="#workspace-content">Saltar al contenido</a>
   <div class="app-shell">
-    {% include "suno/_sidebar.html" with active="projects" %}
+    {% include "suno/_sidebar.html" with active=sidebar_active|default:"projects" %}
     <div class="workspace-frame">
       <header class="workspace-topbar">
         <button class="sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false" data-sidebar-toggle><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#menu"></use></svg><span class="sr-only">Abrir navegación</span></button>
