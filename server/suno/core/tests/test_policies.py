@@ -404,6 +404,9 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             "can_reverse_costs": project(),
             "can_update_cost": cost_entry(),
             "can_delete_cost": cost_entry(),
+            # Costos, pieza 6c: catálogo de materiales de la organización.
+            "can_read_material_catalog": ORG,
+            "can_manage_material_catalog": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
@@ -506,6 +509,33 @@ class CostPolicyTests(SimpleTestCase):
         self.assertFalse(policies.can_delete_cost(contributor, other))
         self.assertTrue(policies.can_update_cost(self.actor(SectionRole.REVIEWER), other))
         self.assertFalse(policies.can_update_cost(self.actor(SectionRole.VIEWER), own))
+
+    def test_material_catalog(self) -> None:
+        """Costos, pieza 6c (decisión 2 del plan): lo ve cualquier rol de Costos con cualquier
+        alcance; lo gestiona quien crea y actualiza con alcance de toda la organización."""
+        cases = {
+            SectionRole.MANAGER: True,
+            SectionRole.REVIEWER: True,
+            SectionRole.CONTRIBUTOR: True,
+            SectionRole.VIEWER: False,
+        }
+        for role, manages in cases.items():
+            actor = self.actor(role)
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_read_material_catalog(actor, ORG))
+                self.assertEqual(policies.can_manage_material_catalog(actor, ORG), manages)
+        limited = self.actor(
+            SectionRole.MANAGER, scope=AccessScope.PROJECTS, projects=frozenset({uuid.uuid4()})
+        )
+        self.assertTrue(policies.can_read_material_catalog(limited, ORG))
+        self.assertFalse(policies.can_manage_material_catalog(limited, ORG))
+        self.assertFalse(
+            policies.can_read_material_catalog(self.actor(SectionRole.MANAGER), OTHER_ORG)
+        )
+        self.assertFalse(policies.can_read_material_catalog(ctx(Role.SUPERVISOR), ORG))
+        with self.assertRaises(HttpError) as denied:
+            policies.check_manage_material_catalog(self.actor(SectionRole.VIEWER), ORG)
+        self.assertEqual(denied.exception.status_code, 403)
 
     def test_project_scope(self) -> None:
         inside, outside = project(), project()

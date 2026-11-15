@@ -34,7 +34,7 @@ from uuid import UUID
 
 from ninja.errors import HttpError
 
-from suno.core.access import Capability, Section
+from suno.core.access import Capability, Section, role_has_capability
 from suno.core.context import RequestContext, RoleValue
 from suno.core.models import Role
 
@@ -59,6 +59,7 @@ __all__ = [
     "can_import_costs",
     "can_manage_basemaps",
     "can_manage_budgets",
+    "can_manage_material_catalog",
     "can_manage_device",
     "can_manage_personal_data",
     "can_manage_projects",
@@ -66,6 +67,7 @@ __all__ = [
     "can_publish_form_template",
     "can_read_basemaps",
     "can_read_costs",
+    "can_read_material_catalog",
     "can_read_field_tasks",
     "can_read_job_output",
     "can_read_members",
@@ -90,6 +92,7 @@ __all__ = [
     "check_import_costs",
     "check_manage_basemaps",
     "check_manage_budgets",
+    "check_manage_material_catalog",
     "check_manage_device",
     "check_manage_personal_data",
     "check_manage_projects",
@@ -97,6 +100,7 @@ __all__ = [
     "check_publish_form_template",
     "check_read_basemaps",
     "check_read_costs",
+    "check_read_material_catalog",
     "check_read_field_tasks",
     "check_read_job_output",
     "check_read_members",
@@ -560,6 +564,27 @@ def can_delete_cost(ctx: RequestContext, entry: CostEntryResource) -> bool:
     return _own_or_any_cost(ctx, entry, Capability.DELETE)
 
 
+def can_read_material_catalog(ctx: RequestContext, org_id: UUID) -> bool:
+    """Ver el catálogo de materiales de la organización (costos, pieza 6c): cualquier rol de la
+    sección Costos, con cualquier alcance (los formularios de cada proyecto lo usan)."""
+    access = ctx.access_for(Section.COSTS)
+    return (
+        ctx.org_id == org_id
+        and ctx.is_member
+        and access is not None
+        and role_has_capability(access.section, access.role, Capability.READ)
+    )
+
+
+def can_manage_material_catalog(ctx: RequestContext, org_id: UUID) -> bool:
+    """Crear, editar, desactivar e importar materiales: `create` y `update` de Costos con
+    alcance de toda la organización. El catálogo es de todos los proyectos: un acceso limitado
+    a algunos no basta (sin `project_id`, `has_capability` solo lo concede a ese alcance)."""
+    return user_has_section_capability(
+        ctx, org_id, Section.COSTS, Capability.CREATE
+    ) and user_has_section_capability(ctx, org_id, Section.COSTS, Capability.UPDATE)
+
+
 def check_read_record(ctx: RequestContext, record: OrgScopedResource) -> None:
     if not can_read_record(ctx, record):
         raise _denial(ctx, record.org_id)
@@ -713,3 +738,13 @@ def check_update_cost(ctx: RequestContext, entry: CostEntryResource) -> None:
 def check_delete_cost(ctx: RequestContext, entry: CostEntryResource) -> None:
     if not can_delete_cost(ctx, entry):
         raise _denial(ctx, entry.org_id)
+
+
+def check_read_material_catalog(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_read_material_catalog(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_material_catalog(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_material_catalog(ctx, org_id):
+        raise _denial(ctx, org_id)
