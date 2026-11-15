@@ -12,6 +12,7 @@ R = C + "actas/<uuid:certificate_id>/"
 
 urlpatterns = [
     path("", views.contract_list, name="list"),
+    path("contratos.xlsx", views.export_list, name="export"),
     path("nuevo/", views.new_contract, name="new"),
     path(C, views.contract_detail, name="detail"),
     path(C + "editar/", views.edit_contract, name="edit"),
@@ -33,4 +34,6 @@ urlpatterns = [
     path(R + "aprobar/", views.approve_certificate, name="approve_certificate"),
     path(R + "rechazar/", views.reject_certificate, name="reject_certificate"),
     path(R + "anular/", views.void_certificate, name="void_certificate"),
+    path(C + "contrato.xlsx", views.export_contract, name="export_contract"),
+    path(R + "acta.pdf", views.certificate_document_pdf, name="certificate_pdf"),
 ]

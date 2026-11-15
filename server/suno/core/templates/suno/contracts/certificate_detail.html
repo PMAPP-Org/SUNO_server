@@ -15,6 +15,7 @@
     <dt>Acta firmada</dt><dd>{% if certificate.attachment_id %}<a href="{% url 'contracts:signed_copy' project.pk contract.pk certificate.pk %}" target="_blank" rel="noopener">{{ certificate.attachment_name|default:"Ver" }}</a>{% else %}<span class="pj-late">Falta</span>{% endif %}</dd>
   </dl>
   <div class="ctr-actions">
+    {% if can_export_contract %}<a class="button" href="{% url 'contracts:certificate_pdf' project.pk contract.pk certificate.pk %}">Descargar PDF para firmar</a>{% endif %}
     {% if can_edit %}<a class="button" href="{% url 'contracts:edit_certificate' project.pk contract.pk certificate.pk %}">{% if certificate.status == "rejected" %}Corregir y reenviar{% else %}Editar{% endif %}</a>{% endif %}
     {% if can_delete %}<form method="post" action="{% url 'contracts:delete_certificate' project.pk contract.pk certificate.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar borrador</button></form>{% endif %}
   </div>

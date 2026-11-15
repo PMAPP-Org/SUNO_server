@@ -2,4 +2,5 @@
   <a href="{% url 'contracts:list' project.pk %}" {% if sub == "list" %}aria-current="page"{% endif %}>Contratos</a>
   {% if can_create_contract %}<a href="{% url 'contracts:new' project.pk %}" {% if sub == "new" %}aria-current="page"{% endif %}>Nuevo contrato</a>{% endif %}
   {% if can_decide_contract %}<a href="{% url 'costs:inbox' project.pk %}">Por aprobar</a>{% endif %}
+  {% if can_export_contract %}<a href="{% url 'contracts:export' project.pk %}{% if filters.query %}?{{ filters.query }}{% endif %}">Exportar a Excel</a>{% endif %}
 </nav>

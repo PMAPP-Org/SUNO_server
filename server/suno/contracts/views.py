@@ -15,6 +15,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -22,7 +23,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from suno.budgets.totals import BASE_DIRECT, describe_base, pct_text
+from suno.core import audit
+from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
+from suno.core.download import content_disposition
 from suno.core.models import (
     CertificateLine,
     CertificateStatus,
@@ -64,6 +68,7 @@ from .certificates import (
     contract_lines,
     default_period,
 )
+from .export import contract_workbook, contracts_workbook
 from .forms import (
     NEW_LINE_ROWS,
     AmendmentForm,
@@ -81,6 +86,7 @@ from .forms import (
     read_lines,
     term_initial,
 )
+from .pdf import certificate_pdf
 from .queries import (
     ACTION_LABELS,
     ContractSheet,
@@ -93,6 +99,8 @@ from .queries import (
     tab_alerts,
 )
 from .services import ContractRejected
+
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def term_texts(sheet: ContractSheet) -> tuple[list[str], list[str]]:
@@ -861,3 +869,89 @@ def delete_certificate(
         return redirect(_certificate_url(project, contract_id, certificate_id))
     messages.success(request, "Borrador del acta borrado.")
     return _detail(project, contract_id, "actas")
+
+
+# ---------------------------------------------------------------------------
+# Documentos (auditados)
+# ---------------------------------------------------------------------------
+
+
+def _require_export(ctx: RequestContext, project: Project) -> None:
+    if not can_export_costs(ctx, project):
+        raise PermissionDenied
+
+
+@login_required(login_url="platform_login")
+@require_GET
+def export_list(request: HttpRequest, project_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    _require_export(ctx, project)
+    filters = ListFilters.from_query(request.GET)
+    rows = contract_rows(ctx, project, filters)
+    content = contracts_workbook(rows)
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.CONTRACT_EXPORTED,
+            target=f"project:{project.pk}",
+            metadata={"contracts": len(rows), "filters": filters.query},
+        )
+    response = HttpResponse(content, content_type=XLSX_TYPE)
+    response["Content-Disposition"] = content_disposition(
+        f"contratos-{project.code or project.name}", ".xlsx", fallback="contratos"
+    )
+    return response
+
+
+@login_required(login_url="platform_login")
+@require_GET
+def export_contract(request: HttpRequest, project_id: UUID, contract_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    _require_export(ctx, project)
+    content = contract_workbook(contract_sheet(ctx, project, contract, load_catalog(ctx, project)))
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.CONTRACT_EXPORTED,
+            target=f"contract:{contract.pk}",
+            metadata={"contract": str(contract.pk), "number": contract.number},
+        )
+    response = HttpResponse(content, content_type=XLSX_TYPE)
+    response["Content-Disposition"] = content_disposition(
+        f"contrato-{contract.number}", ".xlsx", fallback="contrato"
+    )
+    return response
+
+
+@login_required(login_url="platform_login")
+@require_GET
+def certificate_document_pdf(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    """El acta para imprimir y firmar."""
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    certificate = get_certificate(ctx, contract, certificate_id)
+    _require_export(ctx, project)
+    document = certificate_document(ctx, project, contract, certificate, load_catalog(ctx, project))
+    content = certificate_pdf(document, generated_on=timezone.localdate())
+    with transaction.atomic():
+        audit.record(
+            ctx,
+            action=AuditAction.CERTIFICATE_EXPORTED,
+            target=f"certificate:{certificate.pk}",
+            metadata={
+                "contract": str(contract.pk),
+                "number": certificate.number,
+                "status": certificate.status,
+            },
+        )
+    response = HttpResponse(content, content_type="application/pdf")
+    response["Content-Disposition"] = content_disposition(
+        f"acta-{contract.number}-{certificate.number}", ".pdf", fallback="acta"
+    )
+    return response
