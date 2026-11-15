@@ -7,7 +7,7 @@
 <section class="pj-panel">
   <h2>{% if amendment %}Otrosí {{ amendment.number }}{% else %}Nuevo otrosí{% endif %} · {{ contract.number }}</h2>
   {% if amendment.status == "rejected" %}<p class="pj-warning">Rechazado: {{ amendment.decision_note }}. Al guardarlo vuelve a borrador.</p>{% endif %}
-  <form method="post" class="ctr-form">
+  <form method="post" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
     {% csrf_token %}
     {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><p>No se pudo guardar:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
     {% if overlaps %}<div class="pj-warning" role="alert"><ul>{% for o in overlaps %}<li>{{ o }}</li>{% endfor %}</ul><label class="cst-check">{{ form.confirm_overlap }} {{ form.confirm_overlap.label }}</label></div>{% endif %}
