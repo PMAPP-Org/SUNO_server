@@ -1,0 +1,98 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{{ contract.number }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="contracts" %}
+{% include "suno/contracts/_nav.html" with sub="detail" %}
+<section class="pj-panel">
+  <h2 class="pj-name">{{ contract.number }} · {{ contract.purpose }}</h2>
+  <p><span class="bg-label ctr-{{ contract.status }}">{{ contract.get_status_display }}</span> {{ contract.get_kind_display }} con {{ contract.contractor }}</p>
+  {% if contract.rejection_note %}<p class="pj-warning">Devuelto por {{ contract.rejected_by }}: {{ contract.rejection_note }}</p>{% endif %}
+  {% if contract.status == "voided" %}<p class="pj-muted">Anulado por {{ contract.closed_by }}: {{ contract.close_note }}</p>{% endif %}
+  <div class="ctr-actions">
+    {% if can_export_contract %}<a class="text-link" href="{% url 'contracts:export_contract' project.pk contract.pk %}">Exportar a Excel</a>{% endif %}
+    {% if can_edit %}<a class="button" href="{% url 'contracts:edit' project.pk contract.pk %}">Editar</a>{% endif %}
+    {% if can_delete %}<form method="post" action="{% url 'contracts:delete' project.pk contract.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar borrador</button></form>{% endif %}
+    {% if can_decide %}
+      <form method="post" action="{% url 'contracts:approve' project.pk contract.pk %}">{% csrf_token %}<button class="button" type="submit">Aprobar</button></form>
+      <form method="post" action="{% url 'contracts:reject' project.pk contract.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Rechazar</button></form>
+    {% endif %}
+    {% if can_new_amendment %}<a class="button" href="{% url 'contracts:new_amendment' project.pk contract.pk %}">Nuevo otrosí</a>{% endif %}
+    {% if can_void %}<form method="post" action="{% url 'contracts:void' project.pk contract.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo de la anulación <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Anular contrato</button></form>{% endif %}
+  </div>
+  <nav class="pj-tabs" aria-label="Ficha del contrato">
+    {% for key, label in tabs.items %}<a href="?pestana={{ key }}" {% if tab == key %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+</section>
+<section class="pj-panel">
+{% if tab == "resumen" %}
+  <dl class="cst-facts">
+    <dt>Vigencia</dt><dd>{{ contract.starts_on|date:"d/m/Y" }} – {{ contract.ends_on|date:"d/m/Y" }}</dd>
+    <dt>Valor vigente</dt><dd>{{ contract.current_value|money }}</dd>
+    <dt>Ejecutado (actas aprobadas)</dt><dd>{{ sheet.progress.executed|money }}{% if sheet.executed_pct is not None %} · {{ sheet.executed_pct|floatformat:1 }} %{% endif %}</dd>
+    <dt>Anticipo</dt><dd>{{ contract.advance_pct|qty }} %{% if contract.status != "draft" %} · {{ contract.advance_amount|money }}{% endif %}</dd>
+    <dt>Anticipo por amortizar</dt><dd>{{ sheet.advance_balance|money }}</dd>
+    <dt>Retención de garantía</dt><dd>{{ contract.retention_pct|qty }} % · retenido {{ sheet.progress.retained|money }}</dd>
+    <dt>Creó</dt><dd>{{ contract.created_by }} · {{ contract.created_at|date:"d/m/Y H:i" }}</dd>
+    {% if contract.approved_by %}<dt>Aprobó</dt><dd>{{ contract.approved_by }} · {{ contract.approved_at|date:"d/m/Y H:i" }}</dd>{% endif %}
+  </dl>
+  <h3>Cargos</h3>
+  {% if charge_texts %}<ul>{% for text in charge_texts %}<li>{{ text }}</li>{% endfor %}</ul>{% else %}<p class="pj-muted">Sin cargos.</p>{% endif %}
+  <h3>Descuentos de cada acta</h3>
+  {% if deduction_texts %}<ul>{% for text in deduction_texts %}<li>{{ text }}</li>{% endfor %}</ul>{% else %}<p class="pj-muted">Sin descuentos.</p>{% endif %}
+{% elif tab == "lineas" %}
+  <div class="pj-scroll">
+  <table class="pj-table ctr-table">
+    <thead><tr><th>#</th><th>Ítem</th><th>Tareas</th><th>Unidad</th><th class="num">Precio</th><th class="num">Contratado</th><th class="num">Pagado</th><th class="num">Saldo</th><th class="num">Saldo ($)</th>{% if contract.status == "approved" %}<th class="num">Validado sin pagar</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for line in sheet.lines %}
+      <tr>
+        <td>{{ line.line.order }}</td>
+        <td class="pj-name">{{ line.label }}{% if line.line.amendment_id %} <small class="cst-mark">otrosí</small>{% endif %}</td>
+        <td class="pj-wrap">{{ line.tasks }}</td>
+        <td>{{ line.line.unit }}</td>
+        <td class="num">{{ line.line.unit_price|signed }}</td>
+        <td class="num">{{ line.contracted|qty }}</td>
+        <td class="num">{{ line.paid|qty }}</td>
+        <td class="num">{{ line.balance|qty }}</td>
+        <td class="num">{{ line.balance_value|signed }}</td>
+        {% if contract.status == "approved" %}<td class="num{% if line.unpaid_validated %} pj-late{% endif %}">{{ line.unpaid_validated|qty }}</td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+{% elif tab == "actas" %}
+  {% include "suno/contracts/_certificates.html" %}
+{% elif tab == "otrosies" %}
+  {% if can_new_amendment %}<p><a class="button" href="{% url 'contracts:new_amendment' project.pk contract.pk %}">Nuevo otrosí</a></p>{% endif %}
+  {% for a in sheet.amendments %}
+  <article class="ctr-amendment">
+    <h3>Otrosí {{ a.number }} · {{ a.signed_on|date:"d/m/Y" }} <span class="bg-label ctr-{{ a.status }}">{{ a.get_status_display }}</span></h3>
+    <p class="pj-name">{{ a.reason }}</p>
+    {% if a.status == "rejected" %}<p class="pj-warning">Rechazado: {{ a.decision_note }}</p>{% endif %}
+    {% if a.value_after %}<p class="pj-muted">Valor vigente después: {{ a.value_after|money }}</p>{% endif %}
+    {% if a.status != "approved" %}
+    <div class="ctr-actions">
+      {% if a.created_by_id == request.user.pk or can_decide_contract %}<a class="text-link" href="{% url 'contracts:edit_amendment' project.pk contract.pk a.pk %}">Editar</a>
+      <form method="post" action="{% url 'contracts:delete_amendment' project.pk contract.pk a.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar</button></form>{% endif %}
+      {% if a.status == "draft" and can_decide_contract and a.created_by_id != request.user.pk and a.updated_by_id != request.user.pk %}
+      <form method="post" action="{% url 'contracts:approve_amendment' project.pk contract.pk a.pk %}">{% csrf_token %}<button class="button" type="submit">Aprobar</button></form>
+      <form method="post" action="{% url 'contracts:reject_amendment' project.pk contract.pk a.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Rechazar</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </article>
+  {% empty %}<p class="pj-empty">Sin otrosíes.</p>{% endfor %}
+{% else %}
+  {% if history %}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>Fecha</th><th>Qué pasó</th><th>Quién</th><th>Detalle</th></tr></thead>
+    <tbody>{% for event, label in history %}<tr><td>{{ event.created_at|date:"d/m/Y H:i" }}</td><td>{{ label }}</td><td class="pj-wrap">{{ event.actor|default:"Sistema" }}</td><td class="pj-wrap">{% if event.metadata.number %}N.º {{ event.metadata.number }}{% endif %}{% if event.metadata.note %} · {{ event.metadata.note }}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">Sin eventos.</p>{% endif %}
+{% endif %}
+</section>
+{% endblock %}

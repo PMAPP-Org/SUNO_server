@@ -1,0 +1,62 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{% if settlement %}Acta de liquidación{% else %}Acta{% endif %} · {{ contract.number }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="contracts" %}
+{% include "suno/contracts/_nav.html" with sub="detail" %}
+{% if no_period %}
+<section class="pj-panel">
+  <h2>{% if settlement %}Acta de liquidación{% else %}Nueva acta{% endif %} · <a href="{% url 'contracts:detail' project.pk contract.pk %}">{{ contract.number }}</a></h2>
+  <p class="pj-warning">No hay periodo para una nueva acta: las actas del contrato ya cubren hasta hoy, o el contrato todavía no empieza. Se podrá preparar a partir del día siguiente.</p>
+  <p><a class="text-link" href="{% url 'contracts:detail' project.pk contract.pk %}?pestana=actas">Volver a las actas</a></p>
+</section>
+{% else %}
+<section class="pj-panel">
+  <h2>{% if settlement %}Acta de liquidación{% elif certificate %}Acta {{ certificate.number }}{% else %}Nueva acta{% endif %} · <a href="{% url 'contracts:detail' project.pk contract.pk %}">{{ contract.number }}</a></h2>
+  {% if settlement %}<p class="pj-warning">La liquidación descuenta todo el anticipo que falte, devuelve lo retenido y deja el contrato liquidado al aprobarse. Puede ir con cantidades en cero.</p>{% endif %}
+  {% if certificate.status == "rejected" %}<p class="pj-warning">Rechazada: {{ certificate.decision_note }}. Al guardarla vuelve a borrador.</p>{% endif %}
+  <form method="get" class="pj-filters" aria-label="Paso 1: periodo">
+    {% if settlement %}<input type="hidden" name="liquidacion" value="1">{% endif %}
+    <label>Desde <input type="date" name="desde" value="{{ start|date:'Y-m-d' }}"></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ end|date:'Y-m-d' }}"></label>
+    <button class="button" type="submit">Proponer cantidades</button>
+  </form>
+  <p class="pj-muted">La propuesta es lo validado en campo hasta el fin del periodo para el ítem y las tareas de cada línea, menos lo ya pagado.</p>
+</section>
+<section class="pj-panel">
+  <form method="post" class="ctr-form">
+    {% csrf_token %}
+    <input type="hidden" name="desde" value="{{ start|date:'Y-m-d' }}">
+    <input type="hidden" name="hasta" value="{{ end|date:'Y-m-d' }}">
+    {% if settlement %}<input type="hidden" name="liquidacion" value="1">{% endif %}
+    {% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
+    {% if draft.over_balance %}<p class="pj-warning">Hay líneas que pasan lo contratado vigente: no se podrá aprobar así. Ajusta las cantidades, o bórrala, tramita un otrosí y vuelve a prepararla.</p>{% endif %}
+    <div class="pj-scroll">
+    <table class="pj-table ctr-lines">
+      <thead><tr><th>Ítem</th><th class="num">Saldo</th><th class="num">Validado en el periodo</th><th class="num">Propuesta</th><th class="num">Cantidad del acta</th><th>Justificación (si difiere)</th><th class="num">Valor</th></tr></thead>
+      <tbody>
+      {% for line, quantity, justification in rows %}
+        <tr>
+          <td class="pj-name">{{ line.label }}<br><small class="pj-muted">{{ line.line.unit }} · {{ line.line.unit_price|money }}</small></td>
+          <td class="num{% if line.over_balance %} pj-late{% endif %}">{{ line.balance|qty }}</td>
+          <td class="num">{{ line.proposal.in_period|qty }}</td>
+          <td class="num">{{ line.proposal.proposed|qty }}</td>
+          <td class="ctr-num"><label class="sr-only" for="{{ quantity.id_for_label }}">Cantidad del acta de {{ line.label }}</label>{{ quantity }}</td>
+          <td><label class="sr-only" for="{{ justification.id_for_label }}">Justificación de {{ line.label }}</label>{{ justification }}</td>
+          <td class="num{% if line.differs %} ctr-diff{% endif %}">{{ line.amount|signed }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="pj-muted">Deja la cantidad vacía para usar la propuesta.</p>
+    {% include "suno/contracts/_totals.html" with direct=draft.totals.direct gross=draft.totals.gross amortization=draft.totals.amortization retention=draft.totals.retention returned=draft.totals.retention_returned net=draft.totals.net charge_lines=draft.totals.charges.lines deduction_lines=draft.totals.deductions %}
+    <div class="ctr-actions">
+      <button class="text-link" type="submit" name="accion" value="calcular">Recalcular</button>
+      <button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
+      <a href="{% url 'contracts:detail' project.pk contract.pk %}?pestana=actas">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

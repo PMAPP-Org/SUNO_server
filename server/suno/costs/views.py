@@ -23,11 +23,12 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from suno.budgets.excel import MAX_BYTES, ExcelRejected, check_file_name
+from suno.contracts.queries import contracts_on_item, inbox_count, inbox_items
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
 from suno.core.download import content_disposition
-from suno.core.models import CostEntry, CostKind, CostScope, CostStatus, Project
+from suno.core.models import CostEntry, CostEntryItem, CostKind, CostScope, CostStatus, Project
 from suno.core.policies import (
     can_approve_costs,
     can_create_costs,
@@ -68,6 +69,7 @@ def _context(ctx: RequestContext, project: Project) -> dict[str, Any]:
         .exclude(created_by_id=ctx.user_id)
         .exclude(updated_by_id=ctx.user_id)
         .count()
+        + inbox_count(ctx, project)
         if can_decide
         else 0
     )
@@ -126,6 +128,27 @@ def ledger_list(request: HttpRequest, project_id: UUID) -> HttpResponse:
     )
 
 
+def _contract_warning(ctx: RequestContext, project: Project, entry: CostEntry) -> str:
+    """Un costo manual de subcontrato o mano de obra sobre un ítem con contrato vigente: aviso,
+    sin bloquear (spec 4). Vacío si no aplica."""
+    if (
+        entry.certificate_id is not None
+        or entry.scope != CostScope.ITEM
+        or entry.kind not in (CostKind.SUBCONTRACT, CostKind.LABOR)
+    ):
+        return ""
+    item_id = (
+        scoped_qs(ctx, CostEntryItem).filter(entry=entry).values_list("item_id", flat=True).first()
+    )
+    numbers = contracts_on_item(ctx, project, item_id) if item_id else []
+    if not numbers:
+        return ""
+    return (
+        f"El ítem tiene contrato vigente ({', '.join(numbers)}): su costo entra por las actas. "
+        "Revisa que este costo no se cuente dos veces."
+    )
+
+
 def _entry_form(
     request: HttpRequest,
     ctx: RequestContext,
@@ -172,6 +195,9 @@ def _entry_form(
             errors = exc.errors
         else:
             messages.success(request, "Costo guardado en borrador.")
+            warning = _contract_warning(ctx, project, saved)
+            if warning:
+                messages.warning(request, warning)
             return redirect("costs:detail", project.pk, saved.pk)
     return _render(
         request,
@@ -237,9 +263,11 @@ def detail(request: HttpRequest, project_id: UUID, entry_id: UUID) -> HttpRespon
             "can_reverse": entry.status == CostStatus.APPROVED
             and entry.reverses_id is None
             and reversal is None
+            and entry.certificate_id is None
             and can_reverse_costs(ctx, project),
             "can_edit": _editable(ctx, entry),
             "can_delete": _editable(ctx, entry, delete=True),
+            "contract_warning": _contract_warning(ctx, project, entry),
         },
     )
 
@@ -307,6 +335,7 @@ def inbox(request: HttpRequest, project_id: UUID) -> HttpResponse:
         {
             **_context(ctx, project),
             "rows": [(entry, assignment_text(entry, catalog)) for entry in entries],
+            "contract_items": inbox_items(ctx, project),
         },
     )
 

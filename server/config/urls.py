@@ -33,6 +33,10 @@ urlpatterns = [
         "plataforma/proyectos/<uuid:project_id>/costos/",
         include("suno.costs.urls"),
     ),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/contratos/",
+        include("suno.contracts.urls"),
+    ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),
 ]

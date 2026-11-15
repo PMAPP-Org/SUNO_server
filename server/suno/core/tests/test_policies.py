@@ -29,7 +29,7 @@ from suno.core import policies
 from suno.core.access import AccessScope, Section, SectionRole
 from suno.core.access_services import LEGACY_GRANTS
 from suno.core.context import RequestContext, SectionAccess
-from suno.core.models import CostEntry, Device, FormTemplate, Job, Project, Record, Role
+from suno.core.models import Contract, CostEntry, Device, FormTemplate, Job, Project, Record, Role
 from suno.core.policies import (
     can_manage_device,
     can_publish_form_template,
@@ -494,6 +494,17 @@ class CostPolicyTests(SimpleTestCase):
             with self.subTest(role=role):
                 self.assertTrue(policies.can_update_cost(self.actor(role), other))
                 self.assertTrue(policies.can_delete_cost(self.actor(role), other))
+        self.assertFalse(policies.can_update_cost(self.actor(SectionRole.VIEWER), own))
+
+    def test_contracts_use_the_cost_policies(self) -> None:
+        """Costos, pieza 6b: contratos, otrosíes y actas se editan con `can_update_cost`."""
+        own = Contract(org_id=ORG, project_id=uuid.uuid4(), created_by_id=USER)
+        other = Contract(org_id=ORG, project_id=uuid.uuid4(), created_by_id=OTHER_USER)
+        contributor = self.actor(SectionRole.CONTRIBUTOR)
+        self.assertTrue(policies.can_update_cost(contributor, own))
+        self.assertFalse(policies.can_update_cost(contributor, other))
+        self.assertFalse(policies.can_delete_cost(contributor, other))
+        self.assertTrue(policies.can_update_cost(self.actor(SectionRole.REVIEWER), other))
         self.assertFalse(policies.can_update_cost(self.actor(SectionRole.VIEWER), own))
 
     def test_project_scope(self) -> None:

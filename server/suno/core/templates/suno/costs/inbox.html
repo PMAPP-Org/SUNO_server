@@ -29,6 +29,55 @@
     </tbody>
   </table>
   </div>
-  {% else %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
+  {% elif not contract_items.count %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
+  {% if contract_items.count %}
+  <h3>Contratos, otrosíes y actas</h3>
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Qué</th><th>Detalle</th><th class="num">Valor</th><th>Preparó</th><th>Soporte</th><th>Decisión</th></tr></thead>
+    <tbody>
+    {% for c in contract_items.contracts %}
+      <tr>
+        <td><a href="{% url 'contracts:detail' project.pk c.pk %}">Contrato {{ c.number }}</a></td>
+        <td class="pj-wrap">{{ c.get_kind_display }} · {{ c.contractor }}</td>
+        <td class="num">{{ c.current_value|signed }}</td>
+        <td class="pj-wrap">{{ c.created_by }}</td>
+        <td>—</td>
+        <td class="cst-decide">
+          <form method="post" action="{% url 'contracts:approve' project.pk c.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit">Aprobar</button></form>
+          <form method="post" action="{% url 'contracts:reject' project.pk c.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    {% for a in contract_items.amendments %}
+      <tr>
+        <td><a href="{% url 'contracts:detail' project.pk a.contract_id %}?pestana=otrosies">Otrosí {{ a.number }} · {{ a.contract.number }}</a></td>
+        <td class="pj-wrap">{{ a.reason }}</td>
+        <td class="num">—</td>
+        <td class="pj-wrap">{{ a.created_by }}</td>
+        <td>—</td>
+        <td class="cst-decide">
+          <form method="post" action="{% url 'contracts:approve_amendment' project.pk a.contract_id a.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit">Aprobar</button></form>
+          <form method="post" action="{% url 'contracts:reject_amendment' project.pk a.contract_id a.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    {% for c in contract_items.certificates %}
+      <tr>
+        <td><a href="{% url 'contracts:certificate' project.pk c.contract_id c.pk %}">Acta {{ c.number }} · {{ c.contract.number }}</a>{% if c.is_settlement %} <small class="cst-mark">liquidación</small>{% endif %}</td>
+        <td class="pj-wrap">{{ c.period_start|date:"d/m/Y" }} – {{ c.period_end|date:"d/m/Y" }}{% if c.adjusted %} · <span class="ctr-diff">{{ c.adjusted }} línea{{ c.adjusted|pluralize:"s" }} distinta{{ c.adjusted|pluralize:"s" }} de lo validado</span>{% endif %}</td>
+        <td class="num">{{ c.gross|signed }}</td>
+        <td class="pj-wrap">{{ c.created_by }}</td>
+        <td>{% if c.attachment_id %}<a href="{% url 'contracts:signed_copy' project.pk c.contract_id c.pk %}" target="_blank" rel="noopener">Acta firmada</a>{% else %}<span class="pj-late">Sin firmar</span>{% endif %}</td>
+        <td class="cst-decide">
+          <form method="post" action="{% url 'contracts:approve_certificate' project.pk c.contract_id c.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit"{% if not c.attachment_id %} disabled{% endif %}>Aprobar</button></form>
+          <form method="post" action="{% url 'contracts:reject_certificate' project.pk c.contract_id c.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
 </section>
 {% endblock %}

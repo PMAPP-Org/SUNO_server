@@ -12,6 +12,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from suno.contracts.tests.factories import contract_world, make_certificate, make_contract
 from suno.core.models import CostEntry, CostKind, CostScope, CostStatus, EquipmentOwnership
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -21,7 +22,14 @@ from suno.core.tests.dbsupport import (
 from suno.costs import ledger
 from suno.costs.catalog import load_catalog
 from suno.costs.export import ledger_workbook
-from suno.costs.ledger import LedgerFilters, LedgerPage, LedgerTooLarge, export_lines, ledger_page
+from suno.costs.ledger import (
+    ORIGINS,
+    LedgerFilters,
+    LedgerPage,
+    LedgerTooLarge,
+    export_lines,
+    ledger_page,
+)
 
 from .factories import cost_world, entry, equipment, item, trip, usage
 
@@ -164,3 +172,35 @@ class LedgerTests(TestCase):
         self.assertIn(">Equipo propio<", sheet)
         with mock.patch.object(ledger, "MAX_EXPORT_LINES", 2), self.assertRaises(LedgerTooLarge):
             export_lines(self.ctx, self.world.project, LedgerFilters(), catalog=self.catalog)
+
+
+@skip_without_db
+class CertificateOriginTests(TestCase):
+    """Costos, pieza 6b: origen "Actas" y la etiqueta del acta en el libro."""
+
+    def setUp(self) -> None:
+        self.cw = contract_world()
+        self.ctx = self.cw.world.ctx()
+        self.contract = make_contract(self.cw)
+        self.certificate = make_certificate(self.cw, self.contract, quantities={"2.1": "1"})
+        self.manual = entry(self.cw.world, status=CostStatus.APPROVED, description="Manual")
+        from_certificate = entry(self.cw.world, status=CostStatus.APPROVED, description="Del acta")
+        CostEntry.objects.filter(pk=from_certificate.pk).update(certificate=self.certificate)
+        self.catalog = load_catalog(self.ctx, self.cw.project)
+
+    def page(self, **query: str) -> LedgerPage:
+        return ledger_page(self.ctx, self.cw.project, LedgerFilters.from_query(query), page=1,
+                           catalog=self.catalog)  # fmt: skip
+
+    def test_origin_filter_and_label(self) -> None:
+        self.assertEqual([line.description for line in self.page(origen="actas").lines],
+                         ["Del acta"])  # fmt: skip
+        self.assertEqual([line.description for line in self.page(origen="libro").lines],
+                         ["Manual"])  # fmt: skip
+        line = self.page(origen="actas").lines[0]
+        self.assertEqual(line.certificate_label, "Acta 1 · Contrato SC-001")
+        self.assertEqual((line.certificate_id, line.contract_id),
+                         (self.certificate.pk, self.contract.pk))  # fmt: skip
+        self.assertEqual(line.origin_label, "Acta")
+        self.assertEqual(ORIGINS["libro"], "Manual")
+        self.assertFalse(LedgerFilters(origin="actas").shows_automatic)

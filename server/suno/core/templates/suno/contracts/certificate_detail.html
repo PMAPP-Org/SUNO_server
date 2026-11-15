@@ -1,0 +1,62 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Acta {{ certificate.number }} · {{ contract.number }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="contracts" %}
+{% include "suno/contracts/_nav.html" with sub="detail" %}
+<section class="pj-panel">
+  <h2>{% if certificate.is_settlement %}Acta de liquidación{% else %}Acta{% endif %} {{ certificate.number }} · <a href="{% url 'contracts:detail' project.pk contract.pk %}?pestana=actas">{{ contract.number }}</a></h2>
+  <p><span class="bg-label ctr-{{ certificate.status }}">{{ certificate.get_status_display }}</span> Periodo {{ certificate.period_start|date:"d/m/Y" }} – {{ certificate.period_end|date:"d/m/Y" }} · {{ contract.contractor }}</p>
+  {% if certificate.status == "rejected" %}<p class="pj-warning">Rechazada por {{ certificate.decided_by }}: {{ certificate.decision_note }}</p>{% endif %}
+  {% if certificate.status == "voided" %}<p class="pj-muted">Anulada por {{ certificate.voided_by }} el {{ certificate.voided_at|date:"d/m/Y" }}: {{ certificate.void_note }}</p>{% endif %}
+  <dl class="cst-facts">
+    <dt>Preparó</dt><dd>{{ certificate.created_by }} · {{ certificate.created_at|date:"d/m/Y H:i" }}</dd>
+    {% if certificate.decided_by %}<dt>{% if certificate.status == "rejected" %}Rechazó{% else %}Aprobó{% endif %}</dt><dd>{{ certificate.decided_by }} · {{ certificate.decided_at|date:"d/m/Y H:i" }}</dd>{% endif %}
+    <dt>Acta firmada</dt><dd>{% if certificate.attachment_id %}<a href="{% url 'contracts:signed_copy' project.pk contract.pk certificate.pk %}" target="_blank" rel="noopener">{{ certificate.attachment_name|default:"Ver" }}</a>{% else %}<span class="pj-late">Falta</span>{% endif %}</dd>
+  </dl>
+  <div class="ctr-actions">
+    {% if can_export_contract %}<a class="button" href="{% url 'contracts:certificate_pdf' project.pk contract.pk certificate.pk %}">Descargar PDF para firmar</a>{% endif %}
+    {% if can_edit %}<a class="button" href="{% url 'contracts:edit_certificate' project.pk contract.pk certificate.pk %}">{% if certificate.status == "rejected" %}Corregir y reenviar{% else %}Editar{% endif %}</a>{% endif %}
+    {% if can_delete %}<form method="post" action="{% url 'contracts:delete_certificate' project.pk contract.pk certificate.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar borrador</button></form>{% endif %}
+  </div>
+  {% if can_sign %}
+  <form method="post" enctype="multipart/form-data" action="{% url 'contracts:upload_signed' project.pk contract.pk certificate.pk %}" class="pj-form">
+    {% csrf_token %}
+    <label>{{ signed_form.signed.label }}{% if certificate.attachment_id %} <small>(ya tiene una; otra la reemplaza)</small>{% endif %} {{ signed_form.signed }}</label>
+    <button class="button" type="submit">Subir acta firmada</button>
+  </form>
+  {% endif %}
+  {% if can_decide %}
+  <div class="cst-decide">
+    <form method="post" action="{% url 'contracts:approve_certificate' project.pk contract.pk certificate.pk %}">{% csrf_token %}<button class="button" type="submit"{% if not certificate.attachment_id %} disabled title="Falta el acta firmada"{% endif %}>Aprobar</button></form>
+    <form method="post" action="{% url 'contracts:reject_certificate' project.pk contract.pk certificate.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo del rechazo <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Rechazar</button></form>
+  </div>
+  {% endif %}
+  {% if can_void %}<form method="post" action="{% url 'contracts:void_certificate' project.pk contract.pk certificate.pk %}" class="cst-reject">{% csrf_token %}<label>Motivo de la anulación <input name="motivo" maxlength="500" required></label><button class="text-link" type="submit">Anular acta</button></form>{% endif %}
+</section>
+<section class="pj-panel">
+  <div class="pj-scroll">
+  <table class="pj-table ctr-table">
+    <thead><tr><th>Ítem</th><th class="num">Contratado</th><th class="num">Anterior</th><th class="num">Esta acta</th><th class="num">Acumulado</th><th class="num">Saldo</th><th class="num">Valor de esta acta</th></tr></thead>
+    <tbody>
+    {% for line in document.lines %}
+      <tr>
+        <td class="pj-name">{{ line.label }}{% if line.differs %}<br><small class="ctr-diff">Propuesta {{ line.proposed|qty }} · {{ line.justification }}</small>{% endif %}</td>
+        <td class="num">{{ line.contracted|qty }}</td>
+        <td class="num">{{ line.previous|qty }}</td>
+        <td class="num">{{ line.this|qty }}</td>
+        <td class="num">{{ line.accumulated|qty }}</td>
+        <td class="num">{{ line.balance|qty }}</td>
+        <td class="num">{{ line.amount|signed }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% include "suno/contracts/_totals.html" with direct=certificate.direct gross=certificate.gross amortization=certificate.amortization retention=certificate.retention returned=certificate.retention_returned net=certificate.net charge_lines=document.charges deduction_lines=document.deductions %}
+  {% if entries %}
+  <h3>Movimientos en el libro</h3>
+  <ul>{% for e in entries %}<li><a href="{% url 'costs:detail' project.pk e.pk %}">{{ e.incurred_on|date:"d/m/Y" }} · {{ e.description }}</a> · {{ e.amount|signed }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}

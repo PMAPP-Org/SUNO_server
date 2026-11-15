@@ -27,7 +27,7 @@
       <tr{% if line.automatic %} class="cst-auto"{% endif %}>
         <td>{{ line.day|date:"d/m/Y" }}</td>
         <td>{{ line.kind }}</td>
-        <td class="pj-name">{% if line.entry_id %}<a href="{% url 'costs:detail' project.pk line.entry_id %}">{{ line.description }}</a>{% else %}{{ line.description }}{% endif %}{% if line.reversed %} <small class="cst-mark">reversado</small>{% endif %}{% if line.is_reversal %} <small class="cst-mark">reverso</small>{% endif %}</td>
+        <td class="pj-name">{% if line.entry_id %}<a href="{% url 'costs:detail' project.pk line.entry_id %}">{{ line.description }}</a>{% else %}{{ line.description }}{% endif %}{% if line.reversed %} <small class="cst-mark">reversado</small>{% endif %}{% if line.is_reversal %} <small class="cst-mark">reverso</small>{% endif %}{% if line.certificate_id %}<br><a class="cst-mark" href="{% url 'contracts:certificate' project.pk line.contract_id line.certificate_id %}">{{ line.certificate_label }}</a>{% endif %}</td>
         <td class="pj-wrap">{{ line.assignment }}</td>
         <td class="pj-wrap">{{ line.third_party }}</td>
         <td class="pj-wrap">{{ line.document }}</td>

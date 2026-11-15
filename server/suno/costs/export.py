@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 from suno.backoffice.export import safe_cell, to_xlsx
 
-from .ledger import ORIGIN_LABELS, LedgerLine
+from .ledger import LedgerLine
 
 SHEET = "Libro de costos"
 HEADER = [
@@ -25,7 +25,7 @@ def ledger_workbook(lines: Sequence[LedgerLine]) -> bytes:
             safe_cell(value)
             for value in (
                 line.day.isoformat(),
-                ORIGIN_LABELS[line.origin],
+                line.origin_label,
                 line.kind,
                 line.description,
                 line.assignment,

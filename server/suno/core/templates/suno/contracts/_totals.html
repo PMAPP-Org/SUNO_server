@@ -1,0 +1,11 @@
+{% load money_tags %}
+<dl class="ctr-totals">
+  <dt>Bruto directo</dt><dd>{{ direct|signed }}</dd>
+  {% for c in charge_lines %}<dt>{{ c.name }} ({{ c.pct|qty }} %)</dt><dd>{{ c.amount|signed }}</dd>{% endfor %}
+  <dt><strong>Bruto (va al libro)</strong></dt><dd><strong>{{ gross|signed }}</strong></dd>
+  <dt>Amortización del anticipo</dt><dd>−{{ amortization|signed }}</dd>
+  <dt>Retención de garantía</dt><dd>−{{ retention|signed }}</dd>
+  {% for d in deduction_lines %}<dt>{{ d.name }} ({{ d.pct|qty }} %)</dt><dd>−{{ d.amount|signed }}</dd>{% endfor %}
+  {% if returned %}<dt>Devolución de la retención</dt><dd>{{ returned|signed }}</dd>{% endif %}
+  <dt class="ctr-net">Neto a pagar</dt><dd class="ctr-net">{{ net|signed }}</dd>
+</dl>

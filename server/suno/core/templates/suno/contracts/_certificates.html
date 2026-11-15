@@ -1,0 +1,24 @@
+{% load money_tags %}
+<div class="ctr-actions">
+  {% if can_new_certificate %}<a class="button" href="{% url 'contracts:new_certificate' project.pk contract.pk %}">Nueva acta</a>{% endif %}
+  {% if can_settle %}<a class="text-link" href="{% url 'contracts:new_certificate' project.pk contract.pk %}?liquidacion=1">Liquidar</a>{% endif %}
+</div>
+{% if sheet.certificates %}
+<div class="pj-scroll">
+<table class="pj-table ctr-table">
+  <thead><tr><th>Acta</th><th>Periodo</th><th class="num">Bruto</th><th class="num">Neto</th><th>Estado</th><th>Preparó</th></tr></thead>
+  <tbody>
+  {% for c in sheet.certificates %}
+    <tr>
+      <td><a href="{% url 'contracts:certificate' project.pk contract.pk c.pk %}">Acta {{ c.number }}</a>{% if c.is_settlement %} <small class="cst-mark">liquidación</small>{% endif %}</td>
+      <td>{{ c.period_start|date:"d/m/Y" }} – {{ c.period_end|date:"d/m/Y" }}</td>
+      <td class="num">{{ c.gross|signed }}</td>
+      <td class="num">{{ c.net|signed }}</td>
+      <td><span class="bg-label ctr-{{ c.status }}">{{ c.get_status_display }}</span></td>
+      <td class="pj-wrap">{{ c.created_by }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="pj-empty">Todavía no hay actas.</p>{% endif %}

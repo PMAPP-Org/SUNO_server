@@ -28,7 +28,15 @@ def get_costs_project(ctx: RequestContext, project_id: UUID) -> Project:
 def get_entry(ctx: RequestContext, project: Project, entry_id: UUID) -> CostEntry:
     entry = (
         scoped_qs(ctx, CostEntry)
-        .select_related("created_by", "updated_by", "decided_by", "chapter", "task", "reverses")
+        .select_related(
+            "created_by",
+            "updated_by",
+            "decided_by",
+            "chapter",
+            "task",
+            "reverses",
+            "certificate__contract",
+        )
         .filter(pk=entry_id, project=project)
         .first()
     )

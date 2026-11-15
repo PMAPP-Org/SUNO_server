@@ -34,6 +34,7 @@ class CostDocumentType(models.TextChoices):
     COLLECTION_ACCOUNT = "collection_account", "Cuenta de cobro"
     PAYROLL = "payroll", "Nómina"
     RECEIPT = "receipt", "Recibo"
+    CERTIFICATE = "certificate", "Acta de avance"
     OTHER = "other", "Otro"
 
 
@@ -138,6 +139,16 @@ class CostEntry(OrgScopedModel):
         verbose_name="soporte",
     )
     attachment_name = models.CharField(max_length=200, blank=True, verbose_name="archivo")
+    #: El acta de contrato que lo generó (pieza 6b). No se edita ni se reversa desde el libro:
+    #: se anula el acta.
+    certificate = models.ForeignKey(
+        "core.ContractCertificate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cost_entries",
+        verbose_name="acta",
+    )
 
     class Meta:
         db_table = "cost_entry"

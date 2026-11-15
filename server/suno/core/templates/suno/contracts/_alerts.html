@@ -1,0 +1,8 @@
+{% if alerts %}
+<details class="pj-warning ctr-warning" open>
+  <summary>{{ alerts|length }} aviso{{ alerts|length|pluralize:"s" }} de contratos</summary>
+  <ul class="ctr-alerts">
+    {% for alert in alerts %}<li>{% if alert.contract_id %}<a href="{% url 'contracts:detail' project.pk alert.contract_id %}">{{ alert.text }}</a>{% else %}{{ alert.text }}{% endif %}</li>{% endfor %}
+  </ul>
+</details>
+{% endif %}

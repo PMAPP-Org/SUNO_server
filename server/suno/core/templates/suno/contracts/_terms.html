@@ -1,0 +1,22 @@
+<fieldset class="ctr-terms">
+  <legend>{{ title }}</legend>
+  {{ formset.management_form }}
+  <div class="pj-scroll">
+  <table class="pj-table">
+    <thead><tr><th>#</th><th>Nombre</th><th class="num">%</th><th>Base</th></tr></thead>
+    <tbody>
+    {% for row in formset %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td class="ctr-name"><label class="sr-only" for="{{ row.name.id_for_label }}">Nombre {{ forloop.counter }}</label>{{ row.name }}</td>
+        <td class="ctr-num"><label class="sr-only" for="{{ row.pct.id_for_label }}">Porcentaje {{ forloop.counter }}</label>{{ row.pct }}</td>
+        <td class="ctr-base"><label class="sr-only" for="{{ row.base.id_for_label }}">Base {{ forloop.counter }}</label>{{ row.base }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="pj-muted">Sin filas.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <button class="text-link" type="submit" name="accion" value="{{ action }}">Agregar fila</button>
+</fieldset>

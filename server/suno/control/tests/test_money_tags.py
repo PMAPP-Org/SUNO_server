@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.template import Context, Template
 from django.test import SimpleTestCase
 
-from suno.core.templatetags.money_tags import money, signed
+from suno.core.templatetags.money_tags import money, qty, signed
 
 D = Decimal
 
@@ -28,3 +28,9 @@ class MoneyFilterTests(SimpleTestCase):
     def test_usable_from_a_template(self) -> None:
         template = Template("{% load money_tags %}{{ v|money }} {{ v|signed }}")
         self.assertEqual(template.render(Context({"v": D("-5")})), "−$5,00 −5,00")
+
+    def test_quantities(self) -> None:
+        self.assertEqual(qty(D("1234.5000")), "1.234,5")
+        self.assertEqual(qty(D("10.0000")), "10")
+        self.assertEqual(qty(D("0.0000")), "0")
+        self.assertEqual(qty(None), "")
