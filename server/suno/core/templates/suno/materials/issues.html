@@ -1,0 +1,62 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Salidas · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="issues" %}
+{% if form %}
+<section class="pj-panel">
+  <h2>Registrar una salida</h2>
+  <form method="post" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
+    <div class="pj-form ctr-head">
+      <label>{{ form.warehouse.label }} {{ form.warehouse }}</label>
+      <label>{{ form.issued_on.label }} {{ form.issued_on }}</label>
+      <label>{{ form.received_by.label }} {{ form.received_by }}</label>
+      <label>{{ form.destination.label }} {{ form.destination }}</label>
+      <label>{{ form.task.label }} {{ form.task }}</label>
+      <label>{{ form.notes.label }} {{ form.notes }}</label>
+    </div>
+    {% include "suno/materials/_material_rows.html" with formset=lines %}
+    {% include "suno/materials/_datalists.html" %}
+    <div class="ctr-actions">
+      <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
+      <button class="button" type="submit" name="accion" value="guardar">Registrar salida</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros de salidas">
+    <label>Desde <input type="date" name="desde" value="{{ filters.start|date:'Y-m-d' }}"></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ filters.end|date:'Y-m-d' }}"></label>
+    <label>Bodega <select name="bodega"><option value="">Todas</option>{% for w in all_warehouses %}<option value="{{ w.pk }}" {% if filters.warehouse_id == w.pk %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></label>
+    <label>Destino <select name="destino"><option value="">Todos</option>{% for key, label in scopes %}<option value="{{ key }}" {% if filters.scope == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Corte <select name="corte"><option value="">Todas</option><option value="sin" {% if filters.cut == "sin" %}selected{% endif %}>Sin cortar</option><option value="con" {% if filters.cut == "con" %}selected{% endif %}>En un corte</option></select></label>
+    <button class="button" type="submit">Filtrar</button>
+    {% if can_export_material %}<a class="text-link" href="{% url 'materials:export_issues' project.pk %}{% if filters.query %}?{{ filters.query }}{% endif %}">Exportar a Excel</a>{% endif %}
+  </form>
+  {% if rows %}
+  {% if more %}<p class="pj-muted">Se muestran las 200 más recientes: filtra por fechas para ver las demás.</p>{% endif %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Número</th><th>Fecha</th><th>Bodega</th><th>Destino</th><th>Recibe</th><th class="num">Valor</th><th>Corte</th></tr></thead>
+    <tbody>
+    {% for issue, label in rows %}
+      <tr>
+        <td><a href="{% url 'materials:issue' project.pk issue.pk %}">{{ issue.code }}</a></td>
+        <td>{{ issue.issued_on|date:"d/m/Y" }}</td>
+        <td class="pj-wrap">{{ issue.warehouse.name }}</td>
+        <td class="pj-name">{{ label }}</td>
+        <td class="pj-wrap">{{ issue.received_by|default:"—" }}</td>
+        <td class="num">{{ issue.total|signed }}</td>
+        <td>{% if issue.cut %}{{ issue.cut.code }}{% else %}<span class="pj-muted">Sin cortar</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay salidas con estos filtros.</p>{% endif %}
+</section>
+{% endblock %}

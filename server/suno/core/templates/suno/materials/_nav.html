@@ -1,7 +1,9 @@
 <nav class="pj-tabs mat-nav" aria-label="Materiales">
   <a href="{% url 'materials:inventory' project.pk %}" {% if sub == "inventory" %}aria-current="page"{% endif %}>Inventario</a>
   <a href="{% url 'materials:purchases' project.pk %}" {% if sub == "purchases" %}aria-current="page"{% endif %}>Compras</a>
-  {# salidas, traslados, ajustes, cortes #}
+  <a href="{% url 'materials:issues' project.pk %}" {% if sub == "issues" %}aria-current="page"{% endif %}>Salidas</a>
+  <a href="{% url 'materials:transfers' project.pk %}" {% if sub == "transfers" %}aria-current="page"{% endif %}>Traslados</a>
+  {# ajustes, cortes #}
   <a href="{% url 'materials:warehouses' project.pk %}" {% if sub == "warehouses" %}aria-current="page"{% endif %}>Bodegas</a>
   <a href="{% url 'materials_catalog:list' %}">Catálogo</a>
 </nav>

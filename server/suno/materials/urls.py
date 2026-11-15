@@ -2,12 +2,13 @@
 
 from django.urls import path
 
-from . import views, views_purchases
+from . import views, views_movements, views_purchases
 
 app_name = "materials"
 
 K = "kardex/<uuid:warehouse_id>/<uuid:material_id>/"
 P = "compras/<uuid:purchase_id>/"
+S = "salidas/<uuid:issue_id>/"
 
 urlpatterns = [
     path("", views.inventory, name="inventory"),
@@ -26,4 +27,12 @@ urlpatterns = [
     path(P + "aprobar/", views_purchases.purchase_approve, name="approve_purchase"),
     path(P + "rechazar/", views_purchases.purchase_reject, name="reject_purchase"),
     path(P + "anular/", views_purchases.purchase_void, name="void_purchase"),
+    path("salidas/", views_movements.issue_list, name="issues"),
+    path("salidas.xlsx", views_movements.export_issues, name="export_issues"),
+    path(S, views_movements.issue_detail, name="issue"),
+    path(S + "editar/", views_movements.issue_edit, name="edit_issue"),
+    path(S + "borrar/", views_movements.issue_delete, name="delete_issue"),
+    path(S + "devolver/", views_movements.issue_return, name="return_issue"),
+    path("traslados/", views_movements.transfer_list, name="transfers"),
+    path("traslados/<uuid:transfer_id>/", views_movements.transfer_detail, name="transfer"),
 ]

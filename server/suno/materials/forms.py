@@ -20,6 +20,8 @@ from suno.core.context import RequestContext
 from suno.core.models import (
     CostDocumentType,
     Material,
+    MaterialIssue,
+    MaterialIssueLine,
     MaterialPurchase,
     MaterialPurchaseLine,
     PurchaseKind,
@@ -31,6 +33,7 @@ from suno.costs.catalog import Catalog
 
 from .catalog_services import MAX_CATEGORY, MAX_CODE, MAX_NAME, MAX_UNIT, MaterialData
 from .destination import DestinationData, destination_text, parse_destination
+from .movements import IssueData, IssueLineData, ReturnData, ReturnLineData, TransferData
 from .purchases import PurchaseData, PurchaseLineData
 
 #: Filas vacías que agrega "Agregar líneas" y filas de un formulario nuevo.
@@ -282,3 +285,150 @@ def purchase_initial(
         for line in lines
     ]
     return header, rows
+
+
+class MaterialLineForm(forms.Form):
+    """Una fila de material y cantidad (salidas y traslados)."""
+
+    material = material_field()
+    quantity = forms.DecimalField(
+        label="Cantidad", required=False, max_digits=18, decimal_places=4, min_value=0
+    )
+
+
+MaterialLineFormSet = formset_factory(MaterialLineForm, extra=0)
+
+
+def read_material_lines(
+    formset: Any, index: MaterialIndex
+) -> tuple[list[IssueLineData], list[str]]:
+    """Las filas con material (las vacías se ignoran). Formset ya validado."""
+    lines: list[IssueLineData] = []
+    errors: list[str] = []
+    for n, form in enumerate(formset.forms, start=1):
+        text = (form.cleaned_data.get("material") or "").strip()
+        if not text:
+            continue
+        material = index.find(text)
+        amount = form.cleaned_data.get("quantity")
+        if material is None:
+            errors.append(f"Línea {n}: «{text}» no está en el catálogo; elígelo de la lista.")
+        elif amount is None:
+            errors.append(f"Línea {n}: Escribe la cantidad.")
+        else:
+            lines.append(IssueLineData(material.pk, amount))
+    return lines, errors
+
+
+def material_rows(lines: Sequence[Any]) -> list[dict[str, Any]]:
+    """Filas para editar (líneas con `select_related("material")`)."""
+    return [{"material": line.material.label, "quantity": plain(line.quantity)} for line in lines]
+
+
+class IssueForm(forms.Form):
+    warehouse = forms.ChoiceField(label="Bodega")
+    issued_on = forms.DateField(label="Fecha", widget=date_input())
+    received_by = forms.CharField(label="Recibe", max_length=120, required=False)
+    destination = destination_field()
+    task = forms.ChoiceField(label="Tarea", required=False)
+    notes = forms.CharField(label="Notas", max_length=500, required=False)
+
+    def __init__(
+        self,
+        *args: Any,
+        warehouses: Sequence[Warehouse],
+        tasks: Mapping[UUID, Task],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["warehouse"].choices = warehouse_choices(warehouses)
+        self.fields["task"].choices = task_choices(tasks)
+
+    def issue_data(
+        self, lines: Sequence[IssueLineData], catalog: Catalog
+    ) -> tuple[IssueData | None, str]:
+        data = self.cleaned_data
+        task = data.get("task") or ""
+        destination, error = parse_destination(
+            data.get("destination") or "", catalog, UUID(task) if task else None
+        )
+        if destination is None:
+            return None, error
+        return (
+            IssueData(
+                warehouse_id=UUID(data["warehouse"]) if data.get("warehouse") else None,
+                issued_on=data["issued_on"],
+                destination=destination,
+                lines=tuple(lines),
+                received_by=data.get("received_by") or "",
+                notes=data.get("notes") or "",
+            ),
+            "",
+        )
+
+
+def issue_initial(issue: MaterialIssue, catalog: Catalog) -> dict[str, Any]:
+    """El encabezado para editar (con `prefetch_related("item_links")`)."""
+    return {
+        "warehouse": str(issue.warehouse_id),
+        "issued_on": issue.issued_on,
+        "received_by": issue.received_by,
+        "destination": destination_text(
+            catalog,
+            issue.scope,
+            issue.chapter_id,
+            [link.item_id for link in issue.item_links.all()],
+        ),
+        "task": str(issue.task_id or ""),
+        "notes": issue.notes,
+    }
+
+
+class ReturnForm(forms.Form):
+    returned_on = forms.DateField(label="Fecha de la devolución", widget=date_input())
+    notes = forms.CharField(label="Notas", max_length=500, required=False)
+
+    def __init__(self, *args: Any, lines: Sequence[MaterialIssueLine], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.lines = list(lines)
+        for line in self.lines:
+            self.fields[f"devolver_{line.pk}"] = forms.DecimalField(
+                label="Vuelve", required=False, max_digits=18, decimal_places=4, min_value=0
+            )
+
+    def line_fields(self) -> list[tuple[MaterialIssueLine, Any]]:
+        return [(line, self[f"devolver_{line.pk}"]) for line in self.lines]
+
+    def return_data(self) -> ReturnData:
+        data = self.cleaned_data
+        return ReturnData(
+            returned_on=data["returned_on"],
+            lines=tuple(
+                ReturnLineData(line.pk, data[f"devolver_{line.pk}"])
+                for line in self.lines
+                if data.get(f"devolver_{line.pk}")
+            ),
+            notes=data.get("notes") or "",
+        )
+
+
+class TransferForm(forms.Form):
+    source = forms.ChoiceField(label="Sale de")
+    target = forms.ChoiceField(label="Entra a")
+    moved_on = forms.DateField(label="Fecha", widget=date_input())
+    notes = forms.CharField(label="Notas", max_length=500, required=False)
+
+    def __init__(self, *args: Any, warehouses: Sequence[Warehouse], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["source"].choices = warehouse_choices(warehouses)
+        self.fields["target"].choices = warehouse_choices(warehouses)
+
+    def transfer_data(self, lines: Sequence[IssueLineData]) -> TransferData:
+        data = self.cleaned_data
+        return TransferData(
+            source_id=UUID(data["source"]) if data.get("source") else None,
+            target_id=UUID(data["target"]) if data.get("target") else None,
+            moved_on=data["moved_on"],
+            lines=tuple(lines),
+            notes=data.get("notes") or "",
+        )

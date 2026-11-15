@@ -1,0 +1,51 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Salida {{ issue.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="issues" %}
+<section class="pj-panel cst-detail">
+  <h2>Salida {{ issue.code }}</h2>
+  <dl class="cst-facts">
+    <dt>Fecha</dt><dd>{{ issue.issued_on|date:"d/m/Y" }}</dd>
+    <dt>Bodega</dt><dd>{{ issue.warehouse.name }}</dd>
+    <dt>Destino</dt><dd>{{ label }}</dd>
+    <dt>Recibe</dt><dd>{{ issue.received_by|default:"—" }}</dd>
+    <dt>Valor</dt><dd>{{ issue.total|money }}</dd>
+    <dt>Corte</dt><dd>{% if issue.cut %}{{ issue.cut.code }}{% else %}Sin cortar{% endif %}</dd>
+    <dt>Registró</dt><dd>{{ issue.created_by }} · {{ issue.created_at|date:"d/m/Y H:i" }}</dd>
+    {% if issue.notes %}<dt>Notas</dt><dd>{{ issue.notes }}</dd>{% endif %}
+  </dl>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Costo unitario</th><th class="num">Valor</th><th class="num">Devuelto</th></tr></thead>
+    <tbody>{% for line, back in lines %}<tr><td class="pj-name">{{ line.material.code }} · {{ line.material.name }}</td><td class="num">{{ line.quantity|qty }} {{ line.material.unit }}</td><td class="num">{{ line.unit_cost|money }}</td><td class="num">{{ line.amount|signed }}</td><td class="num">{{ back|qty|default:"—" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  <div class="ctr-actions">
+    {% if can_edit %}<a class="button" href="{% url 'materials:edit_issue' project.pk issue.pk %}">Editar</a>{% endif %}
+    {% if can_delete %}<form method="post" action="{% url 'materials:delete_issue' project.pk issue.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar</button></form>{% endif %}
+  </div>
+  {% if returns %}<h3>Devoluciones</h3><ul>{% for r in returns %}<li>{{ r.code }} · {{ r.returned_on|date:"d/m/Y" }} · {{ r.total|money }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% if return_form %}
+<section class="pj-panel">
+  <h2>Registrar devolución</h2>
+  <form method="post" action="{% url 'materials:return_issue' project.pk issue.pk %}" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    <div class="pj-form ctr-head">
+      <label>{{ return_form.returned_on.label }} {{ return_form.returned_on }}</label>
+      <label>{{ return_form.notes.label }} {{ return_form.notes }}</label>
+    </div>
+    <div class="pj-scroll">
+    <table class="pj-table mat-lines">
+      <thead><tr><th>Material</th><th class="num">Salió</th><th class="num">Vuelve</th></tr></thead>
+      <tbody>{% for line, field in return_form.line_fields %}<tr><td class="pj-name">{{ line.material.code }} · {{ line.material.name }}</td><td class="num">{{ line.quantity|qty }}</td><td class="mat-num"><label class="sr-only" for="{{ field.id_for_label }}">Cantidad que vuelve de {{ line.material.name }}</label>{{ field }}</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    <p class="pj-muted">Vuelve al costo de la salida y llega al libro restando en el corte del periodo.</p>
+    <div class="ctr-actions"><button class="button" type="submit">Registrar devolución</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

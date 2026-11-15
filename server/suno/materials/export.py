@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from suno.backoffice.export import safe_cell, to_xlsx
+from suno.core.models import MaterialIssueLine
 
 from .queries import InventoryRow, Kardex
 
@@ -63,4 +64,35 @@ def kardex_workbook(sheet: Kardex) -> bytes:
             for row in sheet.rows
         ],
         sheet_name="Kárdex",
+    )
+
+
+ISSUES_HEADER = [
+    "salida", "fecha", "bodega", "destino", "recibe", "codigo", "material", "unidad",
+    "cantidad", "costo_unitario", "valor", "corte",
+]  # fmt: skip
+
+
+def issues_workbook(lines: Sequence[tuple[MaterialIssueLine, str]]) -> bytes:
+    """Las líneas de salida de un periodo, con la etiqueta de su destino."""
+    return to_xlsx(
+        ISSUES_HEADER,
+        [
+            [
+                line.issue.code,
+                line.issue.issued_on.isoformat(),
+                safe_cell(line.issue.warehouse.name),
+                safe_cell(destination),
+                safe_cell(line.issue.received_by),
+                safe_cell(line.material.code),
+                safe_cell(line.material.name),
+                safe_cell(line.material.unit),
+                number(line.quantity),
+                number(line.unit_cost),
+                number(line.amount),
+                line.issue.cut.code if line.issue.cut else "",
+            ]
+            for line, destination in lines
+        ],
+        sheet_name="Salidas",
     )
