@@ -18,7 +18,17 @@ from suno.control.earned_value import compute
 from suno.control.loader import load_control_input
 from suno.control.periods import MONTH
 from suno.core.context import Principal, resolve_request_context
-from suno.core.models import CostEntry, CostStatus, Project, Role
+from suno.core.models import (
+    CertificateStatus,
+    Contract,
+    ContractAmendment,
+    ContractCertificate,
+    CostEntry,
+    CostKind,
+    CostStatus,
+    Project,
+    Role,
+)
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -118,4 +128,28 @@ class SeedControlDemoTests(TestCase):
             entries.filter(
                 status=CostStatus.APPROVED, reverses__isnull=True, attachment=None
             ).exists()
+        )
+
+    def test_seeds_contracts_amendment_certificates_and_piecework(self) -> None:
+        self.seed()
+        project = Project.objects.get(org=self.org, name=PROJECT_NAME)
+        contracts = Contract.objects.filter(project=project)
+        self.assertEqual(
+            set(contracts.values_list("number", "status")),
+            {("SC-001", "approved"), ("DT-001", "approved"), ("SC-002", "settled"),
+             ("SC-003", "draft")},
+        )  # fmt: skip
+        self.assertEqual(contracts.get(number="DT-001").kind, "piecework")
+        self.assertTrue(
+            ContractAmendment.objects.filter(contract__number="SC-001", status="approved").exists()
+        )
+        certificates = ContractCertificate.objects.filter(project=project)
+        self.assertTrue(certificates.filter(status=CertificateStatus.VOIDED).exists())
+        self.assertTrue(certificates.filter(is_settlement=True, status="approved").exists())
+        self.assertTrue(certificates.filter(status="draft").exclude(attachment=None).exists())
+        entries = CostEntry.objects.filter(project=project, certificate__isnull=False)
+        self.assertTrue(entries.filter(reverses__isnull=False).exists())
+        self.assertTrue(entries.filter(kind=CostKind.LABOR).exists())
+        self.assertFalse(
+            CostEntry.objects.filter(project=project, description__startswith="Acta 1: ").exists()
         )

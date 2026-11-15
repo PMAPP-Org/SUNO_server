@@ -9,7 +9,9 @@ sobreejecución, un ajuste negativo, una cantidad fuera del plan y un registro s
 (que no cuenta). Desde la pieza 6a también siembra el libro de costos: cargos AIU (Administración
 del 8 %), un residente que registra y el administrador que aprueba, movimientos de todos los
 tipos y asignaciones, un borrador, un rechazado, un reverso, un equipo propio con y sin ítem y
-viajes de un transportador.
+viajes de un transportador. Desde la pieza 6b también siembra contratos: un subcontrato con un
+otrosí y actas (una anulada y una en borrador firmada), un destajo, un subcontrato liquidado y un
+borrador por aprobar.
 
 Escribe sin pasar por las importaciones (como `bootstrap_demo`): lo que interesa es el estado
 final. Es aprovisionamiento offline y por eso figura en `ALLOWED` de `test_architecture.py`.
@@ -32,6 +34,12 @@ from django.utils import timezone
 
 from suno.attachments.web import store_upload
 from suno.budgets.totals import BASE_DIRECT, ChargeSpec, compute_charges, line_base, money
+from suno.contracts import certificates as contract_certificates
+from suno.contracts import services as contract_services
+from suno.contracts.certificates import CertificateData, CertificateLineData
+from suno.contracts.services import AmendmentData, ContractData, IncreaseData, LineData
+from suno.core.access import AccessScope, Section, SectionRole
+from suno.core.access_services import set_section_grant
 from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     AppUser,
@@ -42,6 +50,8 @@ from suno.core.models import (
     BudgetRowKind,
     BudgetVersion,
     BudgetVersionStatus,
+    ContractKind,
+    ContractLine,
     CostDocumentType,
     CostEntry,
     CostEntryItem,
@@ -166,10 +176,6 @@ K, S, DOC = CostKind, CostScope, CostDocumentType
 COSTS = [
     Cost(10, K.MATERIALS, S.ITEM, ("1.1",), "", "11800000", "Estacas, pintura y mojones",
          "Topografía del Norte SAS", DOC.INVOICE, "Localización y replanteo"),
-    Cost(25, K.SUBCONTRACT, S.CHAPTER, (), "2", "46000000", "Acta 1: movimiento de tierras",
-         "Excavaciones Andinas SAS", DOC.COLLECTION_ACCOUNT),
-    Cost(60, K.SUBCONTRACT, S.CHAPTER, (), "2", "51500000", "Acta 2: movimiento de tierras",
-         "Excavaciones Andinas SAS", DOC.COLLECTION_ACCOUNT),
     Cost(70, K.RENTED_EQUIPMENT, S.ITEM, ("2.1",), "", "18500000",
          "Retroexcavadora alquilada (contratista)", "Alquileres del Valle", DOC.INVOICE,
          "Excavación frente sur"),
@@ -252,6 +258,7 @@ class _Seeder:
         )
         self._record(tasks["Zapatas eje A"], self.today, [_row(items["3.1"], Decimal("5"))])
         self._costs(project, start, items, tasks)
+        self._contracts(project, start, items, tasks)
         return project
 
     def _budget(self, project: Project) -> dict[str, BudgetItem]:
@@ -675,6 +682,148 @@ class _Seeder:
                 received_by=self.admin,
                 created_by=self.admin,
             )
+
+    def _upload(self) -> Any:
+        return SimpleUploadedFile("acta-firmada.pdf", DEMO_PDF, content_type="application/pdf")
+
+    def _certificate(
+        self,
+        project: Project,
+        contract_id: Any,
+        start: date,
+        end: date,
+        *,
+        author: Any,
+        approver: Any | None,
+        lines: tuple[CertificateLineData, ...] = (),
+        settlement: bool = False,
+    ) -> Any:
+        """Prepara un acta (con el firmado subido) y, si hay `approver`, la aprueba."""
+        certificate = contract_certificates.create_certificate(
+            author, project, contract_id, CertificateData(start, end, lines), settlement=settlement
+        )
+        contract_certificates.attach_signed(
+            author, project, contract_id, certificate.pk, self._upload(), "acta-firmada.pdf"
+        )
+        if approver is None:
+            return certificate
+        return contract_certificates.approve_certificate(
+            approver, project, contract_id, certificate.pk
+        )
+
+    def _contracts(
+        self,
+        project: Project,
+        start: date,
+        items: dict[str, BudgetItem],
+        tasks: dict[str, Task],
+    ) -> None:
+        """Contratos por los servicios: el residente (Revisor de Costos) prepara y el
+        administrador aprueba; en la liquidación, al revés."""
+        resident = self._resident()
+        set_section_grant(
+            self.ctx,
+            user_id=resident.pk,
+            section=Section.COSTS,
+            role=SectionRole.REVIEWER,
+            scope=AccessScope.ORGANIZATION,
+        )
+        office = resolve_request_context(Principal(user_id=resident.pk, org_id=self.org.pk))
+        admin = self.ctx
+        aiu = tuple(CHARGES)
+        withholdings = (
+            ChargeSpec(1, "Retención en la fuente", Decimal("2"), BASE_DIRECT),
+            ChargeSpec(2, "ReteICA", Decimal("0.966"), BASE_DIRECT),
+            ChargeSpec(3, "ReteIVA", Decimal("15"), line_base(4)),
+        )
+
+        def line(code: str, quantity: str, price: str, *names: str) -> LineData:
+            return LineData(
+                items[code].pk, tuple(tasks[name].pk for name in names), "", Decimal(quantity),
+                Decimal(price),
+            )  # fmt: skip
+
+        def contract(data: ContractData, *, approve: bool = True) -> Any:
+            created = contract_services.create_contract(office, project, data)
+            if approve:
+                contract_services.approve_contract(admin, project, created.pk)
+            return created
+
+        def day(offset: int) -> date:
+            return start + timedelta(days=offset)
+
+        # SC-001: movimiento de tierras, con un otrosí y tres actas (la tercera, anulada).
+        earthworks = contract(
+            ContractData(
+                kind=str(ContractKind.SUBCONTRACT), number="SC-001",
+                purpose="Movimiento de tierras: excavación y rellenos",
+                contractor="Excavaciones Andinas SAS", starts_on=day(30), ends_on=day(150),
+                advance_pct=Decimal("20"), retention_pct=Decimal("5"),
+                lines=(
+                    line("2.1", "2600", "26000", "Excavación frente norte",
+                         "Excavación frente sur"),
+                    line("2.2", "1800", "42000", "Rellenos"),
+                ),
+                charges=aiu, deductions=withholdings,
+            )
+        )  # fmt: skip
+        excavation = contract_services.active_lines(
+            ContractLine.objects.filter(contract=earthworks)
+        ).get(item=items["2.1"])
+        amendment = contract_services.create_amendment(
+            office, project, earthworks.pk,
+            AmendmentData(day(80), "Mayor volumen de excavación en el frente sur", day(200),
+                          (IncreaseData(excavation.pk, Decimal("200")),)),
+        )  # fmt: skip
+        contract_services.approve_amendment(admin, project, earthworks.pk, amendment.pk)
+        self._certificate(project, earthworks.pk, day(30), day(90), author=office, approver=admin)
+        self._certificate(project, earthworks.pk, day(91), day(150), author=office, approver=admin)
+        closing = (CertificateLineData(excavation.pk, Decimal("20"), "Medición de cierre"),)
+        wrong = self._certificate(project, earthworks.pk, day(151), day(170), author=office,
+                                  approver=admin, lines=closing)  # fmt: skip
+        contract_certificates.void_certificate(
+            admin, project, earthworks.pk, wrong.pk, "Error en la medición de cierre"
+        )
+        self._certificate(project, earthworks.pk, day(151), self.today - timedelta(days=3),
+                          author=office, approver=None, lines=closing)  # fmt: skip
+        # DT-001: destajo de armado de acero (va al libro como mano de obra); vencido.
+        steel = contract(
+            ContractData(
+                kind=str(ContractKind.PIECEWORK), number="DT-001",
+                purpose="Armado de acero de zapatas",
+                contractor="Cuadrilla Pérez", starts_on=day(98), ends_on=day(170),
+                advance_pct=Decimal("0"), retention_pct=Decimal("0"),
+                lines=(line("3.2", "21000", "1200", "Zapatas eje A", "Zapatas eje B"),),
+            )
+        )  # fmt: skip
+        self._certificate(project, steel.pk, day(98), day(160), author=office, approver=admin)
+        # SC-002: redes, con un acta y la liquidación (la prepara el Gestor y aprueba otro).
+        networks = contract(
+            ContractData(
+                kind=str(ContractKind.SUBCONTRACT), number="SC-002", purpose="Tubería principal",
+                contractor="Tuberías y Accesorios SAS", starts_on=day(150), ends_on=day(260),
+                advance_pct=Decimal("0"), retention_pct=Decimal("5"),
+                lines=(line("4.1", "900", "70000", "Tubería principal"),),
+                charges=(ChargeSpec(1, "IVA", Decimal("19"), BASE_DIRECT),),
+            )
+        )  # fmt: skip
+        self._certificate(project, networks.pk, day(150), self.today - timedelta(days=10),
+                          author=office, approver=admin)  # fmt: skip
+        self._certificate(project, networks.pk, self.today - timedelta(days=9),
+                          self.today - timedelta(days=1), author=admin, approver=office,
+                          settlement=True)  # fmt: skip
+        # SC-003: borrador por aprobar (en la bandeja del administrador).
+        contract(
+            ContractData(
+                kind=str(ContractKind.SUBCONTRACT), number="SC-003",
+                purpose="Cámaras de inspección",
+                contractor="Redes del Valle SAS", starts_on=day(196), ends_on=day(256),
+                advance_pct=Decimal("10"), retention_pct=Decimal("5"),
+                lines=(line("4.2", "18", "2300000", "Cámaras de inspección"),),
+                charges=(ChargeSpec(1, "IVA", Decimal("19"), BASE_DIRECT),),
+            ),
+            approve=False,
+        )  # fmt: skip
 
 
 class Command(BaseCommand):
