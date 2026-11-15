@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.19.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.18.0...v0.19.0) (2026-11-15)
+
+
+### Agregado
+
+* **contracts:** subcontracts and piecework with certificates posted to the cost ledger ([#79](https://github.com/PMAPP-Org/SUNO_server/issues/79)) ([3bbd619](https://github.com/PMAPP-Org/SUNO_server/commit/3bbd619d0a218fdd3e86a8d63d816e418481418f))
+
 ## [0.18.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.17.3...v0.18.0) (2026-11-14)
 
 
