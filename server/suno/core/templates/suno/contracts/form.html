@@ -1,0 +1,50 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{% if contract %}Editar contrato{% else %}Nuevo contrato{% endif %} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="contracts" %}
+{% include "suno/contracts/_nav.html" with sub="new" %}
+{% if not contract %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Paso 1: tipo y plantillas">
+    <label>Tipo <select name="tipo">{% for key, label in kinds %}<option value="{{ key }}" {% if form.kind.value == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Cargos <select name="plantilla">{% for key, label in charge_templates.items %}<option value="{{ key }}" {% if request.GET.plantilla == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Descuentos <select name="descuentos">{% for key, label in deduction_templates.items %}<option value="{{ key }}" {% if request.GET.descuentos == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Aplicar</button>
+  </form>
+  <p class="pj-muted">Un destajo arranca sin cargos, sin anticipo y sin garantía. Las plantillas se pueden ajustar abajo.</p>
+</section>
+{% endif %}
+<section class="pj-panel">
+  <h2>{% if contract %}Editar contrato {{ contract.number }}{% else %}Nuevo contrato{% endif %}</h2>
+  {% if contract.rejection_note %}<p class="pj-warning">Devuelto por {{ contract.rejected_by }}: {{ contract.rejection_note }}. Al guardarlo queda listo para aprobar otra vez.</p>{% endif %}
+  <form method="post" class="ctr-form">
+    {% csrf_token %}
+    {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><p>No se pudo guardar:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
+    {% if overlaps %}
+    <div class="pj-warning" role="alert">
+      <p>Otro contrato (o línea) ya cubre lo mismo:</p>
+      <ul>{% for o in overlaps %}<li>{{ o }}</li>{% endfor %}</ul>
+      <label class="cst-check">{{ form.confirm_overlap }} {{ form.confirm_overlap.label }}</label>
+    </div>
+    {% endif %}
+    <div class="pj-form ctr-head">
+      <label>{{ form.kind.label }} {{ form.kind }}</label>
+      <label>{{ form.number.label }} {{ form.number }}</label>
+      <label>{{ form.purpose.label }} {{ form.purpose }}</label>
+      <label>{{ form.contractor.label }} {{ form.contractor }}</label>
+      <label>{{ form.starts_on.label }} {{ form.starts_on }}</label>
+      <label>{{ form.ends_on.label }} {{ form.ends_on }}</label>
+      <label>{{ form.advance_pct.label }} {{ form.advance_pct }}</label>
+      <label>{{ form.retention_pct.label }} {{ form.retention_pct }}</label>
+    </div>
+    <h3>Líneas</h3>
+    {% include "suno/contracts/_rows.html" with formset=lines %}
+    <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
+    {% include "suno/contracts/_terms.html" with formset=charges title="Cargos (AIU, IVA…)" action="cargos" %}
+    {% include "suno/contracts/_terms.html" with formset=deductions title="Descuentos de cada acta (retenciones, estampillas…)" action="descuentos" %}
+    <p class="pj-muted">Anticipo y retención de garantía se descuentan en cada acta; no son costo.</p>
+    <div class="ctr-actions"><button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
+    <a href="{% if contract %}{% url 'contracts:detail' project.pk contract.pk %}{% else %}{% url 'contracts:list' project.pk %}{% endif %}">Cancelar</a></div>
+  </form>
+</section>
+{% endblock %}

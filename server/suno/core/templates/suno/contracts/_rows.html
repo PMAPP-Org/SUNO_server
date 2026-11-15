@@ -1,0 +1,20 @@
+{{ formset.management_form }}
+<div class="pj-scroll">
+<table class="pj-table ctr-lines">
+  <thead><tr><th>#</th><th>Ítem</th><th>Tareas</th><th>Unidad</th><th class="num">Cantidad</th><th class="num">Precio unitario</th></tr></thead>
+  <tbody>
+  {% for row in formset %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td class="ctr-item"><label class="sr-only" for="{{ row.item.id_for_label }}">Ítem de la línea {{ forloop.counter }}</label>{{ row.item }}</td>
+      <td><label class="sr-only" for="{{ row.tasks.id_for_label }}">Tareas de la línea {{ forloop.counter }}</label>{{ row.tasks }}</td>
+      <td class="ctr-unit"><label class="sr-only" for="{{ row.unit.id_for_label }}">Unidad de la línea {{ forloop.counter }}</label>{{ row.unit }}</td>
+      <td class="ctr-num"><label class="sr-only" for="{{ row.quantity.id_for_label }}">Cantidad de la línea {{ forloop.counter }}</label>{{ row.quantity }}</td>
+      <td class="ctr-num"><label class="sr-only" for="{{ row.unit_price.id_for_label }}">Precio de la línea {{ forloop.counter }}</label>{{ row.unit_price }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<datalist id="ctr-items">{% for row in catalog.items %}<option value="{{ row.label }}">{% endfor %}</datalist>
+<p class="pj-muted">Tareas: números de esquema separados por comas (por ejemplo 1.2, 2.1). Vacío: todas las tareas del ítem.</p>

@@ -1,0 +1,20 @@
+{% load money_tags %}
+{% if sheet.certificates %}
+<div class="pj-scroll">
+<table class="pj-table ctr-table">
+  <thead><tr><th>Acta</th><th>Periodo</th><th class="num">Bruto</th><th class="num">Neto</th><th>Estado</th><th>Preparó</th></tr></thead>
+  <tbody>
+  {% for c in sheet.certificates %}
+    <tr>
+      <td>Acta {{ c.number }}{% if c.is_settlement %} <small class="cst-mark">liquidación</small>{% endif %}</td>
+      <td>{{ c.period_start|date:"d/m/Y" }} – {{ c.period_end|date:"d/m/Y" }}</td>
+      <td class="num">{{ c.gross|signed }}</td>
+      <td class="num">{{ c.net|signed }}</td>
+      <td><span class="bg-label ctr-{{ c.status }}">{{ c.get_status_display }}</span></td>
+      <td class="pj-wrap">{{ c.created_by }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="pj-empty">Todavía no hay actas.</p>{% endif %}

@@ -37,3 +37,15 @@ def signed(value: Any) -> str:
     """El importe sin símbolo, con el signo menos tipográfico: `−1.234,50`."""
     parts = _parts(value)
     return "" if parts is None else f"{parts[0]}{parts[1]}"
+
+
+@register.filter
+def qty(value: Any) -> str:
+    """Una cantidad sin ceros de sobra, con punto de miles y coma decimal: `1234.5000` →
+    `1.234,5`; vacío si no hay valor (costos, pieza 6b)."""
+    if value is None or value == "":
+        return ""
+    amount = Decimal(value).normalize()
+    exponent = amount.as_tuple().exponent
+    places = -exponent if isinstance(exponent, int) and exponent < 0 else 0
+    return floatformat(amount, f"{places}g")

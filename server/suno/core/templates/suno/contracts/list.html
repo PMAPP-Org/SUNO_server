@@ -1,0 +1,43 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Contratos · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="contracts" %}
+{% include "suno/contracts/_nav.html" with sub="list" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros de contratos">
+    <label>Tipo <select name="tipo"><option value="">Todos</option>{% for key, label in kinds %}<option value="{{ key }}" {% if filters.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado"><option value="">Todos</option>{% for key, label in statuses %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Filtrar</button>
+  </form>
+  {% include "suno/contracts/_alerts.html" %}
+</section>
+<section class="pj-panel">
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table ctr-table">
+    <caption class="sr-only">Contratos del proyecto</caption>
+    <thead><tr><th>Número</th><th>Tipo</th><th>Contratista</th><th>Objeto</th><th class="num">Valor vigente</th><th class="num">Ejecutado</th><th class="num">%</th><th class="num">Anticipo por amortizar</th><th class="num">Retenido</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td><a href="{% url 'contracts:detail' project.pk row.contract.pk %}">{{ row.contract.number }}</a></td>
+        <td>{{ row.contract.get_kind_display }}</td>
+        <td class="pj-wrap">{{ row.contract.contractor }}</td>
+        <td class="pj-name">{{ row.contract.purpose }}</td>
+        <td class="num">{{ row.contract.current_value|signed }}</td>
+        <td class="num">{{ row.progress.executed|signed }}</td>
+        <td class="num">{% if row.executed_pct is not None %}{{ row.executed_pct|floatformat:1 }}{% else %}—{% endif %}</td>
+        <td class="num">{{ row.advance_balance|signed }}</td>
+        <td class="num">{{ row.retained|signed }}</td>
+        <td><span class="bg-label ctr-{{ row.contract.status }}">{{ row.contract.get_status_display }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="pj-empty">No hay contratos con estos filtros.{% if can_create_contract %} <a href="{% url 'contracts:new' project.pk %}">Registra uno</a>.{% endif %}</p>
+  {% endif %}
+</section>
+{% endblock %}
