@@ -71,6 +71,10 @@ APPROVED_IS_FINAL = "Un costo aprobado no se cambia ni se borra: se reversa."
 FROM_CERTIFICATE = (
     "Este costo viene de un acta de contrato: se anula el acta desde la pestaña Contratos."
 )
+FROM_MATERIALS = (
+    "Este costo viene de una compra, un corte o un ajuste de materiales: se anula el documento "
+    "desde la pestaña Materiales."
+)
 
 
 class CostRejected(Exception):
@@ -456,8 +460,10 @@ def reverse(ctx: RequestContext, project: Project, entry_id: UUID, reason: str) 
             raise PermissionDenied
         if original.status != CostStatus.APPROVED or original.reverses_id is not None:
             raise CostRejected(["Solo se reversa un costo aprobado que no sea un reverso."])
-        if original.certificate_id is not None:
-            raise CostRejected([FROM_CERTIFICATE])
+        if original.from_document:
+            raise CostRejected(
+                [FROM_CERTIFICATE if original.certificate_id is not None else FROM_MATERIALS]
+            )
         if scoped_qs(ctx, CostEntry).filter(reverses=original).exists():
             raise CostRejected(["Este costo ya se reversó."])
         reversal = scoped_qs(ctx, CostEntry).create(

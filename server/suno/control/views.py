@@ -28,6 +28,7 @@ from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.download import content_disposition
 from suno.core.policies import can_export_budgets, can_read_costs
+from suno.materials.queries import stock_value
 from suno.matrix.access import get_matrix_project
 from suno.projects.views import _ctx, _parse_date, _project_context, _render
 
@@ -110,6 +111,7 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
     committed = (
         committed_by_item(ctx, project) if costs and options.tab == "item" and result else {}
     )
+    stock = stock_value(ctx, project) if costs and options.tab == "item" and result else None
     over_budget = [
         row.label
         for row in rows
@@ -130,6 +132,7 @@ def dashboard(request: HttpRequest, project_id: UUID) -> HttpResponse:
             "rows": [(row, committed.get(row.item_id) if row.item_id else None) for row in rows],
             "show_committed": bool(costs and options.tab == "item"),
             "committed_over_budget": over_budget,
+            "stock_value": stock,
             "curve": build_s_curve(result.periods, result.indicators.bac) if result else None,
             "can_export_control": can_export_budgets(ctx, ctx.org_id),
             "error": error,
