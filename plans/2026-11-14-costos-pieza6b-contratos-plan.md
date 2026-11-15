@@ -44,6 +44,8 @@ Ninguna reabre lo aprobado; precisan cómo se cumple. Ya están anotadas al fina
 24. **Destajo:** el mismo modelo; arranca sin cargos, sin anticipo y sin garantía; número sugerido `DT-001` (subcontrato `SC-001`), único por proyecto sin distinguir mayúsculas.
 25. **Límites:** hasta 200 líneas, 20 cargos y 20 descuentos por contrato; cantidades con 4 decimales y mayores que cero en el contrato (mayores o iguales a cero en el acta); precios a centavos y mayores que cero; anticipo y garantía entre 0 y 100 %.
 
+**Limitación conocida (revisión de código, M-5):** el PDF de un acta vieja que se vuelve a descargar muestra en «contratado» la cantidad vigente de **hoy** (`ContractLine.current_quantity`), no la que había cuando se firmó: si después se aprobó un otrosí, el contratado y el saldo de ese PDF no coinciden con la copia firmada. Lo que vale es la copia firmada que quedó adjunta; las cantidades del acta, sus valores y lo «anterior» sí son los de entonces. Se deja así a propósito (no se guarda una foto del contratado por acta).
+
 ---
 
 ## Convenciones del repositorio que hay que respetar
