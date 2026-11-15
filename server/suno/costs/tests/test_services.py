@@ -298,3 +298,13 @@ class CostServiceTests(TestCase):
                 self.world.ctx(), self.project, cost.pk, self.data(), upload=pdf_upload()
             )
         self.assertEqual(depth, [outer])
+
+    def test_entries_of_a_certificate_are_not_reversed_from_the_ledger(self) -> None:
+        from suno.contracts.tests.factories import contract_world, make_certificate, make_contract
+
+        cw = contract_world("Con contratos")
+        certificate = make_certificate(cw, make_contract(cw), quantities={"2.1": "1"})
+        cost = entry(cw.world, status=CostStatus.APPROVED)
+        CostEntry.objects.filter(pk=cost.pk).update(certificate=certificate)
+        with self.assertRaises(CostRejected):
+            services.reverse(cw.world.ctx(), cw.world.project, cost.pk, "No va")

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -36,11 +37,20 @@ from suno.core.models import (
     CertificateStatus,
     Contract,
     ContractCertificate,
+    ContractKind,
     ContractLine,
+    ContractStatus,
+    CostDocumentType,
+    CostEntry,
+    CostEntryItem,
+    CostKind,
+    CostScope,
+    CostStatus,
     Project,
 )
 from suno.core.models.contract import OPEN_STATES
 from suno.core.policies import (
+    can_approve_costs,
     can_create_costs,
     can_delete_cost,
     can_read_costs,
@@ -50,10 +60,15 @@ from suno.core.policies import (
 )
 from suno.core.scoping import blob_registry, scoped_qs
 from suno.costs.catalog import Catalog, load_catalog
-from suno.costs.services import MAX_FILE_NAME
+from suno.costs.services import (
+    MAX_DESCRIPTION,
+    MAX_DOCUMENT_NUMBER,
+    MAX_FILE_NAME,
+    MAX_THIRD_PARTY,
+)
 
-from .calc import Balances, CertificateTotals, LineInput, certificate_totals
-from .proposal import Proposal, line_scopes, proposals
+from .calc import Balances, CertificateTotals, LineInput, certificate_totals, ledger_split
+from .proposal import Proposal, line_scopes, paid_by_line, proposals
 from .services import (
     FIRST_DAY,
     MAX_QUANTITY,
@@ -519,3 +534,235 @@ def signed_url(ctx: RequestContext, project: Project, certificate: ContractCerti
         mime=blob.mime,
         filename=validation.generated_filename(blob.mime),
     )
+
+
+# ---------------------------------------------------------------------------
+# Aprobación, paso al libro y anulación
+# ---------------------------------------------------------------------------
+
+
+def post_to_ledger(
+    ctx: RequestContext,
+    project: Project,
+    contract: Contract,
+    certificate: ContractCertificate,
+    lines: Sequence[ContractLine],
+    totals: CertificateTotals,
+    catalog: Catalog,
+) -> list[CostEntry]:
+    """Un movimiento aprobado por línea con valor (spec 3.2). Registró y modificó: quien
+    preparó y editó el acta; aprobó: quien aprueba; soporte: el acta firmada."""
+    kind = CostKind.LABOR if contract.kind == ContractKind.PIECEWORK else CostKind.SUBCONTRACT
+    by_id = {line.pk: line for line in lines}
+    now = timezone.now()
+    entries: list[CostEntry] = []
+    links: list[CostEntryItem] = []
+    for line_id, value in ledger_split(totals.lines, totals.charges_total).items():
+        line = by_id[line_id]
+        row = catalog.rows.get(line.item_id)
+        task_ids = [link.task_id for link in line.task_links.all()]
+        label = catalog.label_of(line.item_id, line.item.code)
+        entry = CostEntry(
+            org_id=ctx.org_id,
+            project=project,
+            incurred_on=certificate.period_end,
+            kind=kind,
+            description=(f"Acta {certificate.number} · Contrato {contract.number} · {label}")[
+                :MAX_DESCRIPTION
+            ],
+            amount=value,
+            third_party=contract.contractor[:MAX_THIRD_PARTY],
+            document_type=CostDocumentType.CERTIFICATE,
+            document_number=f"{contract.number} · Acta {certificate.number}"[:MAX_DOCUMENT_NUMBER],
+            scope=CostScope.ITEM,
+            chapter_id=row.parent_id if row is not None else None,
+            task_id=task_ids[0] if len(task_ids) == 1 else None,
+            status=CostStatus.APPROVED,
+            created_by_id=certificate.created_by_id,
+            updated_by_id=certificate.updated_by_id,
+            decided_by_id=ctx.user_id,
+            decided_at=now,
+            attachment_id=certificate.attachment_id,
+            attachment_name=certificate.attachment_name,
+            certificate=certificate,
+        )
+        entries.append(entry)
+        links.append(CostEntryItem(org_id=ctx.org_id, entry=entry, item_id=line.item_id))
+    scoped_qs(ctx, CostEntry).bulk_create(entries)
+    scoped_qs(ctx, CostEntryItem).bulk_create(links)
+    return entries
+
+
+def approve_certificate(
+    ctx: RequestContext,
+    project: Project,
+    contract_id: UUID,
+    certificate_id: UUID,
+    *,
+    catalog: Catalog | None = None,
+) -> ContractCertificate:
+    """Aprueba con el contrato bloqueado: comprueba el firmado, el periodo y el tope por línea,
+    recalcula los totales con los saldos de hoy, escribe el libro y, si es la liquidación,
+    cierra el contrato. Las cantidades y las propuestas son las guardadas en el borrador."""
+    catalog = catalog if catalog is not None else load_catalog(ctx, project)
+    with transaction.atomic():
+        contract = locked_contract(ctx, project, contract_id)
+        certificate = _locked_certificate(ctx, contract, certificate_id)
+        if not can_approve_costs(ctx, project):
+            raise PermissionDenied
+        require_decidable(ctx, certificate)
+        require_open(contract)
+        if certificate.attachment_id is None:
+            raise ContractRejected(["Sube el acta firmada antes de aprobar."])
+        lines = contract_lines(ctx, contract)
+        stored = {
+            row.line_id: row
+            for row in scoped_qs(ctx, CertificateLine).filter(certificate=certificate)
+        }
+        if set(stored) != {line.pk for line in lines}:
+            raise ContractRejected(
+                ["El contrato cambió desde que se preparó el acta: edítala para recalcularla."]
+            )
+        errors = period_conflicts(
+            ctx, contract, certificate.period_start, certificate.period_end,
+            exclude=certificate.pk,
+        )  # fmt: skip
+        paid = paid_by_line(ctx, stored)
+        for line in lines:
+            total = paid.get(line.pk, ZERO) + stored[line.pk].quantity
+            if total > line.current_quantity:
+                errors.append(
+                    f"{catalog.label_of(line.item_id, line.item.code)}: con esta acta lo pagado "
+                    f"({quantity_text(total)}) pasa lo contratado vigente "
+                    f"({quantity_text(line.current_quantity)}). Tramita un otrosí o ajusta el "
+                    "acta."
+                )
+        if errors:
+            raise ContractRejected(errors)
+        totals = certificate_totals(
+            [
+                LineInput(line.pk, line.order, stored[line.pk].quantity, line.unit_price)
+                for line in lines
+            ],
+            charge_specs(ctx, contract),
+            deduction_specs(ctx, contract),
+            retention_pct=contract.retention_pct,
+            balances=balances(ctx, contract),
+            settlement=certificate.is_settlement,
+        )
+        for field, value in totals.stored().items():
+            setattr(certificate, field, value)
+        certificate.breakdown = totals.breakdown()
+        certificate.status = CertificateStatus.APPROVED
+        certificate.decided_by_id = ctx.user_id
+        certificate.decided_at = timezone.now()
+        certificate.save()
+        entries = post_to_ledger(ctx, project, contract, certificate, lines, totals, catalog)
+        if certificate.is_settlement:
+            contract.status = ContractStatus.SETTLED
+            contract.closed_by_id = ctx.user_id
+            contract.closed_at = timezone.now()
+            contract.save(update_fields=["status", "closed_by", "closed_at"])
+            audit.record(
+                ctx,
+                action=AuditAction.CONTRACT_SETTLED,
+                target=f"contract:{contract.pk}",
+                metadata={
+                    "contract": str(contract.pk),
+                    "project": str(project.pk),
+                    "certificate": str(certificate.pk),
+                    "net": str(certificate.net),
+                },
+            )
+        audit.record(
+            ctx,
+            action=AuditAction.CERTIFICATE_APPROVED,
+            target=f"certificate:{certificate.pk}",
+            metadata={**certificate_metadata(certificate), "entries": len(entries)},
+        )
+    return certificate
+
+
+def void_certificate(
+    ctx: RequestContext, project: Project, contract_id: UUID, certificate_id: UUID, note: str
+) -> ContractCertificate:
+    """Anula la última acta aprobada: reversa sus movimientos con fecha de hoy y el motivo. Si
+    era la liquidación, el contrato vuelve a aprobado."""
+    reason = clean_note(note, "de la anulación")
+    with transaction.atomic():
+        contract = locked_contract(ctx, project, contract_id)
+        certificate = _locked_certificate(ctx, contract, certificate_id)
+        if not can_reverse_costs(ctx, project):
+            raise PermissionDenied
+        if certificate.status != CertificateStatus.APPROVED:
+            raise ContractRejected(["Solo se anula un acta aprobada."])
+        last = (
+            scoped_qs(ctx, ContractCertificate)
+            .filter(contract=contract, status=CertificateStatus.APPROVED)
+            .order_by("-number")
+            .first()
+        )
+        if last is None or last.pk != certificate.pk:
+            raise ContractRejected(
+                [f"Solo se anula la última acta aprobada (la {last.number if last else '—'})."]
+            )
+        today, now = timezone.localdate(), timezone.now()
+        originals = list(
+            scoped_qs(ctx, CostEntry)
+            .filter(certificate=certificate, reverses__isnull=True)
+            .prefetch_related("item_links")
+        )
+        reversals = [
+            CostEntry(
+                org_id=ctx.org_id,
+                project=project,
+                incurred_on=today,
+                kind=original.kind,
+                description=f"Reverso: {original.description}"[:MAX_DESCRIPTION],
+                amount=-original.amount,
+                third_party=original.third_party,
+                document_type=original.document_type,
+                document_number=original.document_number,
+                scope=original.scope,
+                chapter_id=original.chapter_id,
+                task_id=original.task_id,
+                status=CostStatus.APPROVED,
+                created_by_id=ctx.user_id,
+                updated_by_id=ctx.user_id,
+                decided_by_id=ctx.user_id,
+                decided_at=now,
+                decision_note=reason,
+                reverses=original,
+                certificate=certificate,
+            )
+            for original in originals
+        ]
+        scoped_qs(ctx, CostEntry).bulk_create(reversals)
+        scoped_qs(ctx, CostEntryItem).bulk_create(
+            [
+                CostEntryItem(org_id=ctx.org_id, entry=reversal, item_id=link.item_id)
+                for reversal, original in zip(reversals, originals, strict=True)
+                for link in original.item_links.all()
+            ]
+        )
+        certificate.status = CertificateStatus.VOIDED
+        certificate.voided_by_id = ctx.user_id
+        certificate.voided_at = now
+        certificate.void_note = reason
+        certificate.save(update_fields=["status", "voided_by", "voided_at", "void_note"])
+        if certificate.is_settlement:
+            contract.status = ContractStatus.APPROVED
+            contract.closed_by = None
+            contract.closed_at = None
+            contract.save(update_fields=["status", "closed_by", "closed_at"])
+        audit.record(
+            ctx,
+            action=AuditAction.CERTIFICATE_VOIDED,
+            target=f"certificate:{certificate.pk}",
+            metadata={
+                **certificate_metadata(certificate),
+                "note": reason,
+                "reversals": len(reversals),
+            },
+        )
+    return certificate
