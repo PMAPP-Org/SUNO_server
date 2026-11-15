@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from django.db.models import Sum
 from django.utils import timezone
@@ -35,7 +36,9 @@ from suno.core.models import (
     Warehouse,
 )
 from suno.costs.tests.factories import support_blob
-from suno.materials import purchases
+from suno.materials import movements, purchases
+from suno.materials.destination import INDIRECT, DestinationData
+from suno.materials.movements import IssueData, IssueLineData
 from suno.materials.purchases import PurchaseData, PurchaseLineData
 from suno.projects.tests.factories import FieldWorld
 
@@ -211,3 +214,28 @@ def stock_in(
         attachment=support_blob("factura de materiales"), attachment_name="factura.pdf"
     )
     return purchases.approve_purchase(mw.ctx(mw.world.supervisor), mw.project, purchase.pk)
+
+
+def issue(
+    mw: MaterialWorld,
+    lines: Sequence[tuple[Material, str]],
+    *,
+    day: date = date(2026, 3, 10),
+    destination: DestinationData = INDIRECT,
+    warehouse: Warehouse | None = None,
+    user: AppUser | None = None,
+    client_id: UUID | None = None,
+) -> MaterialIssue:
+    """Una salida por el servicio (por defecto, del Colaborador, indirecta)."""
+    return movements.create_issue(
+        mw.ctx(user or mw.cw.contributor),
+        mw.project,
+        IssueData(
+            warehouse_id=(warehouse or mw.warehouse).pk,
+            issued_on=day,
+            destination=destination,
+            lines=tuple(IssueLineData(m.pk, D(q)) for m, q in lines),
+            received_by="Maestro de obra",
+            client_id=client_id,
+        ),
+    )
