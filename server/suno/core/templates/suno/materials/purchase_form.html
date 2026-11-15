@@ -1,0 +1,52 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{% if purchase %}Editar {{ purchase.code }}{% else %}Nueva compra{% endif %} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="purchases" %}
+<section class="pj-panel">
+  <h2>{% if purchase %}Editar compra {{ purchase.code }}{% else %}Nueva compra{% endif %}</h2>
+  {% if purchase.status == "rejected" %}<p class="pj-warning">Rechazada: {{ purchase.decision_note }}. Al guardarla vuelve a borrador.</p>{% endif %}
+  <form method="post" enctype="multipart/form-data" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
+    <div class="pj-form ctr-head">
+      <label>{{ form.kind.label }} {{ form.kind }}</label>
+      <label>{{ form.warehouse.label }} {{ form.warehouse }}</label>
+      <label>{{ form.supplier.label }} {{ form.supplier }}</label>
+      <label>{{ form.supplier_tax_id.label }} {{ form.supplier_tax_id }}</label>
+      <label>{{ form.document_type.label }} {{ form.document_type }}</label>
+      <label>{{ form.document_number.label }} {{ form.document_number }}</label>
+      <label>{{ form.purchased_on.label }} {{ form.purchased_on }}</label>
+      {% if not purchase %}<label>{{ form.support.label }} {{ form.support }}</label>{% endif %}
+    </div>
+    <p class="pj-muted">A bodega: entra al inventario al aprobarla y el costo llega con las salidas. Directa: cada línea es un costo de su destino al aprobarla (el destino y la tarea solo se usan en una compra directa).</p>
+    {{ lines.management_form }}
+    <div class="pj-scroll">
+    <table class="pj-table mat-lines">
+      <thead><tr><th>#</th><th>Material</th><th class="num">Cantidad</th><th class="num">Valor unitario</th><th>Destino</th><th>Tarea</th></tr></thead>
+      <tbody>
+      {% for row in lines %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td class="mat-material"><label class="sr-only" for="{{ row.material.id_for_label }}">Material de la línea {{ forloop.counter }}</label>{{ row.material }}</td>
+          <td class="mat-num"><label class="sr-only" for="{{ row.quantity.id_for_label }}">Cantidad de la línea {{ forloop.counter }}</label>{{ row.quantity }}</td>
+          <td class="mat-num"><label class="sr-only" for="{{ row.unit_price.id_for_label }}">Valor unitario de la línea {{ forloop.counter }}</label>{{ row.unit_price }}</td>
+          <td class="mat-destination"><label class="sr-only" for="{{ row.destination.id_for_label }}">Destino de la línea {{ forloop.counter }}</label>{{ row.destination }}</td>
+          <td class="mat-task"><label class="sr-only" for="{{ row.task.id_for_label }}">Tarea de la línea {{ forloop.counter }}</label>{{ row.task }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% include "suno/materials/_datalists.html" %}
+    {% if total is not None %}<p>Total de la compra: <strong>{{ total|money }}</strong></p>{% endif %}
+    <div class="ctr-actions">
+      <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
+      <button class="text-link" type="submit" name="accion" value="calcular">Recalcular</button>
+      <button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
+      <a href="{% if purchase %}{% url 'materials:purchase' project.pk purchase.pk %}{% else %}{% url 'materials:purchases' project.pk %}{% endif %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

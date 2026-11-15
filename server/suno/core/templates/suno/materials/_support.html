@@ -1,0 +1,4 @@
+<p>{{ label }}: {% if doc.attachment_id %}<a href="{{ view }}" target="_blank" rel="noopener">{{ doc.attachment_name|default:"Ver" }}</a>{% else %}<span class="pj-late">sin cargar</span>{% endif %}</p>
+{% if can_attach %}
+<form method="post" action="{{ upload }}" enctype="multipart/form-data" class="cst-reject">{% csrf_token %}<input type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required aria-label="{{ label }}"><button class="text-link" type="submit">Cargar</button></form>
+{% endif %}

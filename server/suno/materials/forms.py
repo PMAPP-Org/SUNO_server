@@ -6,19 +6,32 @@ más; "Recalcular" calcula en el servidor sin guardar. El material se elige con 
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
+from uuid import UUID
 
 from django import forms
 from django.db.models import Q
+from django.forms import formset_factory
 from django.http import QueryDict
 
 from suno.attachments.web import ACCEPT
 from suno.core.context import RequestContext
-from suno.core.models import Material
+from suno.core.models import (
+    CostDocumentType,
+    Material,
+    MaterialPurchase,
+    MaterialPurchaseLine,
+    PurchaseKind,
+    Task,
+    Warehouse,
+)
 from suno.core.scoping import scoped_qs
+from suno.costs.catalog import Catalog
 
 from .catalog_services import MAX_CATEGORY, MAX_CODE, MAX_NAME, MAX_UNIT, MaterialData
+from .destination import DestinationData, destination_text, parse_destination
+from .purchases import PurchaseData, PurchaseLineData
 
 #: Filas vacías que agrega "Agregar líneas" y filas de un formulario nuevo.
 ADD_ROWS = 3
@@ -100,3 +113,172 @@ class SupportForm(forms.Form):
 
 class WarehouseForm(forms.Form):
     name = forms.CharField(label="Nombre", max_length=120)
+
+
+def outline_index(tasks: Mapping[UUID, Task]) -> dict[str, UUID]:
+    return {task.outline_number: task.pk for task in tasks.values()}
+
+
+def warehouse_choices(warehouses: Sequence[Warehouse]) -> list[tuple[str, str]]:
+    return [("", "Elige una bodega"), *((str(w.pk), w.name) for w in warehouses)]
+
+
+def task_choices(tasks: Mapping[UUID, Task]) -> list[tuple[str, str]]:
+    return [
+        ("", "Sin tarea"),
+        *((str(task.pk), f"{task.outline_number} {task.name}") for task in tasks.values()),
+    ]
+
+
+def material_field() -> forms.CharField:
+    return forms.CharField(
+        label="Material",
+        required=False,
+        widget=forms.TextInput(attrs={"list": "mat-materials", "autocomplete": "off"}),
+    )
+
+
+def destination_field(required: bool = False) -> forms.CharField:
+    return forms.CharField(
+        label="Destino",
+        required=required,
+        max_length=500,
+        widget=forms.TextInput(
+            attrs={"list": "mat-destinations", "autocomplete": "off", "placeholder": "Indirecto"}
+        ),
+    )
+
+
+def read_destination(
+    text: str, task_text: str, catalog: Catalog, outlines: Mapping[str, UUID]
+) -> tuple[DestinationData | None, str]:
+    """El destino de una fila: el texto y el número de esquema de la tarea (vacío: sin tarea)."""
+    task_id = None
+    task = task_text.strip()
+    if task:
+        task_id = outlines.get(task)
+        if task_id is None:
+            return None, f"No hay una tarea vigente con número {task}."
+    return parse_destination(text, catalog, task_id)
+
+
+class PurchaseForm(forms.Form):
+    kind = forms.ChoiceField(label="Tipo", choices=PurchaseKind.choices)
+    warehouse = forms.ChoiceField(label="Bodega (si es a bodega)", required=False)
+    supplier = forms.CharField(label="Proveedor", max_length=200)
+    supplier_tax_id = forms.CharField(label="NIT", max_length=40, required=False)
+    document_type = forms.ChoiceField(label="Documento", choices=CostDocumentType.choices)
+    document_number = forms.CharField(label="Número", max_length=80, required=False)
+    purchased_on = forms.DateField(label="Fecha", widget=date_input())
+    support = forms.FileField(
+        label="Factura (PDF, JPG, PNG o WebP; opcional ahora)",
+        required=False,
+        widget=forms.FileInput(attrs={"accept": ACCEPT}),
+    )
+
+    def __init__(self, *args: Any, warehouses: Sequence[Warehouse], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["warehouse"].choices = warehouse_choices(warehouses)
+
+
+class PurchaseLineForm(forms.Form):
+    material = material_field()
+    quantity = forms.DecimalField(
+        label="Cantidad", required=False, max_digits=18, decimal_places=4, min_value=0
+    )
+    unit_price = forms.DecimalField(
+        label="Valor unitario (IVA incluido)", required=False, max_digits=18, decimal_places=2,
+        min_value=0,
+    )  # fmt: skip
+    destination = destination_field()
+    task = forms.CharField(
+        label="Tarea", required=False, max_length=40,
+        widget=forms.TextInput(attrs={"placeholder": "2.1"}),
+    )  # fmt: skip
+
+
+PurchaseLineFormSet = formset_factory(PurchaseLineForm, extra=0)
+
+
+def read_purchase_lines(
+    formset: Any,
+    index: MaterialIndex,
+    catalog: Catalog,
+    outlines: Mapping[str, UUID],
+    *,
+    direct: bool,
+) -> tuple[list[PurchaseLineData], list[str]]:
+    """Las filas con material (las vacías se ignoran). Formset ya validado."""
+    lines: list[PurchaseLineData] = []
+    errors: list[str] = []
+    for n, form in enumerate(formset.forms, start=1):
+        data = form.cleaned_data
+        text = (data.get("material") or "").strip()
+        if not text:
+            continue
+        material = index.find(text)
+        amount, price = data.get("quantity"), data.get("unit_price")
+        problems: list[str] = []
+        if material is None:
+            problems.append(f"«{text}» no está en el catálogo; elígelo de la lista.")
+        if amount is None or price is None:
+            problems.append("Escribe la cantidad y el valor unitario.")
+        destination = None
+        if direct:
+            destination, error = read_destination(
+                data.get("destination") or "", data.get("task") or "", catalog, outlines
+            )
+            if error:
+                problems.append(error)
+        errors += [f"Línea {n}: {problem}" for problem in problems]
+        if not problems and material is not None and amount is not None and price is not None:
+            lines.append(PurchaseLineData(material.pk, amount, price, destination))
+    return lines, errors
+
+
+def purchase_data(form: PurchaseForm, lines: Sequence[PurchaseLineData]) -> PurchaseData:
+    data = form.cleaned_data
+    warehouse = data.get("warehouse") or ""
+    to_warehouse = bool(warehouse) and data["kind"] == PurchaseKind.WAREHOUSE
+    return PurchaseData(
+        kind=data["kind"],
+        warehouse_id=UUID(warehouse) if to_warehouse else None,
+        supplier=data["supplier"],
+        supplier_tax_id=data.get("supplier_tax_id") or "",
+        document_type=data["document_type"],
+        document_number=data.get("document_number") or "",
+        purchased_on=data["purchased_on"],
+        lines=tuple(lines),
+    )
+
+
+def purchase_initial(
+    purchase: MaterialPurchase, lines: Sequence[MaterialPurchaseLine], catalog: Catalog
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Encabezado y filas para editar (líneas con `select_related("material", "task")` y
+    `prefetch_related("item_links")`)."""
+    header = {
+        "kind": purchase.kind,
+        "warehouse": str(purchase.warehouse_id or ""),
+        "supplier": purchase.supplier,
+        "supplier_tax_id": purchase.supplier_tax_id,
+        "document_type": purchase.document_type,
+        "document_number": purchase.document_number,
+        "purchased_on": purchase.purchased_on,
+    }
+    rows = [
+        {
+            "material": line.material.label,
+            "quantity": plain(line.quantity),
+            "unit_price": line.unit_price,
+            "destination": destination_text(
+                catalog,
+                line.scope,
+                line.chapter_id,
+                [link.item_id for link in line.item_links.all()],
+            ),
+            "task": line.task.outline_number if line.task else "",
+        }
+        for line in lines
+    ]
+    return header, rows
