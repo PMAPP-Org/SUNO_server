@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from suno.budgets.excel import MAX_BYTES, ExcelRejected, check_file_name
+from suno.contracts.queries import inbox_count, inbox_items
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
@@ -68,6 +69,7 @@ def _context(ctx: RequestContext, project: Project) -> dict[str, Any]:
         .exclude(created_by_id=ctx.user_id)
         .exclude(updated_by_id=ctx.user_id)
         .count()
+        + inbox_count(ctx, project)
         if can_decide
         else 0
     )
@@ -307,6 +309,7 @@ def inbox(request: HttpRequest, project_id: UUID) -> HttpResponse:
         {
             **_context(ctx, project),
             "rows": [(entry, assignment_text(entry, catalog)) for entry in entries],
+            "contract_items": inbox_items(ctx, project),
         },
     )
 

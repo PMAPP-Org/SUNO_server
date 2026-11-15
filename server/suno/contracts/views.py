@@ -8,13 +8,14 @@ autoaprobación viven en `services` y `certificates`: aquí solo se traducen a m
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -23,13 +24,18 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from suno.budgets.totals import BASE_DIRECT, describe_base, pct_text
 from suno.core.context import RequestContext
 from suno.core.models import (
+    CertificateLine,
+    CertificateStatus,
     Contract,
     ContractAmendment,
+    ContractCertificate,
     ContractKind,
     ContractLine,
     ContractStatus,
+    CostEntry,
     Project,
 )
+from suno.core.models.contract import OPEN_STATES
 from suno.core.policies import (
     can_approve_costs,
     can_create_costs,
@@ -40,10 +46,10 @@ from suno.core.policies import (
 )
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import assignable_tasks, load_catalog
-from suno.projects.views import _ctx, _project_context, _render
+from suno.projects.views import _ctx, _parse_date, _project_context, _render
 
-from . import services
-from .access import get_amendment, get_contract, get_contracts_project
+from . import certificates, services
+from .access import get_amendment, get_certificate, get_contract, get_contracts_project
 from .calc import (
     BASE_GROSS,
     CHARGE_TEMPLATES,
@@ -51,12 +57,20 @@ from .calc import (
     charge_template,
     withholding_template,
 )
-from .certificates import contract_lines
+from .certificates import (
+    CertificateData,
+    CertificateLineData,
+    build_draft,
+    contract_lines,
+    default_period,
+)
 from .forms import (
     NEW_LINE_ROWS,
     AmendmentForm,
+    CertificateForm,
     ContractForm,
     LineFormSet,
+    SignedForm,
     amendment_initial,
     contract_data,
     contract_formsets,
@@ -71,6 +85,7 @@ from .queries import (
     ACTION_LABELS,
     ContractSheet,
     ListFilters,
+    certificate_document,
     contract_history,
     contract_rows,
     contract_sheet,
@@ -535,3 +550,314 @@ def reject_amendment(
     else:
         messages.success(request, "Otrosí rechazado; su autor lo verá con el motivo.")
     return _back(request, project, contract_id, "otrosies")
+
+
+# ---------------------------------------------------------------------------
+# Actas
+# ---------------------------------------------------------------------------
+
+
+def _certificate_url(project: Project, contract_id: UUID, certificate_id: UUID) -> str:
+    return reverse("contracts:certificate", args=[project.pk, contract_id, certificate_id])
+
+
+def _certificate_form(
+    request: HttpRequest,
+    ctx: RequestContext,
+    project: Project,
+    contract: Contract,
+    certificate: ContractCertificate | None,
+    settlement: bool,
+) -> HttpResponse:
+    """Paso 1 (GET): el periodo. Paso 2 (POST): cantidades; "Recalcular" no guarda."""
+    catalog = load_catalog(ctx, project)
+    lines = contract_lines(ctx, contract)
+    params = request.POST if request.method == "POST" else request.GET
+    default = (
+        (certificate.period_start, certificate.period_end)
+        if certificate is not None
+        else default_period(ctx, contract)
+    )
+    start = _parse_date(params.get("desde")) or default[0]
+    end = _parse_date(params.get("hasta")) or default[1]
+    initial: dict[str, Any] = {}
+    stored: tuple[CertificateLineData, ...] = ()
+    if certificate is not None and request.method != "POST":
+        rows = list(scoped_qs(ctx, CertificateLine).filter(certificate=certificate))
+        for row in rows:
+            if row.quantity != row.proposed_quantity:
+                initial[f"cantidad_{row.line_id}"] = plain(row.quantity)
+                initial[f"justificacion_{row.line_id}"] = row.justification
+        stored = tuple(
+            CertificateLineData(row.line_id, row.quantity, row.justification)
+            for row in rows
+            if row.quantity != row.proposed_quantity
+        )
+    form = CertificateForm(request.POST or None, lines=lines, initial=initial)
+    action = request.POST.get("accion", "") if request.method == "POST" else ""
+    valid = form.is_valid() if request.method == "POST" else False
+    given = form.certificate_lines() if valid else stored
+    draft = build_draft(
+        ctx,
+        project,
+        contract,
+        CertificateData(start, end, given),
+        settlement=settlement,
+        catalog=catalog,
+        exclude=certificate.pk if certificate is not None else None,
+    )
+    errors: list[str] = []
+    if action == "guardar" and valid:
+        data = CertificateData(start, end, given)
+        try:
+            if certificate is None:
+                saved = certificates.create_certificate(
+                    ctx, project, contract.pk, data, settlement=settlement, catalog=catalog
+                )
+            else:
+                saved = certificates.update_certificate(
+                    ctx, project, contract.pk, certificate.pk, data, catalog=catalog
+                )
+        except ContractRejected as exc:
+            errors = exc.errors
+        else:
+            messages.success(
+                request,
+                "Acta guardada en borrador. Descarga el PDF, hazla firmar y súbela para aprobarla.",
+            )
+            return redirect(_certificate_url(project, contract.pk, saved.pk))
+    return _render(
+        request,
+        ctx,
+        "suno/contracts/certificate_form.html",
+        {
+            **_context(ctx, project),
+            "contract": contract,
+            "certificate": certificate,
+            "settlement": settlement,
+            "draft": draft,
+            "rows": [
+                (line, form[f"cantidad_{line.line.pk}"], form[f"justificacion_{line.line.pk}"])
+                for line in draft.lines
+            ],
+            "form": form,
+            "errors": errors or (list(draft.errors) if action else []),
+            "start": start,
+            "end": end,
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def new_certificate(request: HttpRequest, project_id: UUID, contract_id: UUID) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    params = request.POST if request.method == "POST" else request.GET
+    settlement = params.get("liquidacion") == "1"
+    if not can_create_costs(ctx, project) or (settlement and not can_reverse_costs(ctx, project)):
+        raise PermissionDenied
+    if contract.status != ContractStatus.APPROVED:
+        messages.error(request, "Solo un contrato aprobado admite actas.")
+        return _detail(project, contract.pk, "actas")
+    return _certificate_form(request, ctx, project, contract, None, settlement)
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def edit_certificate(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    certificate = get_certificate(ctx, contract, certificate_id)
+    try:
+        services.require_editable(ctx, certificate, can_update_cost)
+    except ContractRejected as exc:
+        messages.error(request, exc.errors[0])
+        return redirect(_certificate_url(project, contract.pk, certificate.pk))
+    return _certificate_form(
+        request, ctx, project, contract, certificate, certificate.is_settlement
+    )
+
+
+def _is_editable(ctx: RequestContext, certificate: ContractCertificate, delete: bool) -> bool:
+    if certificate.status not in OPEN_STATES:
+        return False
+    if (
+        certificate.status == CertificateStatus.REJECTED
+        and certificate.created_by_id != ctx.user_id
+    ):
+        return False
+    return can_delete_cost(ctx, certificate) if delete else can_update_cost(ctx, certificate)
+
+
+@login_required(login_url="platform_login")
+@require_GET
+def certificate_detail(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    certificate = get_certificate(ctx, contract, certificate_id)
+    document = certificate_document(ctx, project, contract, certificate, load_catalog(ctx, project))
+    draft = certificate.status == CertificateStatus.DRAFT
+    mine = ctx.user_id in (certificate.created_by_id, certificate.updated_by_id)
+    last = (
+        scoped_qs(ctx, ContractCertificate)
+        .filter(contract=contract, status=CertificateStatus.APPROVED)
+        .order_by("-number")
+        .values_list("pk", flat=True)
+        .first()
+    )
+    return _render(
+        request,
+        ctx,
+        "suno/contracts/certificate_detail.html",
+        {
+            **_context(ctx, project),
+            "contract": contract,
+            "certificate": certificate,
+            "document": document,
+            "signed_form": SignedForm(),
+            "entries": list(
+                scoped_qs(ctx, CostEntry)
+                .filter(certificate=certificate)
+                .order_by("incurred_on", "amount")
+            ),
+            "can_edit": _is_editable(ctx, certificate, delete=False),
+            "can_delete": _is_editable(ctx, certificate, delete=True),
+            "can_sign": draft and can_update_cost(ctx, certificate),
+            "can_decide": draft and can_approve_costs(ctx, project) and not mine,
+            "can_void": certificate.status == CertificateStatus.APPROVED
+            and last == certificate.pk
+            and can_reverse_costs(ctx, project),
+        },
+    )
+
+
+@login_required(login_url="platform_login")
+@require_POST
+def upload_signed(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    form = SignedForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, "Elige el archivo del acta firmada.")
+    else:
+        upload = form.cleaned_data["signed"]
+        try:
+            certificates.attach_signed(
+                ctx, project, contract_id, certificate_id, upload, upload.name or "acta.pdf"
+            )
+        except ContractRejected as exc:
+            messages.error(request, exc.errors[0])
+        else:
+            messages.success(request, "Acta firmada adjunta; ya se puede aprobar.")
+    return redirect(_certificate_url(project, contract_id, certificate_id))
+
+
+@login_required(login_url="platform_login")
+@require_GET
+def signed_copy(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    """Como el soporte del libro (6a): URL prefirmada; `local://` se arma a mano."""
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    contract = get_contract(ctx, project, contract_id)
+    url = certificates.signed_url(ctx, project, get_certificate(ctx, contract, certificate_id))
+    scheme = urlsplit(url).scheme
+    if scheme == "local":
+        response = HttpResponse(status=302)
+        response["Location"] = url
+        return response
+    if scheme == "https" or (scheme == "http" and settings.DEBUG):
+        return redirect(url)
+    raise Http404
+
+
+def _certificate_back(
+    request: HttpRequest, project: Project, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    if request.POST.get("volver") == "bandeja":
+        return redirect("costs:inbox", project.pk)
+    return redirect(_certificate_url(project, contract_id, certificate_id))
+
+
+@login_required(login_url="platform_login")
+@require_POST
+def approve_certificate(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    try:
+        approved = certificates.approve_certificate(ctx, project, contract_id, certificate_id)
+    except ContractRejected as exc:
+        for error in exc.errors[:5]:
+            messages.error(request, error)
+    else:
+        messages.success(
+            request,
+            "Acta aprobada; sus movimientos están en el libro."
+            + (" El contrato quedó liquidado." if approved.is_settlement else ""),
+        )
+    return _certificate_back(request, project, contract_id, certificate_id)
+
+
+@login_required(login_url="platform_login")
+@require_POST
+def reject_certificate(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    try:
+        certificates.reject_certificate(
+            ctx, project, contract_id, certificate_id, request.POST.get("motivo", "")
+        )
+    except ContractRejected as exc:
+        messages.error(request, exc.errors[0])
+    else:
+        messages.success(request, "Acta rechazada; su autor la verá con el motivo.")
+    return _certificate_back(request, project, contract_id, certificate_id)
+
+
+@login_required(login_url="platform_login")
+@require_POST
+def void_certificate(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    try:
+        certificates.void_certificate(
+            ctx, project, contract_id, certificate_id, request.POST.get("motivo", "")
+        )
+    except ContractRejected as exc:
+        messages.error(request, exc.errors[0])
+    else:
+        messages.success(request, "Acta anulada; sus reversos están en el libro con fecha de hoy.")
+    return redirect(_certificate_url(project, contract_id, certificate_id))
+
+
+@login_required(login_url="platform_login")
+@require_POST
+def delete_certificate(
+    request: HttpRequest, project_id: UUID, contract_id: UUID, certificate_id: UUID
+) -> HttpResponse:
+    ctx = _ctx(request)
+    project = get_contracts_project(ctx, project_id)
+    try:
+        certificates.delete_certificate(ctx, project, contract_id, certificate_id)
+    except ContractRejected as exc:
+        messages.error(request, exc.errors[0])
+        return redirect(_certificate_url(project, contract_id, certificate_id))
+    messages.success(request, "Borrador del acta borrado.")
+    return _detail(project, contract_id, "actas")
