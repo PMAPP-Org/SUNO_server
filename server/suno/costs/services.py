@@ -134,42 +134,61 @@ def _field_errors(data: EntryData, today: date) -> list[str]:
     return errors
 
 
-def _assignment(
-    catalog: Catalog, tasks: Mapping[UUID, Task], data: EntryData
+def check_assignment(
+    catalog: Catalog,
+    tasks: Mapping[UUID, Task],
+    *,
+    scope: str,
+    item_ids: Sequence[UUID] = (),
+    chapter_id: UUID | None = None,
+    task_id: UUID | None = None,
 ) -> tuple[list[str], Assignment | None]:
-    scope = data.scope
+    """La asignación validada contra la versión vigente. También la usan los destinos de los
+    documentos de materiales (6c)."""
     if scope not in CostScope.values:
         return ["Elige a qué se asigna el costo."], None
     if scope == CostScope.INDIRECT:
-        if data.item_ids or data.chapter_id or data.task_id:
+        if item_ids or chapter_id or task_id:
             return ["Un costo indirecto va al proyecto: sin ítem, capítulo ni tarea."], None
         return [], Assignment(scope)
     errors: list[str] = []
-    task_id = data.task_id
     if task_id is not None and task_id not in tasks:
         errors.append("La tarea no es una tarea vigente del proyecto.")
     if scope == CostScope.ITEM:
-        row = catalog.rows.get(data.item_ids[0]) if len(data.item_ids) == 1 else None
+        row = catalog.rows.get(item_ids[0]) if len(item_ids) == 1 else None
         if row is None or row.kind != BudgetRowKind.ITEM:
             errors.append(
                 "Elige un ítem que esté como ítem en la versión vigente de su presupuesto."
             )
             return errors, None
         return errors, Assignment(scope, (row.item_id,), row.parent_id, task_id)
-    chapter = catalog.rows.get(data.chapter_id) if data.chapter_id is not None else None
+    chapter = catalog.rows.get(chapter_id) if chapter_id is not None else None
     if chapter is None or chapter.kind != BudgetRowKind.CHAPTER:
         errors.append("Elige un capítulo de la versión vigente del presupuesto.")
         return errors, None
     if scope == CostScope.CHAPTER:
-        if data.item_ids:
+        if item_ids:
             errors.append("Un capítulo completo no lleva ítems sueltos.")
         return errors, Assignment(scope, (), chapter.item_id, task_id)
-    picked = tuple(dict.fromkeys(data.item_ids))
+    picked = tuple(dict.fromkeys(item_ids))
     inside = catalog.descendants(chapter.item_id)
     if len(picked) < 2 or any(item_id not in inside for item_id in picked):
         errors.append("Una selección lleva dos o más ítems del mismo capítulo.")
         return errors, None
     return errors, Assignment(scope, picked, chapter.item_id, task_id)
+
+
+def _assignment(
+    catalog: Catalog, tasks: Mapping[UUID, Task], data: EntryData
+) -> tuple[list[str], Assignment | None]:
+    return check_assignment(
+        catalog,
+        tasks,
+        scope=data.scope,
+        item_ids=data.item_ids,
+        chapter_id=data.chapter_id,
+        task_id=data.task_id,
+    )
 
 
 def validate_entry(
