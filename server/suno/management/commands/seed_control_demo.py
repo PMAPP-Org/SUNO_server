@@ -11,7 +11,9 @@ del 8 %), un residente que registra y el administrador que aprueba, movimientos 
 tipos y asignaciones, un borrador, un rechazado, un reverso, un equipo propio con y sin ítem y
 viajes de un transportador. Desde la pieza 6b también siembra contratos: un subcontrato con un
 otrosí y actas (una anulada y una en borrador firmada), un destajo, un subcontrato liquidado y un
-borrador por aprobar.
+borrador por aprobar. Desde la pieza 6c también siembra materiales: catálogo, dos bodegas, compras a
+bodega y directa, salidas, una devolución, un traslado, un ajuste y un corte aprobados, una salida
+sin cortar y una compra en borrador.
 
 Escribe sin pasar por las importaciones (como `bootstrap_demo`): lo que interesa es el estado
 final. Es aprovisionamiento offline y por eso figura en `ALLOWED` de `test_architecture.py`.
@@ -66,14 +68,18 @@ from suno.core.models import (
     EquipmentUsageStatus,
     FormTemplate,
     FormTemplateVersion,
+    Material,
+    MaterialIssueLine,
     Membership,
     Organization,
     Project,
+    PurchaseKind,
     QuantityPlan,
     Record,
     RecordReview,
     RecordReviewStatus,
     Role,
+    StockBalance,
     Task,
     TransportContractor,
     TransportMaterial,
@@ -83,6 +89,21 @@ from suno.core.models import (
 )
 from suno.equipment.costing import usage_cost, usage_hours
 from suno.management.commands.bootstrap_demo import DEMO_FORM_DEFINITION
+from suno.materials import adjustments as material_adjustments
+from suno.materials import cuts as material_cuts
+from suno.materials import movements as material_movements
+from suno.materials import purchases as material_purchases
+from suno.materials.adjustments import AdjustmentData, AdjustmentLineData
+from suno.materials.destination import INDIRECT, DestinationData
+from suno.materials.movements import (
+    IssueData,
+    IssueLineData,
+    ReturnData,
+    ReturnLineData,
+    TransferData,
+)
+from suno.materials.purchases import PurchaseData, PurchaseLineData
+from suno.materials.warehouses import create_warehouse
 from suno.matrix.locations import LevelSpec, load_tree, project_levels, save_levels
 from suno.sync.changeseq import acquire_org_lock, highest_change_seq
 
@@ -191,6 +212,14 @@ COSTS = [
          "Seguros del Sur", DOC.RECEIPT),
 ]  # fmt: skip
 
+#: (código, nombre, unidad, categoría) del catálogo de ejemplo (de la organización).
+MATERIALS = [
+    ("CEM-01", "Cemento gris 50 kg", "und", "Cementos"),
+    ("ARE-01", "Arena de río", "m3", "Agregados"),
+    ("ACE-12", "Varilla de 1/2 pulgada", "kg", "Aceros"),
+    ("TUB-06", "Tubería PVC de 6 pulgadas", "ml", "Redes"),
+]
+
 
 def _row(item: BudgetItem, quantity: Decimal, note: str = "") -> dict[str, Any]:
     return {
@@ -259,6 +288,7 @@ class _Seeder:
         self._record(tasks["Zapatas eje A"], self.today, [_row(items["3.1"], Decimal("5"))])
         self._costs(project, start, items, tasks)
         self._contracts(project, start, items, tasks)
+        self._materials(project, start, items, tasks)
         return project
 
     def _budget(self, project: Project) -> dict[str, BudgetItem]:
@@ -824,6 +854,86 @@ class _Seeder:
             ),
             approve=False,
         )  # fmt: skip
+
+    def _materials(
+        self,
+        project: Project,
+        start: date,
+        items: dict[str, BudgetItem],
+        tasks: dict[str, Task],
+    ) -> None:
+        """Materiales por los servicios: el residente (Revisor de Costos desde `_contracts`)
+        registra y el administrador aprueba. El catálogo es de la organización: se reutiliza
+        si ya existe."""
+        office = resolve_request_context(Principal(user_id=self._resident().pk, org_id=self.org.pk))
+        admin = self.ctx
+        stock = {
+            code: Material.objects.get_or_create(
+                org=self.org, code=code, defaults={"name": name, "unit": unit, "category": cat}
+            )[0]
+            for code, name, unit, cat in MATERIALS
+        }
+        main = create_warehouse(office, project, "Almacén principal")
+        north = create_warehouse(office, project, "Frente norte")
+
+        def day(offset: int) -> date:
+            return start + timedelta(days=offset)
+
+        def line(code: str, amount: str, price: str, dest: Any = None) -> PurchaseLineData:
+            return PurchaseLineData(stock[code].pk, Decimal(amount), Decimal(price), dest)
+
+        def purchase(kind: Any, warehouse: Any, number: str, offset: int, *lines: Any,
+                     approve: bool = True) -> Any:  # fmt: skip
+            data = PurchaseData(str(kind), warehouse.pk if warehouse else None,
+                                "Ferretería El Constructor", "900123456", "invoice", number,
+                                day(offset) if offset >= 0 else self.today + timedelta(offset),
+                                tuple(lines))  # fmt: skip
+            created = material_purchases.create_purchase(
+                office, project, data, upload=self._upload(), name="factura-ejemplo.pdf"
+            )
+            if approve:
+                material_purchases.approve_purchase(admin, project, created.pk)
+            return created
+
+        def to_item(code: str, task: str) -> DestinationData:
+            return DestinationData(str(CostScope.ITEM), (items[code].pk,), task_id=tasks[task].pk)
+
+        def issue(warehouse: Any, when: date, dest: DestinationData, code: str, amount: str) -> Any:
+            return material_movements.create_issue(office, project, IssueData(
+                warehouse.pk, when, dest, (IssueLineData(stock[code].pk, Decimal(amount)),),
+                received_by="Maestro de obra",
+            ))  # fmt: skip
+
+        W, DIRECT = PurchaseKind.WAREHOUSE, PurchaseKind.DIRECT
+        purchase(W, main, "FE-2001", 95, line("CEM-01", "400", "32000"),
+                 line("ACE-12", "12000", "4100"))  # fmt: skip
+        purchase(W, main, "FE-2002", 120, line("CEM-01", "300", "33500"))
+        purchase(DIRECT, None, "FA-0077", 100,
+                 line("ARE-01", "30", "95000", to_item("3.1", "Zapatas eje A")))  # fmt: skip
+        footing = issue(main, day(100), to_item("3.1", "Zapatas eje A"), "CEM-01", "120")
+        issue(main, day(105), to_item("3.2", "Zapatas eje A"), "ACE-12", "4000")
+        issue(main, day(130), to_item("3.1", "Zapatas eje B"), "CEM-01", "150")
+        returned = MaterialIssueLine.objects.get(issue=footing)
+        material_movements.create_return(office, project, footing.pk, ReturnData(
+            day(110), (ReturnLineData(returned.pk, Decimal("10")),)))  # fmt: skip
+        moved = (IssueLineData(stock["CEM-01"].pk, Decimal("40")),)
+        material_movements.create_transfer(
+            office, project, TransferData(main.pk, north.pk, day(112), moved)
+        )
+        expected = StockBalance.objects.get(warehouse=main, material=stock["CEM-01"]).quantity
+        adjustment = material_adjustments.create_adjustment(office, project, AdjustmentData(
+            main.pk, day(140), INDIRECT,
+            (AdjustmentLineData(stock["CEM-01"].pk, expected - Decimal("2")),)))  # fmt: skip
+        material_adjustments.attach_count(office, project, adjustment.pk, self._upload(),
+                                          "acta-de-conteo.pdf")  # fmt: skip
+        material_adjustments.approve_adjustment(admin, project, adjustment.pk)
+        cut = material_cuts.create_cut(office, project, day(140))
+        material_cuts.attach_signed_report(office, project, cut.pk, self._upload(),
+                                           "reporte-firmado.pdf")  # fmt: skip
+        material_cuts.approve_cut(admin, project, cut.pk)
+        # Después del corte: una salida sin cortar vieja (aviso) y una compra por aprobar.
+        issue(north, self.today - timedelta(days=35), INDIRECT, "CEM-01", "5")
+        purchase(W, main, "FE-2003", -2, line("ACE-12", "2000", "4200"), approve=False)
 
 
 class Command(BaseCommand):
