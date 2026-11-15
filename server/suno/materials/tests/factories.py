@@ -8,11 +8,13 @@ Costos (señal), la supervisión Revisora; hay un Colaborador y un Consulta.
 
 from __future__ import annotations
 
+import unittest
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from django.db.models import Sum
 from django.utils import timezone
 
 from suno.contracts.tests.factories import ContractWorld, contract_world
@@ -25,6 +27,8 @@ from suno.core.models import (
     MaterialPurchase,
     Organization,
     Project,
+    StockBalance,
+    StockMovement,
     Warehouse,
 )
 from suno.costs.tests.factories import support_blob
@@ -152,3 +156,23 @@ def bare_cut(
         attachment=support_blob("reporte firmado") if decided else None,
         attachment_name="reporte-firmado.pdf" if decided else "",
     )
+
+
+def balance_of(
+    mw: MaterialWorld, material: Material, warehouse: Warehouse | None = None
+) -> tuple[Decimal, Decimal]:
+    """(cantidad, valor) del saldo; (0, 0) si el par no tiene saldo."""
+    row = StockBalance.objects.filter(
+        warehouse=warehouse or mw.warehouse, material=material
+    ).first()
+    return (row.quantity, row.value) if row is not None else (D("0"), D("0.00"))
+
+
+def assert_consistent(test: unittest.TestCase, mw: MaterialWorld) -> None:
+    """Cada saldo del proyecto es la suma de los movimientos de su par (spec 1.3)."""
+    for row in StockBalance.objects.filter(project=mw.project):
+        moves = StockMovement.objects.filter(warehouse=row.warehouse, material=row.material)
+        sums = moves.aggregate(q=Sum("quantity"), v=Sum("value"))
+        test.assertEqual((row.quantity, row.value), (sums["q"] or D("0"), sums["v"] or D("0.00")))
+        last = moves.order_by("-sequence").values_list("sequence", flat=True).first()
+        test.assertGreaterEqual(row.last_sequence, last or 0)
