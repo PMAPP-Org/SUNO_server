@@ -87,7 +87,7 @@ def cut_pdf(project: Project, cut: ConsumptionCut, *, generated_on: date) -> byt
         ),  # fmt: skip
     ]
     for group in summary.get("groups", []):
-        story.append(Paragraph(f"{group['label']} · neto {money(group['net'])}", section))
+        story.append(Paragraph(escape(f"{group['label']} · neto {money(group['net'])}"), section))
         story.append(
             table(
                 [

@@ -183,3 +183,14 @@ class CutTests(TestCase):
         approved = cuts.approve_cut(self.admin, self.project, cut.pk)
         with self.assertRaises(PermissionDenied):
             cuts.void_cut(self.supervisor, self.project, approved.pk, "No")
+
+    def test_a_changed_line_with_the_same_value_is_not_approved(self) -> None:
+        cut = self.signed(MARCH_END)
+        signed_summary = ConsumptionCut.objects.get(pk=cut.pk).summary
+        indirect = MaterialIssue.objects.get(scope="indirect")
+        MaterialIssueLine.objects.filter(issue=indirect).update(material=self.mw.sand)
+        with self.assertRaises(MaterialRejected) as caught:
+            cuts.approve_cut(self.supervisor, self.project, cut.pk)
+        self.assertEqual(caught.exception.errors, [cuts.CHANGED])
+        self.assertEqual(ConsumptionCut.objects.get(pk=cut.pk).summary, signed_summary)
+        self.assertEqual(len(signed_summary["fingerprint"]["lines"]), 4)

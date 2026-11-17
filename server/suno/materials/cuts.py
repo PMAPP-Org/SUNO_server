@@ -27,7 +27,7 @@ from uuid import UUID
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Min, Sum
+from django.db.models import Min
 from django.http import Http404
 from django.utils import timezone
 
@@ -135,6 +135,8 @@ class Proposal:
     groups: tuple[CutGroup, ...]
     issue_ids: tuple[UUID, ...]
     return_ids: tuple[UUID, ...]
+    #: Cada línea de salida y devolución (id, material, cantidad y valor), ordenadas.
+    lines: tuple[str, ...] = ()
 
     @property
     def issued(self) -> Decimal:
@@ -149,13 +151,15 @@ class Proposal:
         return self.issued - self.returned
 
     def fingerprint(self) -> dict[str, Any]:
-        """Lo que se compara al aprobar: total, cuántas salidas y devoluciones, y el neto por
-        destino."""
+        """Lo que se compara al aprobar: total, cuántas salidas y devoluciones, el neto por
+        destino y cada línea (id, material, cantidad y valor): cualquier cambio en lo que se
+        imprimió y firmó impide aprobar."""
         return {
             "total": str(self.total),
             "issues": len(self.issue_ids),
             "returns": len(self.return_ids),
             "groups": {key_text(group.key): str(group.net) for group in self.groups},
+            "lines": list(self.lines),
         }
 
     def snapshot(self) -> dict[str, Any]:
@@ -259,45 +263,41 @@ def build_proposal(
         row[offset] += amount
         row[offset + 1] += value
 
-    for issue_id, material_id, code, name, unit, amount, value in (
+    #: La huella línea por línea: qué salió o volvió, de qué material, cuánto y por cuánto.
+    fingerprint_lines: list[str] = []
+    for pk, issue_id, material_id, code, name, unit, amount, value in (
         scoped_qs(ctx, MaterialIssueLine)
         .filter(issue_id__in=issue_ids)
-        .values("issue_id", "material_id", "material__code", "material__name", "material__unit")
-        .annotate(qty_sum=Sum("quantity"), value_sum=Sum("amount"))
         .values_list(
+            "pk",
             "issue_id",
             "material_id",
             "material__code",
             "material__name",
             "material__unit",
-            "qty_sum",
-            "value_sum",
-        )
+            "quantity",
+            "amount",
+        )  # fmt: skip
     ):
         names[material_id] = (code, name, unit)
+        fingerprint_lines.append(f"salida:{pk}:{material_id}:{amount}:{value}")
         add(issue_id, material_id, 0, amount, value)
-    for issue_id, material_id, code, name, unit, amount, value in (
+    for pk, issue_id, material_id, code, name, unit, amount, value in (
         scoped_qs(ctx, MaterialReturnLine)
         .filter(material_return_id__in=return_ids)
-        .values(
-            "material_return__issue_id",
-            "issue_line__material_id",
-            "issue_line__material__code",
-            "issue_line__material__name",
-            "issue_line__material__unit",
-        )
-        .annotate(qty_sum=Sum("quantity"), value_sum=Sum("amount"))
         .values_list(
+            "pk",
             "material_return__issue_id",
             "issue_line__material_id",
             "issue_line__material__code",
             "issue_line__material__name",
             "issue_line__material__unit",
-            "qty_sum",
-            "value_sum",
-        )
+            "quantity",
+            "amount",
+        )  # fmt: skip
     ):
         names[material_id] = (code, name, unit)
+        fingerprint_lines.append(f"devolucion:{pk}:{material_id}:{amount}:{value}")
         add(issue_id, material_id, 2, amount, value)
     groups = [
         CutGroup(
@@ -313,7 +313,10 @@ def build_proposal(
         for key, rows in sums.items()
     ]
     groups.sort(key=lambda group: group.label)
-    return Proposal(start, end, tuple(groups), tuple(issue_ids), tuple(return_ids))
+    return Proposal(
+        start, end, tuple(groups), tuple(issue_ids), tuple(return_ids),
+        tuple(sorted(fingerprint_lines)),
+    )  # fmt: skip
 
 
 def cut_metadata(cut: ConsumptionCut) -> dict[str, Any]:
@@ -532,11 +535,11 @@ def approve_cut(
         scoped_qs(ctx, MaterialIssue).filter(pk__in=proposal.issue_ids).update(cut=cut)
         scoped_qs(ctx, MaterialReturn).filter(pk__in=proposal.return_ids).update(cut=cut)
         entries = _post(ctx, project, cut, proposal)
-        cut.summary = proposal.snapshot()
+        # El resumen guardado es el que imprimió el PDF firmado: no se reescribe.
         cut.status = str(MaterialStatus.APPROVED)
         cut.decided_by_id = ctx.user_id
         cut.decided_at = timezone.now()
-        cut.save(update_fields=["summary", "status", "decided_by", "decided_at"])
+        cut.save(update_fields=["status", "decided_by", "decided_at"])
         audit.record(
             ctx,
             action=AuditAction.CONSUMPTION_CUT_APPROVED,

@@ -9,13 +9,14 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from suno.core.models import AuditEvent, ConsumptionCut
+from suno.core.models import AuditEvent, ConsumptionCut, CostScope, Material, Task
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
-from suno.costs.tests.factories import pdf_upload
+from suno.costs.tests.factories import item, pdf_upload
+from suno.materials.destination import DestinationData
 
 from .factories import issue, material_world, stock_in
 
@@ -72,3 +73,19 @@ class CutPageTests(TestCase):
         self.client.post(f"{self.base}{cut.pk}/recalcular/", {"hasta": "2026-03-31"})
         cut.refresh_from_db()
         self.assertEqual(cut.issue_count, 2)
+
+    def test_the_pdf_escapes_markup_in_labels(self) -> None:
+        markup = "Columnas <b>norte & sur</b> <img src=x>"
+        Task.objects.filter(pk=self.mw.world.task(5).pk).update(name=markup)
+        Material.objects.filter(pk=self.mw.cement.pk).update(name=f"Cemento {markup}")
+        concrete = DestinationData(
+            str(CostScope.ITEM), (item(self.mw.cw.budget, "2.1").pk,),
+            task_id=self.mw.world.task(5).pk,
+        )  # fmt: skip
+        issue(self.mw, [(self.mw.cement, "3")], day=date(2026, 3, 12), destination=concrete)
+        self.client.post(self.base + "nuevo/", {"hasta": "2026-03-31"})
+        cut = ConsumptionCut.objects.get()
+        self.assertIn("<b>norte & sur</b>", str(cut.summary["groups"]))
+        document = self.client.get(f"{self.base}{cut.pk}/corte.pdf")
+        self.assertEqual(document.status_code, 200)
+        self.assertTrue(document.content.startswith(b"%PDF"))
