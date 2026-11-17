@@ -5,11 +5,10 @@ del corte en menos de 1 s (2 s en CI)."""
 from __future__ import annotations
 
 import time
-import unittest
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.db import connection
 from django.test import TestCase
@@ -38,7 +37,7 @@ from suno.projects.tests.factories import FieldWorld, make_field_world
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
-skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
+skip_without_db = skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 D = Decimal
 MATERIALS = 2000

@@ -6,11 +6,10 @@ test_concurrency.py`)."""
 from __future__ import annotations
 
 import threading
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.db import connections
 from django.test import TransactionTestCase
@@ -29,7 +28,7 @@ from .factories import assert_consistent, balance_of, issue, material_world, sto
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
-skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
+skip_without_db = skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 D = Decimal
 

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import unittest
 from datetime import date
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
@@ -27,7 +26,7 @@ from .factories import material_world, stock_in
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
-skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
+skip_without_db = skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 
 @skip_without_db

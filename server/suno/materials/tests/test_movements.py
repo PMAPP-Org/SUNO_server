@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import unittest
 import uuid
 from datetime import date
 from decimal import Decimal
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
@@ -48,7 +47,7 @@ from .factories import (
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
-skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
+skip_without_db = skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
 D = Decimal
 TODAY = date(2026, 4, 15)
