@@ -262,3 +262,14 @@ class PurchaseTests(TestCase):
         )
         purchases.delete_purchase(self.contributor, self.project, purchase.pk)
         self.assertFalse(MaterialPurchase.objects.exists())
+
+    def test_amounts_over_the_field_limit_are_refused(self) -> None:
+        huge = PurchaseLineData(self.mw.cement.pk, D("1000000"), D("9999999999999.00"), INDIRECT)
+        with self.assertRaises(MaterialRejected) as caught:
+            purchases.create_purchase(self.contributor, self.project, self.data(huge))
+        self.assertEqual(caught.exception.errors, [f"Línea 1: {purchases.TOO_BIG}"])
+        half = PurchaseLineData(self.mw.cement.pk, D("1"), D("6000000000000000.00"), INDIRECT)
+        with self.assertRaises(MaterialRejected) as caught:
+            purchases.create_purchase(self.contributor, self.project, self.data(half, half))
+        self.assertEqual(caught.exception.errors, [purchases.TOO_BIG_TOTAL])
+        self.assertFalse(MaterialPurchase.objects.exists())

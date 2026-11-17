@@ -46,7 +46,7 @@ from .forms import (
     read_material_lines,
 )
 from .queries import MAX_EXPORT_ROWS, DocumentFilters, issue_query, issue_rows, transfer_rows
-from .views import page, run, xlsx
+from .views import page, require_export, run, xlsx
 
 
 def issue_label(issue: MaterialIssue, catalog: Catalog) -> str:
@@ -237,6 +237,7 @@ def export_issues(request: HttpRequest, project_id: UUID) -> HttpResponse:
     """Las líneas de salida de un periodo (spec 3.4)."""
     ctx = _ctx(request)
     project = get_materials_project(ctx, project_id)
+    require_export(ctx, project)
     filters = DocumentFilters.from_query(request.GET)
     catalog = load_catalog(ctx, project)
     issues = issue_query(ctx, project, filters)

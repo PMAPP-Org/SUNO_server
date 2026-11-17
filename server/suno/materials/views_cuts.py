@@ -35,7 +35,7 @@ from .common import MaterialRejected, attachment_url
 from .export import cut_workbook
 from .pdf import cut_pdf
 from .queries import cut_rows
-from .views import download, page, run, xlsx
+from .views import download, page, require_export, run, xlsx
 from .views_purchases import back
 
 
@@ -218,6 +218,7 @@ def cut_document(request: HttpRequest, project_id: UUID, cut_id: UUID) -> HttpRe
 def cut_sheet(request: HttpRequest, project_id: UUID, cut_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_materials_project(ctx, project_id)
+    require_export(ctx, project)
     cut = get_document(ctx, ConsumptionCut, project, cut_id)
     return xlsx(ctx, project, cut_workbook(cut), f"corte-{cut.number}", "corte",
                 cut=str(cut.pk))  # fmt: skip

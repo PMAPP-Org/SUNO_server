@@ -84,6 +84,12 @@ def download(url: str) -> HttpResponse:
     raise Http404
 
 
+def require_export(ctx: RequestContext, project: Project) -> None:
+    """Antes de armar un Excel o un PDF: sin permiso de exportar, 403 sin leer los datos."""
+    if not can_export_costs(ctx, project):
+        raise PermissionDenied
+
+
 def xlsx(
     ctx: RequestContext,
     project: Project,
@@ -139,6 +145,7 @@ def inventory(request: HttpRequest, project_id: UUID) -> HttpResponse:
 def export_inventory(request: HttpRequest, project_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_materials_project(ctx, project_id)
+    require_export(ctx, project)
     filters = InventoryFilters.from_query(request.GET)
     rows = inventory_rows(ctx, project, filters)
     return xlsx(
@@ -147,10 +154,19 @@ def export_inventory(request: HttpRequest, project_id: UUID) -> HttpResponse:
     )  # fmt: skip
 
 
-def _kardex(request: HttpRequest, project_id: UUID, warehouse_id: UUID, material_id: UUID,
-            limit: int) -> tuple[RequestContext, Project, Any]:  # fmt: skip
+def _kardex(
+    request: HttpRequest,
+    project_id: UUID,
+    warehouse_id: UUID,
+    material_id: UUID,
+    limit: int,
+    *,
+    export: bool = False,
+) -> tuple[RequestContext, Project, Any]:
     ctx = _ctx(request)
     project = get_materials_project(ctx, project_id)
+    if export:
+        require_export(ctx, project)
     sheet = kardex(
         ctx, project, get_warehouse(ctx, project, warehouse_id), get_material(ctx, material_id),
         start=_parse_date(request.GET.get("desde")), end=_parse_date(request.GET.get("hasta")),
@@ -174,7 +190,9 @@ def kardex_page(
 def export_kardex(
     request: HttpRequest, project_id: UUID, warehouse_id: UUID, material_id: UUID
 ) -> HttpResponse:
-    ctx, project, sheet = _kardex(request, project_id, warehouse_id, material_id, MAX_EXPORT_ROWS)
+    ctx, project, sheet = _kardex(
+        request, project_id, warehouse_id, material_id, MAX_EXPORT_ROWS, export=True
+    )
     return xlsx(
         ctx, project, kardex_workbook(sheet), f"kardex-{sheet.material.code}", "kardex",
         material=str(sheet.material.pk), warehouse=str(sheet.warehouse.pk),

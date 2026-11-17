@@ -67,6 +67,7 @@ from .common import (
     MAX_DOCUMENT_NUMBER,
     MAX_FILE_NAME,
     MAX_LINES,
+    MAX_PRICE,
     MAX_THIRD_PARTY,
     MaterialRejected,
     clean_note,
@@ -85,6 +86,8 @@ from .destination import DestinationData, check_destination
 from .kardex import Stock
 
 MAX_SUPPLIER = 200
+TOO_BIG = "El valor de la línea pasa del máximo permitido: revisa la cantidad y el valor unitario."
+TOO_BIG_TOTAL = "El total de la compra pasa del máximo permitido: divídela en varias compras."
 MAX_TAX_ID = 40
 
 
@@ -189,6 +192,8 @@ def purchase_errors(
         amount = ZERO if problems else item_total(line.quantity, line.unit_price)
         if not problems and amount <= 0:
             problems.append("El valor de la línea da cero: revisa la cantidad y el valor unitario.")
+        elif not problems and amount > MAX_PRICE:
+            problems.append(TOO_BIG)
         assignment: Assignment | None = None
         if direct:
             if line.destination is None:
@@ -203,6 +208,8 @@ def purchase_errors(
             checked.append(
                 CheckedLine(n, material, line.quantity, line.unit_price, amount, assignment)
             )
+    if sum((line.amount for line in checked), ZERO) > MAX_PRICE:
+        errors.append(TOO_BIG_TOTAL)
     return errors, checked
 
 

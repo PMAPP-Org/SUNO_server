@@ -493,7 +493,12 @@ def approve_adjustment(
             if line.difference == 0:
                 line.unit_cost, line.amount = balance.average or ZERO, ZERO
                 continue
-            unit = balance.average or last.get(line.material_id) or line.given_unit_cost
+            # Explícito: un costo de 0 (promedio o última entrada) es un costo válido.
+            unit = balance.average
+            if unit is None:
+                unit = last.get(line.material_id)
+            if unit is None:
+                unit = line.given_unit_cost
             if unit is None:
                 raise MaterialRejected(
                     [f"{line.material.name}: escribe el costo unitario del sobrante."]

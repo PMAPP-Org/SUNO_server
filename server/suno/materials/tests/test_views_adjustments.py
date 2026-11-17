@@ -71,3 +71,11 @@ class AdjustmentPageTests(TestCase):
         entry = CostEntry.objects.get(inventory_adjustment=adjustment)
         self.assertEqual(entry.amount, 162500)
         self.assertContains(self.client.get(url), "162.500,00")
+
+    def test_bringing_the_stock_of_a_bad_warehouse_id_is_a_form_error(self) -> None:
+        for bad in ("no-es-un-uuid", "00000000-0000-0000-0000-000000000000"):
+            with self.subTest(warehouse=bad):
+                page = self.post("traer", warehouse=bad)
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(page, "Bodega:")
+        self.assertFalse(InventoryAdjustment.objects.exists())

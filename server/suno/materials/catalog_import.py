@@ -222,7 +222,7 @@ def apply(ctx: RequestContext, token: str) -> tuple[int, int]:
                 raise MaterialRejected([ALREADY_APPLIED]) from exc
             existing = {
                 material.code.casefold(): material
-                for material in scoped_qs(ctx, Material).select_for_update()
+                for material in scoped_qs(ctx, Material).select_for_update().order_by("pk")
             }
             used = with_movements(ctx, [material.pk for material in existing.values()])
             created: list[Material] = []

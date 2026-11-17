@@ -45,7 +45,7 @@ from .forms import (
     plain,
     read_adjustment_lines,
 )
-from .queries import adjustment_rows
+from .queries import _uuid, adjustment_rows
 from .views import download, page, run
 from .views_purchases import back
 
@@ -53,9 +53,11 @@ from .views_purchases import back
 def _bring(data: QueryDict, ctx: Any, project: Any) -> QueryDict:
     """El POST con una fila por material con saldo en la bodega elegida."""
     copy = data.copy()
+    # Un id que no es UUID no trae filas: el formulario lo marca como bodega no válida.
+    warehouse_id = _uuid(data.get("warehouse"))
     balances = (
         scoped_qs(ctx, StockBalance)
-        .filter(project=project, warehouse_id=data.get("warehouse") or None, quantity__gt=0)
+        .filter(project=project, warehouse_id=warehouse_id, quantity__gt=0)
         .select_related("material")
         .order_by("material__code")
     )
@@ -142,7 +144,7 @@ def _form(request: HttpRequest, project_id: UUID, adjustment_id: UUID | None) ->
         request, ctx, project, "suno/materials/adjustment_form.html", form=form, lines=lines,
         adjustment=adjustment, errors=errors, counted=counted, material_index=index,
         destination_options=destination_options(catalog),
-        show_errors=action in ("guardar", "calcular"),
+        show_errors=action in ("guardar", "calcular", "traer"),
     )  # fmt: skip
 
 

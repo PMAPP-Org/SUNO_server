@@ -14,6 +14,7 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from suno.materials import cuts
 
 from .factories import issue, make_warehouse, material_world, stock_in
 
@@ -95,3 +96,29 @@ class MaterialsTabTests(TestCase):
         self.assertContains(page, "La bodega tiene inventario")
         self.client.force_login(self.mw.cw.viewer)
         self.assertEqual(self.client.post(url, {"name": "X"}).status_code, 403)
+
+    def test_no_workbook_is_built_without_the_export_permission(self) -> None:
+        cut = cuts.create_cut(self.mw.ctx(self.mw.cw.contributor), self.mw.project,
+                              date(2026, 3, 31))  # fmt: skip
+        self.client.force_login(self.mw.cw.viewer)
+        builders = [
+            mock.patch(f"suno.materials.{module}.{name}")
+            for module, name in (
+                ("views", "inventory_workbook"),
+                ("views", "kardex_workbook"),
+                ("views_movements", "issues_workbook"),
+                ("views_cuts", "cut_workbook"),
+            )
+        ]
+        refused = mock.patch("suno.materials.views.can_export_costs", return_value=False)
+        with refused, builders[0] as a, builders[1] as b, builders[2] as c, builders[3] as d:
+            for url in (
+                self.base + "inventario.xlsx",
+                f"{self.base}kardex/{self.mw.warehouse.pk}/{self.mw.cement.pk}/kardex.xlsx",
+                self.base + "salidas.xlsx",
+                f"{self.base}cortes/{cut.pk}/corte.xlsx",
+            ):
+                with self.subTest(url=url):
+                    self.assertEqual(self.client.get(url).status_code, 403)
+            for builder in (a, b, c, d):
+                builder.assert_not_called()

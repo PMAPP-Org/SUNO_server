@@ -8,12 +8,14 @@ from decimal import Decimal
 from unittest import mock
 
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.test import TestCase
 
 from suno.core.models import (
     CostEntry,
     InventoryAdjustment,
     InventoryAdjustmentLine,
+    MovementKind,
     StockMovement,
 )
 from suno.core.tests.dbsupport import (
@@ -26,8 +28,16 @@ from suno.materials import adjustments
 from suno.materials.adjustments import CHANGED_COUNT, AdjustmentData, AdjustmentLineData
 from suno.materials.common import SELF_DECISION, MaterialRejected
 from suno.materials.destination import INDIRECT
+from suno.materials.kardex import Stock
 
-from .factories import assert_consistent, balance_of, issue, material_world, stock_in
+from .factories import (
+    assert_consistent,
+    balance_of,
+    draft_purchase,
+    issue,
+    material_world,
+    stock_in,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -155,4 +165,31 @@ class AdjustmentTests(TestCase):
              "fue 2."],
         )  # fmt: skip
         self.assertEqual(StockMovement.objects.filter(kind="adjustment_void").count(), 1)
+        assert_consistent(self, self.mw)
+
+    def test_a_last_entry_at_zero_cost_is_a_valid_cost_for_a_surplus(self) -> None:
+        pair = (self.mw.warehouse.pk, self.mw.steel.pk)
+        with transaction.atomic():
+            stock = Stock(self.admin, self.project, [pair])
+            stock.add(str(MovementKind.PURCHASE), *pair, D("5"), D("0.00"), date(2026, 3, 2),
+                      purchase=draft_purchase(self.mw, number=99))  # fmt: skip
+            stock.save()
+        issue(self.mw, [(self.mw.steel, "5")])  # varilla en cero; última entrada a 0
+        draft = self.count(AdjustmentLineData(self.mw.steel.pk, D("2")))  # sin costo dado
+        approved = adjustments.approve_adjustment(self.supervisor, self.project, draft.pk)
+        line = InventoryAdjustmentLine.objects.get(adjustment=approved)
+        self.assertEqual((line.unit_cost, line.amount), (D("0.000000"), D("0.00")))
+        self.assertEqual(balance_of(self.mw, self.mw.steel), (D("2"), D("0.00")))
+        assert_consistent(self, self.mw)
+
+    def test_voiding_a_surplus_can_leave_quantity_without_value(self) -> None:
+        surplus = self.count(AdjustmentLineData(self.mw.steel.pk, D("5"), D("4100.00")))
+        adjustments.approve_adjustment(self.supervisor, self.project, surplus.pk)
+        stock_in(self.mw, [(self.mw.steel, "10", "100.00")])  # 15 / 21.500,00
+        issue(self.mw, [(self.mw.steel, "9")])  # 9 × 1.433,333333 = 12.900,00
+        self.assertEqual(balance_of(self.mw, self.mw.steel), (D("6"), D("8600.00")))
+        adjustments.void_adjustment(self.admin, self.project, surplus.pk, "Conteo errado")
+        self.assertEqual(balance_of(self.mw, self.mw.steel), (D("1"), D("0.00")))
+        void = StockMovement.objects.get(kind="adjustment_void")
+        self.assertEqual((void.quantity, void.value), (D("-5"), D("-8600.00")))
         assert_consistent(self, self.mw)
