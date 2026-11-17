@@ -11,7 +11,7 @@
   {% if cut.status == "voided" %}<p class="pj-warning">Anulado por {{ cut.voided_by }}: {{ cut.void_note }}</p>{% endif %}
   <dl class="cst-facts">
     <dt>Periodo</dt><dd>{{ cut.period_start|date:"d/m/Y" }} – {{ cut.period_end|date:"d/m/Y" }}</dd>
-    <dt>Al libro</dt><dd>{{ cut.total|money }} ({{ cut.issue_count }} salidas, {{ cut.return_count }} devoluciones)</dd>
+    <dt>Al libro</dt><dd>{{ cut.total|money }} ({{ cut.issue_count }} salida{{ cut.issue_count|pluralize }}, {{ cut.return_count }} {% if cut.return_count == 1 %}devolución{% else %}devoluciones{% endif %})</dd>
     <dt>Preparó</dt><dd>{{ cut.created_by }} · recalculó {{ cut.updated_by }}</dd>
     {% if cut.decided_by %}<dt>{% if cut.status == "rejected" %}Rechazó{% else %}Aprobó{% endif %}</dt><dd>{{ cut.decided_by }} · {{ cut.decided_at|date:"d/m/Y H:i" }}</dd>{% endif %}
   </dl>

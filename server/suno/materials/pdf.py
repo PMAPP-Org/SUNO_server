@@ -38,6 +38,13 @@ def _font() -> None:
         )
 
 
+def _counts(issues: int, returns: int) -> str:
+    """ "3 salidas · 1 devolución"."""
+    issue_word = "salida" if issues == 1 else "salidas"
+    return_word = "devolución" if returns == 1 else "devoluciones"
+    return f"{issues} {issue_word} · {returns} {return_word}"
+
+
 def cut_pdf(project: Project, cut: ConsumptionCut, *, generated_on: date) -> bytes:
     _font()
     styles = getSampleStyleSheet()
@@ -78,8 +85,7 @@ def cut_pdf(project: Project, cut: ConsumptionCut, *, generated_on: date) -> byt
                 ["Periodo", f"{cut.period_start:%d/%m/%Y} – {cut.period_end:%d/%m/%Y}"],
                 [
                     "Salidas y devoluciones",
-                    f"{fingerprint.get('issues', 0)} salidas · {fingerprint.get('returns', 0)} "
-                    "devoluciones",
+                    _counts(fingerprint.get("issues", 0), fingerprint.get("returns", 0)),
                 ],
             ],
             [width * 0.22, width * 0.78],

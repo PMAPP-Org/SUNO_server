@@ -14,7 +14,7 @@
   </form>
   {% if error %}<p class="pj-warning">{{ error }}</p>{% endif %}
   {% if proposal %}
-  <p>Salió {{ proposal.issued|money }} · devuelto {{ proposal.returned|money }} · <strong>al libro {{ proposal.total|money }}</strong> ({{ proposal.issue_ids|length }} salidas, {{ proposal.return_ids|length }} devoluciones).</p>
+  <p>Salió {{ proposal.issued|money }} · devuelto {{ proposal.returned|money }} · <strong>al libro {{ proposal.total|money }}</strong> ({{ proposal.issue_ids|length }} salida{{ proposal.issue_ids|length|pluralize }}, {{ proposal.return_ids|length }} {% if proposal.return_ids|length == 1 %}devolución{% else %}devoluciones{% endif %}).</p>
   {% include "suno/materials/_cut_groups.html" with groups=proposal.snapshot.groups %}
   {% if can_create_material %}<form method="post" action="{% url 'materials:new_cut' project.pk %}" class="ctr-actions">{% csrf_token %}<input type="hidden" name="hasta" value="{{ end|date:'Y-m-d' }}"><button class="button" type="submit">Guardar el corte en borrador</button></form>{% endif %}
   {% endif %}
