@@ -14,7 +14,6 @@ La tarea va aparte. Los ítems se guardan en una tabla de enlaces por documento.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -32,7 +31,8 @@ INDIRECT_TEXT = "Indirecto"
 INDIRECT_LABEL = "Indirecto (proyecto)"
 CHAPTER_PREFIX = "Capítulo "
 EMPTY_SELECTION = "Escribe el destino: un ítem, «Capítulo …» o varios códigos separados por comas."
-_SPLIT = re.compile(r"\s*[,;]\s*")
+#: Separadores de una selección de ítems ("2.1, 2.2" o "2.1; 2.2").
+SEPARATORS = (",", ";")
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,14 @@ def _chapter_id(catalog: Catalog, text: str) -> UUID | None:
     return None
 
 
+def _codes(text: str) -> list[str]:
+    """Los códigos de una selección, sin vacíos. Sin expresiones regulares: un texto largo de
+    espacios y comas se recorre una sola vez (no hay retroceso)."""
+    for separator in SEPARATORS[1:]:
+        text = text.replace(separator, SEPARATORS[0])
+    return [part.strip() for part in text.split(SEPARATORS[0]) if part.strip()]
+
+
 def parse_destination(
     text: str, catalog: Catalog, task_id: UUID | None = None
 ) -> tuple[DestinationData | None, str]:
@@ -74,7 +82,7 @@ def parse_destination(
         chapter = DestinationData(str(CostScope.CHAPTER), chapter_id=chapter_id, task_id=task_id)
         return chapter, ""
     rows: list[CatalogRow] = []
-    for code in filter(None, _SPLIT.split(value)):
+    for code in _codes(value):
         found = catalog.by_code(code)
         if not found:
             return None, f"«{code}» no es un ítem ni un capítulo del presupuesto vigente."

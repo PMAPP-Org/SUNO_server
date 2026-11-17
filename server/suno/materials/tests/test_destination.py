@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import unittest
 from typing import Any
 
@@ -16,6 +17,7 @@ from suno.core.tests.dbsupport import (
 from suno.costs.catalog import assignable_tasks, load_catalog
 from suno.costs.tests.factories import item
 from suno.materials.destination import (
+    EMPTY_SELECTION,
     DestinationData,
     check_destination,
     destination_key,
@@ -143,3 +145,19 @@ class DestinationTests(TestCase):
             list(MaterialIssueItem.objects.filter(issue=issue).values_list("item_id", flat=True)),
             [self.steel.pk],
         )
+
+    def test_long_adversarial_texts_parse_quickly(self) -> None:
+        """Muchos espacios y separadores (CodeQL `py/polynomial-redos`): una sola pasada."""
+        cases = (
+            ("2.1" + " " * 50_000 + ", " * 50_000 + ";" * 50_000 + " x",
+             "«x» no es un ítem ni un capítulo del presupuesto vigente."),
+            (" ," * 100_000, EMPTY_SELECTION),
+            ("2.1" + " " * 100_000 + "\t2.2", "«2.1" + " " * 100_000 + "\t2.2» no es un ítem ni "
+             "un capítulo del presupuesto vigente."),
+        )  # fmt: skip
+        for text, error in cases:
+            with self.subTest(size=len(text)):
+                started = time.perf_counter()
+                found = parse_destination(text, self.catalog)
+                self.assertLess(time.perf_counter() - started, 0.5)
+                self.assertEqual(found, (None, error))
