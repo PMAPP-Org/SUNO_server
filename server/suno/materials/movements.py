@@ -24,7 +24,7 @@ from typing import Any
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
 
@@ -72,6 +72,8 @@ from .stock import returned_value
 MAX_RECEIVER = 120
 IN_A_CUT = "La salida ya está en un corte: no se edita ni se borra."
 HAS_RETURNS = "La salida tiene devoluciones: no se edita ni se borra."
+CLIENT_CONSTRAINT = "material_issue_client_uq"
+DUPLICATE_CLIENT = "Esa salida ya se registró desde otro lado: actualiza la lista de salidas."
 
 
 @dataclass(frozen=True)
@@ -262,43 +264,48 @@ def create_issue(
         raise PermissionDenied
     catalog, tasks = _defaults(ctx, project, catalog, tasks)
     today = timezone.localdate()
-    with transaction.atomic():
-        lock_project(ctx, project)
-        if data.client_id is not None:
-            existing = scoped_qs(ctx, MaterialIssue).filter(client_id=data.client_id).first()
-            if existing is not None:
-                if existing.project_id != project.pk:
-                    raise MaterialRejected(
-                        ["Ese identificador de salida ya se usó en otro proyecto."]
-                    )
-                return existing
-        warehouse, assignment = _issue_checked(
-            ctx, project, data, catalog, tasks, frozenset(), today
-        )
-        issue = scoped_qs(ctx, MaterialIssue).create(
-            org_id=ctx.org_id,
-            project=project,
-            number=next_number(ctx, MaterialIssue, project),
-            warehouse=warehouse,
-            issued_on=data.issued_on,
-            received_by=data.received_by.strip(),
-            notes=data.notes.strip(),
-            client_id=data.client_id,
-            created_by_id=ctx.user_id,
-            updated_by_id=ctx.user_id,
-            **destination_fields(assignment),
-        )
-        link_items(ctx, MaterialIssueItem, "issue", issue, assignment.item_ids)
-        stock = Stock(ctx, project, [(warehouse.pk, line.material_id) for line in data.lines])
-        issue.total = _take_lines(ctx, stock, issue, data.lines)
-        stock.save()
-        issue.save(update_fields=["total"])
-        audit.record(
-            ctx,
-            action=AuditAction.MATERIAL_ISSUE_CREATED,
-            target=f"material_issue:{issue.pk}",
-            metadata=issue_metadata(issue),
-        )
+    try:
+        with transaction.atomic():
+            lock_project(ctx, project)
+            if data.client_id is not None:
+                existing = (
+                    scoped_qs(ctx, MaterialIssue)
+                    .filter(project=project, client_id=data.client_id)
+                    .first()
+                )
+                if existing is not None:
+                    return existing
+            warehouse, assignment = _issue_checked(
+                ctx, project, data, catalog, tasks, frozenset(), today
+            )
+            issue = scoped_qs(ctx, MaterialIssue).create(
+                org_id=ctx.org_id,
+                project=project,
+                number=next_number(ctx, MaterialIssue, project),
+                warehouse=warehouse,
+                issued_on=data.issued_on,
+                received_by=data.received_by.strip(),
+                notes=data.notes.strip(),
+                client_id=data.client_id,
+                created_by_id=ctx.user_id,
+                updated_by_id=ctx.user_id,
+                **destination_fields(assignment),
+            )
+            link_items(ctx, MaterialIssueItem, "issue", issue, assignment.item_ids)
+            stock = Stock(ctx, project, [(warehouse.pk, line.material_id) for line in data.lines])
+            issue.total = _take_lines(ctx, stock, issue, data.lines)
+            stock.save()
+            issue.save(update_fields=["total"])
+            audit.record(
+                ctx,
+                action=AuditAction.MATERIAL_ISSUE_CREATED,
+                target=f"material_issue:{issue.pk}",
+                metadata=issue_metadata(issue),
+            )
+    except IntegrityError as exc:
+        if CLIENT_CONSTRAINT not in str(exc):
+            raise
+        raise MaterialRejected([DUPLICATE_CLIENT]) from exc
     return issue
 
 
@@ -401,8 +408,8 @@ def returned_by_line(
         for line_id, quantity, value in scoped_qs(ctx, MaterialReturnLine)
         .filter(issue_line_id__in=list(line_ids))
         .values("issue_line_id")
-        .annotate(quantity=Sum("quantity"), value=Sum("amount"))
-        .values_list("issue_line_id", "quantity", "value")
+        .annotate(qty_sum=Sum("quantity"), value_sum=Sum("amount"))
+        .values_list("issue_line_id", "qty_sum", "value_sum")
     }
 
 
@@ -422,6 +429,12 @@ def create_return(
             .select_related("material")
         }
         errors: list[str] = []
+        warehouse = scoped_qs(ctx, Warehouse).get(pk=issue.warehouse_id)
+        if not warehouse.active:
+            errors.append(
+                f"La bodega {warehouse.name} está inactiva: reactívala para registrar la "
+                "devolución."
+            )
         problem = day_problem(ctx, project, data.returned_on, today)
         if problem:
             errors.append(problem)

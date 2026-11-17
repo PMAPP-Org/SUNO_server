@@ -192,13 +192,14 @@ def stock_in(
     *,
     warehouse: Warehouse | None = None,
     day: date = BOUGHT,
+    project: Project | None = None,
 ) -> MaterialPurchase:
     """Una compra a bodega aprobada por los servicios: la registra el Colaborador, se le pone un
     soporte en la BD (sin almacén) y la aprueba la supervisión. `lines`: (material, cantidad,
     valor unitario)."""
     purchase = purchases.create_purchase(
         mw.ctx(mw.cw.contributor),
-        mw.project,
+        project or mw.project,
         PurchaseData(
             kind=str(PurchaseKind.WAREHOUSE),
             warehouse_id=(warehouse or mw.warehouse).pk,
@@ -213,7 +214,9 @@ def stock_in(
     MaterialPurchase.objects.filter(pk=purchase.pk).update(
         attachment=support_blob("factura de materiales"), attachment_name="factura.pdf"
     )
-    return purchases.approve_purchase(mw.ctx(mw.world.supervisor), mw.project, purchase.pk)
+    return purchases.approve_purchase(
+        mw.ctx(mw.world.supervisor), project or mw.project, purchase.pk
+    )
 
 
 def issue(
@@ -225,11 +228,12 @@ def issue(
     warehouse: Warehouse | None = None,
     user: AppUser | None = None,
     client_id: UUID | None = None,
+    project: Project | None = None,
 ) -> MaterialIssue:
     """Una salida por el servicio (por defecto, del Colaborador, indirecta)."""
     return movements.create_issue(
         mw.ctx(user or mw.cw.contributor),
-        mw.project,
+        project or mw.project,
         IssueData(
             warehouse_id=(warehouse or mw.warehouse).pk,
             issued_on=day,

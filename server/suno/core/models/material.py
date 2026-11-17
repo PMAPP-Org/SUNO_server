@@ -430,7 +430,8 @@ class MaterialIssue(Authored, Destined):
     received_by = models.CharField(max_length=120, blank=True, verbose_name="recibe")
     notes = models.CharField(max_length=500, blank=True, verbose_name="notas")
     #: Generado por el cliente (la futura captura móvil): un reintento no duplica la salida.
-    client_id = models.UUIDField(null=True, blank=True, unique=True)
+    #: Único por proyecto (`material_issue_client_uq`).
+    client_id = models.UUIDField(null=True, blank=True)
     cut = models.ForeignKey(
         ConsumptionCut,
         null=True,
@@ -456,6 +457,11 @@ class MaterialIssue(Authored, Destined):
         verbose_name_plural = "salidas de materiales"
         constraints = [
             models.UniqueConstraint(fields=["project", "number"], name="material_issue_number_uq"),
+            models.UniqueConstraint(
+                fields=["project", "client_id"],
+                condition=models.Q(client_id__isnull=False),
+                name="material_issue_client_uq",
+            ),
             _destination_check("material_issue_destination"),
         ]
         indexes = [

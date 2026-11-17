@@ -16,7 +16,9 @@ from suno.core.models import (
     MaterialIssue,
     MaterialIssueLine,
     MaterialReturn,
+    Project,
     StockMovement,
+    Warehouse,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -164,6 +166,44 @@ class IssueTests(TestCase):
         self.assertEqual(first.pk, again.pk)
         self.assertEqual(balance_of(self.mw, self.mw.cement), (D("143"), D("4647500.00")))
 
+    def test_a_client_id_is_unique_per_project_only(self) -> None:
+        client_id = uuid.uuid4()
+        first = issue(self.mw, [(self.mw.cement, "1")], client_id=client_id)
+        other_org = material_world("Otra constructora")
+        stock_in(other_org, [(other_org.cement, "5", "1000.00")])
+        elsewhere = issue(other_org, [(other_org.cement, "1")], client_id=client_id)
+        world = self.mw.world
+        other = Project.objects.create(org=world.org, name="Obra B", created_by=world.admin)
+        site = make_warehouse(world, "Bodega de la obra B", project=other)
+        stock_in(self.mw, [(self.mw.cement, "5", "1000.00")], warehouse=site, project=other)
+        sibling = issue(self.mw, [(self.mw.cement, "1")], warehouse=site, project=other,
+                        client_id=client_id)  # fmt: skip
+        self.assertEqual(len({first.pk, elsewhere.pk, sibling.pk}), 3)
+        self.assertEqual(sibling.project_id, other.pk)
+        again = issue(self.mw, [(self.mw.cement, "3")], warehouse=site, project=other,
+                      client_id=client_id)  # fmt: skip
+        self.assertEqual(again.pk, sibling.pk)
+        self.assertEqual(MaterialIssue.objects.filter(client_id=client_id).count(), 3)
+
+    def test_editing_an_issue_into_another_warehouse(self) -> None:
+        north = make_warehouse(self.mw.world, "Frente norte")
+        stock_in(self.mw, [(self.mw.cement, "20", "30000.00")], warehouse=north)
+        out = issue(self.mw, [(self.mw.cement, "7")])
+        moved = IssueData(
+            warehouse_id=north.pk,
+            issued_on=date(2026, 3, 10),
+            destination=INDIRECT,
+            lines=(IssueLineData(self.mw.cement.pk, D("10")),),
+        )
+        movements.update_issue(self.contributor, self.project, out.pk, moved)
+        self.assertEqual(balance_of(self.mw, self.mw.cement), (D("150"), D("4875000.00")))
+        self.assertEqual(balance_of(self.mw, self.mw.cement, north), (D("10"), D("300000.00")))
+        self.assertEqual(
+            set(StockMovement.objects.filter(issue=out).values_list("warehouse_id", flat=True)),
+            {north.pk},
+        )
+        assert_consistent(self, self.mw)
+
 
 @skip_without_db
 class ReturnAndTransferTests(TestCase):
@@ -230,3 +270,35 @@ class ReturnAndTransferTests(TestCase):
             )  # fmt: skip
         self.assertEqual(caught.exception.errors, ["Un traslado va entre dos bodegas distintas."])
         assert_consistent(self, self.mw)
+
+    def test_partial_returns_end_exactly_at_the_line_amount(self) -> None:
+        stock_in(self.mw, [(self.mw.sand, "10", "100000.00")])
+        stock_in(self.mw, [(self.mw.sand, "20", "110000.00")])
+        out = issue(self.mw, [(self.mw.sand, "7")])
+        line = MaterialIssueLine.objects.get(issue=out)
+        totals = [
+            movements.create_return(
+                self.contributor, self.project, out.pk,
+                ReturnData(date(2026, 3, 12), (ReturnLineData(line.pk, D(quantity)),)),
+            ).total
+            for quantity in ("2", "2", "3")
+        ]  # fmt: skip
+        self.assertEqual(totals, [D("213333.33"), D("213333.33"), D("320000.01")])
+        self.assertEqual(sum(totals), line.amount)
+        self.assertEqual(balance_of(self.mw, self.mw.sand), (D("30"), D("3200000.00")))
+        assert_consistent(self, self.mw)
+
+    def test_no_return_into_an_inactive_warehouse(self) -> None:
+        stock_in(self.mw, [(self.mw.cement, "10", "32000.00")])
+        out = issue(self.mw, [(self.mw.cement, "7")])
+        line = MaterialIssueLine.objects.get(issue=out)
+        Warehouse.objects.filter(pk=self.mw.warehouse.pk).update(active=False)
+        with self.assertRaises(MaterialRejected) as caught:
+            movements.create_return(
+                self.contributor, self.project, out.pk,
+                ReturnData(date(2026, 3, 12), (ReturnLineData(line.pk, D("1")),)),
+            )  # fmt: skip
+        self.assertEqual(
+            caught.exception.errors,
+            ["La bodega Almacén principal está inactiva: reactívala para registrar la devolución."],
+        )
