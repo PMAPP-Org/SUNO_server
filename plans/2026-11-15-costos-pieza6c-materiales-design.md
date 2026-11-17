@@ -406,3 +406,58 @@ que se ajuste mejor, lo reutiliza y lo deja anotado.
 - Insumos o APU en el presupuesto, y consumo teórico contra real por ítem.
 - Lotes, seriales y vencimientos.
 - Mano de obra por jornal y nómina: pieza 6d.
+
+## Decisiones tomadas al planear
+
+Resumen de la sección del mismo nombre del plan
+([2026-11-15-costos-pieza6c-materiales-plan.md](2026-11-15-costos-pieza6c-materiales-plan.md)).
+Ninguna reabre lo aprobado; ⚑ las que revisó el usuario.
+
+- **Migración** `0030_materials`, aditiva salvo la restricción de signo del libro (admite el neto
+  negativo de un corte) y la nueva "un solo origen" de `CostEntry`.
+- ⚑ **Permiso del catálogo**: `can_read_material_catalog` (cualquier rol de Costos) y
+  `can_manage_material_catalog` (`create` y `update` de Costos con alcance de toda la
+  organización). No había un permiso de catálogo de organización que encajara.
+- **Permisos del proyecto**: las políticas de Costos. ⚑ Bodegas: crear pide `create`;
+  renombrar, desactivar y activar, `can_update_cost` sobre la bodega.
+- ⚑ **Destino escrito como texto**: vacío o "Indirecto", un ítem ("2.1" o su etiqueta),
+  "Capítulo 2" o varios códigos del mismo capítulo ("2.1, 2.2"). Se valida con
+  `costs.services.check_assignment`, extraída de la 6a sin cambiar su comportamiento.
+- ⚑ **Precisión**: cantidades con 4 decimales, valores a centavos y costo unitario con 6. Una
+  salida al promedio nunca se lleva más valor del que tiene el saldo.
+- ⚑ **Orden del kárdex**: la secuencia de registro por bodega y material. El filtro por fechas
+  solo elige las filas; en pantalla, como mucho los últimos 1.000 movimientos.
+- ⚑ **Retiros por anulación**: por el valor con que entró, sin pasar del valor del saldo.
+- ⚑ **Editar o borrar una salida** borra sus movimientos y, al editar, los escribe de nuevo al
+  promedio del momento. Devoluciones y traslados no se editan ni se borran.
+- ⚑ **Devolución**: al costo de la línea de salida; la que completa la línea se lleva el valor
+  exacto que faltaba. No entra a una bodega inactiva.
+- **Bloqueo**: proyecto (`FOR NO KEY UPDATE`), documento y saldos en orden de (bodega,
+  material).
+- **Consecutivos** por proyecto y tipo (`CM-`, `SA-`, `DV-`, `TR-`, `AJ-`, `Corte n`).
+- ⚑ **Estados** con etiquetas neutras: Borrador, Aprobado, Rechazado, Anulado.
+- ⚑ **Compra**: la factura se adjunta al crear o después; adjuntarla no es editar y editar no
+  la quita. La bodega tiene que estar activa para aprobar. Tercero "Proveedor (NIT …)". Una
+  línea o un total que pasa del máximo del campo se rechaza con un mensaje.
+- ⚑ **`client_id`** de una salida: único por proyecto. Si ya existe en el proyecto, el
+  servicio devuelve esa salida; en otro proyecto u organización es otra salida. (Ajustado en
+  la revisión de código: antes era único en toda la base.)
+- ⚑ **Ajuste**: una línea por material; destino del faltante obligatorio (por defecto
+  Indirecto); un conteo sin diferencias no se guarda; el periodo cerrado no aplica a compras ni
+  ajustes. El sobrante sin saldo entra al costo de la última entrada, aunque sea 0; sin
+  entradas, al costo que escriba el usuario.
+- ⚑ **Corte**: el inicio no se elige; un corte sin movimientos no se crea; no se anula el
+  último aprobado con otro corte abierto. La huella que se compara al aprobar incluye el total,
+  el número de salidas y devoluciones, el neto por destino y cada línea (id, material, cantidad
+  y valor). Al aprobar no se reescribe el resumen que imprimió el PDF.
+- **Corte → libro**: un `CostEntry` aprobado por destino con neto distinto de cero, con fecha
+  del fin del periodo.
+- **Libro**: orígenes "Compras", "Cortes" y "Ajustes"; los movimientos de materiales no se
+  reversan desde el libro.
+- **Control, "Por ítem"**: "Valor en bodega del proyecto" como dato informativo, solo cuando
+  hay resultado del control.
+- **Listas**: inventario paginado de a 100; las demás, los 200 más recientes del filtro.
+- **Excel y PDF**: piden el permiso de exportar antes de armarse, con `safe_cell` en todo texto
+  y auditados. El PDF escapa todo texto de usuario.
+- ⚑ **Catálogo**: un material no se borra, se desactiva; la unidad de un material con
+  movimientos no se cambia.
