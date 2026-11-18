@@ -21,12 +21,22 @@ Contrato de uso, en un módulo de test::
 `.github/workflows/backend.yml`): si no hay PostgreSQL alcanzable, importar
 este módulo falla en tiempo de colección en vez de dejar que los tests se
 salten en silencio. Un skip masivo y un verde real no pueden parecerse.
+
+**Migrar una vez por sesión.** Migrar desde cero en cada módulo costaba ~70 s
+por módulo en CI con 30 migraciones (la suite pasó de las 2 h). El primer
+módulo crea y migra `test_<NAME>` y lo copia a una plantilla
+(`test_<NAME>_plantilla`); los siguientes recrean `test_<NAME>` con
+`CREATE DATABASE … TEMPLATE`, que copia los archivos en ~1 s. Cada módulo
+sigue empezando con una BD recién migrada y vacía, como antes.
 """
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import os
 
+from django.conf import settings
 from django.db import connection
 from django.test.utils import setup_test_environment, teardown_test_environment
 
@@ -74,7 +84,62 @@ def setup_test_database() -> None:
         return
     setup_test_environment()
     _STATE["old_name"] = connection.settings_dict["NAME"]
-    connection.creation.create_test_db(verbosity=0, autoclobber=True)
+    if "template" in _SESSION:
+        _create_from_template()
+    else:
+        connection.creation.create_test_db(verbosity=0, autoclobber=True)
+        _save_template()
+
+
+#: Nombre de la plantilla migrada de esta sesión (un proceso de pytest).
+_SESSION: dict[str, str] = {}
+
+_TEMPLATE_SUFFIX = "plantilla"
+
+
+def _execute_without_db(*statements: str) -> None:
+    """Ejecuta SQL de administración (CREATE/DROP DATABASE) fuera de la BD de test.
+
+    Postgres no copia ni borra una base con conexiones abiertas: se cierra la
+    de este hilo antes de ejecutar.
+    """
+    connection.close()
+    with connection.creation._nodb_cursor() as cursor:
+        for statement in statements:
+            cursor.execute(statement)
+
+
+def _save_template() -> None:
+    """Copia la BD recién migrada a la plantilla de la sesión."""
+    quote = connection.ops.quote_name
+    test_name = connection.settings_dict["NAME"]
+    template = connection.creation.get_test_db_clone_settings(_TEMPLATE_SUFFIX)["NAME"]
+    _execute_without_db(
+        f"DROP DATABASE IF EXISTS {quote(template)}",
+        f"CREATE DATABASE {quote(template)} TEMPLATE {quote(test_name)}",
+    )
+    _SESSION["template"] = template
+    atexit.register(_drop_template)
+
+
+def _create_from_template() -> None:
+    """Recrea `test_<NAME>` desde la plantilla, como haría `create_test_db()`."""
+    quote = connection.ops.quote_name
+    test_name = connection.creation._get_test_db_name()
+    _execute_without_db(
+        f"DROP DATABASE IF EXISTS {quote(test_name)}",
+        f"CREATE DATABASE {quote(test_name)} TEMPLATE {quote(_SESSION['template'])}",
+    )
+    settings.DATABASES[connection.alias]["NAME"] = test_name
+    connection.settings_dict["NAME"] = test_name
+    connection.ensure_connection()
+
+
+def _drop_template() -> None:
+    """Borra la plantilla al salir del proceso; si falla, la próxima sesión la pisa."""
+    template = connection.ops.quote_name(_SESSION["template"])
+    with contextlib.suppress(Exception):  # al salir no hay a quién avisar
+        _execute_without_db(f"DROP DATABASE IF EXISTS {template}")
 
 
 def teardown_test_database() -> None:
