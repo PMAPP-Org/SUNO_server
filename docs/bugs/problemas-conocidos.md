@@ -3,6 +3,7 @@
 Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub. Cada uno debe convertirse en un issue con la etiqueta `known-issue` (y su severidad); a partir de ahí **el issue es la fuente de verdad** y esta lista solo sirve de punto de partida. Severidades como en [`CONTRIBUTING.md`](../../CONTRIBUTING.md#bugs-y-parches): S1 crítica, S2 alta, S3 media, S4 baja.
 
 ## KI-01. La prueba de carga semanal del push falla desde el 2026-10-19
+- **Issue:** [#85](https://github.com/PMAPP-Org/SUNO_server/issues/85)
 
 - **Título propuesto:** `Prueba de carga: p95 de /v1/sync/push 2,33 s, por encima del objetivo de 1,5 s`
 - **Severidad:** S3. Sin impacto visible con los usuarios actuales, pero es el riesgo S-05 de doc 08 (ráfaga de fin de jornada) y ADR-0010 fija 2 s como disparador de migración.
@@ -10,6 +11,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `gh run list --workflow load.yml` (runs 39273297855 … 43917406983); log de 43917406983: `FALLO: p95 2.330 s ≥ 1.5 s (riesgo S-05)`; `infra/load/push_load.py`.
 
 ## KI-02. Cuatro pruebas de `test_load_script.py` fallan al correr la suite en local
+- **Issue:** [#86](https://github.com/PMAPP-Org/SUNO_server/issues/86)
 
 - **Título propuesto:** `test_load_script.py falla en el contenedor local: no encuentra infra/load/push_load.py`
 - **Severidad:** S4.
@@ -17,6 +19,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `plans/suno-progreso.md` (etapa 1 y piezas 3 a 6c, «Verificación real»).
 
 ## KI-03. El job de pruebas del backend supera los 75 minutos
+- **Issue:** [#87](https://github.com/PMAPP-Org/SUNO_server/issues/87)
 
 - **Título propuesto:** `CI backend: la suite completa no cabe en 75 min en GitHub Actions`
 - **Severidad:** S3 (una ejecución cortada deja `master` sin señal de calidad y se despliega igual).
@@ -24,6 +27,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `.github/workflows/backend.yml` (`timeout-minutes: 75`); PR #78; commit `8091e14` en `feat/costos-materiales`.
 
 ## KI-04. La descripción de los movimientos generados usa el nombre vivo del ítem o material
+- **Issue:** [#88](https://github.com/PMAPP-Org/SUNO_server/issues/88)
 
 - **Título propuesto:** `Libro de costos: renombrar un ítem entre la firma y la aprobación cambia la descripción del movimiento`
 - **Severidad:** S4. No cambia montos.
@@ -31,6 +35,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `server/suno/contracts/certificates.py` (`post_to_ledger`); `server/suno/materials/purchases.py` en la rama de #84; `plans/suno-progreso.md` (6b, «Limitación conocida»).
 
 ## KI-05. MinIO de desarrollo sin imagen fijada (issue #21)
+- **Issue:** [#21](https://github.com/PMAPP-Org/SUNO_server/issues/21)
 
 - **Título propuesto:** ya existe: [#21 «Dev: MinIO ya no publica imágenes; elegir S3 local sustituto»](https://github.com/PMAPP-Org/SUNO_server/issues/21). Añadirle la etiqueta `known-issue`.
 - **Severidad:** S4 (solo desarrollo).
@@ -38,12 +43,14 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `infra/docker-compose.override.dev.yml`; issue #21.
 
 ## KI-06. Configuración pendiente de un Admin de la organización (issue #7)
+- **Issue:** [#7](https://github.com/PMAPP-Org/SUNO_server/issues/7)
 
 - **Título propuesto:** ya existe: [#7 «Pendiente (requiere Admin): protección de rama, dependency graph y releases»](https://github.com/PMAPP-Org/SUNO_server/issues/7). Añadirle `known-issue`.
 - **Severidad:** S3. Sin protección de rama y con auto-integración temporal (EXC-002), un commit puede llegar a `master` (y a producción) sin revisión; Scorecard marca `BranchProtection` y `CodeReview` como altos.
 - **Evidencia:** issue #7; `.github/CODEOWNERS`; `docs/seguridad/excepciones.md` (EXC-002); alertas de Scorecard abiertas en code scanning.
 
 ## KI-07. Code scanning: alertas de Semgrep sobre CSRF que son falsos positivos
+- **Issue:** [#89](https://github.com/PMAPP-Org/SUNO_server/issues/89)
 
 - **Título propuesto:** `Code scanning: alertas django-no-csrf-token en plantillas que sí tienen {% csrf_token %}`
 - **Severidad:** S4.
@@ -51,6 +58,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `gh api repos/PMAPP-Org/SUNO_server/code-scanning/alerts` (abiertas y descartadas); `server/suno/core/templates/suno/contracts/amendment_form.html`.
 
 ## KI-08. Hallazgos de revisión de C5/C6 sin verificar
+- **Issue:** [#90](https://github.com/PMAPP-Org/SUNO_server/issues/90)
 
 - **Título propuesto:** `Verificar hallazgos de la revisión de C5/C6 (#37): repetibles anidados, relevant compuesto, fechas de Excel, exportes con borrados`
 - **Severidad:** S3 hasta verificarlos (uno era un 500 al importar).
@@ -58,6 +66,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** `plans/suno-progreso.md`; PR #37 (`ae782ad`).
 
 ## KI-09. Sentry previsto pero no integrado
+- **Issue:** [#91](https://github.com/PMAPP-Org/SUNO_server/issues/91)
 
 - **Título propuesto:** `Errores de aplicación: Sentry (ADR-0010) no está integrado`
 - **Severidad:** S4.
@@ -65,6 +74,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Evidencia:** búsqueda de `sentry` en `server/` e `infra/` sin resultados.
 
 ## KI-10. La reversa de la migración 0014 no tiene prueba automática
+- **Issue:** [#92](https://github.com/PMAPP-Org/SUNO_server/issues/92)
 
 - **Título propuesto:** `Migraciones: la reversa de 0014_add_quantity_matrix no tiene prueba`
 - **Severidad:** S4.
