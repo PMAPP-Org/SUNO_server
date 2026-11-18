@@ -1,0 +1,33 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Compra {{ purchase.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="purchases" %}
+<section class="pj-panel cst-detail">
+  <h2>Compra {{ purchase.code }} <span class="bg-label mat-{{ purchase.status }}">{{ purchase.get_status_display }}</span></h2>
+  {% if purchase.status == "rejected" %}<p class="pj-warning">Motivo del rechazo: {{ purchase.decision_note }}</p>{% endif %}
+  {% if purchase.status == "voided" %}<p class="pj-warning">Anulada por {{ purchase.voided_by }}: {{ purchase.void_note }}</p>{% endif %}
+  <dl class="cst-facts">
+    <dt>Tipo</dt><dd>{{ purchase.get_kind_display }}{% if purchase.warehouse %} · {{ purchase.warehouse.name }}{% endif %}</dd>
+    <dt>Proveedor</dt><dd>{{ purchase.supplier }}{% if purchase.supplier_tax_id %} (NIT {{ purchase.supplier_tax_id }}){% endif %}</dd>
+    <dt>Documento</dt><dd>{{ purchase.get_document_type_display }} {{ purchase.document_number }}</dd>
+    <dt>Fecha</dt><dd>{{ purchase.purchased_on|date:"d/m/Y" }}</dd>
+    <dt>Total (IVA incluido)</dt><dd>{{ purchase.total|money }}</dd>
+    <dt>Registró</dt><dd>{{ purchase.created_by }} · modificó {{ purchase.updated_by }}</dd>
+    {% if purchase.decided_by %}<dt>{% if purchase.status == "rejected" %}Rechazó{% else %}Aprobó{% endif %}</dt><dd>{{ purchase.decided_by }} · {{ purchase.decided_at|date:"d/m/Y H:i" }}</dd>{% endif %}
+  </dl>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Valor unitario</th><th class="num">Valor</th>{% if purchase.kind == "direct" %}<th>Destino</th>{% endif %}</tr></thead>
+    <tbody>{% for line, destination in lines %}<tr><td class="pj-name">{{ line.material.code }} · {{ line.material.name }}</td><td class="num">{{ line.quantity|qty }} {{ line.material.unit }}</td><td class="num">{{ line.unit_price|money }}</td><td class="num">{{ line.amount|signed }}</td>{% if purchase.kind == "direct" %}<td class="pj-wrap">{{ destination }}</td>{% endif %}</tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% include "suno/materials/_support.html" with doc=purchase label="Factura" upload=urls.upload view=urls.view %}
+  <div class="ctr-actions">
+    {% if can_edit %}<a class="button" href="{% url 'materials:edit_purchase' project.pk purchase.pk %}">{% if purchase.status == "rejected" %}Corregir y reenviar{% else %}Editar{% endif %}</a>{% endif %}
+    {% if can_delete %}<form method="post" action="{% url 'materials:delete_purchase' project.pk purchase.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar</button></form>{% endif %}
+  </div>
+  {% include "suno/materials/_decide.html" with approve=urls.approve reject=urls.reject void=urls.void back="" %}
+</section>
+{% endblock %}

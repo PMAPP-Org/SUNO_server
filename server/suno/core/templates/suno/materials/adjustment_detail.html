@@ -1,0 +1,31 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Ajuste {{ adjustment.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="adjustments" %}
+<section class="pj-panel cst-detail">
+  <h2>Ajuste {{ adjustment.code }} <span class="bg-label mat-{{ adjustment.status }}">{{ adjustment.get_status_display }}</span></h2>
+  {% if adjustment.status == "rejected" %}<p class="pj-warning">Motivo del rechazo: {{ adjustment.decision_note }}</p>{% endif %}
+  {% if adjustment.status == "voided" %}<p class="pj-warning">Anulado por {{ adjustment.voided_by }}: {{ adjustment.void_note }}</p>{% endif %}
+  <dl class="cst-facts">
+    <dt>Bodega</dt><dd>{{ adjustment.warehouse.name }}</dd>
+    <dt>Fecha del conteo</dt><dd>{{ adjustment.counted_on|date:"d/m/Y" }}</dd>
+    <dt>Destino del faltante</dt><dd>{{ label }}</dd>
+    {% if adjustment.status == "approved" or adjustment.status == "voided" %}<dt>Faltantes</dt><dd>{{ adjustment.shortage_total|money }}</dd><dt>Sobrantes</dt><dd>{{ adjustment.surplus_total|money }}</dd>{% endif %}
+    <dt>Registró</dt><dd>{{ adjustment.created_by }} · modificó {{ adjustment.updated_by }}</dd>
+  </dl>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Material</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th class="num">Costo unitario</th><th class="num">Valor</th></tr></thead>
+    <tbody>{% for line in lines %}<tr><td class="pj-name">{{ line.material.label }}</td><td class="num">{{ line.expected|qty }}</td><td class="num">{{ line.counted|qty }}</td><td class="num">{{ line.difference|qty }}</td><td class="num">{% if line.unit_cost is not None %}{{ line.unit_cost|money }}{% elif line.given_unit_cost %}{{ line.given_unit_cost|money }}{% else %}—{% endif %}</td><td class="num">{{ line.amount|signed|default:"—" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% include "suno/materials/_support.html" with doc=adjustment label="Acta de conteo firmada" upload=urls.upload view=urls.view %}
+  <div class="ctr-actions">
+    {% if can_edit %}<a class="button" href="{% url 'materials:edit_adjustment' project.pk adjustment.pk %}">{% if adjustment.status == "rejected" %}Corregir y reenviar{% else %}Editar{% endif %}</a>{% endif %}
+    {% if can_delete %}<form method="post" action="{% url 'materials:delete_adjustment' project.pk adjustment.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar</button></form>{% endif %}
+  </div>
+  {% include "suno/materials/_decide.html" with approve=urls.approve reject=urls.reject void=urls.void back="" %}
+</section>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Traslados · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="transfers" %}
+{% if can_create %}
+<section class="pj-panel">
+  <h2>Nuevo traslado</h2>
+  <form method="post" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
+    <div class="pj-form ctr-head">
+      <label>{{ form.source.label }} {{ form.source }}</label>
+      <label>{{ form.target.label }} {{ form.target }}</label>
+      <label>{{ form.moved_on.label }} {{ form.moved_on }}</label>
+      <label>{{ form.notes.label }} {{ form.notes }}</label>
+    </div>
+    {% include "suno/materials/_material_rows.html" with formset=lines %}
+    <datalist id="mat-materials">{% for m in material_index.materials %}<option value="{{ m.label }}">{% endfor %}</datalist>
+    <p class="pj-muted">Sale al promedio de la bodega de origen y entra a la otra con el mismo valor. No es costo.</p>
+    <div class="ctr-actions">
+      <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
+      <button class="button" type="submit" name="accion" value="guardar">Registrar traslado</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+<section class="pj-panel">
+  {% if rows %}
+  {% if more %}<p class="pj-muted">Se muestran los 200 más recientes.</p>{% endif %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Número</th><th>Fecha</th><th>Sale de</th><th>Entra a</th><th class="num">Valor</th></tr></thead>
+    <tbody>{% for t in rows %}<tr><td><a href="{% url 'materials:transfer' project.pk t.pk %}">{{ t.code }}</a></td><td>{{ t.moved_on|date:"d/m/Y" }}</td><td class="pj-wrap">{{ t.source.name }}</td><td class="pj-wrap">{{ t.target.name }}</td><td class="num">{{ t.total|signed }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay traslados.</p>{% endif %}
+</section>
+{% endblock %}

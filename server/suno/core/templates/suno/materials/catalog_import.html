@@ -1,0 +1,32 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Importar materiales{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'materials_catalog:list' %}">Catálogo de materiales</a></p><h1>Importar desde Excel</h1></div></section>
+<section class="pj-panel">
+  <p><a href="{% url 'materials_catalog:template' %}">Descarga la plantilla</a>: hoja «Materiales» con Código, Nombre, Unidad y Categoría. Los códigos nuevos se crean; los que ya existen se actualizan.</p>
+  <form method="post" enctype="multipart/form-data" class="pj-form">
+    {% csrf_token %}
+    <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
+    {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <button class="button" type="submit">Ver vista previa</button>
+  </form>
+</section>
+{% if result %}
+<section class="pj-panel">
+  <h2>Vista previa</h2>
+  {% if result.errors %}<div class="pj-late" role="alert"><p>No se puede cargar el archivo:</p><ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if result.rows %}
+  <p>{% for action, n in counts %}{{ n }} {{ action }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Fila</th><th>Código</th><th>Nombre</th><th>Unidad</th><th>Categoría</th><th>Qué pasa</th></tr></thead>
+    <tbody>{% for row in result.rows %}<tr><td>{{ row.line }}</td><td>{{ row.data.code }}</td><td class="pj-name">{{ row.data.name }}</td><td>{{ row.data.unit }}</td><td class="pj-wrap">{{ row.data.category|default:"—" }}</td><td>{{ row.action }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if result.token %}
+  <form method="post" action="{% url 'materials_catalog:import_apply' %}">{% csrf_token %}<input type="hidden" name="token" value="{{ result.token }}"><button class="button" type="submit">Cargar al catálogo</button></form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

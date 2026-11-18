@@ -108,3 +108,37 @@ Los datos en el teléfono están cifrados (SQLCipher) y los tokens en el almacé
    Guárdalo fuera del servidor, con su hash (`sha256sum`).
 3. Notificación: cliente afectado y SIC (§8.4 de las políticas).
 4. Post-mortem en ≤ 5 días hábiles.
+
+## Postmortem (sin culpables)
+
+Todo incidente S1 o S2, y cualquier otro que deje una lección, termina en un postmortem en ≤ 5 días hábiles ([`politicas.md`](../seguridad/politicas.md) §8, paso 5). Es **sin culpables**: se describen decisiones y sistemas, no personas; la pregunta es qué permitió el fallo y qué lo detectará o impedirá la próxima vez.
+
+Cada postmortem se agrega al **registro** de abajo (el más reciente primero) con esta plantilla. Las acciones correctivas son issues enlazados; un fallo de código, además, una fila en [`docs/bugs/historial.md`](../bugs/historial.md).
+
+```markdown
+### AAAA-MM-DD — Título corto (S1/S2/S3)
+
+- **Issue del incidente:** #N
+- **Duración:** inicio → recuperación (UTC-5); tiempo hasta detectar y hasta recuperar.
+- **Impacto:** qué no funcionó, a quién, datos afectados (sí/no; si sí, notificaciones hechas).
+- **Detección:** cómo se supo (alerta, uptime.yml, usuario). ¿Pudo detectarse antes?
+
+**Cronología**
+- HH:MM — hecho o acción.
+
+**Causa raíz**
+Qué falló y por qué no lo atajó nada antes (prueba, revisión, alerta). Varias causas si las hay.
+
+**Qué funcionó / qué no**
+- …
+
+**Acciones correctivas**
+| Acción | Tipo (prevenir / detectar / mitigar) | Issue | Responsable |
+|---|---|---|---|
+
+**Riesgos** nuevos o reevaluados en `docs/seguridad/registro-riesgos.md`: …
+```
+
+### Registro de postmortems
+
+Aún no hay postmortems registrados (2026-11-17).

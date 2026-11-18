@@ -31,10 +31,11 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
-    # Con el libro de costos (pieza 6a), la suite completa tarda unos 40 minutos y
-    # llega a ~55 en un runner lento. Este límite evita que una prueba bloqueada
-    # consuma el runner durante horas y deje el gate abierto.
-    timeout-minutes: 75
+    # Con la BD de test migrada una vez por sesión (#94) la suite tarda ~10
+    # minutos. Este límite evita que una prueba bloqueada consuma el runner
+    # durante horas y deje el gate abierto; `--durations` (abajo) deja a la
+    # vista las pruebas más lentas.
+    timeout-minutes: 30
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
     # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
@@ -94,7 +95,7 @@ jobs:
         env:
           SUNO_REQUIRE_DB: "1"
         run: |
-          pytest -vv server/ --cov --cov-config=server/pyproject.toml \
+          pytest -vv server/ --durations=30 --cov --cov-config=server/pyproject.toml \
             --cov-report=term --cov-report=xml:coverage-server.xml
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

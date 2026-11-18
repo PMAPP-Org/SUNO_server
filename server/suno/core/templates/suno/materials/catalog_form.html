@@ -1,0 +1,18 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{% if material %}Editar {{ material.code }}{% else %}Nuevo material{% endif %}{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'materials_catalog:list' %}">Catálogo de materiales</a></p><h1>{% if material %}Editar {{ material.code }}{% else %}Nuevo material{% endif %}</h1></div></section>
+<section class="pj-panel">
+  <form method="post" class="pj-form ctr-head">
+    {% csrf_token %}
+    {% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
+    <label>{{ form.code.label }} {{ form.code }}</label>
+    <label>{{ form.name.label }} {{ form.name }}</label>
+    <label>{{ form.unit.label }} {{ form.unit }}</label>
+    <label>{{ form.category.label }} {{ form.category }}</label>
+    <label class="cst-check">{{ form.active }} {{ form.active.label }}</label>
+    <p class="pj-muted">Un material inactivo no se ofrece en documentos nuevos, pero sigue en el kárdex. La unidad de un material con movimientos no se cambia.</p>
+    <div class="ctr-actions"><button class="button" type="submit">Guardar</button> <a href="{% url 'materials_catalog:list' %}">Cancelar</a></div>
+  </form>
+</section>
+{% endblock %}

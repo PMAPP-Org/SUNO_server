@@ -130,6 +130,39 @@ son la fuente de verdad. La app usa una copia fijada en su `contract/`: un
 cambio del contrato aquí lleva un PR en SUNO_client que actualice esa copia
 ([`server/openapi/README.md`](server/openapi/README.md)).
 
+## Bugs y parches
+
+**Todo bug que llega a `master` o a producción lleva issue**, abierto con la plantilla [Bug](.github/ISSUE_TEMPLATE/bug.yml) (o [Incidente](.github/ISSUE_TEMPLATE/incidente.yml) si afecta a producción). Como `master` se despliega en cada commit ([ADR-0017](docs/adr/0017-despliegue-continuo-de-master.md)), todo lo que entra a `master` cuenta como producción.
+
+**Severidades** (las de [`docs/seguridad/politicas.md`](docs/seguridad/politicas.md) §8, más S4):
+
+| Severidad | Qué es | Primera respuesta |
+|---|---|---|
+| S1 crítica | Producción caída, pérdida o fuga de datos, llave comprometida, montos de costos errados. | 1 h; se trata como incidente. |
+| S2 alta | Una función principal no sirve y no hay rodeo; vulnerabilidad crítica sin explotar. | 4 h. |
+| S3 media | Falla con rodeo posible o en pocos casos; backups o alertas degradados. | 1 día hábil. |
+| S4 baja | Cosmético, textos, documentación, herramientas de desarrollo. | Se planifica. |
+
+**El parche:**
+
+1. PR con título `fix(<área>): …` y en la descripción `Fixes #N`, para que el issue se cierre al integrar.
+2. **Prueba de regresión obligatoria**: una prueba que falla sin el parche y pasa con él. Si de verdad no se puede automatizar (p. ej. un workflow), el PR explica por qué y cómo se comprobó.
+3. Una fila nueva en [`docs/bugs/historial.md`](docs/bugs/historial.md) con fecha, área, síntoma, causa, parche y ruta de la prueba.
+
+**Defectos encontrados en revisión antes del merge**: se corrigen y se discuten en el propio PR; no llevan issue.
+
+**Problemas conocidos**: lo que se sabe roto y no se arregla ya es un issue abierto con la etiqueta `known-issue` y su severidad. No se esconden en comentarios del código ni en los planes. Punto de partida: [`docs/bugs/problemas-conocidos.md`](docs/bugs/problemas-conocidos.md).
+
+**Incidentes de producción**: se atienden con [`docs/operacion/incidentes.md`](docs/operacion/incidentes.md) y terminan en un **postmortem sin culpables** registrado en ese mismo archivo, en ≤ 5 días hábiles, con un issue por cada acción correctiva.
+
+## Documentación
+
+- **Cada pieza** (funcionalidad del plan) entrega en su PR:
+  - su ADR o ADRs en [`docs/adr/`](docs/adr/README.md) si toma decisiones de arquitectura (formato en [ADR-0000](docs/adr/0000-registro-de-decisiones.md); un ADR aceptado no se reescribe, se reemplaza con otro);
+  - la actualización de [`docs/arquitectura/`](docs/arquitectura/README.md) (componentes, modelo de datos, flujos, stack) si cambia algo de lo que describe;
+  - en su tarea final, un issue `known-issue` por cada limitación conocida que deja (las «limitaciones conocidas» y «pendientes» de su entrada en `plans/suno-progreso.md`).
+- `docs/arquitectura/` describe el estado **actual**. Si el código y un documento difieren, se corrige el documento en el mismo PR.
+
 ## Estilo de commits
 
 Ver [`README.md`](README.md#convención-de-commits): mensajes descriptivos en

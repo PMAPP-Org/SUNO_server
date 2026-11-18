@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Materiales{% endblock %}
+{% block content %}
+<section class="workspace-heading">
+  <div><p class="editorial-label">Costos</p><h1>Catálogo de materiales</h1><p>Lo comparten todos los proyectos de la organización.</p></div>
+</section>
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros del catálogo">
+    <label>Código o nombre <input name="texto" value="{{ text }}" maxlength="100"></label>
+    <label>Categoría <select name="categoria"><option value="">Todas</option>{% for c in categories %}<option value="{{ c }}" {% if c == category %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado">{% for key, label in states.items %}<option value="{{ key }}" {% if key == state %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Filtrar</button>
+  </form>
+  {% if can_manage_catalog %}<p class="ctr-actions"><a class="button" href="{% url 'materials_catalog:new' %}">Nuevo material</a> <a class="text-link" href="{% url 'materials_catalog:import' %}">Importar Excel</a></p>{% endif %}
+</section>
+<section class="pj-panel">
+  {% if page.object_list %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <caption class="sr-only">Materiales del catálogo</caption>
+    <thead><tr><th>Código</th><th>Nombre</th><th>Unidad</th><th>Categoría</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for m in page.object_list %}
+      <tr>
+        <td>{% if can_manage_catalog %}<a href="{% url 'materials_catalog:edit' m.pk %}">{{ m.code }}</a>{% else %}{{ m.code }}{% endif %}</td>
+        <td class="pj-name">{{ m.name }}</td><td>{{ m.unit }}</td><td class="pj-wrap">{{ m.category|default:"—" }}</td>
+        <td>{% if m.active %}Activo{% else %}<span class="pj-muted">Inactivo</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <nav class="cst-pages" aria-label="Páginas">
+    {% if page.has_previous %}<a href="?{{ query }}&amp;pagina={{ page.previous_page_number }}">Anterior</a>{% endif %}
+    <span>Página {{ page.number }} de {{ page.paginator.num_pages }} · {{ page.paginator.count }} material{{ page.paginator.count|pluralize:"es" }}</span>
+    {% if page.has_next %}<a href="?{{ query }}&amp;pagina={{ page.next_page_number }}">Siguiente</a>{% endif %}
+  </nav>
+  {% else %}<p class="pj-empty">No hay materiales con estos filtros.</p>{% endif %}
+</section>
+{% endblock %}

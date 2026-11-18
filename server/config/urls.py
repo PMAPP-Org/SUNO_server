@@ -16,6 +16,7 @@ urlpatterns = [
     path("plataforma/salir/", platform_logout, name="platform_logout"),
     path("plataforma/accesos/", include("suno.core.access_urls")),
     path("plataforma/equipos/", include("suno.equipment.urls")),
+    path("plataforma/materiales/", include("suno.materials.catalog_urls")),
     path("plataforma/proyectos/", include("suno.projects.urls")),
     path(
         "plataforma/proyectos/<uuid:project_id>/presupuestos/",
@@ -36,6 +37,10 @@ urlpatterns = [
     path(
         "plataforma/proyectos/<uuid:project_id>/contratos/",
         include("suno.contracts.urls"),
+    ),
+    path(
+        "plataforma/proyectos/<uuid:project_id>/materiales/",
+        include("suno.materials.urls"),
     ),
     path("admin/", admin.site.urls),
     path("v1/", api.urls),

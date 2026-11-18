@@ -1,0 +1,39 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Kárdex {{ sheet.material.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="inventory" %}
+<section class="pj-panel">
+  <h2 class="pj-name">Kárdex · {{ sheet.material.code }} {{ sheet.material.name }} · {{ sheet.warehouse.name }}</h2>
+  <form method="get" class="pj-filters" aria-label="Fechas del kárdex">
+    <label>Desde <input type="date" name="desde" value="{{ start }}"></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ end }}"></label>
+    <button class="button" type="submit">Filtrar</button>
+    {% if can_export_material %}<a class="text-link" href="{% url 'materials:export_kardex' project.pk sheet.warehouse.pk sheet.material.pk %}{% if start or end %}?desde={{ start }}&amp;hasta={{ end }}{% endif %}">Exportar a Excel</a>{% endif %}
+  </form>
+  <p class="pj-muted">En el orden en que se registraron los movimientos; el saldo corrido sigue ese orden aunque se filtre por fechas.{% if sheet.truncated %} Se muestran los últimos 1.000 movimientos del filtro.{% endif %}</p>
+  {% if sheet.rows %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Fecha</th><th>Movimiento</th><th>Documento</th><th class="num">Entrada</th><th class="num">Salida</th><th class="num">Valor</th><th class="num">Saldo</th><th class="num">Valor del saldo</th><th class="num">Promedio</th></tr></thead>
+    <tbody>
+    {% for row in sheet.rows %}
+      <tr>
+        <td>{{ row.movement.moved_on|date:"d/m/Y" }}</td>
+        <td>{{ row.movement.get_kind_display }}</td>
+        <td>{{ row.document }}</td>
+        <td class="num">{{ row.entry|qty }}</td>
+        <td class="num">{{ row.exit|qty }}</td>
+        <td class="num">{{ row.movement.value|signed }}</td>
+        <td class="num">{{ row.balance_quantity|qty }}</td>
+        <td class="num">{{ row.balance_value|signed }}</td>
+        <td class="num">{% if row.average is not None %}{{ row.average|money }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay movimientos en estas fechas.</p>{% endif %}
+</section>
+{% endblock %}

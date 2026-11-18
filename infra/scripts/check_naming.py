@@ -5,7 +5,8 @@
 
 `package` (PR 1) solo busca `visitacampo`; `concept` (desde el PR 2) busca además
 "visit"/"visita" en código, plantillas, contrato e infraestructura. No se revisan
-`plans/` (planes y registro de avance: son historia), el CHANGELOG, `.gitleaksignore` ni
+`plans/` (planes y registro de avance: son historia), `docs/adr/`, `docs/bugs/historial.md`,
+el CHANGELOG, `.gitleaksignore` ni
 la propia guardia (que nombra lo que busca). Las citas a documentos de `plans/`
 (`plans/visitacampo-....md`) se permiten si el archivo citado existe: esos documentos
 conservan su nombre. Corre siempre desde la raíz del repositorio.
@@ -45,9 +46,11 @@ _BINARY = (
     ".ttf",
 )
 _SELF = {"infra/scripts/check_naming.py", "infra/scripts/tests/test_check_naming.py"}
-# Historia que cita los nombres de entonces: el CHANGELOG publicado y las huellas de
-# gitleaks (`commit:ruta:regla:línea`, con la ruta que tenía el archivo en ese commit).
-_HISTORY = {"CHANGELOG.md", ".gitleaksignore"}
+# Historia que cita los nombres de entonces: el CHANGELOG publicado, las huellas de
+# gitleaks (`commit:ruta:regla:línea`, con la ruta que tenía el archivo en ese commit),
+# el historial de bugs y los ADR (registros inmutables de lo que se decidió entonces).
+_HISTORY = {"CHANGELOG.md", ".gitleaksignore", "docs/bugs/historial.md"}
+_HISTORY_DIRS = ("plans/", "docs/adr/")
 # Migraciones ya aplicadas en producción que nombran la visita (no se reescriben) y la que
 # hace el renombre: es la historia de la base de datos, y cada ruta se lista a propósito.
 _MIGRATIONS_HISTORY = {
@@ -92,7 +95,7 @@ def skipped(path: str) -> bool:
         or path in _MIGRATIONS_HISTORY
         or path in _SELF
         or path.endswith(_BINARY)
-        or path.startswith("plans/")
+        or path.startswith(_HISTORY_DIRS)
     )
 
 

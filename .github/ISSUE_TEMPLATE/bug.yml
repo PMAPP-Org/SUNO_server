@@ -1,0 +1,76 @@
+name: Bug
+description: Un defecto en master o en producción (API, plataforma web, Admin o infraestructura).
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de abrirlo, busca en los issues abiertos (incluidos los `known-issue`).
+        **Vulnerabilidades no**: repórtalas en privado como dice SECURITY.md.
+        Si producción está caída o hay datos afectados, usa la plantilla **Incidente**.
+  - type: textarea
+    id: reproduccion
+    attributes:
+      label: Pasos para reproducir
+      description: Lo mínimo para que otra persona lo vea. Usa datos de prueba, nunca datos personales reales.
+      placeholder: |
+        1. Entrar a /plataforma/proyectos/<id>/costos/ como Revisor
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: obtenido
+    attributes:
+      label: Resultado obtenido
+      description: Mensaje, código HTTP o comportamiento real.
+    validations:
+      required: true
+  - type: dropdown
+    id: severidad
+    attributes:
+      label: Severidad
+      description: "Definiciones en CONTRIBUTING.md, sección Bugs y parches."
+      options:
+        - "S1 — crítica: producción caída, pérdida o fuga de datos, montos de costos errados"
+        - "S2 — alta: una función principal no sirve y no hay forma de evitarlo"
+        - "S3 — media: falla con un rodeo posible, o afecta a pocos casos"
+        - "S4 — baja: cosmético, textos, documentación o herramientas"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión o commit
+      description: Versión de /v1/server/info, tag vX.Y.Z o SHA de master.
+      placeholder: "v0.19.0 / 41bc1aa"
+    validations:
+      required: true
+  - type: dropdown
+    id: entorno
+    attributes:
+      label: Entorno
+      options:
+        - Producción
+        - CI (GitHub Actions)
+        - Desarrollo local (Docker Compose)
+        - Otro
+    validations:
+      required: true
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia
+      description: Logs, capturas, enlace al run de CI. Quita tokens, contraseñas, IP y datos personales.
+      render: text
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas
+      description: Causa sospechada, desde cuándo pasa, issues o PR relacionados.
