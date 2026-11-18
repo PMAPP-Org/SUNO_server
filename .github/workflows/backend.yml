@@ -31,11 +31,11 @@ jobs:
   lint-and-test:
     name: ruff + mypy + pytest + manage.py checks
     runs-on: ubuntu-latest
-    # Desde contratos (6b) y materiales (6c) la suite completa pasa de los 75
-    # minutos en los runners de GitHub. Este límite evita que una prueba
-    # bloqueada consuma el runner durante horas y deje el gate abierto;
-    # `--durations` (abajo) deja a la vista las pruebas más lentas.
-    timeout-minutes: 120
+    # Con la BD de test migrada una vez por sesión (#94) la suite tarda ~10
+    # minutos. Este límite evita que una prueba bloqueada consuma el runner
+    # durante horas y deje el gate abierto; `--durations` (abajo) deja a la
+    # vista las pruebas más lentas.
+    timeout-minutes: 30
     # PostgreSQL real (hallazgo "Important" de la revisión del Paso 5): sin
     # este servicio la mitad de integración de la suite se salta en silencio.
     # `SUNO_REQUIRE_DB=1` convierte ese salto en fallo
