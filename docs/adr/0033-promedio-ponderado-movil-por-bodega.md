@@ -1,6 +1,6 @@
 # ADR-0033: Costeo de materiales al promedio ponderado móvil por bodega y material
 
-- **Estado:** Aceptada. Implementada en el PR #84 (pieza 6c), pendiente de integrar.
+- **Estado:** Aceptada. Implementada en el PR #84 (pieza 6c, v0.20.0).
 - **Fecha:** 2026-11-15
 
 ## Contexto
@@ -23,5 +23,5 @@ Los materiales comprados a bodega se vuelven costo cuando salen a obra. Hay que 
 
 ## Referencias
 
-- `plans/2026-11-15-costos-pieza6c-materiales-design.md` (rama de #84), «Costeo».
-- `server/suno/materials/stock.py` (rama de #84).
+- `plans/2026-11-15-costos-pieza6c-materiales-design.md`, «Costeo».
+- `server/suno/materials/stock.py`.

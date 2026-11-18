@@ -1,6 +1,6 @@
 # ADR-0034: Inventario como kárdex de movimientos más saldos guardados con checks en la BD
 
-- **Estado:** Aceptada. Implementada en el PR #84 (pieza 6c), pendiente de integrar.
+- **Estado:** Aceptada. Implementada en el PR #84 (pieza 6c, v0.20.0).
 - **Fecha:** 2026-11-15
 
 ## Contexto
@@ -21,5 +21,5 @@ Calcular el saldo sumando todos los movimientos en cada consulta escala mal, y g
 
 ## Referencias
 
-- `plans/2026-11-15-costos-pieza6c-materiales-design.md` (rama de #84), «Arquitectura»; `plans/suno-progreso.md` en la misma rama.
-- `server/suno/materials/kardex.py`, `server/suno/core/models/material.py` (rama de #84).
+- `plans/2026-11-15-costos-pieza6c-materiales-design.md`, «Arquitectura»; `plans/suno-progreso.md`.
+- `server/suno/materials/kardex.py`, `server/suno/core/models/material.py`.

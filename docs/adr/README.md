@@ -35,10 +35,10 @@ Proceso y formato: [ADR-0000](0000-registro-de-decisiones.md). Los ADR 0001–00
 | [0028](0028-presupuesto-item-estable-y-versiones.md) | Presupuesto con ítem estable, contractual y vigente | Aceptada |
 | [0029](0029-cantidades-dentro-del-registro.md) | Cantidades dentro del registro | Aceptada |
 | [0030](0030-libro-de-costos-aprobado-y-reverso.md) | Libro de costos: solo lo aprobado; se reversa | Aceptada |
-| [0031](0031-origen-unico-del-movimiento-del-libro.md) | Un solo documento de origen por movimiento | Aceptada (restricción en PR #84) |
+| [0031](0031-origen-unico-del-movimiento-del-libro.md) | Un solo documento de origen por movimiento | Aceptada |
 | [0032](0032-aprobado-es-lo-firmado.md) | Lo aprobado es lo firmado | Aceptada |
-| [0033](0033-promedio-ponderado-movil-por-bodega.md) | Promedio ponderado móvil por bodega y material | Aceptada (PR #84) |
-| [0034](0034-kardex-movimientos-y-saldos.md) | Kárdex de movimientos + saldos con checks en BD | Aceptada (PR #84) |
+| [0033](0033-promedio-ponderado-movil-por-bodega.md) | Promedio ponderado móvil por bodega y material | Aceptada |
+| [0034](0034-kardex-movimientos-y-saldos.md) | Kárdex de movimientos + saldos con checks en BD | Aceptada |
 | [0035](0035-orden-de-bloqueos.md) | Orden de bloqueos | Aceptada |
 | [0036](0036-importaciones-en-dos-pasos.md) | Importaciones en dos pasos con vista previa | Aceptada |
 | [0037](0037-tareas-de-campo-en-endpoint-propio.md) | Tareas de campo por endpoint propio | Aceptada |

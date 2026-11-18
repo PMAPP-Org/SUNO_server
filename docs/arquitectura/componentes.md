@@ -101,7 +101,7 @@ Se construyó por piezas, cada una con su spec y plan en [`plans/`](../../plans/
 | 5 | `control` | Valor ganado: PV, EV, SV, SPI, curva S en SVG, desglose por capítulo, tarea, ubicación e ítem, Excel. Cargador con número fijo de consultas. | `2026-11-11-costos-pieza5-control-design.md` |
 | 6a | `costs` + `control/actual_cost.py` | Libro de costos (borrador → aprobado, reverso), importación Excel con vista previa firmada, costos automáticos (equipos propios y transporte); AC, CV, CPI, EAC, VAC, TCPI en Control. | `2026-11-12-costos-pieza6a-costo-real-design.md` |
 | 6b | `contracts` | Subcontratos y destajos, otrosíes, actas con cantidad propuesta desde lo validado, anticipo, retención, descuentos, liquidación; el acta aprobada pasa al libro. PDF para firmar. | `2026-11-14-costos-pieza6b-contratos-design.md` |
-| 6c | `materials` (PR #84, sin integrar) | Catálogo de materiales de la organización, bodegas por proyecto, compras, salidas, devoluciones, traslados, ajustes por conteo y cortes de consumos; kárdex al promedio ponderado móvil. | `2026-11-15-costos-pieza6c-materiales-design.md` (en la rama de #84) |
+| 6c | `materials` (PR #84, v0.20.0) | Catálogo de materiales de la organización, bodegas por proyecto, compras, salidas, devoluciones, traslados, ajustes por conteo y cortes de consumos; kárdex al promedio ponderado móvil. | `2026-11-15-costos-pieza6c-materiales-design.md` (en la rama de #84) |
 
 Todas las páginas del módulo usan la sección **Costos** o **Presupuestos** de la matriz de acceso ([ADR-0022](../adr/0022-matriz-de-permisos-por-seccion.md)); el agente de campo recibe 404. Las decisiones que dan forma al módulo están en los ADR 0026–0036. El modelo de datos está en [`modelo-datos-costos.md`](modelo-datos-costos.md).
 

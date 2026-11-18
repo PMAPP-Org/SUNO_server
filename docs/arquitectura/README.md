@@ -1,6 +1,6 @@
 # Arquitectura de SUNO (estado actual)
 
-Esta carpeta describe **cómo está construido SUNO hoy**, según el código de `master` (v0.19.0, 2026-11-15) y, donde se indica, la pieza 6c de materiales aún sin integrar ([PR #84](https://github.com/PMAPP-Org/SUNO_server/pull/84)). Sigue el modelo [C4](https://c4model.com/): cada nivel acerca la vista.
+Esta carpeta describe **cómo está construido SUNO hoy**, según el código de `master` (v0.20.0, 2026-11-18, con la pieza 6c de materiales). Sigue el modelo [C4](https://c4model.com/): cada nivel acerca la vista.
 
 La propuesta original de julio de 2026 está en [`../08-arquitectura-propuesta-suno.md`](../08-arquitectura-propuesta-suno.md). Es historia: donde ese documento y el código difieren, **manda el código**, y la diferencia queda anotada en estas páginas y en [`../adr/`](../adr/README.md).
 

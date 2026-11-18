@@ -1,6 +1,6 @@
 # ADR-0031: Cada movimiento del libro tiene como mucho un documento de origen
 
-- **Estado:** Aceptada. La restricción `cost_entry_single_origin` está en el PR #84 (pieza 6c), pendiente de integrar.
+- **Estado:** Aceptada. La restricción `cost_entry_single_origin` llegó con el PR #84 (pieza 6c, v0.20.0).
 - **Fecha:** 2026-11-14 (FK del acta, 6b); 2026-11-15 (restricción, 6c)
 
 ## Contexto
@@ -22,4 +22,4 @@ Desde 6b, el libro recibe movimientos generados por documentos: actas de contrat
 ## Referencias
 
 - Specs 6b y 6c; PR #79 y #84.
-- `server/suno/core/models/cost.py` (en la rama de #84: `_at_most_one_origin`).
+- `server/suno/core/models/cost.py` (`_at_most_one_origin`).

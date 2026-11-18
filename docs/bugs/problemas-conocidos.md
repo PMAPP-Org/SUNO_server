@@ -18,13 +18,10 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Descripción:** al correr `pytest` en el contenedor de desarrollo, las 4 pruebas de `server/suno/sync/tests/test_load_script.py` fallan porque el contenedor no monta `/infra/load/push_load.py`. En la CI de GitHub pasan (está el repositorio completo). Cada pieza lo anota como «4 fallos conocidos del entorno», lo que acostumbra a ignorar rojos.
 - **Evidencia:** `plans/suno-progreso.md` (etapa 1 y piezas 3 a 6c, «Verificación real»).
 
-## KI-03. El job de pruebas del backend supera los 75 minutos
-- **Issue:** [#87](https://github.com/PMAPP-Org/SUNO_server/issues/87)
+## KI-03. ~~El job de pruebas del backend supera los 75 minutos~~ — resuelto
 
-- **Título propuesto:** `CI backend: la suite completa no cabe en 75 min en GitHub Actions`
-- **Severidad:** S3 (una ejecución cortada deja `master` sin señal de calidad y se despliega igual).
-- **Descripción:** con contratos (6b) la suite tarda más de 75 minutos en runners de GitHub; la última de `master` se cortó. El PR #84 (commit `8091e14`, sin integrar) sube el límite a 120 minutos y añade `--durations` para ver las pruebas más lentas. Falta reducir el tiempo de verdad (paralelizar o aligerar las pruebas de carga).
-- **Evidencia:** `.github/workflows/backend.yml` (`timeout-minutes: 75`); PR #78; commit `8091e14` en `feat/costos-materiales`.
+- **Issue:** [#87](https://github.com/PMAPP-Org/SUNO_server/issues/87), cerrado.
+- Resuelto en el PR #94 (BD de test migrada una vez por sesión y clonada por módulo); ver el [historial](historial.md), entrada 38.
 
 ## KI-04. La descripción de los movimientos generados usa el nombre vivo del ítem o material
 - **Issue:** [#88](https://github.com/PMAPP-Org/SUNO_server/issues/88)
@@ -32,7 +29,7 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Título propuesto:** `Libro de costos: renombrar un ítem entre la firma y la aprobación cambia la descripción del movimiento`
 - **Severidad:** S4. No cambia montos.
 - **Descripción:** al aprobar un acta, `post_to_ledger` arma la descripción con `catalog.label_of(...)`, es decir, con el nombre del ítem en la versión vigente **al aprobar**, no el que salió en el PDF firmado. Si el ítem se renombra (nueva versión del presupuesto) entre la firma y la aprobación, la descripción del libro no coincide con el papel. Los montos sí se comparan («aprobado = firmado», ADR-0032). En 6c pasa igual con las compras (`material.name`) y los cortes. Relacionado: el PDF de un acta vieja muestra el contratado vigente de hoy (limitación anotada en 6b).
-- **Evidencia:** `server/suno/contracts/certificates.py` (`post_to_ledger`); `server/suno/materials/purchases.py` en la rama de #84; `plans/suno-progreso.md` (6b, «Limitación conocida»).
+- **Evidencia:** `server/suno/contracts/certificates.py` (`post_to_ledger`); `server/suno/materials/purchases.py`; `plans/suno-progreso.md` (6b, «Limitación conocida»).
 
 ## KI-05. MinIO de desarrollo sin imagen fijada (issue #21)
 - **Issue:** [#21](https://github.com/PMAPP-Org/SUNO_server/issues/21)

@@ -23,5 +23,5 @@ Varias operaciones concurrentes tocan las mismas filas: push de varios teléfono
 
 ## Referencias
 
-- `server/suno/sync/changeseq.py`; `plans/suno-progreso.md` (etapa 1, «Correcciones de la revisión» (c); pieza 6a; pieza 6c en la rama de #84).
-- `server/suno/backoffice/services.py`, `server/suno/materials/kardex.py` (rama de #84).
+- `server/suno/sync/changeseq.py`; `plans/suno-progreso.md` (etapa 1, «Correcciones de la revisión» (c); pieza 6a; pieza 6c).
+- `server/suno/backoffice/services.py`, `server/suno/materials/kardex.py`.
