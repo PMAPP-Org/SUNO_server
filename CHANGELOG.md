@@ -4,6 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.20.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.19.0...v0.20.0) (2026-11-18)
+
+
+### Agregado
+
+* **materials:** material catalog, warehouses, purchases and consumption cuts posted to the cost ledger ([#84](https://github.com/PMAPP-Org/SUNO_server/issues/84)) ([2ffec42](https://github.com/PMAPP-Org/SUNO_server/commit/2ffec42fd849b90c0c28ad838503b9897725f1af))
+
 ## [0.19.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.18.0...v0.19.0) (2026-11-15)
 
 
