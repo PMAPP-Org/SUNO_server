@@ -1,3 +1,23 @@
+# Índice de la documentación
+
+## Documentación vigente de SUNO
+
+| Carpeta o documento | Qué contiene |
+|---|---|
+| [`arquitectura/`](arquitectura/README.md) | **Cómo está construido SUNO hoy** (C4: contexto, contenedores, componentes), flujos de sincronización, modelo de datos de costos y stack con versiones. |
+| [`adr/`](adr/README.md) | Registro de decisiones de arquitectura (ADR), incluidas las 14 de doc 08 con su numeración original. |
+| [`bugs/`](bugs/historial.md) | [Historial de bugs y parches](bugs/historial.md) y [problemas conocidos](bugs/problemas-conocidos.md). |
+| [`operacion/`](operacion/README.md) | Runbooks: despliegue, incidentes y postmortems, restauración, mapas base. |
+| [`seguridad/`](seguridad/README.md) | SGSI ISO 27001 y OWASP Top 10. |
+| [`testing/`](testing/e2e-fase0.md), [`forms-and-exports.md`](forms-and-exports.md), [`identidad-visual-suno.md`](identidad-visual-suno.md) | E2E, formularios y exportaciones, identidad visual. |
+
+## Documentos de origen (historia)
+
+- **01–07** son el **análisis de referencia de QField y QFieldCloud** que se hizo antes de escribir SUNO. No describen SUNO.
+- **08** es la **arquitectura propuesta original** de SUNO (2026-07-30). Sus ADR siguen en [`adr/`](adr/README.md) (0001–0014); donde el código actual difiere, lo anota [`arquitectura/README.md`](arquitectura/README.md#diferencias-entre-la-propuesta-doc-08-y-el-código).
+
+---
+
 # Documentación de arquitectura de referencia — QField / QFieldCloud
 
 Este directorio documenta la arquitectura, el funcionamiento interno y el modelo de integración de **QField** (cliente móvil/desktop) y **QFieldCloud** (backend Django), los dos proyectos analizados como referencia antes de iniciar **SUNO**.

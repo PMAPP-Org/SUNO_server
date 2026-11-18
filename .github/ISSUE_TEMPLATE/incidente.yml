@@ -1,0 +1,70 @@
+name: Incidente de producción
+description: Producción caída o degradada, datos afectados, llave comprometida o teléfono perdido con sesión activa.
+title: "Incidente: "
+labels: ["incidente"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sigue el runbook docs/operacion/incidentes.md. Anota cada acción aquí con su hora (UTC-5).
+        Si puede haber datos personales afectados, avisa ya al responsable de seguridad.
+        **No pegues secretos, tokens, IP ni datos personales.**
+  - type: dropdown
+    id: severidad
+    attributes:
+      label: Severidad
+      description: "docs/seguridad/politicas.md §8 (S1: respuesta en 1 h; S2: 4 h; S3: 1 día hábil)."
+      options:
+        - "S1 — crítica: fuga de datos personales, llave comprometida, producción caída"
+        - "S2 — alta: degradación grave, vulnerabilidad crítica sin explotar"
+        - "S3 — media: fallo de backup, alerta de disco"
+        - "S4 — baja: aviso sin impacto en el servicio"
+    validations:
+      required: true
+  - type: input
+    id: deteccion
+    attributes:
+      label: Detección
+      description: Hora de inicio y quién o qué lo detectó (alerta, uptime.yml, usuario).
+      placeholder: "2026-11-17 08:40, alerta ApiDown"
+    validations:
+      required: true
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto
+      description: Qué no funciona, a quién afecta, si hay datos personales involucrados.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión desplegada
+      description: SHA de master o tag que corre en producción (run de Deploy master).
+    validations:
+      required: true
+  - type: textarea
+    id: cronologia
+    attributes:
+      label: Cronología y acciones
+      description: Contener, preservar evidencias, recuperar. Una línea por acción con su hora.
+      placeholder: |
+        08:40 Alerta ApiDown
+        08:45 docker compose ps: api reiniciando
+    validations:
+      required: true
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia
+      description: Logs, alertas, enlaces a runs. Guarda las evidencias grandes fuera del issue, con su hash.
+      render: text
+  - type: checkboxes
+    id: cierre
+    attributes:
+      label: Cierre
+      options:
+        - label: Servicio recuperado y comprobado (/v1/readyz desde fuera).
+        - label: Notificaciones hechas (cliente, SIC) o no aplican.
+        - label: Postmortem sin culpables registrado en docs/operacion/incidentes.md en ≤ 5 días hábiles.
+        - label: Un issue por cada acción correctiva, enlazado aquí.
