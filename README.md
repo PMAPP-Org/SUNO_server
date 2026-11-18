@@ -9,11 +9,21 @@ La app móvil (Flutter) está en [`PMAPP-Org/SUNO_client`](https://github.com/PM
 
 ## Fuente de verdad
 
-- **Arquitectura:** [`docs/08-arquitectura-propuesta-suno.md`](docs/08-arquitectura-propuesta-suno.md). Ante cualquier duda de diseño, ese documento (y el resto de `docs/`) prevalece sobre supuestos ad hoc.
+- **Arquitectura:** [`docs/arquitectura/`](docs/arquitectura/README.md) (estado actual) y [`docs/adr/`](docs/adr/README.md) (decisiones). [`docs/08-arquitectura-propuesta-suno.md`](docs/08-arquitectura-propuesta-suno.md) es la propuesta original; donde difiere del código, manda el código.
 - **Contrato de la API:** [`server/openapi/v1.yaml`](server/openapi/v1.yaml), más los casos de paridad de formularios en `server/openapi/fixtures/`. La app usa una copia fijada en su `contract/` ([`server/openapi/README.md`](server/openapi/README.md)).
 - **Plan de construcción y su seguimiento:** [`plans/`](plans/).
 - **SGSI ISO 27001** de todo el sistema (app incluida): [`docs/seguridad/`](docs/seguridad/README.md).
 - **Runbooks de operación:** [`docs/operacion/`](docs/operacion/README.md).
+
+## Documentación
+
+| Qué | Dónde |
+|---|---|
+| Índice general | [`docs/00-indice.md`](docs/00-indice.md) |
+| Arquitectura actual (C4, flujos, modelo de costos, stack) | [`docs/arquitectura/`](docs/arquitectura/README.md) |
+| Decisiones (ADR) | [`docs/adr/`](docs/adr/README.md) |
+| Bugs corregidos y problemas conocidos | [`docs/bugs/historial.md`](docs/bugs/historial.md), [`docs/bugs/problemas-conocidos.md`](docs/bugs/problemas-conocidos.md) |
+| Cómo reportar un bug o un incidente | [`CONTRIBUTING.md`](CONTRIBUTING.md#bugs-y-parches) y las plantillas de issues |
 
 ## Estructura
 

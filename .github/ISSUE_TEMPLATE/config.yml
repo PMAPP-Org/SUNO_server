@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Vulnerabilidad de seguridad
+    url: https://github.com/PMAPP-Org/SUNO_server/blob/master/SECURITY.md
+    about: No abras un issue público. Repórtala en privado como indica SECURITY.md.
+  - name: Bug de la app móvil
+    url: https://github.com/PMAPP-Org/SUNO_client/issues/new/choose
+    about: Los defectos de la app Flutter van en SUNO_client.
+  - name: Problemas conocidos
+    url: https://github.com/PMAPP-Org/SUNO_server/issues?q=is%3Aissue+is%3Aopen+label%3Aknown-issue
+    about: Revisa primero si ya está registrado.
