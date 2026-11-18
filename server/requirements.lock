@@ -61,9 +61,9 @@ asgiref==3.12.1 \
     # via
     #   django
     #   django-axes
-boto3==1.43.124 \
-    --hash=sha256:62edd40fdeef6523ee2f73f4ccbe754fde79200ad0763bd86f4422e8125b2735 \
-    --hash=sha256:7f330e53e274a0b8e5982ed3dd4cec9e7e932cf48306c08db8b9e880d09c5c63
+boto3==1.43.126 \
+    --hash=sha256:5fda4a3dd2782c134a01d1678911962c2860dd8de8cd10bef168ba1507b371a9 \
+    --hash=sha256:dd701a973b02a73930e546a6a15d13edbfbedc3180bb3d55b0a88678c284ccd6
     # via -r requirements.txt
 botocore==1.43.126 \
     --hash=sha256:2f2239a47025a2fa173cd145ab8803ac02b76114864bf5b66475ff1cb88e6b0a \
@@ -430,9 +430,9 @@ django-axes==7.1.0 \
     --hash=sha256:0d73f2a5240ec6c03a1b343c0dd1bd0e6278ce181eaa700cf185536313c10df1 \
     --hash=sha256:e56edc4ba7eeebb3f30af3b59301db0a9880514eabc1e64f98b5fe5057829bfa
     # via -r requirements.txt
-django-ninja==1.7.3 \
-    --hash=sha256:5e3c2dcead83a2512ea772dbc435ca51632cf46bf3be1523bac41e5bb394891c \
-    --hash=sha256:8a73ecccaa86639202427e81667b8fca6dfc250d2b6e5108369688029a4cb593
+django-ninja==1.8.0 \
+    --hash=sha256:0f043a1aebd2c45e2a124a83e5bd0961491b18cdf81ea57c6abd80607b2c6ef8 \
+    --hash=sha256:132f37a36ac5ec9569fdc141da6984c1806bdd08af36f855980fab6cdcb10038
     # via -r requirements.txt
 django-otp==1.7.5 \
     --hash=sha256:475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc \
