@@ -4,6 +4,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.20.1](https://github.com/PMAPP-Org/SUNO_server/compare/v0.20.0...v0.20.1) (2026-11-18)
+
+
+### Documentación
+
+* architecture (C4), ADRs, bug history and known problems ([#93](https://github.com/PMAPP-Org/SUNO_server/issues/93)) ([9adcbb2](https://github.com/PMAPP-Org/SUNO_server/commit/9adcbb24c3dadc6e8dcc1577057347fb35b6d767))
+
+
+### Dependencias y build
+
+* **deps:** bump prom/prometheus from v3.15.1 to v3.16.0 in /infra ([#81](https://github.com/PMAPP-Org/SUNO_server/issues/81)) ([43a7bba](https://github.com/PMAPP-Org/SUNO_server/commit/43a7bba87b7c0493d58fcc73a3e85882fdd6d36b))
+* **deps:** bump the actions group across 1 directory with 4 updates ([#82](https://github.com/PMAPP-Org/SUNO_server/issues/82)) ([ef6928a](https://github.com/PMAPP-Org/SUNO_server/commit/ef6928a0234caf192dcc2a84d58997aaf75cbccd))
+
 ## [0.20.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.19.0...v0.20.0) (2026-11-18)
 
 
