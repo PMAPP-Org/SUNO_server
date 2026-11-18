@@ -109,5 +109,5 @@ Todas las páginas del módulo usan la sección **Costos** o **Presupuestos** de
 
 - `core/tests/test_architecture.py`: falla si un servicio usa `Model.objects` sin `scoped_qs` (RD-11).
 - Presupuesto de consultas (`assertNumQueries`) en push, pull, control, contratos y materiales.
-- `infra/scripts/check_naming.py`: guardia contra los nombres viejos (`visitacampo`, "visita").
+- `infra/scripts/check_naming.py`: guardia contra los nombres anteriores del proyecto y del concepto (ver ADR-0024 y ADR-0025).
 - Mapa de hallazgos H-01…H-21 → prueba: [`../seguridad/hallazgos-tests.toml`](../seguridad/hallazgos-tests.toml).

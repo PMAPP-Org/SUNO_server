@@ -15,7 +15,7 @@ La app trabaja sin conexión y sincroniza cuando hay red. El servidor es la auto
 | Privacidad | `POST /v1/consents` | Prueba de la autorización del titular (Ley 1581). | — |
 | Jobs | `GET /v1/jobs/{id}` | Estado de un job; salida redactada y solo para administradores. | — |
 
-Límites (`serverinfo/capabilities.py`): push de hasta 500 operaciones o 5 MiB; pull de hasta 1000 filas (500 por defecto); adjunto de hasta 25 MiB y 200 MiB por registro. `SCHEMA_VERSION = 2` y `MIN_SUPPORTED_SCHEMA_VERSION = 2`: la app que habla de «visitas» (esquema 1) ya no sincroniza ([ADR-0025](../adr/0025-solo-migraciones-aditivas-con-produccion.md)).
+Límites (`serverinfo/capabilities.py`): push de hasta 500 operaciones o 5 MiB; pull de hasta 1000 filas (500 por defecto); adjunto de hasta 25 MiB y 200 MiB por registro. `SCHEMA_VERSION = 2` y `MIN_SUPPORTED_SCHEMA_VERSION = 2`: la app anterior al renombre del concepto (esquema 1) ya no sincroniza ([ADR-0025](../adr/0025-solo-migraciones-aditivas-con-produccion.md)).
 
 ## Ciclo de sincronización
 
