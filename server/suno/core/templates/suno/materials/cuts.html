@@ -1,0 +1,34 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Cortes · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="cuts" %}
+<section class="pj-panel">
+  <h2>Próximo corte</h2>
+  {% if start %}
+  <form method="get" class="pj-filters" aria-label="Periodo del corte">
+    <label>Desde <input type="date" value="{{ start|date:'Y-m-d' }}" disabled></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ end|date:'Y-m-d' }}"></label>
+    <button class="button" type="submit">Ver propuesta</button>
+  </form>
+  {% if error %}<p class="pj-warning">{{ error }}</p>{% endif %}
+  {% if proposal %}
+  <p>Salió {{ proposal.issued|money }} · devuelto {{ proposal.returned|money }} · <strong>al libro {{ proposal.total|money }}</strong> ({{ proposal.issue_ids|length }} salida{{ proposal.issue_ids|length|pluralize }}, {{ proposal.return_ids|length }} {% if proposal.return_ids|length == 1 %}devolución{% else %}devoluciones{% endif %}).</p>
+  {% include "suno/materials/_cut_groups.html" with groups=proposal.snapshot.groups %}
+  {% if can_create_material %}<form method="post" action="{% url 'materials:new_cut' project.pk %}" class="ctr-actions">{% csrf_token %}<input type="hidden" name="hasta" value="{{ end|date:'Y-m-d' }}"><button class="button" type="submit">Guardar el corte en borrador</button></form>{% endif %}
+  {% endif %}
+  {% else %}<p class="pj-empty">No hay salidas ni devoluciones sin cortar.</p>{% endif %}
+</section>
+<section class="pj-panel">
+  <h2>Cortes</h2>
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Corte</th><th>Periodo</th><th class="num">Total</th><th>Estado</th></tr></thead>
+    <tbody>{% for c in rows %}<tr><td><a href="{% url 'materials:cut' project.pk c.pk %}">{{ c.code }}</a></td><td>{{ c.period_start|date:"d/m/Y" }} – {{ c.period_end|date:"d/m/Y" }}</td><td class="num">{{ c.total|signed }}</td><td><span class="bg-label mat-{{ c.status }}">{{ c.get_status_display }}</span></td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">Todavía no hay cortes.</p>{% endif %}
+</section>
+{% endblock %}

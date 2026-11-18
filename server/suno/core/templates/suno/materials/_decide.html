@@ -1,0 +1,9 @@
+{% if can_decide %}
+<div class="cst-decide">
+  <form method="post" action="{{ approve }}">{% csrf_token %}<input type="hidden" name="volver" value="{{ back }}"><button class="button" type="submit"{% if needs %} disabled title="{{ needs }}"{% endif %}>Aprobar</button></form>
+  <form method="post" action="{{ reject }}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="{{ back }}"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
+</div>
+{% endif %}
+{% if can_void %}
+<form method="post" action="{{ void }}" class="cst-reject">{% csrf_token %}<input aria-label="Motivo de la anulación" name="motivo" maxlength="500" required placeholder="Motivo de la anulación"><button class="text-link" type="submit">Anular</button></form>
+{% endif %}

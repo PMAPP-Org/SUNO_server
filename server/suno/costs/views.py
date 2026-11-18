@@ -39,6 +39,8 @@ from suno.core.policies import (
     can_update_cost,
 )
 from suno.core.scoping import scoped_qs
+from suno.materials.queries import inbox_count as material_inbox_count
+from suno.materials.queries import inbox_items as material_inbox_items
 from suno.projects.views import _ctx, _parse_uuid, _project_context, _render
 
 from . import importer, services
@@ -52,6 +54,7 @@ from .ledger import (
     LedgerFilters,
     LedgerTooLarge,
     assignment_text,
+    entry_source,
     export_lines,
     ledger_page,
 )
@@ -70,6 +73,7 @@ def _context(ctx: RequestContext, project: Project) -> dict[str, Any]:
         .exclude(updated_by_id=ctx.user_id)
         .count()
         + inbox_count(ctx, project)
+        + material_inbox_count(ctx, project)
         if can_decide
         else 0
     )
@@ -132,7 +136,7 @@ def _contract_warning(ctx: RequestContext, project: Project, entry: CostEntry) -
     """Un costo manual de subcontrato o mano de obra sobre un ítem con contrato vigente: aviso,
     sin bloquear (spec 4). Vacío si no aplica."""
     if (
-        entry.certificate_id is not None
+        entry.from_document
         or entry.scope != CostScope.ITEM
         or entry.kind not in (CostKind.SUBCONTRACT, CostKind.LABOR)
     ):
@@ -263,11 +267,12 @@ def detail(request: HttpRequest, project_id: UUID, entry_id: UUID) -> HttpRespon
             "can_reverse": entry.status == CostStatus.APPROVED
             and entry.reverses_id is None
             and reversal is None
-            and entry.certificate_id is None
+            and not entry.from_document
             and can_reverse_costs(ctx, project),
             "can_edit": _editable(ctx, entry),
             "can_delete": _editable(ctx, entry, delete=True),
             "contract_warning": _contract_warning(ctx, project, entry),
+            "source": entry_source(entry),
         },
     )
 
@@ -336,6 +341,7 @@ def inbox(request: HttpRequest, project_id: UUID) -> HttpResponse:
             **_context(ctx, project),
             "rows": [(entry, assignment_text(entry, catalog)) for entry in entries],
             "contract_items": inbox_items(ctx, project),
+            "material_items": material_inbox_items(ctx, project),
         },
     )
 

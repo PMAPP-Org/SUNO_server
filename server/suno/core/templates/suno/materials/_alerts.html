@@ -1,0 +1,6 @@
+{% if material_alerts %}
+<details class="pj-warning ctr-warning" open>
+  <summary>{{ material_alerts|length }} aviso{{ material_alerts|length|pluralize:"s" }} de materiales</summary>
+  <ul class="ctr-alerts">{% for alert in material_alerts %}<li><a href="{% url alert.view project.pk %}{{ alert.query }}">{{ alert.text }}</a></li>{% endfor %}</ul>
+</details>
+{% endif %}

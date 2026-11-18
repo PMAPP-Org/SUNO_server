@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Compras · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="purchases" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros de compras">
+    <label>Tipo <select name="tipo"><option value="">Todos</option>{% for key, label in kinds %}<option value="{{ key }}" {% if filters.kind == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado"><option value="">Todos</option>{% for key, label in statuses %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Desde <input type="date" name="desde" value="{{ filters.start|date:'Y-m-d' }}"></label>
+    <label>Hasta <input type="date" name="hasta" value="{{ filters.end|date:'Y-m-d' }}"></label>
+    <button class="button" type="submit">Filtrar</button>
+    {% if can_create_material %}<a class="button" href="{% url 'materials:new_purchase' project.pk %}">Nueva compra</a>{% endif %}
+  </form>
+</section>
+<section class="pj-panel">
+  {% if rows %}
+  {% if more %}<p class="pj-muted">Se muestran las 200 más recientes: filtra por fechas para ver las demás.</p>{% endif %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Número</th><th>Fecha</th><th>Tipo</th><th>Proveedor</th><th>Documento</th><th class="num">Total</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for p in rows %}
+      <tr>
+        <td><a href="{% url 'materials:purchase' project.pk p.pk %}">{{ p.code }}</a></td>
+        <td>{{ p.purchased_on|date:"d/m/Y" }}</td>
+        <td>{{ p.get_kind_display }}{% if p.warehouse %} · {{ p.warehouse.name }}{% endif %}</td>
+        <td class="pj-name">{{ p.supplier }}</td>
+        <td class="pj-wrap">{{ p.get_document_type_display }} {{ p.document_number }}</td>
+        <td class="num">{{ p.total|signed }}</td>
+        <td><span class="bg-label mat-{{ p.status }}">{{ p.get_status_display }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay compras con estos filtros.</p>{% endif %}
+</section>
+{% endblock %}

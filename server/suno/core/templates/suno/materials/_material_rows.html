@@ -1,0 +1,15 @@
+{{ formset.management_form }}
+<div class="pj-scroll">
+<table class="pj-table mat-lines">
+  <thead><tr><th>#</th><th>Material</th><th class="num">Cantidad</th></tr></thead>
+  <tbody>
+  {% for row in formset %}
+    <tr>
+      <td>{{ forloop.counter }}</td>
+      <td class="mat-material"><label class="sr-only" for="{{ row.material.id_for_label }}">Material de la línea {{ forloop.counter }}</label>{{ row.material }}</td>
+      <td class="mat-num"><label class="sr-only" for="{{ row.quantity.id_for_label }}">Cantidad de la línea {{ forloop.counter }}</label>{{ row.quantity }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

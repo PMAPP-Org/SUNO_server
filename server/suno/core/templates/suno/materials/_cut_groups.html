@@ -1,0 +1,12 @@
+{% load money_tags %}
+<div class="mat-groups">
+{% for group in groups %}
+  <h3>{{ group.label }} · {{ group.net|money }}</h3>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Material</th><th>Unidad</th><th class="num">Salió</th><th class="num">Valor</th><th class="num">Devuelto</th><th class="num">Valor</th></tr></thead>
+    <tbody>{% for line in group.materials %}<tr><td class="pj-name">{{ line.code }} · {{ line.name }}</td><td>{{ line.unit }}</td><td class="num">{{ line.issued_quantity|qty }}</td><td class="num">{{ line.issued_value|signed }}</td><td class="num">{{ line.returned_quantity|qty }}</td><td class="num">{{ line.returned_value|signed }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+{% endfor %}
+</div>

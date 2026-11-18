@@ -1,0 +1,25 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Traslado {{ transfer.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="transfers" %}
+<section class="pj-panel cst-detail">
+  <h2>Traslado {{ transfer.code }}</h2>
+  <dl class="cst-facts">
+    <dt>Fecha</dt><dd>{{ transfer.moved_on|date:"d/m/Y" }}</dd>
+    <dt>Sale de</dt><dd>{{ transfer.source.name }}</dd>
+    <dt>Entra a</dt><dd>{{ transfer.target.name }}</dd>
+    <dt>Valor</dt><dd>{{ transfer.total|money }}</dd>
+    <dt>Registró</dt><dd>{{ transfer.created_by }}</dd>
+    {% if transfer.notes %}<dt>Notas</dt><dd>{{ transfer.notes }}</dd>{% endif %}
+  </dl>
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Costo unitario</th><th class="num">Valor</th></tr></thead>
+    <tbody>{% for line in lines %}<tr><td class="pj-name">{{ line.material.code }} · {{ line.material.name }}</td><td class="num">{{ line.quantity|qty }} {{ line.material.unit }}</td><td class="num">{{ line.unit_cost|money }}</td><td class="num">{{ line.amount|signed }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  <p class="pj-muted">Un traslado no se edita ni se borra: si hubo un error, registra el traslado de vuelta.</p>
+</section>
+{% endblock %}

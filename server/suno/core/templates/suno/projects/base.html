@@ -11,7 +11,7 @@
   <link rel="icon" type="image/png" href="{% static 'suno/brand/Icon_App.png' %}">
   <link rel="stylesheet" href="{% static 'suno/css/tokens.css' %}?v=20261108-topo-v1">
   <link rel="stylesheet" href="{% static 'suno/css/web.css' %}?v=20261112-names-v1">
-  <link rel="stylesheet" href="{% static 'suno/css/projects.css' %}?v=20261114-contracts-v3">
+  <link rel="stylesheet" href="{% static 'suno/css/projects.css' %}?v=20261116-materials-v2">
   <script src="{% static 'suno/js/web.js' %}" defer></script>
   <script src="{% static 'suno/js/peek.js' %}" defer></script>
   {% block head %}{% endblock %}
@@ -19,7 +19,7 @@
 <body class="workspace-page pj-page">
   <a class="skip-link" href="#workspace-content">Saltar al contenido</a>
   <div class="app-shell">
-    {% include "suno/_sidebar.html" with active="projects" %}
+    {% include "suno/_sidebar.html" with active=sidebar_active|default:"projects" %}
     <div class="workspace-frame">
       <header class="workspace-topbar">
         <button class="sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="false" data-sidebar-toggle><svg class="ui-icon" aria-hidden="true"><use href="{{ suno_icons }}#menu"></use></svg><span class="sr-only">Abrir navegación</span></button>
