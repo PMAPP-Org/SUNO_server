@@ -1,0 +1,19 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Ajustes · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="adjustments" %}
+<section class="pj-panel">
+  {% if can_create_material %}<p class="ctr-actions"><a class="button" href="{% url 'materials:new_adjustment' project.pk %}">Nuevo conteo</a></p>{% endif %}
+  {% if rows %}
+  {% if more %}<p class="pj-muted">Se muestran los 200 más recientes.</p>{% endif %}
+  <div class="pj-scroll">
+  <table class="pj-table mat-table">
+    <thead><tr><th>Número</th><th>Fecha del conteo</th><th>Bodega</th><th class="num">Faltantes</th><th class="num">Sobrantes</th><th>Estado</th></tr></thead>
+    <tbody>{% for a in rows %}<tr><td><a href="{% url 'materials:adjustment' project.pk a.pk %}">{{ a.code }}</a></td><td>{{ a.counted_on|date:"d/m/Y" }}</td><td class="pj-wrap">{{ a.warehouse.name }}</td><td class="num">{{ a.shortage_total|signed }}</td><td class="num">{{ a.surplus_total|signed }}</td><td><span class="bg-label mat-{{ a.status }}">{{ a.get_status_display }}</span></td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay ajustes de inventario.</p>{% endif %}
+</section>
+{% endblock %}

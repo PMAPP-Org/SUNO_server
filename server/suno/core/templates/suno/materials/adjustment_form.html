@@ -1,0 +1,57 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{% if adjustment %}Editar {{ adjustment.code }}{% else %}Nuevo conteo{% endif %} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="materials" %}
+{% include "suno/materials/_nav.html" with sub="adjustments" %}
+<section class="pj-panel">
+  <h2>{% if adjustment %}Editar ajuste {{ adjustment.code }}{% else %}Conteo físico{% endif %}</h2>
+  {% if adjustment.status == "rejected" %}<p class="pj-warning">Rechazado: {{ adjustment.decision_note }}. Al guardarlo vuelve a borrador.</p>{% endif %}
+  {% if adjustment %}<p class="pj-muted">Al guardarlo se vuelve a leer el inventario y se quita el acta de conteo firmada.</p>{% endif %}
+  <form method="post" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
+    <div class="pj-form ctr-head">
+      <label>{{ form.warehouse.label }} {{ form.warehouse }}</label>
+      <label>{{ form.counted_on.label }} {{ form.counted_on }}</label>
+      <label>Destino del faltante {{ form.destination }}</label>
+      <label>{{ form.task.label }} {{ form.task }}</label>
+      <label>{{ form.notes.label }} {{ form.notes }}</label>
+    </div>
+    {{ lines.management_form }}
+    <div class="pj-scroll">
+    <table class="pj-table mat-lines">
+      <thead><tr><th>#</th><th>Material</th><th class="num">Contado</th><th class="num">Costo unitario</th></tr></thead>
+      <tbody>
+      {% for row in lines %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td class="mat-material"><label class="sr-only" for="{{ row.material.id_for_label }}">Material de la línea {{ forloop.counter }}</label>{{ row.material }}</td>
+          <td class="mat-num"><label class="sr-only" for="{{ row.counted.id_for_label }}">Contado de la línea {{ forloop.counter }}</label>{{ row.counted }}</td>
+          <td class="mat-num"><label class="sr-only" for="{{ row.unit_cost.id_for_label }}">Costo unitario de la línea {{ forloop.counter }}</label>{{ row.unit_cost }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% include "suno/materials/_datalists.html" %}
+    {% if counted %}
+    <div class="pj-scroll">
+    <table class="pj-table mat-table">
+      <caption>Lo esperado es el saldo de hoy</caption>
+      <thead><tr><th>Material</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th></tr></thead>
+      <tbody>{% for line in counted %}<tr><td class="pj-name">{{ line.material.label }}</td><td class="num">{{ line.expected|qty }}</td><td class="num">{{ line.counted|qty }}</td><td class="num{% if line.difference %} ctr-diff{% endif %}">{{ line.difference|qty }}</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    {% endif %}
+    <p class="pj-muted">El costo unitario solo se pide para un sobrante de un material sin saldo ni entradas en la bodega.</p>
+    <div class="ctr-actions">
+      <button class="text-link" type="submit" name="accion" value="traer">Traer el inventario de la bodega</button>
+      <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
+      <button class="text-link" type="submit" name="accion" value="calcular">Recalcular</button>
+      <button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
+      <a href="{% if adjustment %}{% url 'materials:adjustment' project.pk adjustment.pk %}{% else %}{% url 'materials:adjustments' project.pk %}{% endif %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

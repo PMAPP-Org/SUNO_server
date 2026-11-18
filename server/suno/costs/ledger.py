@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from django.db.models import Exists, OuterRef, Q, QuerySet, Sum
+from django.urls import reverse
 from django.utils import timezone
 
 from suno.core.context import RequestContext
@@ -35,20 +36,38 @@ from suno.core.models import (
     Project,
     Trip,
 )
+from suno.core.models.cost import ORIGIN_FIELDS
 from suno.core.scoping import scoped_qs
 
 from .catalog import Catalog
 
 PAGE_SIZE = 100
 MAX_EXPORT_LINES = 50_000
-ALL, LEDGER_ONLY, CERTIFICATES, AUTOMATIC = "todos", "libro", "actas", "automaticos"
+ALL, LEDGER_ONLY, AUTOMATIC = "todos", "libro", "automaticos"
+CERTIFICATES, PURCHASES, CUTS, ADJUSTMENTS = "actas", "compras", "cortes", "ajustes"
 ORIGINS = {
     ALL: "Todos",
     LEDGER_ONLY: "Manual",
     CERTIFICATES: "Actas",
+    PURCHASES: "Compras",
+    CUTS: "Cortes",
+    ADJUSTMENTS: "Ajustes",
     AUTOMATIC: "Solo automáticos",
 }
+#: El campo de origen de `CostEntry` de cada filtro de documento (6b y 6c).
+DOCUMENT_ORIGINS = {
+    CERTIFICATES: "certificate",
+    PURCHASES: "material_purchase",
+    CUTS: "consumption_cut",
+    ADJUSTMENTS: "inventory_adjustment",
+}
 CERTIFICATE_LABEL = "Acta"
+SOURCE_LABELS = {
+    "certificate": "Acta",
+    "purchase": "Compra",
+    "cut": "Corte",
+    "adjustment": "Ajuste",
+}
 LEDGER, EQUIPMENT, TRANSPORT = "libro", "equipo", "transporte"
 ORIGIN_LABELS = {LEDGER: "Libro", EQUIPMENT: "Equipo propio", TRANSPORT: "Transporte"}
 COUNTED_USAGE = (EquipmentUsageStatus.COMPLETED, EquipmentUsageStatus.IN_PROGRESS)
@@ -121,7 +140,7 @@ class LedgerFilters:
     @property
     def shows_automatic(self) -> bool:
         return (
-            self.origin not in (LEDGER_ONLY, CERTIFICATES)
+            self.origin not in (LEDGER_ONLY, *DOCUMENT_ORIGINS)
             and not self.kind
             and self.status in ("", CostStatus.APPROVED)
         )
@@ -149,6 +168,10 @@ class LedgerLine:
     certificate_id: UUID | None = None
     contract_id: UUID | None = None
     certificate_label: str = ""
+    #: El documento que escribió el movimiento: "certificate", "purchase", "cut", "adjustment".
+    source_kind: str = ""
+    source_label: str = ""
+    source_url: str = ""
 
     @property
     def automatic(self) -> bool:
@@ -156,7 +179,7 @@ class LedgerLine:
 
     @property
     def origin_label(self) -> str:
-        return CERTIFICATE_LABEL if self.certificate_id else ORIGIN_LABELS[self.origin]
+        return SOURCE_LABELS.get(self.source_kind) or ORIGIN_LABELS[self.origin]
 
 
 @dataclass(frozen=True)
@@ -186,9 +209,9 @@ def manual_entries(
 ) -> QuerySet[CostEntry]:
     entries = scoped_qs(ctx, CostEntry).filter(project=project)
     if filters.origin == LEDGER_ONLY:
-        entries = entries.filter(certificate__isnull=True)
-    elif filters.origin == CERTIFICATES:
-        entries = entries.filter(certificate__isnull=False)
+        entries = entries.filter(**{f"{field}__isnull": True for field in ORIGIN_FIELDS})
+    elif filters.origin in DOCUMENT_ORIGINS:
+        entries = entries.filter(**{f"{DOCUMENT_ORIGINS[filters.origin]}__isnull": False})
     if filters.status:
         entries = entries.filter(status=filters.status)
     if filters.kind:
@@ -212,7 +235,14 @@ def manual_entries(
 def _with_details(ctx: RequestContext, entries: QuerySet[CostEntry]) -> QuerySet[CostEntry]:
     return (
         entries.select_related(
-            "created_by", "decided_by", "chapter", "task", "certificate__contract"
+            "created_by",
+            "decided_by",
+            "chapter",
+            "task",
+            "certificate__contract",
+            "material_purchase",
+            "consumption_cut",
+            "inventory_adjustment",
         )
         .prefetch_related("item_links__item")
         .annotate(is_reversed=Exists(scoped_qs(ctx, CostEntry).filter(reverses=OuterRef("pk"))))
@@ -235,10 +265,44 @@ def assignment_text(entry: CostEntry, catalog: Catalog) -> str:
     return text
 
 
+def entry_source(entry: CostEntry) -> tuple[str, str, str]:
+    """(tipo, etiqueta, URL) del documento que escribió el movimiento; vacío si es manual."""
+    project_id = entry.project_id
+    if entry.certificate is not None:
+        certificate = entry.certificate
+        return (
+            "certificate",
+            f"Acta {certificate.number} · Contrato {certificate.contract.number}",
+            reverse(
+                "contracts:certificate",
+                args=[project_id, certificate.contract_id, certificate.pk],
+            ),
+        )
+    if entry.material_purchase is not None:
+        purchase = entry.material_purchase
+        return (
+            "purchase",
+            f"Compra {purchase.code}",
+            reverse("materials:purchase", args=[project_id, purchase.pk]),
+        )
+    if entry.consumption_cut is not None:
+        cut = entry.consumption_cut
+        return "cut", cut.code, reverse("materials:cut", args=[project_id, cut.pk])
+    if entry.inventory_adjustment is not None:
+        adjustment = entry.inventory_adjustment
+        return (
+            "adjustment",
+            f"Ajuste {adjustment.code}",
+            reverse("materials:adjustment", args=[project_id, adjustment.pk]),
+        )
+    return "", "", ""
+
+
 def _entry_line(entry: CostEntry, catalog: Catalog) -> LedgerLine:
     document = " ".join(
         part for part in (entry.get_document_type_display(), entry.document_number) if part
     )
+    kind, label, url = entry_source(entry)
     return LedgerLine(
         day=entry.incurred_on,
         origin=LEDGER,
@@ -262,6 +326,9 @@ def _entry_line(entry: CostEntry, catalog: Catalog) -> LedgerLine:
             if entry.certificate
             else ""
         ),
+        source_kind=kind,
+        source_label=label,
+        source_url=url,
     )
 
 

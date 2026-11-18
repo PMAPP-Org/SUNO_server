@@ -29,7 +29,7 @@
     </tbody>
   </table>
   </div>
-  {% elif not contract_items.count %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
+  {% elif not contract_items.count and not material_items.count %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
   {% if contract_items.count %}
   <h3>Contratos, otrosíes y actas</h3>
   <div class="pj-scroll">
@@ -73,6 +73,46 @@
           <form method="post" action="{% url 'contracts:approve_certificate' project.pk c.contract_id c.pk %}">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><button class="button" type="submit"{% if not c.attachment_id %} disabled{% endif %}>Aprobar</button></form>
           <form method="post" action="{% url 'contracts:reject_certificate' project.pk c.contract_id c.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="bandeja"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
         </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if material_items.count %}
+  <h3>Materiales: compras, ajustes y cortes</h3>
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Qué</th><th>Detalle</th><th class="num">Valor</th><th>Preparó</th><th>Soporte</th><th>Decisión</th></tr></thead>
+    <tbody>
+    {% for p in material_items.purchases %}
+      <tr>
+        <td><a href="{% url 'materials:purchase' project.pk p.pk %}">Compra {{ p.code }}</a></td>
+        <td class="pj-wrap">{{ p.get_kind_display }} · {{ p.supplier }}</td>
+        <td class="num">{{ p.total|signed }}</td>
+        <td class="pj-wrap">{{ p.created_by }}</td>
+        <td>{% if p.attachment_id %}<a href="{% url 'materials:purchase_file' project.pk p.pk %}" target="_blank" rel="noopener">Factura</a>{% else %}<span class="pj-late">Sin factura</span>{% endif %}</td>
+        <td>{% url 'materials:approve_purchase' project.pk p.pk as approve %}{% url 'materials:reject_purchase' project.pk p.pk as reject %}{% include "suno/materials/_decide.html" with can_decide=True can_void=False needs=p.attachment_id|yesno:",Falta la factura" back="bandeja" %}</td>
+      </tr>
+    {% endfor %}
+    {% for a in material_items.adjustments %}
+      <tr>
+        <td><a href="{% url 'materials:adjustment' project.pk a.pk %}">Ajuste {{ a.code }}</a></td>
+        <td class="pj-wrap">Conteo del {{ a.counted_on|date:"d/m/Y" }} · {{ a.warehouse.name }}</td>
+        <td class="num">—</td>
+        <td class="pj-wrap">{{ a.created_by }}</td>
+        <td>{% if a.attachment_id %}<a href="{% url 'materials:adjustment_file' project.pk a.pk %}" target="_blank" rel="noopener">Acta</a>{% else %}<span class="pj-late">Sin acta</span>{% endif %}</td>
+        <td>{% url 'materials:approve_adjustment' project.pk a.pk as approve %}{% url 'materials:reject_adjustment' project.pk a.pk as reject %}{% include "suno/materials/_decide.html" with can_decide=True can_void=False needs=a.attachment_id|yesno:",Falta el acta" back="bandeja" %}</td>
+      </tr>
+    {% endfor %}
+    {% for c in material_items.cuts %}
+      <tr>
+        <td><a href="{% url 'materials:cut' project.pk c.pk %}">{{ c.code }} de consumos</a></td>
+        <td class="pj-wrap">{{ c.period_start|date:"d/m/Y" }} – {{ c.period_end|date:"d/m/Y" }}</td>
+        <td class="num">{{ c.total|signed }}</td>
+        <td class="pj-wrap">{{ c.created_by }}</td>
+        <td>{% if c.attachment_id %}<a href="{% url 'materials:cut_file' project.pk c.pk %}" target="_blank" rel="noopener">Reporte firmado</a>{% else %}<span class="pj-late">Sin firmar</span>{% endif %}</td>
+        <td>{% url 'materials:approve_cut' project.pk c.pk as approve %}{% url 'materials:reject_cut' project.pk c.pk as reject %}{% include "suno/materials/_decide.html" with can_decide=True can_void=False needs=c.attachment_id|yesno:",Falta el reporte firmado" back="bandeja" %}</td>
       </tr>
     {% endfor %}
     </tbody>

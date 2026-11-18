@@ -14,6 +14,8 @@ al del propio doc 08:
 - `access`   — roles funcionales por sección y alcance de proyecto.
 - `cost`     — `CostEntry`, `CostEntryItem`, `CostImportToken` (costos, pieza 6a).
 - `contract` — `Contract`, sus líneas, otrosíes y actas (costos, pieza 6b).
+- `material` — catálogo, bodegas, compras, salidas, devoluciones, traslados, ajustes,
+  cortes y kárdex (costos, pieza 6c).
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
 import Record` funcione igual que con un `models.py` plano.
@@ -128,6 +130,30 @@ from .maintenance import (
     WorkOrderLineKind,
     WorkOrderMechanic,
     WorkOrderStatus,
+)
+from .material import (
+    ConsumptionCut,
+    InventoryAdjustment,
+    InventoryAdjustmentItem,
+    InventoryAdjustmentLine,
+    Material,
+    MaterialImportToken,
+    MaterialIssue,
+    MaterialIssueItem,
+    MaterialIssueLine,
+    MaterialPurchase,
+    MaterialPurchaseLine,
+    MaterialPurchaseLineItem,
+    MaterialReturn,
+    MaterialReturnLine,
+    MaterialStatus,
+    MaterialTransfer,
+    MaterialTransferLine,
+    MovementKind,
+    PurchaseKind,
+    StockBalance,
+    StockMovement,
+    Warehouse,
 )
 from .ops import AuditEvent, Job, RateLimitBucket, SyncCursorFloor, SyncOpLog
 from .privacy import PrivacyConsent, PrivacyPurpose
@@ -259,6 +285,28 @@ __all__ = [
     "LocationLevel",
     "LocationNode",
     "MAX_LEVELS",
+    "ConsumptionCut",
+    "InventoryAdjustment",
+    "InventoryAdjustmentItem",
+    "InventoryAdjustmentLine",
+    "Material",
+    "MaterialImportToken",
+    "MaterialIssue",
+    "MaterialIssueItem",
+    "MaterialIssueLine",
+    "MaterialPurchase",
+    "MaterialPurchaseLine",
+    "MaterialPurchaseLineItem",
+    "MaterialReturn",
+    "MaterialReturnLine",
+    "MaterialStatus",
+    "MaterialTransfer",
+    "MaterialTransferLine",
+    "MovementKind",
+    "PurchaseKind",
+    "StockBalance",
+    "StockMovement",
+    "Warehouse",
     "Membership",
     "MimeType",
     "OrgScopedModel",

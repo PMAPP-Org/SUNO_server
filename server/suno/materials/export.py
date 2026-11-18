@@ -1,0 +1,124 @@
+"""Excel de materiales (costos, pieza 6c, spec 3.4). Todo texto de usuario pasa por
+`safe_cell`; los valores van como número y las fechas en ISO."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from decimal import Decimal
+
+from suno.backoffice.export import safe_cell, to_xlsx
+from suno.core.models import ConsumptionCut, MaterialIssueLine
+
+from .queries import InventoryRow, Kardex
+
+INVENTORY_HEADER = [
+    "bodega", "codigo", "material", "unidad", "categoria", "cantidad", "promedio", "valor",
+]  # fmt: skip
+KARDEX_HEADER = [
+    "secuencia", "fecha", "tipo", "documento", "entrada", "salida", "costo_unitario", "valor",
+    "saldo", "valor_saldo", "promedio",
+]  # fmt: skip
+
+
+def number(value: Decimal | None) -> float | str:
+    return "" if value is None else float(value)
+
+
+def inventory_workbook(rows: Sequence[InventoryRow]) -> bytes:
+    return to_xlsx(
+        INVENTORY_HEADER,
+        [
+            [
+                safe_cell(row.balance.warehouse.name),
+                safe_cell(row.balance.material.code),
+                safe_cell(row.balance.material.name),
+                safe_cell(row.balance.material.unit),
+                safe_cell(row.balance.material.category),
+                number(row.balance.quantity),
+                number(row.average),
+                number(row.balance.value),
+            ]
+            for row in rows
+        ],
+        sheet_name="Inventario",
+    )
+
+
+def kardex_workbook(sheet: Kardex) -> bytes:
+    return to_xlsx(
+        KARDEX_HEADER,
+        [
+            [
+                row.movement.sequence,
+                row.movement.moved_on.isoformat(),
+                row.movement.get_kind_display(),
+                safe_cell(row.document),
+                number(row.entry),
+                number(row.exit),
+                number(row.movement.unit_cost),
+                number(row.movement.value),
+                number(row.balance_quantity),
+                number(row.balance_value),
+                number(row.average),
+            ]
+            for row in sheet.rows
+        ],
+        sheet_name="Kárdex",
+    )
+
+
+ISSUES_HEADER = [
+    "salida", "fecha", "bodega", "destino", "recibe", "codigo", "material", "unidad",
+    "cantidad", "costo_unitario", "valor", "corte",
+]  # fmt: skip
+
+
+def issues_workbook(lines: Sequence[tuple[MaterialIssueLine, str]]) -> bytes:
+    """Las líneas de salida de un periodo, con la etiqueta de su destino."""
+    return to_xlsx(
+        ISSUES_HEADER,
+        [
+            [
+                line.issue.code,
+                line.issue.issued_on.isoformat(),
+                safe_cell(line.issue.warehouse.name),
+                safe_cell(destination),
+                safe_cell(line.issue.received_by),
+                safe_cell(line.material.code),
+                safe_cell(line.material.name),
+                safe_cell(line.material.unit),
+                number(line.quantity),
+                number(line.unit_cost),
+                number(line.amount),
+                line.issue.cut.code if line.issue.cut else "",
+            ]
+            for line, destination in lines
+        ],
+        sheet_name="Salidas",
+    )
+
+
+CUT_HEADER = [
+    "destino", "codigo", "material", "unidad", "cantidad_salio", "valor_salio",
+    "cantidad_devuelta", "valor_devuelto", "neto",
+]  # fmt: skip
+
+
+def cut_workbook(cut: ConsumptionCut) -> bytes:
+    """El detalle del corte por destino y material, del resumen guardado."""
+    rows = [
+        [
+            safe_cell(group["label"]),
+            safe_cell(line["code"]),
+            safe_cell(line["name"]),
+            safe_cell(line["unit"]),
+            float(Decimal(line["issued_quantity"])),
+            float(Decimal(line["issued_value"])),
+            float(Decimal(line["returned_quantity"])),
+            float(Decimal(line["returned_value"])),
+            float(Decimal(line["issued_value"]) - Decimal(line["returned_value"])),
+        ]
+        for group in (cut.summary or {}).get("groups", [])
+        for line in group["materials"]
+    ]
+    return to_xlsx(CUT_HEADER, rows, sheet_name=f"Corte {cut.number}")

@@ -1,0 +1,11 @@
+<nav class="pj-tabs mat-nav" aria-label="Materiales">
+  <a href="{% url 'materials:inventory' project.pk %}" {% if sub == "inventory" %}aria-current="page"{% endif %}>Inventario</a>
+  <a href="{% url 'materials:purchases' project.pk %}" {% if sub == "purchases" %}aria-current="page"{% endif %}>Compras</a>
+  <a href="{% url 'materials:issues' project.pk %}" {% if sub == "issues" %}aria-current="page"{% endif %}>Salidas</a>
+  <a href="{% url 'materials:transfers' project.pk %}" {% if sub == "transfers" %}aria-current="page"{% endif %}>Traslados</a>
+  <a href="{% url 'materials:adjustments' project.pk %}" {% if sub == "adjustments" %}aria-current="page"{% endif %}>Ajustes</a>
+  <a href="{% url 'materials:cuts' project.pk %}" {% if sub == "cuts" %}aria-current="page"{% endif %}>Cortes</a>
+  <a href="{% url 'materials:warehouses' project.pk %}" {% if sub == "warehouses" %}aria-current="page"{% endif %}>Bodegas</a>
+  <a href="{% url 'materials_catalog:list' %}">Catálogo</a>
+</nav>
+{% include "suno/materials/_alerts.html" %}

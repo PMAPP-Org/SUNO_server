@@ -11,6 +11,7 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.models import Sum
 from django.test import TestCase, override_settings
 
 from suno.authn.tests.factories import make_org, make_user
@@ -20,14 +21,24 @@ from suno.control.periods import MONTH
 from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     CertificateStatus,
+    ConsumptionCut,
     Contract,
     ContractAmendment,
     ContractCertificate,
     CostEntry,
     CostKind,
     CostStatus,
+    InventoryAdjustment,
+    Material,
+    MaterialIssue,
+    MaterialPurchase,
+    MaterialReturn,
+    MaterialTransfer,
     Project,
     Role,
+    StockBalance,
+    StockMovement,
+    Warehouse,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -153,3 +164,29 @@ class SeedControlDemoTests(TestCase):
         self.assertFalse(
             CostEntry.objects.filter(project=project, description__startswith="Acta 1: ").exists()
         )
+
+    def test_seeds_materials_with_a_cut_in_the_ledger(self) -> None:
+        self.seed()
+        project = Project.objects.get(org=self.org, name=PROJECT_NAME)
+        self.assertEqual(
+            set(Material.objects.filter(org=self.org).values_list("code", flat=True)),
+            {"CEM-01", "ARE-01", "ACE-12", "TUB-06"},
+        )
+        self.assertEqual(Warehouse.objects.filter(project=project).count(), 2)
+        purchases = MaterialPurchase.objects.filter(project=project)
+        self.assertEqual(set(purchases.values_list("kind", "status")),
+                         {("warehouse", "approved"), ("direct", "approved"),
+                          ("warehouse", "draft")})  # fmt: skip
+        self.assertTrue(MaterialReturn.objects.filter(project=project).exists())
+        self.assertTrue(MaterialTransfer.objects.filter(project=project).exists())
+        self.assertTrue(InventoryAdjustment.objects.filter(project=project, status="approved")
+                        .exists())  # fmt: skip
+        cut = ConsumptionCut.objects.get(project=project)
+        self.assertEqual(cut.status, "approved")
+        self.assertTrue(CostEntry.objects.filter(consumption_cut=cut).exists())
+        self.assertTrue(MaterialIssue.objects.filter(project=project, cut__isnull=True).exists())
+        for row in StockBalance.objects.filter(project=project):
+            sums = StockMovement.objects.filter(
+                warehouse=row.warehouse, material=row.material
+            ).aggregate(q=Sum("quantity"), v=Sum("value"))
+            self.assertEqual((row.quantity, row.value), (sums["q"], sums["v"]))
