@@ -61,6 +61,7 @@ from suno.materials.destination import (
 from .calc import LineCost, Summary, days_text, fraction_ok, over_cap, price, summarize
 from .common import (
     COUNTED_STATES,
+    FROZEN_STATES,
     MAX_ERRORS,
     MAX_FILE_NAME,
     LaborRejected,
@@ -99,6 +100,9 @@ class StoredLine:
     #: El número de esquema de la tarea ("2.1"), para volver a escribirla en la cuadrícula.
     task_outline: str
     fraction: Decimal
+    #: Congelados al aprobar (nulos en un borrador).
+    daily_wage: Decimal | None = None
+    factor: Decimal | None = None
 
     @property
     def destination(self) -> DestinationData:
@@ -180,8 +184,23 @@ def load_lines(ctx: RequestContext, sheet: Timesheet) -> list[StoredLine]:
             f"{outline} {name}" if task_id else "",
             outline or "",
             fraction,
+            daily_wage,
+            factor,
         )  # fmt: skip
-        for pk, worker_id, day, key, scope, chapter_id, task_id, outline, name, fraction in (
+        for (
+            pk,
+            worker_id,
+            day,
+            key,
+            scope,
+            chapter_id,
+            task_id,
+            outline,
+            name,
+            fraction,
+            daily_wage,
+            factor,
+        ) in (
             scoped_qs(ctx, TimesheetLine)
             .filter(timesheet=sheet)
             .order_by("worked_on", "worker_id")
@@ -196,6 +215,8 @@ def load_lines(ctx: RequestContext, sheet: Timesheet) -> list[StoredLine]:
                 "task__outline_number",
                 "task__name",
                 "fraction",
+                "daily_wage",
+                "factor",
             )  # fmt: skip
         )
     ]
@@ -230,14 +251,23 @@ def read_destination(
 
 
 def evaluate(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> Evaluation:
-    """Cinco consultas: líneas, ítems, nombres, jornales y factor."""
+    """Cinco consultas: líneas, ítems, nombres, jornales y factor. Una planilla aprobada o
+    anulada lleva el jornal y el factor congelados (tres consultas): lo que se aprobó, no lo de
+    hoy (decisión 7 del plan)."""
     lines = load_lines(ctx, sheet)
     workers = {line.worker_id for line in lines}
-    costs = price(
-        [(line.worker_id, line.day, line.key, line.fraction) for line in lines],
-        wage_histories(ctx, workers),
-        factor_history(ctx),
-    )
+    if sheet.status in FROZEN_STATES:
+        costs = [
+            LineCost(line.worker_id, line.day, line.key, line.fraction, line.daily_wage,
+                     line.factor)
+            for line in lines
+        ]  # fmt: skip
+    else:
+        costs = price(
+            [(line.worker_id, line.day, line.key, line.fraction) for line in lines],
+            wage_histories(ctx, workers),
+            factor_history(ctx),
+        )
     return Evaluation(
         tuple(lines), tuple(costs), summarize(costs), labels_for(catalog, lines),
         worker_names(ctx, workers),

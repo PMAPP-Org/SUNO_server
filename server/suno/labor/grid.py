@@ -4,7 +4,8 @@
   recortada al periodo) y la fracción en cada celda. Los trabajadores asignados en el periodo
   sin tareo aparecen con una fila vacía (destino Indirecto).
 - Totales por día (de la semana) y, del periodo completo, por persona y por destino, con el
-  costo estimado de hoy; `changed` avisa si difiere del resumen guardado (lo que se firmó).
+  costo estimado de hoy (en una aprobada o anulada, el congelado); `changed` avisa si un
+  borrador difiere del resumen guardado (lo que se firmó).
 - Seis consultas: las cinco de `timesheets.evaluate` y las asignaciones del periodo.
 """
 
@@ -28,6 +29,7 @@ from suno.materials.destination import INDIRECT_LABEL, destination_text
 
 from .calc import NO_DAYS, days_text
 from .calc import problems as find_problems
+from .common import FROZEN_STATES
 from .timesheets import evaluate
 
 
@@ -162,7 +164,9 @@ def build_grid(
         days=evaluation.summary.days,
         total=evaluation.summary.total,
         problems=tuple(find_problems(evaluation.costs, evaluation.names)),
-        changed=stored is not None and evaluation.summary.fingerprint() != stored,
+        changed=stored is not None
+        and sheet.status not in FROZEN_STATES
+        and evaluation.summary.fingerprint() != stored,
     )  # fmt: skip
 
 

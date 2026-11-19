@@ -20,7 +20,7 @@ from suno.core.tests.dbsupport import (
 from suno.labor import registry_import
 from suno.labor.common import LaborRejected
 
-from .factories import TODAY, labor_world, xlsx
+from .factories import TODAY, bare_line, bare_timesheet, labor_world, xlsx
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -107,3 +107,46 @@ class WorkerImportTests(TestCase):
             registry_import.apply(self.lw.ctx(self.lw.world.supervisor), token)
         with self.assertRaises(LaborRejected):
             registry_import.apply(self.ctx, token + "x")
+
+    def test_a_new_wage_cannot_start_on_frozen_days(self) -> None:
+        """Decisión 7: la importación tampoco cambia el jornal de días ya aprobados (C2)."""
+        sheet = bare_timesheet(self.lw, status="approved")
+        bare_line(
+            sheet, self.lw.pedro, date(2026, 3, 3), frozen=("80000.00", "1.5200", "121600.00")
+        )
+        early = xlsx(
+            "Trabajadores",
+            HEADER,
+            [["CC", "1012345678", "Pedro Pérez", "Oficial", "2026-01-05", 95000, "2026-03-01"]],
+        )
+        preview = registry_import.preview(self.ctx, early)
+        self.assertEqual(preview.token, "")
+        self.assertIn(
+            "Fila 2: Hay planillas aprobadas hasta el 03/03/2026", " ".join(preview.errors)
+        )
+        later = xlsx(
+            "Trabajadores",
+            HEADER,
+            [["CC", "1012345678", "Pedro Pérez", "Oficial", "2026-01-05", 95000, "2026-03-04"]],
+        )
+        token = registry_import.preview(self.ctx, later).token
+        # Entre la vista previa y aplicar se aprueba otra planilla con días posteriores.
+        other = bare_timesheet(
+            self.lw, number=2, status="reversed", start=date(2026, 3, 9), end=date(2026, 3, 15)
+        )
+        bare_line(
+            other, self.lw.pedro, date(2026, 3, 10), frozen=("80000.00", "1.5200", "121600.00")
+        )
+        with self.assertRaises(LaborRejected) as caught:
+            registry_import.apply(self.ctx, token)
+        self.assertIn("10/03/2026", caught.exception.errors[0])
+        self.assertFalse(
+            WorkerWage.objects.filter(worker=self.lw.pedro, valid_from=date(2026, 3, 4)).exists()
+        )
+        # Un jornal igual al vigente no agrega fila: no choca con lo congelado.
+        same = xlsx(
+            "Trabajadores",
+            HEADER,
+            [["CC", "1012345678", "Pedro Pérez R", "Oficial", "2026-01-05", 80000, "2026-03-01"]],
+        )
+        self.assertEqual(registry_import.preview(self.ctx, same).errors, ())

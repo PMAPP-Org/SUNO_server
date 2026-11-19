@@ -28,28 +28,21 @@ def number(value: Decimal | None) -> float | str:
 
 
 def timesheet_workbook(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> bytes:
-    """Una fila por línea. En una aprobada o anulada, los valores congelados; en un borrador,
-    el costo estimado de hoy."""
+    """Una fila por línea. En una aprobada o anulada, los valores congelados (`evaluate`); en
+    un borrador, el costo estimado de hoy."""
     evaluation = evaluate(ctx, sheet, catalog)
-    frozen = {
-        pk: (wage, factor, amount)
-        for pk, wage, factor, amount in scoped_qs(ctx, TimesheetLine)
-        .filter(timesheet=sheet, amount__isnull=False)
-        .values_list("pk", "daily_wage", "factor", "amount")
-    }
     positions = dict(
         scoped_qs(ctx, TimesheetLine).filter(timesheet=sheet)
         .values_list("worker_id", "worker__position").distinct()
     )  # fmt: skip
     rows = []
     for line, cost in zip(evaluation.lines, evaluation.costs, strict=True):
-        wage, factor, amount = frozen.get(line.pk, (cost.wage, cost.factor, cost.amount))
         rows.append([
             safe_cell(evaluation.names.get(line.worker_id, "—")),
             safe_cell(positions.get(line.worker_id, "")),
             line.day.isoformat(),
             safe_cell(evaluation.labels.get(line.key, "—")),
-            number(line.fraction), number(wage), number(factor), number(amount),
+            number(line.fraction), number(cost.wage), number(cost.factor), number(cost.amount),
         ])  # fmt: skip
     return to_xlsx(TIMESHEET_HEADER, rows, sheet_name=sheet.code)
 

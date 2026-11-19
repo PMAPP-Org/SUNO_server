@@ -15,6 +15,7 @@ from typing import Any
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from suno.backoffice.export import to_xlsx_book
@@ -22,14 +23,14 @@ from suno.budgets.excel import ExcelRejected, preview_sheet, read_rows
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
-from suno.core.models import LaborImportKind, Worker, WorkerWage
+from suno.core.models import LaborImportKind, TimesheetLine, Worker, WorkerWage
 from suno.core.policies import can_manage_labor_registry
 from suno.core.scoping import scoped_qs
 
 from . import imports
 from .calc import History
-from .common import MAX_ERRORS, LaborRejected
-from .registry import WorkerData, clean_document, wage_ok, worker_errors
+from .common import FROZEN_STATES, MAX_ERRORS, LaborRejected
+from .registry import WorkerData, clean_document, frozen_message, wage_ok, worker_errors
 
 SHEET = "Trabajadores"
 H_TYPE, H_NUMBER, H_NAME, H_POSITION = "Tipo de documento", "Número de documento", "Nombre", "Cargo"
@@ -82,7 +83,23 @@ def _wages(ctx: RequestContext) -> dict[Any, History]:
     return {key: History.of(value) for key, value in rows.items()}
 
 
-def _classify(row: WorkerRow, current: Worker | None, wages: dict[Any, History]) -> tuple[str, str]:
+def _frozen(ctx: RequestContext) -> dict[Any, date]:
+    """El último día congelado (planillas aprobadas o anuladas) de cada trabajador."""
+    return dict(
+        scoped_qs(ctx, TimesheetLine)
+        .filter(timesheet__status__in=FROZEN_STATES)
+        .values("worker_id")
+        .annotate(last=Max("worked_on"))
+        .values_list("worker_id", "last")
+    )
+
+
+def _classify(
+    row: WorkerRow,
+    current: Worker | None,
+    wages: dict[Any, History],
+    frozen: dict[Any, date],
+) -> tuple[str, str]:
     if current is None:
         return NEW, ""
     today = timezone.localdate()
@@ -90,6 +107,10 @@ def _classify(row: WorkerRow, current: Worker | None, wages: dict[Any, History])
     same_wage = wages.get(current.pk, History()).on(wage_from) == row.wage
     if not same_wage and wage_from < current.hired_on:
         return "", "El jornal no puede regir antes del ingreso."
+    last = frozen.get(current.pk)
+    if not same_wage and last is not None and wage_from <= last:
+        # Decisión 7 del plan, como `registry._require_after_frozen`.
+        return "", frozen_message(last)
     same = (current.full_name, current.position) == (row.data.full_name.strip(),
                                                      row.data.position.strip())  # fmt: skip
     return (SAME if same and same_wage else UPDATE), ""
@@ -139,7 +160,7 @@ def preview(ctx: RequestContext, data: bytes) -> WorkerPreview:
     found, missing = imports.columns(table[0], HEADER, REQUIRED)
     if missing:
         return WorkerPreview(errors=tuple(missing))
-    existing, wages = _existing(ctx), _wages(ctx)
+    existing, wages, frozen = _existing(ctx), _wages(ctx), _frozen(ctx)
     rows: list[WorkerRow] = []
     errors: list[str] = []
     seen: dict[tuple[str, str], int] = {}
@@ -153,7 +174,7 @@ def preview(ctx: RequestContext, data: bytes) -> WorkerPreview:
             if key in seen:
                 problems.append(f"El documento se repite (fila {seen[key]}).")
             seen.setdefault(key, line)
-            action, problem = _classify(row, existing.get(key), wages)
+            action, problem = _classify(row, existing.get(key), wages, frozen)
             if problem:
                 problems.append(problem)
             row = WorkerRow(row.line, row.data, row.wage, row.wage_from, action)
@@ -204,7 +225,7 @@ def apply(ctx: RequestContext, token: str) -> tuple[int, int]:
             (w.document_type, w.document_number): w
             for w in scoped_qs(ctx, Worker).select_for_update(no_key=True).order_by("pk")
         }
-        wages = _wages(ctx)
+        wages, frozen = _wages(ctx), _frozen(ctx)
         created: list[Worker] = []
         changed: list[Worker] = []
         new_wages: list[WorkerWage] = []
@@ -213,7 +234,7 @@ def apply(ctx: RequestContext, token: str) -> tuple[int, int]:
             key = (row.data.document_type, clean_document(row.data.document_number))
             current = existing.get(key)
             errors = worker_errors(row.data)
-            action, problem = _classify(row, current, wages)
+            action, problem = _classify(row, current, wages, frozen)
             if problem:
                 errors.append(problem)
             if errors:

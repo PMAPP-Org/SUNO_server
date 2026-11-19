@@ -303,10 +303,14 @@ def _require_after_frozen(lines: Any, valid_from: date) -> None:
         .first()
     )
     if last is not None:
-        raise LaborRejected(
-            [f"Hay planillas aprobadas hasta el {last:%d/%m/%Y}: el valor nuevo rige desde el día "
-             "siguiente."]
-        )  # fmt: skip
+        raise LaborRejected([frozen_message(last)])
+
+
+def frozen_message(last: date) -> str:
+    return (
+        f"Hay planillas aprobadas hasta el {last:%d/%m/%Y}: el valor nuevo rige desde el día "
+        "siguiente."
+    )
 
 
 def wage_in_use(ctx: RequestContext, wage: WorkerWage) -> bool:

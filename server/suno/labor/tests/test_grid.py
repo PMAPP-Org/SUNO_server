@@ -9,6 +9,7 @@ from unittest import mock
 
 from django.test import TestCase
 
+from suno.core.models import Timesheet, WorkerWage
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -17,7 +18,15 @@ from suno.core.tests.dbsupport import (
 from suno.costs.catalog import assignable_tasks, load_catalog
 from suno.labor import grid, queries, timesheets
 
-from .factories import TODAY, WEEK, bare_timesheet, labor_world, line_data, to_item
+from .factories import (
+    TODAY,
+    WEEK,
+    bare_line,
+    bare_timesheet,
+    labor_world,
+    line_data,
+    to_item,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -101,3 +110,41 @@ class GridTests(TestCase):
         result = queries.worker_page(self.ctx, queries.WorkerFilters(text="pedro"), page=1)
         self.assertEqual([w.full_name for w in result], ["Pedro Pérez"])
         self.assertEqual(queries.positions(self.ctx), ["Ayudante", "Oficial"])
+
+
+@skip_without_db
+class FrozenGridTests(TestCase):
+    """Una planilla aprobada o anulada muestra lo congelado, no el jornal de hoy (C2)."""
+
+    def setUp(self) -> None:
+        patcher = mock.patch("django.utils.timezone.localdate", return_value=TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.lw = labor_world()
+        self.ctx = self.lw.ctx()
+        self.catalog = load_catalog(self.ctx, self.lw.project)
+        self.tasks = assignable_tasks(self.ctx, self.lw.project)
+
+    def frozen_sheet(self, status: str, number: int = 1) -> Timesheet:
+        sheet = bare_timesheet(self.lw, status=status, number=number)
+        bare_line(sheet, self.lw.pedro, MON, frozen=("70000.00", "1.4000", "98000.00"))
+        sheet.summary = {"fingerprint": {"lines": 1, "days": "1.0000", "total": "98000.00"}}
+        sheet.save()
+        # Hoy el jornal vigente es otro: no debe aparecer en la planilla congelada.
+        WorkerWage.objects.filter(worker=self.lw.pedro).update(daily_wage=D("90000.00"))
+        return sheet
+
+    def test_grid_and_period_table_use_frozen_values(self) -> None:
+        for number, status in enumerate(("approved", "reversed"), start=1):
+            with self.subTest(status=status):
+                sheet = self.frozen_sheet(status, number)
+                built = grid.build_grid(
+                    self.ctx, self.lw.project, sheet, self.catalog, self.tasks, MON
+                )
+                pedro = [r for r in built.rows if r.worker.startswith("Pedro")][0]
+                self.assertEqual(pedro.cost, D("98000.00"))
+                self.assertEqual(built.total, D("98000.00"))
+                self.assertEqual([a for _, _, a in built.by_worker], [D("98000.00")])
+                self.assertFalse(built.changed)
+                table = grid.period_table(self.ctx, sheet, self.catalog)
+                self.assertEqual([row[4] for row in table.rows], [D("98000.00")])
