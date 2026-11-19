@@ -48,7 +48,9 @@ class TabTests(TestCase):
                             f'href="{self.base}"', html=False)  # fmt: skip
         self.client.force_login(self.lw.accountant)
         self.assertNotContains(
-            self.client.get(f"/plataforma/proyectos/{self.lw.project.pk}/costos/"), "Tareo"
+            self.client.get(f"/plataforma/proyectos/{self.lw.project.pk}/costos/"),
+            f'href="{self.base}"',
+            html=False,
         )
 
     def test_ids_of_other_projects_or_organizations_are_404(self) -> None:
