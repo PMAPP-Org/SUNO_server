@@ -55,6 +55,7 @@ from suno.materials.destination import (
     destination_key,
     destination_label,
     key_text,
+    parse_destination,
 )
 
 from .calc import LineCost, Summary, days_text, fraction_ok, over_cap, price, summarize
@@ -208,6 +209,24 @@ def labels_for(catalog: Catalog, lines: Iterable[StoredLine]) -> dict[str, str]:
                 catalog, line.scope, line.chapter_id, line.item_ids, line.task_label
             )
     return labels
+
+
+def outline_index(tasks: Mapping[UUID, Task]) -> dict[str, UUID]:
+    return {task.outline_number: task.pk for task in tasks.values()}
+
+
+def read_destination(
+    text: str, task_text: str, catalog: Catalog, outlines: Mapping[str, UUID]
+) -> tuple[DestinationData | None, str]:
+    """El destino escrito de una fila (cuadrícula o Excel) y la tarea por su número de esquema
+    (vacío: sin tarea); como `materials.forms.read_destination`."""
+    task_id = None
+    task = task_text.strip()
+    if task:
+        task_id = outlines.get(task)
+        if task_id is None:
+            return None, f"No hay una tarea vigente con número {task}."
+    return parse_destination(text, catalog, task_id)
 
 
 def evaluate(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> Evaluation:
