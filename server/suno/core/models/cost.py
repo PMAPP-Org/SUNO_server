@@ -8,7 +8,8 @@ Diseño: plans/2026-11-12-costos-pieza6a-costo-real-design.md, sección 1.
 - `CostEntryItem`: los ítems de un movimiento `item` (uno) o `selection` (dos o más del mismo
   capítulo), por su identidad estable (`BudgetItem`), no por versión.
 
-El acta (6b) y la compra, el corte o el ajuste (6c) que lo generaron se guardan como origen.
+El acta (6b) y la compra, el corte o el ajuste (6c) que lo generaron se guardan como origen;
+la planilla de tareo (6d) también.
 
 El valor lleva IVA incluido, como los precios del presupuesto.
 """
@@ -40,6 +41,7 @@ class CostDocumentType(models.TextChoices):
     CERTIFICATE = "certificate", "Acta de avance"
     CONSUMPTION_CUT = "consumption_cut", "Corte de consumos"
     INVENTORY_COUNT = "inventory_count", "Inventario físico"
+    TIMESHEET = "timesheet", "Planilla de tareo"
     OTHER = "other", "Otro"
 
 
@@ -56,9 +58,15 @@ class CostStatus(models.TextChoices):
     REJECTED = "rejected", "Rechazado"
 
 
-#: Los documentos que escriben movimientos del libro (6b y 6c). Un movimiento con uno de ellos
-#: no se edita ni se reversa desde el libro: se anula el documento.
-ORIGIN_FIELDS = ("certificate", "material_purchase", "consumption_cut", "inventory_adjustment")
+#: Los documentos que escriben movimientos del libro (6b, 6c y 6d). Un movimiento con uno de
+#: ellos no se edita ni se reversa desde el libro: se anula el documento.
+ORIGIN_FIELDS = (
+    "certificate",
+    "material_purchase",
+    "consumption_cut",
+    "inventory_adjustment",
+    "timesheet",
+)
 
 
 def _at_most_one_origin() -> models.Q:
@@ -195,6 +203,17 @@ class CostEntry(OrgScopedModel):
         verbose_name="ajuste",
     )
 
+    #: Pieza 6d: la planilla de tareo aprobada que lo generó (un movimiento por destino). Se
+    #: anula la planilla, no el movimiento.
+    timesheet = models.ForeignKey(
+        "core.Timesheet",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cost_entries",
+        verbose_name="planilla de tareo",
+    )
+
     class Meta:
         db_table = "cost_entry"
         ordering = ["-incurred_on", "-created_at"]
@@ -256,7 +275,7 @@ class CostEntry(OrgScopedModel):
 
     @property
     def from_document(self) -> bool:
-        """Viene de un acta, una compra, un corte o un ajuste."""
+        """Viene de un acta, una compra, un corte, un ajuste o una planilla de tareo."""
         return any(getattr(self, f"{field}_id") is not None for field in ORIGIN_FIELDS)
 
 

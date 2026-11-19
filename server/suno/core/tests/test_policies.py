@@ -29,7 +29,17 @@ from suno.core import policies
 from suno.core.access import AccessScope, Section, SectionRole
 from suno.core.access_services import LEGACY_GRANTS
 from suno.core.context import RequestContext, SectionAccess
-from suno.core.models import Contract, CostEntry, Device, FormTemplate, Job, Project, Record, Role
+from suno.core.models import (
+    Contract,
+    CostEntry,
+    Device,
+    FormTemplate,
+    Job,
+    Project,
+    Record,
+    Role,
+    Timesheet,
+)
 from suno.core.policies import (
     can_manage_device,
     can_publish_form_template,
@@ -89,9 +99,8 @@ def cost_entry(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> Cost
     return CostEntry(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
 
 
-def timesheet(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> CostEntry:
-    """Una planilla como recurso de política. Provisional: la Task 2 la vuelve `Timesheet`."""
-    return CostEntry(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
+def timesheet(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> Timesheet:
+    return Timesheet(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
 
 
 # --- La primitiva -----------------------------------------------------------

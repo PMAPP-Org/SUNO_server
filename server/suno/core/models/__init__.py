@@ -16,6 +16,8 @@ al del propio doc 08:
 - `contract` — `Contract`, sus líneas, otrosíes y actas (costos, pieza 6b).
 - `material` — catálogo, bodegas, compras, salidas, devoluciones, traslados, ajustes,
   cortes y kárdex (costos, pieza 6c).
+- `labor`    — trabajadores, jornales, factor prestacional, asignaciones, planillas de tareo y
+  nómina importada (costos, pieza 6d).
 
 Todos los modelos se reexportan aquí para que `from suno.core.models
 import Record` funcione igual que con un `models.py` plano.
@@ -118,6 +120,21 @@ from .inspection import (
     InspectionStatus,
     PreoperationalItem,
 )
+from .labor import (
+    BenefitFactor,
+    DocumentType,
+    LaborImportKind,
+    LaborImportToken,
+    PayrollImport,
+    PayrollImportLine,
+    ProjectWorker,
+    Timesheet,
+    TimesheetLine,
+    TimesheetLineItem,
+    TimesheetStatus,
+    Worker,
+    WorkerWage,
+)
 from .layer import ReferenceLayer
 from .location import MAX_LEVELS, LocationLevel, LocationNode
 from .maintenance import (
@@ -214,6 +231,19 @@ __all__ = [
     "FaultStatus",
     "InspectionStatus",
     "PreoperationalItem",
+    "BenefitFactor",
+    "DocumentType",
+    "LaborImportKind",
+    "LaborImportToken",
+    "PayrollImport",
+    "PayrollImportLine",
+    "ProjectWorker",
+    "Timesheet",
+    "TimesheetLine",
+    "TimesheetLineItem",
+    "TimesheetStatus",
+    "Worker",
+    "WorkerWage",
     "ACTIVE_JOB_STATUSES",
     "INITIAL_VERSION",
     "LAT_MAX",
