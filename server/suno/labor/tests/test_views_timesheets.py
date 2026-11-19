@@ -109,3 +109,13 @@ class TimesheetFlowTests(TestCase):
             generated_on=TODAY,
         )
         self.assertTrue(content.startswith(b"%PDF"))
+
+
+class PdfDayLabelTests(unittest.TestCase):
+    def test_day_columns_are_in_spanish(self) -> None:
+        from datetime import date
+
+        from suno.labor.pdf import day_label
+
+        self.assertEqual(day_label(date(2026, 3, 2)), "lun 02")
+        self.assertEqual(day_label(date(2026, 3, 8)), "dom 08")

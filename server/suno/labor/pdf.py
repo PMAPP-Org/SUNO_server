@@ -34,6 +34,14 @@ GRID = colors.HexColor("#CCCCCC")
 HEAD = colors.HexColor("#F0EEE9")
 BLOCK_DAYS = 16
 
+#: Días de la semana en español (`%a` depende del locale del servidor).
+WEEKDAYS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+
+
+def day_label(day: date) -> str:
+    """ "lun 02": la cabecera de una columna de día."""
+    return f"{WEEKDAYS[day.weekday()]} {day:%d}"
+
 
 def _font() -> None:
     if "SunoReport" not in pdfmetrics.getRegisteredFontNames():
@@ -101,7 +109,7 @@ def timesheet_pdf(
         cell = (width - fixed - width * 0.08) / len(days)
         story.append(Paragraph(f"Días {days[0]:%d/%m} a {days[-1]:%d/%m}", section))
         story.append(grid_table(
-            [["Trabajador", "Destino", *[f"{d:%a %d}" for d in days], "Jornales"],
+            [["Trabajador", "Destino", *[day_label(d) for d in days], "Jornales"],
              *[[worker, label, *cells[start : start + BLOCK_DAYS], qty(total)]
                for worker, label, cells, total, _amount in data.rows],
              ["Total del día", "", *[qty(t) for t in data.day_totals[start : start + BLOCK_DAYS]],

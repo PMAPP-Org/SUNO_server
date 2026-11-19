@@ -17,7 +17,7 @@
   </div>
   {% else %}<p class="pj-warning">No hay factor prestacional: ninguna planilla se puede aprobar sin él.</p>{% endif %}
   {% if can_manage_registry %}
-  <form method="post" class="pj-filters" aria-label="Nuevo factor">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Registrar factor</button></form>
+  <form method="post" class="pj-filters ta-form" aria-label="Nuevo factor">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Registrar factor</button></form>
   {% endif %}
 </section>
 {% endblock %}

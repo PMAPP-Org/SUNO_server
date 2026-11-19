@@ -17,7 +17,7 @@
   </table>
   </div>
   {% if can_manage_registry and w.is_active %}
-  <form method="post" action="{% url 'labor_registry:wage' w.pk %}" class="pj-filters" aria-label="Nuevo jornal">{% csrf_token %}{{ wage_form.as_div }}<button class="button" type="submit">Registrar cambio de jornal</button></form>
+  <form method="post" action="{% url 'labor_registry:wage' w.pk %}" class="pj-filters ta-form" aria-label="Nuevo jornal">{% csrf_token %}{{ wage_form.as_div }}<button class="button" type="submit">Registrar cambio de jornal</button></form>
   {% endif %}
 </section>
 <section class="pj-panel">
@@ -29,7 +29,7 @@
   <h2>Acciones</h2>
   <p class="ctr-actions"><a class="text-link" href="{% url 'labor_registry:edit' w.pk %}">Editar datos</a></p>
   {% if w.is_active %}
-  <form method="post" action="{% url 'labor_registry:retire' w.pk %}" class="pj-filters" aria-label="Retiro">{% csrf_token %}{{ retire_form.as_div }}<button class="button" type="submit">Retirar</button></form>
+  <form method="post" action="{% url 'labor_registry:retire' w.pk %}" class="pj-filters ta-form" aria-label="Retiro">{% csrf_token %}{{ retire_form.as_div }}<button class="button" type="submit">Retirar</button></form>
   {% else %}
   <form method="post" action="{% url 'labor_registry:retire' w.pk %}">{% csrf_token %}<button class="text-link" type="submit" name="accion" value="reincorporar">Deshacer el retiro</button></form>
   {% endif %}

@@ -6,7 +6,7 @@
 {% if can_create_labor %}
 <section class="pj-panel">
   <h2>Asignar un trabajador</h2>
-  <form method="post" class="pj-filters" aria-label="Nueva asignación">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Asignar</button></form>
+  <form method="post" class="pj-filters ta-form" aria-label="Nueva asignación">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Asignar</button></form>
   {% if not form.fields.worker.choices|length > 1 %}<p class="pj-muted">No hay trabajadores activos en el registro.</p>{% endif %}
 </section>
 {% endif %}
