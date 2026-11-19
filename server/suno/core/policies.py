@@ -48,6 +48,17 @@ __all__ = [
     "WRITE_RECORD_ROLES",
     "PolicyDenied",
     "can_approve_costs",
+    "can_approve_labor",
+    "can_create_labor",
+    "can_delete_labor",
+    "can_export_labor",
+    "can_export_labor_registry",
+    "can_manage_labor_registry",
+    "can_read_labor",
+    "can_read_labor_registry",
+    "can_reject_labor",
+    "can_reverse_labor",
+    "can_update_labor",
     "can_assign_task_responsibles",
     "can_assign_work",
     "can_create_costs",
@@ -81,6 +92,17 @@ __all__ = [
     "can_view_budgets",
     "can_write_record",
     "check_approve_costs",
+    "check_approve_labor",
+    "check_create_labor",
+    "check_delete_labor",
+    "check_export_labor",
+    "check_export_labor_registry",
+    "check_manage_labor_registry",
+    "check_read_labor",
+    "check_read_labor_registry",
+    "check_reject_labor",
+    "check_reverse_labor",
+    "check_update_labor",
     "check_assign_task_responsibles",
     "check_assign_work",
     "check_create_costs",
@@ -585,6 +607,85 @@ def can_manage_material_catalog(ctx: RequestContext, org_id: UUID) -> bool:
     ) and user_has_section_capability(ctx, org_id, Section.COSTS, Capability.UPDATE)
 
 
+def _labor(ctx: RequestContext, org_id: UUID, project_id: UUID, capability: Capability) -> bool:
+    """Mano de obra (costos, pieza 6d): capacidad de la sección **en ese proyecto**."""
+    return user_has_section_capability(
+        ctx, org_id, Section.LABOR, capability, project_id=project_id
+    )
+
+
+def can_read_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Ver la pestaña Tareo (asignaciones y planillas): todos los roles de Mano de obra."""
+    return _labor(ctx, project.org_id, project.id, Capability.READ)
+
+
+def can_create_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Asignar trabajadores y crear planillas: Gestor, Revisor y Colaborador."""
+    return _labor(ctx, project.org_id, project.id, Capability.CREATE)
+
+
+def can_approve_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Aprobar planillas: Gestor y Revisor. Que nadie apruebe lo suyo lo exige el servicio (y
+    la base): esta política responde solo por el rol."""
+    return _labor(ctx, project.org_id, project.id, Capability.APPROVE)
+
+
+def can_reject_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Rechazar planillas, con motivo: Gestor y Revisor."""
+    return _labor(ctx, project.org_id, project.id, Capability.REJECT)
+
+
+def can_reverse_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """Anular una planilla aprobada: solo el Gestor."""
+    return _labor(ctx, project.org_id, project.id, Capability.REVERSE)
+
+
+def can_export_labor(ctx: RequestContext, project: ProjectResource) -> bool:
+    """PDF y Excel de una planilla (nombres y jornales): todos menos Consulta."""
+    return _labor(ctx, project.org_id, project.id, Capability.EXPORT)
+
+
+def _own_or_any_labor(
+    ctx: RequestContext, resource: CostEntryResource, capability: Capability
+) -> bool:
+    if not _labor(ctx, resource.org_id, resource.project_id, capability):
+        return False
+    return resource.created_by_id == ctx.user_id or _labor(
+        ctx, resource.org_id, resource.project_id, Capability.APPROVE
+    )
+
+
+def can_update_labor(ctx: RequestContext, resource: CostEntryResource) -> bool:
+    """Editar una planilla o una asignación: Gestor y Revisor, la de cualquiera; Colaborador,
+    solo las suyas. Lo aprobado nunca se edita: eso lo comprueba el servicio."""
+    return _own_or_any_labor(ctx, resource, Capability.UPDATE)
+
+
+def can_delete_labor(ctx: RequestContext, resource: CostEntryResource) -> bool:
+    """Borrar una planilla en borrador o una asignación: como editar."""
+    return _own_or_any_labor(ctx, resource, Capability.DELETE)
+
+
+def can_read_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
+    """Ver el registro de trabajadores (documento completo y jornales), el factor y la
+    conciliación: `read` de Mano de obra con alcance de **toda la organización** (sin
+    `project_id`, `has_capability` solo lo concede a ese alcance)."""
+    return user_has_section_capability(ctx, org_id, Section.LABOR, Capability.READ)
+
+
+def can_manage_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
+    """Altas, jornales, factor, retiros, borrado e importaciones de trabajadores y de nómina:
+    `create` y `update` de Mano de obra con alcance de toda la organización (spec 3.5)."""
+    return user_has_section_capability(
+        ctx, org_id, Section.LABOR, Capability.CREATE
+    ) and user_has_section_capability(ctx, org_id, Section.LABOR, Capability.UPDATE)
+
+
+def can_export_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
+    """Excel de la conciliación: `export` de Mano de obra con alcance de toda la organización."""
+    return user_has_section_capability(ctx, org_id, Section.LABOR, Capability.EXPORT)
+
+
 def check_read_record(ctx: RequestContext, record: OrgScopedResource) -> None:
     if not can_read_record(ctx, record):
         raise _denial(ctx, record.org_id)
@@ -747,4 +848,59 @@ def check_read_material_catalog(ctx: RequestContext, org_id: UUID) -> None:
 
 def check_manage_material_catalog(ctx: RequestContext, org_id: UUID) -> None:
     if not can_manage_material_catalog(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_read_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_read_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_create_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_create_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_approve_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_approve_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_reject_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_reject_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_reverse_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_reverse_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_export_labor(ctx: RequestContext, project: ProjectResource) -> None:
+    if not can_export_labor(ctx, project):
+        raise _denial(ctx, project.org_id)
+
+
+def check_update_labor(ctx: RequestContext, resource: CostEntryResource) -> None:
+    if not can_update_labor(ctx, resource):
+        raise _denial(ctx, resource.org_id)
+
+
+def check_delete_labor(ctx: RequestContext, resource: CostEntryResource) -> None:
+    if not can_delete_labor(ctx, resource):
+        raise _denial(ctx, resource.org_id)
+
+
+def check_read_labor_registry(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_read_labor_registry(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_manage_labor_registry(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_manage_labor_registry(ctx, org_id):
+        raise _denial(ctx, org_id)
+
+
+def check_export_labor_registry(ctx: RequestContext, org_id: UUID) -> None:
+    if not can_export_labor_registry(ctx, org_id):
         raise _denial(ctx, org_id)

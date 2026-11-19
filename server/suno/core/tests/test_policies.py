@@ -89,6 +89,11 @@ def cost_entry(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> Cost
     return CostEntry(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
 
 
+def timesheet(org_id: uuid.UUID = ORG, created_by_id: uuid.UUID = USER) -> CostEntry:
+    """Una planilla como recurso de política. Provisional: la Task 2 la vuelve `Timesheet`."""
+    return CostEntry(org_id=org_id, project_id=uuid.uuid4(), created_by_id=created_by_id)
+
+
 # --- La primitiva -----------------------------------------------------------
 
 
@@ -407,6 +412,18 @@ class NoRoleGrantsNothingTests(SimpleTestCase):
             # Costos, pieza 6c: catálogo de materiales de la organización.
             "can_read_material_catalog": ORG,
             "can_manage_material_catalog": ORG,
+            # Costos, pieza 6d: mano de obra por proyecto y registro de la organización.
+            "can_read_labor": project(),
+            "can_create_labor": project(),
+            "can_approve_labor": project(),
+            "can_reject_labor": project(),
+            "can_reverse_labor": project(),
+            "can_export_labor": project(),
+            "can_update_labor": timesheet(),
+            "can_delete_labor": timesheet(),
+            "can_read_labor_registry": ORG,
+            "can_manage_labor_registry": ORG,
+            "can_export_labor_registry": ORG,
         }
 
     def test_registry_covers_every_policy_of_the_module(self) -> None:
@@ -554,3 +571,118 @@ class CostPolicyTests(SimpleTestCase):
         with self.assertRaises(HttpError) as hidden:
             policies.check_read_costs(ctx(Role.ADMIN, org_id=OTHER_ORG), project())
         self.assertEqual(hidden.exception.status_code, 404)
+
+
+class LaborPolicyTests(SimpleTestCase):
+    """Costos, pieza 6d (decisiones 2 a 4 del plan)."""
+
+    def actor(
+        self,
+        role: Any,
+        *,
+        scope: Any = AccessScope.ORGANIZATION,
+        projects: frozenset[uuid.UUID] = frozenset(),
+    ) -> RequestContext:
+        return RequestContext(
+            user_id=USER,
+            org_id=ORG,
+            roles=frozenset({Role.SUPERVISOR}),
+            section_access=(
+                SectionAccess(section=Section.LABOR, role=role, scope=scope, project_ids=projects),
+            ),
+        )
+
+    def test_administration_receives_labor_and_nobody_else(self) -> None:
+        for role in (Role.OWNER, Role.ADMIN):
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_reverse_labor(ctx(role), project()))
+                self.assertTrue(policies.can_manage_labor_registry(ctx(role), ORG))
+        for role in (Role.SUPERVISOR, Role.FIELD_AGENT, Role.VIEWER):
+            with self.subTest(role=role):
+                self.assertFalse(policies.can_read_labor(ctx(role), project()))
+
+    def test_role_matrix(self) -> None:
+        site = project()
+        #: crear, aprobar, rechazar, anular, exportar
+        cases = {
+            SectionRole.MANAGER: (True, True, True, True, True),
+            SectionRole.REVIEWER: (True, True, True, False, True),
+            SectionRole.CONTRIBUTOR: (True, False, False, False, True),
+            SectionRole.VIEWER: (False, False, False, False, False),
+        }
+        for role, expected in cases.items():
+            actor = self.actor(role)
+            with self.subTest(role=role):
+                self.assertTrue(policies.can_read_labor(actor, site))
+                self.assertEqual(
+                    (
+                        policies.can_create_labor(actor, site),
+                        policies.can_approve_labor(actor, site),
+                        policies.can_reject_labor(actor, site),
+                        policies.can_reverse_labor(actor, site),
+                        policies.can_export_labor(actor, site),
+                    ),
+                    expected,
+                )
+
+    def test_contributor_updates_and_deletes_only_its_own(self) -> None:
+        own, other = timesheet(created_by_id=USER), timesheet(created_by_id=OTHER_USER)
+        contributor = self.actor(SectionRole.CONTRIBUTOR)
+        self.assertTrue(policies.can_update_labor(contributor, own))
+        self.assertTrue(policies.can_delete_labor(contributor, own))
+        self.assertFalse(policies.can_update_labor(contributor, other))
+        self.assertFalse(policies.can_delete_labor(contributor, other))
+        self.assertTrue(policies.can_update_labor(self.actor(SectionRole.REVIEWER), other))
+        self.assertFalse(policies.can_update_labor(self.actor(SectionRole.VIEWER), own))
+
+    def test_costs_do_not_open_labor(self) -> None:
+        costs_manager = RequestContext(
+            user_id=USER,
+            org_id=ORG,
+            roles=frozenset({Role.SUPERVISOR}),
+            section_access=(
+                SectionAccess(
+                    section=Section.COSTS,
+                    role=SectionRole.MANAGER,
+                    scope=str(AccessScope.ORGANIZATION),
+                ),
+            ),
+        )
+        self.assertTrue(policies.can_read_costs(costs_manager, project()))
+        self.assertFalse(policies.can_read_labor(costs_manager, project()))
+        self.assertFalse(policies.can_read_labor_registry(costs_manager, ORG))
+
+    def test_project_scope_does_not_open_the_registry(self) -> None:
+        site = project()
+        limited = self.actor(
+            SectionRole.MANAGER, scope=AccessScope.PROJECTS, projects=frozenset({site.id})
+        )
+        self.assertTrue(policies.can_read_labor(limited, site))
+        self.assertTrue(policies.can_approve_labor(limited, site))
+        self.assertFalse(policies.can_read_labor(limited, project()))
+        self.assertFalse(policies.can_read_labor_registry(limited, ORG))
+        self.assertFalse(policies.can_manage_labor_registry(limited, ORG))
+        self.assertFalse(policies.can_export_labor_registry(limited, ORG))
+
+    def test_registry_by_role(self) -> None:
+        #: leer, gestionar, exportar (con alcance de organización)
+        cases = {
+            SectionRole.MANAGER: (True, True, True),
+            SectionRole.REVIEWER: (True, True, True),
+            SectionRole.CONTRIBUTOR: (True, True, True),
+            SectionRole.VIEWER: (True, False, False),
+        }
+        for role, expected in cases.items():
+            actor = self.actor(role)
+            with self.subTest(role=role):
+                self.assertEqual(
+                    (
+                        policies.can_read_labor_registry(actor, ORG),
+                        policies.can_manage_labor_registry(actor, ORG),
+                        policies.can_export_labor_registry(actor, ORG),
+                    ),
+                    expected,
+                )
+        with self.assertRaises(HttpError) as denied:
+            policies.check_manage_labor_registry(self.actor(SectionRole.VIEWER), ORG)
+        self.assertEqual(denied.exception.status_code, 403)
