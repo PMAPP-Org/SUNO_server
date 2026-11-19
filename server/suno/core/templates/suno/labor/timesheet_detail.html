@@ -1,0 +1,11 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{{ sheet.code }} · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="labor" %}
+{% include "suno/labor/_nav.html" with sub="timesheets" %}
+<section class="pj-panel">
+  <h2>Planilla {{ sheet.code }} <span class="bg-label ta-{{ sheet.status }}">{{ sheet.get_status_display }}</span></h2>
+  <p>{{ sheet.starts_on|date:"d/m/Y" }} – {{ sheet.ends_on|date:"d/m/Y" }} · {{ sheet.days|qty }} jornales · costo estimado {{ sheet.total|money }}</p>
+</section>
+{% endblock %}

@@ -12,6 +12,7 @@
       {% if can_view_costs %}<a href="{% url 'costs:list' project.pk %}" {% if tab == "costs" %}aria-current="page"{% endif %}>Costos</a>{% endif %}
       {% if can_view_costs %}<a href="{% url 'contracts:list' project.pk %}" {% if tab == "contracts" %}aria-current="page"{% endif %}>Contratos</a>{% endif %}
       {% if can_view_costs %}<a href="{% url 'materials:inventory' project.pk %}" {% if tab == "materials" %}aria-current="page"{% endif %}>Materiales</a>{% endif %}
+      {% if can_view_labor %}<a href="{% url 'labor:timesheets' project.pk %}" {% if tab == "labor" %}aria-current="page"{% endif %}>Tareo</a>{% endif %}
       {% if can_manage %}<a href="{% url 'projects:import' project.pk %}" {% if tab == "import" %}aria-current="page"{% endif %}>Importar XML</a>{% endif %}
     </nav>
   </div>

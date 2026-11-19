@@ -53,6 +53,7 @@ from suno.core.policies import (
     can_manage_budgets,
     can_manage_projects,
     can_read_costs,
+    can_read_labor,
     can_view_budgets,
 )
 from suno.core.scoping import get_organization, scoped_qs
@@ -194,6 +195,8 @@ def _project_context(ctx: RequestContext, project: Project) -> dict[str, object]
         "can_view_budgets": can_view_budgets(ctx, ctx.org_id),
         # Pestaña "Costos" de la cabecera (costos, pieza 6a): por proyecto.
         "can_view_costs": can_read_costs(ctx, project),
+        # Pestaña "Tareo" (costos, pieza 6d): Mano de obra en ese proyecto.
+        "can_view_labor": can_read_labor(ctx, project),
     }
 
 

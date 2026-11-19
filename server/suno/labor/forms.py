@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 from django import forms
 
-from suno.core.models import DocumentType
+from suno.core.models import DocumentType, Worker
 
 from .common import MAX_NAME, MAX_NOTE, MAX_POSITION
 from .registry import WorkerData
@@ -51,3 +54,19 @@ class FactorForm(forms.Form):
     factor = forms.DecimalField(label="Factor", max_digits=6, decimal_places=4, min_value=1,
                                 max_value=3)  # fmt: skip
     note = forms.CharField(label="Composición", max_length=MAX_NOTE, required=False)
+
+
+class AssignmentForm(forms.Form):
+    worker = forms.ChoiceField(label="Trabajador")
+    starts_on = forms.DateField(label="Desde", widget=date_input())
+    ends_on = forms.DateField(label="Hasta (opcional)", required=False, widget=date_input())
+
+    def __init__(self, *args: Any, workers: Sequence[Worker], **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["worker"].choices = [("", "Elige un trabajador"),
+                                         *((str(w.pk), w.label) for w in workers)]  # fmt: skip
+
+
+class PeriodForm(forms.Form):
+    starts_on = forms.DateField(label="Desde", widget=date_input())
+    ends_on = forms.DateField(label="Hasta", widget=date_input())

@@ -1,0 +1,37 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Tareo · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="labor" %}
+{% include "suno/labor/_nav.html" with sub="timesheets" %}
+{% if can_create_labor %}
+<section class="pj-panel">
+  <h2>Nueva planilla</h2>
+  <form method="post" action="{% url 'labor:new_timesheet' project.pk %}" class="pj-filters" aria-label="Periodo de la planilla"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    <label>Desde {{ form.starts_on }}</label>
+    <label>Hasta {{ form.ends_on }}</label>
+    <button class="button" type="submit">Crear planilla</button>
+  </form>
+  <p class="pj-muted">Hasta 31 días, nunca en el futuro. Trae a los trabajadores asignados en el periodo.</p>
+</section>
+{% endif %}
+<section class="pj-panel">
+  <h2>Planillas</h2>
+  {% if page.object_list %}
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Planilla</th><th>Periodo</th><th class="num">Jornales</th><th class="num">Costo estimado</th><th>Estado</th><th>Firmada</th></tr></thead>
+    <tbody>{% for t in page.object_list %}<tr>
+      <td><a href="{% url 'labor:timesheet' project.pk t.pk %}">{{ t.code }}</a></td>
+      <td>{{ t.starts_on|date:"d/m/Y" }} – {{ t.ends_on|date:"d/m/Y" }}</td>
+      <td class="num">{{ t.days|qty }}</td><td class="num">{{ t.total|money }}</td>
+      <td><span class="bg-label ta-{{ t.status }}">{{ t.get_status_display }}</span></td>
+      <td>{% if t.attachment_id %}Sí{% else %}<span class="pj-muted">No</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% if page.has_other_pages %}<p class="pj-pages">{% if page.has_previous %}<a href="?pagina={{ page.previous_page_number }}">Anterior</a>{% endif %} Página {{ page.number }} de {{ page.paginator.num_pages }} {% if page.has_next %}<a href="?pagina={{ page.next_page_number }}">Siguiente</a>{% endif %}</p>{% endif %}
+  {% else %}<p class="pj-empty">Todavía no hay planillas.</p>{% endif %}
+</section>
+{% endblock %}
