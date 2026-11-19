@@ -40,7 +40,9 @@ from suno.core.models import (
     Worker,
     WorkerWage,
 )
-from suno.costs.tests.factories import grant_costs, support_blob
+from suno.costs.tests.factories import grant_costs, item, support_blob
+from suno.labor.timesheets import LineData
+from suno.materials.destination import INDIRECT, DestinationData
 from suno.projects.tests.factories import FieldWorld
 
 D = Decimal
@@ -222,3 +224,24 @@ def xlsx(sheet: str, header: Sequence[str], rows: Sequence[Sequence[Any]]) -> by
     """Un libro de una hoja, con el escritor del repositorio (las celdas de texto que empiezan
     con = + - @ salen con apóstrofo, como en un exporte real)."""
     return to_xlsx_book([(sheet, list(header), [list(row) for row in rows])])
+
+
+def other_project(lw: LaborWorld, name: str = "Obra 2") -> Project:
+    """Otro proyecto de la misma organización, con Pedro asignado desde su ingreso."""
+    world = lw.world
+    project = Project.objects.create(org=world.org, name=name, created_by=world.admin)
+    ProjectWorker.objects.create(
+        org=world.org, project=project, worker=lw.pedro, starts_on=HIRED,
+        created_by=world.admin, updated_by=world.admin,
+    )  # fmt: skip
+    return project
+
+
+def to_item(lw: LaborWorld, code: str = "2.1") -> DestinationData:
+    return DestinationData(str(CostScope.ITEM), (item(lw.cw.budget, code).pk,))
+
+
+def line_data(
+    worker: Worker, day: date, fraction: str = "1", destination: DestinationData | None = None
+) -> LineData:
+    return LineData(worker.pk, day, destination or INDIRECT, D(fraction))
