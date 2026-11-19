@@ -11,7 +11,14 @@
   {% if sheet.status == "reversed" %}<p class="pj-warning">Anulada: {{ sheet.reverse_note }}</p>{% endif %}
   {% if grid.changed %}<p class="pj-warning">Cambió un jornal o el factor desde que se guardó: recalcula el resumen y vuelve a imprimir la planilla antes de aprobarla.</p>{% endif %}
   {% if grid.problems %}<div class="pj-late" role="alert"><p>No se puede aprobar todavía:</p><ul>{% for p in grid.problems|slice:":10" %}<li>{{ p }}</li>{% endfor %}</ul></div>{% endif %}
-  {% block decision %}{% endblock %}
+  <p class="ctr-actions">
+    {% if can_export_labor %}<a class="button" href="{{ urls.pdf }}">Planilla para firmar (PDF)</a> <a class="text-link" href="{{ urls.xlsx }}">Excel</a>{% endif %}{# nosemgrep: generic.html-templates.security.var-in-href.var-in-href -- href hecho en el servidor con reverse() (ruta de la app), nunca texto del usuario #}
+    {% if editable %}<a class="text-link" href="{{ urls.import }}">Importar Excel</a>{% endif %}{# nosemgrep: generic.html-templates.security.var-in-href.var-in-href -- href hecho en el servidor con reverse() (ruta de la app), nunca texto del usuario #}
+  </p>
+  {% include "suno/materials/_support.html" with doc=sheet label="Planilla firmada" view=urls.view upload=urls.upload %}
+  {% include "suno/materials/_decide.html" with approve=urls.approve reject=urls.reject void=urls.void can_void=can_reverse back="" %}
+  {% if can_delete %}<form method="post" action="{{ urls.delete }}">{% csrf_token %}<button class="text-link" type="submit">Borrar la planilla</button></form>{% endif %}
+  <p class="pj-muted">Registró {{ sheet.created_by }}{% if sheet.updated_by_id != sheet.created_by_id %} · modificó {{ sheet.updated_by }}{% endif %}{% if sheet.decided_by %} · {{ sheet.get_status_display|lower }} por {{ sheet.decided_by }} el {{ sheet.decided_at|date:"d/m/Y" }}{% endif %}{% if sheet.reversed_by %} · anuló {{ sheet.reversed_by }}{% endif %}</p>
 </section>
 <section class="pj-panel">
   <h2>Semana del {{ grid.week.days.0|date:"d/m" }} al {{ grid.week.days|last|date:"d/m/Y" }}</h2>

@@ -172,3 +172,36 @@ def day_rows(built: Grid, day: date) -> list[tuple[GridRow, str]]:
         return []
     position = built.week.days.index(day)
     return [(row, row.cells[position]) for row in built.rows]
+
+
+@dataclass(frozen=True)
+class PeriodTable:
+    """La cuadrícula del periodo completo (PDF y Excel): una fila por persona y destino."""
+
+    days: tuple[date, ...]
+    #: (trabajador, destino, celdas por día, jornales, costo)
+    rows: tuple[tuple[str, str, tuple[str, ...], Decimal, Decimal], ...]
+    day_totals: tuple[Decimal, ...]
+
+
+def period_table(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> PeriodTable:
+    """Cinco consultas (`evaluate`)."""
+    evaluation = evaluate(ctx, sheet, catalog)
+    days = tuple(sheet.starts_on + timedelta(days=n)
+                 for n in range((sheet.ends_on - sheet.starts_on).days + 1))  # fmt: skip
+    index = {day: n for n, day in enumerate(days)}
+    grouped: dict[tuple[UUID, str], list[Any]] = {}
+    totals = [NO_DAYS] * len(days)
+    for line, cost in zip(evaluation.lines, evaluation.costs, strict=True):
+        entry = grouped.setdefault((line.worker_id, line.key), [[None] * len(days), NO_DAYS, ZERO])
+        entry[0][index[line.day]] = line.fraction
+        entry[1] += line.fraction
+        entry[2] += cost.amount or ZERO
+        totals[index[line.day]] += line.fraction
+    rows = [
+        (evaluation.names.get(worker, "—"), evaluation.labels.get(key, "—"),
+         tuple(cell_text(v) for v in cells), days_total, amount)
+        for (worker, key), (cells, days_total, amount) in grouped.items()
+    ]  # fmt: skip
+    rows.sort(key=lambda row: (row[0], row[1]))
+    return PeriodTable(days, tuple(rows), tuple(totals))
