@@ -1,0 +1,33 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Importar trabajadores{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'labor_registry:list' %}">Trabajadores</a></p><h1>Importar desde Excel</h1></div></section>
+<section class="pj-panel">
+  <p><a href="{% url 'labor_registry:template' %}">Descarga la plantilla</a>: hoja «Trabajadores» con Tipo de documento, Número de documento, Nombre, Cargo, Fecha de ingreso, Jornal y Jornal desde (opcional). Un documento nuevo se registra; uno existente actualiza nombre y cargo y, si el jornal cambió, agrega un jornal desde «Jornal desde» (sin ella, desde hoy).</p>
+  <form method="post" enctype="multipart/form-data" class="pj-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
+    {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <button class="button" type="submit">Ver vista previa</button>
+  </form>
+</section>
+{% if result %}
+<section class="pj-panel">
+  <h2>Vista previa</h2>
+  {% if result.errors %}<div class="pj-late" role="alert"><p>No se puede cargar el archivo:</p><ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if result.rows %}
+  <p>{% for action, n in counts %}{{ n }} {{ action }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Fila</th><th>Documento</th><th>Nombre</th><th>Cargo</th><th>Ingreso</th><th class="num">Jornal</th><th>Qué pasa</th></tr></thead>
+    <tbody>{% for row in result.rows %}<tr><td>{{ row.line }}</td><td>{{ row.data.document_type }} ***{{ row.data.document_number|slice:"-4:" }}</td><td class="pj-name">{{ row.data.full_name }}</td><td class="pj-wrap">{{ row.data.position|default:"—" }}</td><td>{{ row.data.hired_on|date:"d/m/Y" }}</td><td class="num">{{ row.wage|money }}</td><td>{{ row.action }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if result.token %}
+  <form method="post" action="{% url 'labor_registry:import_apply' %}">{% csrf_token %}<input type="hidden" name="token" value="{{ result.token }}"><button class="button" type="submit">Cargar al registro</button></form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

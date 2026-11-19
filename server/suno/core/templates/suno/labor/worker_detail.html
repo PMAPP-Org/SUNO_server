@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}{{ sheet.worker.full_name }}{% endblock %}
+{% block content %}
+{% with w=sheet.worker %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'labor_registry:list' %}">Trabajadores</a></p><h1>{{ w.full_name }}</h1><p>{{ w.get_document_type_display }} {{ w.document_number }} · {{ w.position|default:"sin cargo" }} · ingreso {{ w.hired_on|date:"d/m/Y" }}{% if w.retired_on %} · retiro {{ w.retired_on|date:"d/m/Y" }}{% endif %}</p></div></section>
+<section class="pj-panel">
+  <h2>Jornal básico</h2>
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Desde</th><th class="num">Jornal</th><th>Uso</th>{% if can_manage_registry %}<th>Corregir</th>{% endif %}</tr></thead>
+    <tbody>{% for wage, used in wages %}<tr>
+      <td>{{ wage.valid_from|date:"d/m/Y" }}</td><td class="num">{{ wage.daily_wage|money }}</td>
+      <td>{% if used %}Usado en planillas aprobadas{% else %}<span class="pj-muted">Sin usar</span>{% endif %}</td>
+      {% if can_manage_registry %}<td>{% if not used %}<form method="post" action="{% url 'labor_registry:wage_update' w.pk wage.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="valid_from" value="{{ wage.valid_from|date:'Y-m-d' }}"><input name="daily_wage" inputmode="decimal" aria-label="Jornal corregido" value="{{ wage.daily_wage }}" size="10"><button class="text-link" type="submit">Corregir</button><button class="text-link" type="submit" name="accion" value="borrar">Borrar</button></form>{% endif %}</td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% if can_manage_registry and w.is_active %}
+  <form method="post" action="{% url 'labor_registry:wage' w.pk %}" class="pj-filters" aria-label="Nuevo jornal">{% csrf_token %}{{ wage_form.as_div }}<button class="button" type="submit">Registrar cambio de jornal</button></form>
+  {% endif %}
+</section>
+<section class="pj-panel">
+  <h2>Asignaciones</h2>
+  {% if sheet.assignments %}<ul>{% for a in sheet.assignments %}<li>{{ a.project.name }}: {{ a.starts_on|date:"d/m/Y" }} – {% if a.ends_on %}{{ a.ends_on|date:"d/m/Y" }}{% else %}sin fin{% endif %}</li>{% endfor %}</ul>{% else %}<p class="pj-empty">Sin asignaciones.</p>{% endif %}
+</section>
+{% if can_manage_registry %}
+<section class="pj-panel">
+  <h2>Acciones</h2>
+  <p class="ctr-actions"><a class="text-link" href="{% url 'labor_registry:edit' w.pk %}">Editar datos</a></p>
+  {% if w.is_active %}
+  <form method="post" action="{% url 'labor_registry:retire' w.pk %}" class="pj-filters" aria-label="Retiro">{% csrf_token %}{{ retire_form.as_div }}<button class="button" type="submit">Retirar</button></form>
+  {% else %}
+  <form method="post" action="{% url 'labor_registry:retire' w.pk %}">{% csrf_token %}<button class="text-link" type="submit" name="accion" value="reincorporar">Deshacer el retiro</button></form>
+  {% endif %}
+  <form method="post" action="{% url 'labor_registry:delete' w.pk %}">{% csrf_token %}<button class="text-link" type="submit">Borrar (solo sin tareo)</button></form>
+</section>
+{% endif %}
+{% endwith %}
+{% endblock %}

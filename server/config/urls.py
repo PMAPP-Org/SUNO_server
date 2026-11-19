@@ -17,6 +17,7 @@ urlpatterns = [
     path("plataforma/accesos/", include("suno.core.access_urls")),
     path("plataforma/equipos/", include("suno.equipment.urls")),
     path("plataforma/materiales/", include("suno.materials.catalog_urls")),
+    path("plataforma/trabajadores/", include("suno.labor.registry_urls")),
     path("plataforma/proyectos/", include("suno.projects.urls")),
     path(
         "plataforma/proyectos/<uuid:project_id>/presupuestos/",

@@ -1,0 +1,14 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}{% if worker %}Editar trabajador{% else %}Nuevo trabajador{% endif %}{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'labor_registry:list' %}">Trabajadores</a></p><h1>{% if worker %}{{ worker.full_name }}{% else %}Nuevo trabajador{% endif %}</h1></div></section>
+<section class="pj-panel">
+  <p class="pj-muted">Solo datos mínimos (Ley 1581): no se guardan dirección, teléfono, correo, cuenta bancaria, EPS ni fondo de pensión.</p>
+  <form method="post" class="pj-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    {{ form.as_div }}
+    <datalist id="ta-positions">{% for p in positions %}<option value="{{ p }}">{% endfor %}</datalist>
+    <button class="button" type="submit">Guardar</button>
+  </form>
+</section>
+{% endblock %}
