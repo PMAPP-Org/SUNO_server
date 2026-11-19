@@ -64,11 +64,13 @@ from .common import (
     FROZEN_STATES,
     MAX_ERRORS,
     MAX_FILE_NAME,
+    MAX_GRID_ROWS,
     LaborRejected,
     factor_history,
     lock_workers,
     require_editable,
     stored_upload,
+    too_many_rows,
     wage_histories,
 )
 
@@ -588,11 +590,25 @@ def save_lines(
     catalog: Catalog | None = None,
     tasks: Mapping[UUID, Task] | None = None,
 ) -> Timesheet:
-    """Reemplaza las líneas de `days` por `lines` (la semana de la cuadrícula o un día)."""
+    """Reemplaza las líneas de `days` por `lines` (la semana de la cuadrícula o un día). Si esos
+    días ya tienen más filas (trabajador y destino) de las que lleva la cuadrícula, no se
+    reemplazan: el formulario no pudo traerlas todas."""
     catalog, tasks = _defaults(ctx, project, catalog, tasks)
     replaced = frozenset(days)
-    return _edit(ctx, project, timesheet_id, lambda _sheet: (lines, replaced), catalog, tasks,
-                 "save")  # fmt: skip
+
+    def build(sheet: Timesheet) -> tuple[Sequence[LineData], frozenset[date]]:
+        existing = (
+            scoped_qs(ctx, TimesheetLine)
+            .filter(timesheet=sheet, worked_on__in=list(replaced))
+            .values("worker_id", "destination_key")
+            .distinct()
+            .count()
+        )
+        if existing > MAX_GRID_ROWS:
+            raise LaborRejected([too_many_rows(MAX_GRID_ROWS)])
+        return lines, replaced
+
+    return _edit(ctx, project, timesheet_id, build, catalog, tasks, "save")
 
 
 def import_lines(

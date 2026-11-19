@@ -15,7 +15,14 @@ from suno.budgets.totals import parse_number
 from suno.core.models import DocumentType, Worker
 from suno.costs.catalog import Catalog
 
-from .common import MAX_NAME, MAX_NOTE, MAX_POSITION
+from .common import (
+    MAX_GRID_ROWS,
+    MAX_NAME,
+    MAX_NOTE,
+    MAX_POSITION,
+    LaborRejected,
+    too_many_rows,
+)
 from .registry import WorkerData
 from .timesheets import LineData, read_destination
 
@@ -79,10 +86,6 @@ class PeriodForm(forms.Form):
     ends_on = forms.DateField(label="Hasta", widget=date_input())
 
 
-#: Filas que acepta un formulario de la cuadrícula (decisión 11 del plan).
-MAX_GRID_ROWS = 250
-
-
 @dataclass(frozen=True)
 class PostedRow:
     worker_id: UUID
@@ -104,11 +107,14 @@ def _uuid(value: str | None) -> UUID | None:
 
 
 def read_rows(post: QueryDict, days: Sequence[date]) -> list[PostedRow]:
-    """Las filas enviadas; una fila sin trabajador válido se ignora."""
+    """Las filas enviadas; una fila sin trabajador válido se ignora. Más de `MAX_GRID_ROWS`:
+    `LaborRejected` (no se recorta: se perderían las de más al reemplazar la semana)."""
     try:
-        count = min(int(post.get("filas") or 0), MAX_GRID_ROWS)
+        count = max(int(post.get("filas") or 0), 0)
     except ValueError:
         count = 0
+    if count > MAX_GRID_ROWS:
+        raise LaborRejected([too_many_rows(MAX_GRID_ROWS)])
     rows: list[PostedRow] = []
     for index in range(count):
         worker = _uuid(post.get(f"f{index}-trabajador"))
@@ -163,7 +169,7 @@ def repeat_previous(rows: Sequence[PostedRow], day: date, days: Sequence[date]) 
 def split_row(rows: Sequence[PostedRow], index: int, days: Sequence[date]) -> list[PostedRow]:
     """ "Partir la fila": otra fila del mismo trabajador, debajo, para repartir el día entre
     destinos."""
-    if not 0 <= index < len(rows):
+    if not 0 <= index < len(rows) or len(rows) >= MAX_GRID_ROWS:
         return list(rows)
     copy = PostedRow(rows[index].worker_id, "", "", dict.fromkeys(days, ""))
     return [*rows[: index + 1], copy, *rows[index + 1 :]]

@@ -30,6 +30,17 @@ MAX_POSITION = 80
 MAX_FILE_NAME = 200
 MAX_DESCRIPTION = 300
 MAX_ERRORS = 50
+#: Filas (trabajador y destino) que acepta un formulario de la cuadrícula (decisión 11 del plan).
+MAX_GRID_ROWS = 250
+
+
+def too_many_rows(limit: int) -> str:
+    return (
+        f"La cuadrícula tiene más de {limit} filas (trabajador y destino): no se guarda para no "
+        "perder datos. Carga el tareo desde Excel o parte la planilla en periodos más cortos."
+    )
+
+
 SELF_DECISION = "Nadie aprueba ni rechaza lo que creó o editó: pídeselo a otra persona."
 #: Las planillas que se editan (un rechazado, solo su autor) y las que cuentan para el tope.
 OPEN_STATES = (str(TimesheetStatus.DRAFT), str(TimesheetStatus.REJECTED))

@@ -164,7 +164,12 @@ def timesheet_save(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -
     day = _parse_date(request.POST.get("dia"))
     by_day = action == "guardar-dia" and day is not None and day in week.days
     days = [day] if by_day and day is not None else list(week.days)
-    rows = read_rows(request.POST, days)
+    try:
+        rows = read_rows(request.POST, days)
+    except LaborRejected as exc:
+        for error in exc.errors:
+            messages.error(request, error)
+        return redirect(back)
     if action.startswith("repetir-"):
         target = _parse_date(action.removeprefix("repetir-"))
         rows = repeat_previous(rows, target, week.days) if target else rows

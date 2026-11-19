@@ -19,8 +19,9 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 from suno.labor import timesheets
+from suno.labor.common import LaborRejected
 
-from .factories import TODAY, WEEK, labor_world
+from .factories import TODAY, WEEK, labor_world, line_data, to_item
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -124,6 +125,30 @@ class GridPageTests(TestCase):
         self.client.post(self.url + "guardar/", day)
         saved = dict(TimesheetLine.objects.values_list("worked_on", "fraction"))
         self.assertEqual(saved, {MON: D("1.0000"), TUE: D("0.5000")})
+
+    def test_too_many_rows_are_rejected_without_losing_lines(self) -> None:
+        """I2: pasadas las 250 filas se perdían las de más sin aviso al reemplazar la semana."""
+        self.client.post(self.url + "guardar/", self.form(**{
+            self.cell("Pedro Pérez", MON): "1", self.cell("María Gómez", TUE): "1",
+            "accion": "guardar"}))  # fmt: skip
+        self.assertEqual(TimesheetLine.objects.count(), 2)
+        data = self.form(accion="guardar", filas="251")
+        page = self.client.post(self.url + "guardar/", data, follow=True)
+        self.assertContains(page, "más de 250 filas")
+        self.assertEqual(TimesheetLine.objects.count(), 2)
+
+    def test_existing_rows_over_the_limit_are_not_replaced(self) -> None:
+        ctx = self.lw.ctx(self.lw.contributor)
+        timesheets.save_lines(ctx, self.lw.project, self.sheet.pk, [
+            line_data(self.lw.pedro, MON), line_data(self.lw.maria, MON, "0.5"),
+            line_data(self.lw.maria, MON, "0.5", to_item(self.lw)),
+        ], [MON])  # fmt: skip
+        with mock.patch("suno.labor.timesheets.MAX_GRID_ROWS", 2):
+            with self.assertRaises(LaborRejected) as caught:
+                timesheets.save_lines(ctx, self.lw.project, self.sheet.pk,
+                                      [line_data(self.lw.pedro, MON)], [MON])  # fmt: skip
+        self.assertIn("más de 2 filas", caught.exception.errors[0])
+        self.assertEqual(TimesheetLine.objects.count(), 3)
 
     def test_viewer_cannot_save(self) -> None:
         self.client.force_login(self.lw.viewer)
