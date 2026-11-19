@@ -14,4 +14,5 @@ urlpatterns = [
     path("asignaciones/", views.assignment_list, name="assignments"),
     path("asignaciones/<uuid:assignment_id>/", views.assignment_update, name="assignment"),
     path(T, views_timesheets.timesheet_detail, name="timesheet"),
+    path(T + "guardar/", views_timesheets.timesheet_save, name="save_timesheet"),
 ]

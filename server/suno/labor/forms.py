@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import date
 from typing import Any
+from uuid import UUID
 
 from django import forms
+from django.http import QueryDict
 
+from suno.budgets.totals import parse_number
 from suno.core.models import DocumentType, Worker
+from suno.costs.catalog import Catalog
 
 from .common import MAX_NAME, MAX_NOTE, MAX_POSITION
 from .registry import WorkerData
+from .timesheets import LineData, read_destination
 
 
 def date_input() -> forms.DateInput:
@@ -70,3 +77,93 @@ class AssignmentForm(forms.Form):
 class PeriodForm(forms.Form):
     starts_on = forms.DateField(label="Desde", widget=date_input())
     ends_on = forms.DateField(label="Hasta", widget=date_input())
+
+
+#: Filas que acepta un formulario de la cuadrícula (decisión 11 del plan).
+MAX_GRID_ROWS = 250
+
+
+@dataclass(frozen=True)
+class PostedRow:
+    worker_id: UUID
+    destination: str
+    task: str
+    #: Lo escrito en cada celda, por día ("" si vacía).
+    cells: Mapping[date, str]
+
+
+def cell_name(index: int, day: date) -> str:
+    return f"f{index}-d{day.toordinal()}"
+
+
+def _uuid(value: str | None) -> UUID | None:
+    try:
+        return UUID(value) if value else None
+    except ValueError:
+        return None
+
+
+def read_rows(post: QueryDict, days: Sequence[date]) -> list[PostedRow]:
+    """Las filas enviadas; una fila sin trabajador válido se ignora."""
+    try:
+        count = min(int(post.get("filas") or 0), MAX_GRID_ROWS)
+    except ValueError:
+        count = 0
+    rows: list[PostedRow] = []
+    for index in range(count):
+        worker = _uuid(post.get(f"f{index}-trabajador"))
+        if worker is None:
+            continue
+        rows.append(PostedRow(
+            worker,
+            (post.get(f"f{index}-destino") or "")[:500],
+            (post.get(f"f{index}-tarea") or "")[:20],
+            {day: (post.get(cell_name(index, day)) or "").strip()[:12] for day in days},
+        ))  # fmt: skip
+    return rows
+
+
+def to_lines(
+    rows: Sequence[PostedRow],
+    catalog: Catalog,
+    outlines: Mapping[str, UUID],
+    names: Mapping[UUID, str],
+) -> tuple[list[LineData], list[str]]:
+    """Las líneas de las celdas escritas; "0" o vacío es no trabajó."""
+    lines: list[LineData] = []
+    errors: list[str] = []
+    for row in rows:
+        written = {day: text for day, text in row.cells.items() if text}
+        if not written:
+            continue
+        who = names.get(row.worker_id, "—")
+        destination, error = read_destination(row.destination, row.task, catalog, outlines)
+        if destination is None:
+            errors.append(f"{who}: {error}")
+            continue
+        for day, text in sorted(written.items()):
+            try:
+                value = parse_number(text)
+            except ValueError:
+                errors.append(f"{who}, {day:%d/%m/%Y}: «{text}» no es un número.")
+                continue
+            if value:
+                lines.append(LineData(row.worker_id, day, destination, value))
+    return lines, errors
+
+
+def repeat_previous(rows: Sequence[PostedRow], day: date, days: Sequence[date]) -> list[PostedRow]:
+    """ "Repetir el día anterior": copia en `day` lo de la columna de la izquierda."""
+    if day not in days or days.index(day) == 0:
+        return list(rows)
+    before = days[days.index(day) - 1]
+    return [replace(row, cells={**row.cells, day: row.cells.get(before, "")}) for row in rows]
+
+
+def split_row(rows: Sequence[PostedRow], index: int, days: Sequence[date]) -> list[PostedRow]:
+    """ "Partir la fila": otra fila del mismo trabajador, debajo, para repartir el día entre
+    destinos."""
+    if not 0 <= index < len(rows):
+        return list(rows)
+    copy = PostedRow(rows[index].worker_id, "", "", dict.fromkeys(days, ""))
+    return [*rows[: index + 1], copy, *rows[index + 1 :]]
