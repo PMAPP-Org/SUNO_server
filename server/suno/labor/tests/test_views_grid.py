@@ -12,7 +12,7 @@ from unittest import mock
 from django.conf import settings
 from django.test import TestCase
 
-from suno.core.models import TimesheetLine
+from suno.core.models import Timesheet, TimesheetLine
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -48,7 +48,7 @@ class GridPageTests(TestCase):
 
     def form(self, **cells: str) -> dict[str, Any]:
         """Los campos de la cuadrícula tal como los envía el navegador (todas las celdas)."""
-        data: dict[str, Any] = {"semana": "2026-03-02", "filas": "2"}
+        data: dict[str, Any] = {"semana": "2026-03-02", "filas": "2", "version": self.version()}
         for name, index in self.rows.items():
             worker = self.lw.pedro if name == "Pedro Pérez" else self.lw.maria
             data[f"f{index}-trabajador"] = str(worker.pk)
@@ -58,6 +58,9 @@ class GridPageTests(TestCase):
                 data[f"f{index}-d{(MON.toordinal() + n)}"] = ""
         data.update(cells)
         return data
+
+    def version(self) -> str:
+        return str(Timesheet.objects.get(pk=self.sheet.pk).version)
 
     def cell(self, worker: str, day: date) -> str:
         return f"f{self.rows[worker]}-d{day.toordinal()}"
@@ -114,6 +117,7 @@ class GridPageTests(TestCase):
             "semana": "2026-03-02",
             "dia": TUE.isoformat(),
             "filas": "2",
+            "version": self.version(),
             "accion": "guardar-dia",
         }
         for name, index in self.rows.items():

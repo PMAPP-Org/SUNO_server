@@ -268,6 +268,9 @@ class Timesheet(OrgScopedModel):
         max_digits=12, decimal_places=4, default=Decimal("0"), verbose_name="jornales"
     )
     line_count = models.PositiveIntegerField(default=0, verbose_name="líneas")
+    #: Sube en cada edición (guardar, importar, recalcular): control de concurrencia optimista
+    #: de la cuadrícula y la versión a la que se ata el soporte firmado (código en el PDF).
+    version = models.PositiveIntegerField(default=1, verbose_name="versión")
 
     class Meta:
         db_table = "timesheet"

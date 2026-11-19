@@ -55,6 +55,14 @@ def _editable(ctx: RequestContext, sheet: Timesheet) -> bool:
     )
 
 
+def _version(request: HttpRequest) -> int:
+    """La versión que vio quien envía el formulario; sin ella, 0 (nunca coincide)."""
+    try:
+        return max(int(request.POST.get("version") or 0), 0)
+    except ValueError:
+        return 0
+
+
 def _posted_grid_rows(
     rows: Sequence[PostedRow], names: dict[UUID, str], days: Sequence[date]
 ) -> list[GridRow]:
@@ -75,7 +83,9 @@ def _render_sheet(
     day: date | None,
     posted: Sequence[PostedRow] | None = None,
     catalog: Catalog | None = None,
+    version: int | None = None,
 ) -> HttpResponse:
+    """`version`: la que trae lo enviado al volver a pintarlo (sigue siendo la que se vio)."""
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     tasks = assignable_tasks(ctx, project)
     built: Grid = build_grid(ctx, project, sheet, catalog, tasks, week_start)
@@ -94,6 +104,8 @@ def _render_sheet(
         grid=built,
         editable=_editable(ctx, sheet),
         unsaved=posted is not None,
+        version=sheet.version if version is None else version,
+        code=timesheets.version_code(sheet),
         inputs=[
             {
                 "index": i,
@@ -155,10 +167,11 @@ def timesheet_save(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -
     if not can_update_labor(ctx, sheet):
         raise PermissionDenied
     action = request.POST.get("accion", "guardar")
+    version = _version(request)
     week = week_of(sheet, _parse_date(request.POST.get("semana")))
     back = f"{reverse('labor:timesheet', args=[project.pk, sheet.pk])}?semana={week.start}"
     if action == "recalcular":
-        run(request, lambda: timesheets.recalculate(ctx, project, sheet.pk),
+        run(request, lambda: timesheets.recalculate(ctx, project, sheet.pk, version=version),
             "Resumen recalculado: vuelve a imprimir la planilla y a cargarla firmada.")  # fmt: skip
         return redirect(back)
     day = _parse_date(request.POST.get("dia"))
@@ -174,8 +187,9 @@ def timesheet_save(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -
         target = _parse_date(action.removeprefix("repetir-"))
         rows = repeat_previous(rows, target, week.days) if target else rows
         return _render_sheet(
-            request, ctx, project, sheet, week_start=week.start, day=day, posted=rows
-        )
+            request, ctx, project, sheet, week_start=week.start, day=day, posted=rows,
+            version=version,
+        )  # fmt: skip
     if action.startswith("partir-"):
         try:
             index = int(action.removeprefix("partir-"))
@@ -183,14 +197,16 @@ def timesheet_save(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -
             index = -1
         rows = split_row(rows, index, week.days)
         return _render_sheet(
-            request, ctx, project, sheet, week_start=week.start, day=day, posted=rows
-        )
+            request, ctx, project, sheet, week_start=week.start, day=day, posted=rows,
+            version=version,
+        )  # fmt: skip
     catalog = load_catalog(ctx, project)
     outlines = timesheets.outline_index(assignable_tasks(ctx, project))
     names = timesheets.worker_names(ctx, {row.worker_id for row in rows})
     lines, errors = to_lines(rows, catalog, outlines, names)
     if not errors and run(request, lambda: timesheets.save_lines(ctx, project, sheet.pk, lines,
-                                                                 days, catalog=catalog),
+                                                                 days, catalog=catalog,
+                                                                 version=version),
                           "Día guardado." if by_day else "Semana guardada."):  # fmt: skip
         return redirect(f"{back}&dia={day}" if by_day else back)
     for error in errors[:5]:
@@ -199,7 +215,7 @@ def timesheet_save(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -
         return redirect(f"{back}&dia={day}")
     sheet.refresh_from_db()
     return _render_sheet(request, ctx, project, sheet, week_start=week.start, day=day,
-                         posted=rows, catalog=catalog)  # fmt: skip
+                         posted=rows, catalog=catalog, version=version)  # fmt: skip
 
 
 def _detail(project_id: UUID, timesheet_id: UUID) -> HttpResponse:
@@ -225,7 +241,9 @@ def timesheet_signed(request: HttpRequest, project_id: UUID, timesheet_id: UUID)
     upload = request.FILES.get("file")
     if upload is not None:
         name = upload.name or "planilla-firmada.pdf"
-        run(request, lambda: timesheets.attach_signed(ctx, project, timesheet_id, upload, name),
+        version = _version(request)
+        run(request, lambda: timesheets.attach_signed(ctx, project, timesheet_id, upload, name,
+                                                      version=version),
             "Planilla firmada adjunta; ya se puede aprobar.")  # fmt: skip
     return _detail(project.pk, timesheet_id)
 
@@ -257,7 +275,8 @@ def timesheet_signed_file(
 def timesheet_approve(request: HttpRequest, project_id: UUID, timesheet_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_labor_project(ctx, project_id)
-    run(request, lambda: approval.approve_timesheet(ctx, project, timesheet_id),
+    version = _version(request)
+    run(request, lambda: approval.approve_timesheet(ctx, project, timesheet_id, version=version),
         "Planilla aprobada: su costo de mano de obra está en el libro.")  # fmt: skip
     return _detail(project.pk, timesheet_id)
 

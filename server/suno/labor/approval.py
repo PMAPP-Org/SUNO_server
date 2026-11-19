@@ -48,6 +48,7 @@ from .common import (
     lock_factors,
     lock_workers,
     require_decidable,
+    require_version,
 )
 from .timesheets import (
     Evaluation,
@@ -114,8 +115,14 @@ def _freeze(ctx: RequestContext, evaluation: Evaluation) -> None:
 
 
 def approve_timesheet(
-    ctx: RequestContext, project: Project, timesheet_id: UUID, *, catalog: Catalog | None = None
+    ctx: RequestContext,
+    project: Project,
+    timesheet_id: UUID,
+    *,
+    catalog: Catalog | None = None,
+    version: int | None = None,
 ) -> Timesheet:
+    """`version`: la que vio el revisor junto a su código (el del PDF firmado)."""
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     with transaction.atomic():
         lock_project(ctx, project)
@@ -123,6 +130,7 @@ def approve_timesheet(
         if not can_approve_labor(ctx, project):
             raise PermissionDenied
         require_decidable(ctx, sheet)
+        require_version(sheet, version)
         if sheet.attachment_id is None:
             raise LaborRejected(["Sube la planilla firmada antes de aprobar."])
         worker_ids = set(

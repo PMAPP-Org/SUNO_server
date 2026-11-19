@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -69,6 +70,7 @@ from .common import (
     factor_history,
     lock_workers,
     require_editable,
+    require_version,
     stored_upload,
     too_many_rows,
     wage_histories,
@@ -136,6 +138,13 @@ class Evaluation:
 
 def hashed(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def version_code(sheet: Timesheet) -> str:
+    """Ocho caracteres de la versión y la huella guardada: los imprime el PDF y los muestra la
+    ficha junto a "Aprobar", para comparar el papel firmado con lo que se aprueba."""
+    fingerprint = json.dumps((sheet.summary or {}).get("fingerprint", {}), sort_keys=True)
+    return hashed(f"{sheet.pk}:{sheet.version}:{fingerprint}")[:8].upper()
 
 
 def default_period(today: date) -> tuple[date, date]:
@@ -489,6 +498,7 @@ def _mark_edited(ctx: RequestContext, sheet: Timesheet) -> dict[str, bool]:
     sheet.attachment = None
     sheet.attachment_name = ""
     sheet.updated_by_id = ctx.user_id
+    sheet.version += 1
     return flags
 
 
@@ -540,13 +550,16 @@ def _edit(
     catalog: Catalog,
     tasks: Mapping[UUID, Task],
     action: str,
+    version: int | None = None,
 ) -> Timesheet:
     """Bloquea, valida, escribe las líneas y el resumen y audita. `build` devuelve las líneas y
-    los días que reemplazan, o `None` para solo recalcular el resumen."""
+    los días que reemplazan, o `None` para solo recalcular el resumen. `version`: la que vio
+    quien guarda; si otra edición la subió, se rechaza (sube en cada edición)."""
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
         require_editable(ctx, sheet, can_update_labor)
+        require_version(sheet, version)
         built = build(sheet)
         placed: list[Placed] = []
         replaced: frozenset[date] = frozenset()
@@ -589,6 +602,7 @@ def save_lines(
     *,
     catalog: Catalog | None = None,
     tasks: Mapping[UUID, Task] | None = None,
+    version: int | None = None,
 ) -> Timesheet:
     """Reemplaza las líneas de `days` por `lines` (la semana de la cuadrícula o un día). Si esos
     días ya tienen más filas (trabajador y destino) de las que lleva la cuadrícula, no se
@@ -608,7 +622,7 @@ def save_lines(
             raise LaborRejected([too_many_rows(MAX_GRID_ROWS)])
         return lines, replaced
 
-    return _edit(ctx, project, timesheet_id, build, catalog, tasks, "save")
+    return _edit(ctx, project, timesheet_id, build, catalog, tasks, "save", version)
 
 
 def import_lines(
@@ -634,11 +648,17 @@ def import_lines(
 
 
 def recalculate(
-    ctx: RequestContext, project: Project, timesheet_id: UUID, *, catalog: Catalog | None = None
+    ctx: RequestContext,
+    project: Project,
+    timesheet_id: UUID,
+    *,
+    catalog: Catalog | None = None,
+    version: int | None = None,
 ) -> Timesheet:
     """Guarda otra vez el resumen con los jornales y el factor de hoy. Es editar."""
     catalog, tasks = _defaults(ctx, project, catalog, {})
-    return _edit(ctx, project, timesheet_id, lambda _sheet: None, catalog, tasks, "recalculate")
+    return _edit(ctx, project, timesheet_id, lambda _sheet: None, catalog, tasks, "recalculate",
+                 version)  # fmt: skip
 
 
 def delete_timesheet(ctx: RequestContext, project: Project, timesheet_id: UUID) -> None:
@@ -660,18 +680,28 @@ def _require_signable(ctx: RequestContext, sheet: Timesheet) -> None:
 
 
 def attach_signed(
-    ctx: RequestContext, project: Project, timesheet_id: UUID, upload: Upload, name: str
+    ctx: RequestContext,
+    project: Project,
+    timesheet_id: UUID,
+    upload: Upload,
+    name: str,
+    *,
+    version: int | None = None,
 ) -> Timesheet:
-    """Sube la planilla firmada. No es editar: `updated_by` no cambia."""
+    """Sube la planilla firmada de la versión `version` (la que se imprimió o se vio); si la
+    planilla cambió desde entonces, se rechaza. No es editar: `updated_by` y la versión no
+    cambian."""
     current = scoped_qs(ctx, Timesheet).filter(pk=timesheet_id, project=project).first()
     if current is None:
         raise Http404
     _require_signable(ctx, current)
+    require_version(current, version)
     blob = stored_upload(upload)
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
         _require_signable(ctx, sheet)
+        require_version(sheet, version)
         sheet.attachment = blob
         sheet.attachment_name = name[:MAX_FILE_NAME]
         sheet.save(update_fields=["attachment", "attachment_name"])

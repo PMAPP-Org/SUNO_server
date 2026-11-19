@@ -159,6 +159,7 @@ class Migration(migrations.Migration):
                 ('total', models.DecimalField(decimal_places=2, default=Decimal('0.00'), max_digits=18, verbose_name='costo estimado')),
                 ('days', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=12, verbose_name='jornales')),
                 ('line_count', models.PositiveIntegerField(default=0, verbose_name='líneas')),
+                ('version', models.PositiveIntegerField(default=1, verbose_name='versión')),
             ],
             options={
                 'verbose_name': 'planilla de tareo',

@@ -9,6 +9,7 @@
     <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
     <input type="hidden" name="dia" value="{{ day|date:'Y-m-d' }}">
     <input type="hidden" name="filas" value="{{ day_inputs|length }}">
+    <input type="hidden" name="version" value="{{ version }}">
     <ul class="ta-day-list">
     {% for item in day_inputs %}
       <li>

@@ -13,6 +13,7 @@ Un acta de contrato (6b) o un corte de consumos (6c) se imprime, se firma en pap
 - Subir el acta firmada no cuenta como edición; editar el borrador quita la firma.
 - En 6c, la huella del corte incluye cada línea (id, material, cantidad y valor) y la aprobación no reescribe el resumen impreso.
 - No se anula el acta anterior ni se aprueba un otrosí con un acta abierta.
+- En 6d (tareo), la planilla lleva además una **versión** (`Timesheet.version`) que sube en cada edición (guardar, importar, recalcular). El PDF imprime un código corto de 8 caracteres derivado de la versión y la huella; el formulario del soporte envía la versión vista y `attach_signed` rechaza la carga si la planilla cambió desde entonces; la ficha muestra el código junto a "Aprobar" para que el revisor lo compare con el papel, y aprobar también comprueba la versión que vio. La misma versión es el control de concurrencia optimista de la cuadrícula: un guardado con una versión vieja se rechaza ("La planilla cambió desde que la abriste; recarga"). Revisado con el usuario el 2026-11-19.
 
 ## Consecuencias
 

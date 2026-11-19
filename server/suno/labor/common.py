@@ -41,6 +41,7 @@ def too_many_rows(limit: int) -> str:
     )
 
 
+STALE = "La planilla cambió desde que la abriste; recarga."
 SELF_DECISION = "Nadie aprueba ni rechaza lo que creó o editó: pídeselo a otra persona."
 #: Las planillas que se editan (un rechazado, solo su autor) y las que cuentan para el tope.
 OPEN_STATES = (str(TimesheetStatus.DRAFT), str(TimesheetStatus.REJECTED))
@@ -110,6 +111,13 @@ def require_editable(
         raise PermissionDenied
     if not policy(ctx, obj):
         raise PermissionDenied
+
+
+def require_version(sheet: Any, expected: int | None) -> None:
+    """Control de concurrencia optimista: la versión que vio quien envía (`None`: sin
+    comprobar, para los servicios internos). Se llama con la planilla bloqueada."""
+    if expected is not None and sheet.version != expected:
+        raise LaborRejected([STALE])
 
 
 def require_decidable(ctx: RequestContext, obj: Any) -> None:

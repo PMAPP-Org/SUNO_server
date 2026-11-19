@@ -25,6 +25,7 @@ from suno.core.templatetags.money_tags import money, qty
 from suno.costs.catalog import load_catalog
 
 from .grid import period_table
+from .timesheets import version_code
 
 __all__ = ["timesheet_pdf"]
 
@@ -92,6 +93,7 @@ def timesheet_pdf(
         return built
 
     width = PAGE[0] - 72
+    code = version_code(sheet)
     data = period_table(ctx, sheet, load_catalog(ctx, project))
     summary = sheet.summary or {}
     fingerprint = summary.get("fingerprint", {})
@@ -99,6 +101,7 @@ def timesheet_pdf(
         Paragraph(f"Planilla de tareo {sheet.code}", heading),
         table([["Proyecto", project.name],
                ["Periodo", f"{sheet.starts_on:%d/%m/%Y} – {sheet.ends_on:%d/%m/%Y}"],
+               ["Versión", f"Versión {code} (se compara al cargar el soporte y al aprobar)"],
                ["Líneas y jornales", f"{fingerprint.get('lines', 0)} líneas · "
                                      f"{qty(fingerprint.get('days', '0'))} jornales"]],
               [width * 0.2, width * 0.8], header=False),
@@ -135,7 +138,7 @@ def timesheet_pdf(
     def footer(canvas: Any, doc: Any) -> None:
         canvas.saveState()
         canvas.setFont("SunoReport", 8)
-        canvas.drawString(36, 20, f"SUNO · {project.name} · {sheet.code}")
+        canvas.drawString(36, 20, f"SUNO · {project.name} · {sheet.code} · versión {code}")
         canvas.drawRightString(PAGE[0] - 36, 20, str(doc.page))
         canvas.restoreState()
 

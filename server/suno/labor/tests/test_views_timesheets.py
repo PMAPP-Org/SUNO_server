@@ -52,9 +52,12 @@ class TimesheetFlowTests(TestCase):
         document = self.client.get(self.url + "planilla.pdf")
         self.assertTrue(document.content.startswith(b"%PDF"))
         self.assertTrue(AuditEvent.objects.filter(action="timesheet.exported").exists())
-        self.client.post(self.url + "firmada/", {"file": pdf_upload()})
+        version = str(Timesheet.objects.get(pk=self.sheet.pk).version)
+        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": version})
         self.client.force_login(self.lw.world.supervisor)
-        self.assertRedirects(self.client.post(self.url + "aprobar/"), self.url)
+        self.assertRedirects(
+            self.client.post(self.url + "aprobar/", {"version": version}), self.url
+        )
         self.assertEqual(CostEntry.objects.filter(timesheet=self.sheet).count(), 1)
         sheet = self.client.get(self.url + "planilla.xlsx")
         self.assertEqual(sheet["Content-Type"], XLSX)

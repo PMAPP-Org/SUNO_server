@@ -3,6 +3,7 @@
   {% csrf_token %}
   <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
   <input type="hidden" name="filas" value="{{ inputs|length }}">
+  <input type="hidden" name="version" value="{{ version }}">
   <div class="pj-scroll">
   <table class="pj-table ta-grid" data-ta-grid>
     <thead><tr>
