@@ -93,6 +93,8 @@ class PostedRow:
     task: str
     #: Lo escrito en cada celda, por día ("" si vacía).
     cells: Mapping[date, str]
+    #: `GridRow.lost`: su destino ya no está en el presupuesto vigente.
+    lost: bool = False
 
 
 def cell_name(index: int, day: date) -> str:
@@ -125,8 +127,15 @@ def read_rows(post: QueryDict, days: Sequence[date]) -> list[PostedRow]:
             (post.get(f"f{index}-destino") or "")[:500],
             (post.get(f"f{index}-tarea") or "")[:20],
             {day: (post.get(cell_name(index, day)) or "").strip()[:12] for day in days},
+            post.get(f"f{index}-perdido") == "1",
         ))  # fmt: skip
     return rows
+
+
+LOST = (
+    "ya no está en el presupuesto vigente. Para no cambiarlo sin aviso, esa fila no se guarda: "
+    "vacía sus días para quitarla y vuelve a cargarlos con otro destino."
+)
 
 
 def to_lines(
@@ -143,6 +152,9 @@ def to_lines(
         if not written:
             continue
         who = names.get(row.worker_id, "—")
+        if row.lost:
+            errors.append(f"{who}: el destino «{row.destination}» {LOST}")
+            continue
         destination, error = read_destination(row.destination, row.task, catalog, outlines)
         if destination is None:
             errors.append(f"{who}: {error}")

@@ -25,12 +25,18 @@ from suno.core.context import RequestContext
 from suno.core.models import Project, ProjectWorker, Task, Timesheet
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog
-from suno.materials.destination import INDIRECT_LABEL, destination_text
+from suno.materials.destination import (
+    INDIRECT_LABEL,
+    check_destination,
+    destination_key,
+    destination_text,
+    key_text,
+)
 
 from .calc import NO_DAYS, days_text
 from .calc import problems as find_problems
 from .common import FROZEN_STATES
-from .timesheets import evaluate
+from .timesheets import StoredLine, evaluate, hashed, outline_index, read_destination
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,10 @@ class GridRow:
     cells: tuple[str, ...]
     days: Decimal
     cost: Decimal | None
+    #: El destino guardado ya no se puede escribir con el presupuesto vigente (se borró un ítem
+    #: o un capítulo, o la tarea dejó de estar): la fila lo muestra por su etiqueta, sin
+    #: cambiarlo, y no se guarda con días (`forms.to_lines`).
+    lost: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,6 +102,25 @@ def week_of(sheet: Timesheet, start: date | None) -> Week:
     previous = monday - timedelta(days=7) if monday > sheet.starts_on else None
     following = monday + timedelta(days=7)
     return Week(days, monday, previous, following if following <= sheet.ends_on else None)
+
+
+def _writable(
+    catalog: Catalog,
+    tasks: dict[UUID, Task],
+    outlines: dict[str, UUID],
+    line: StoredLine,
+    text: str,
+) -> bool:
+    """Volver a leer `text` (y la tarea) da el mismo destino que el guardado."""
+    destination, _error = read_destination(text, line.task_outline, catalog, outlines)
+    if destination is None:
+        return False
+    problems, assignment = check_destination(catalog, tasks, destination)
+    if assignment is None or problems:
+        return False
+    key = destination_key(assignment.scope, assignment.chapter_id, assignment.item_ids,
+                          assignment.task_id)  # fmt: skip
+    return hashed(key_text(key)) == line.key
 
 
 def build_grid(
@@ -136,14 +165,17 @@ def build_grid(
             entry["complete"] &= cost.amount is not None
             day_totals[index[line.day]] += line.fraction
     rows: list[GridRow] = []
+    outlines = outline_index(tasks)
     for (worker_id, key), entry in grouped.items():
         line = entry["line"]
+        label = evaluation.labels.get(key, "—")
+        text = destination_text(catalog, line.scope, line.chapter_id, line.item_ids)
+        lost = not _writable(catalog, tasks, outlines, line, text)
         rows.append(GridRow(
             worker_id, names.get(worker_id, "—"), positions.get(worker_id, ""),
-            destination_text(catalog, line.scope, line.chapter_id, line.item_ids),
-            line.task_outline, evaluation.labels.get(key, "—"),
+            label if lost else text, line.task_outline, label,
             tuple(cell_text(value) for value in entry["cells"]), entry["days"],
-            entry["cost"] if entry["complete"] else None,
+            entry["cost"] if entry["complete"] else None, lost,
         ))  # fmt: skip
     with_rows = {row.worker_id for row in rows}
     for worker_id in positions:

@@ -15,7 +15,7 @@
       <li>
         <strong>{{ item.row.worker }}</strong>
         <input type="hidden" name="f{{ item.index }}-trabajador" value="{{ item.row.worker_id }}">
-        <label>Destino <input name="f{{ item.index }}-destino" value="{{ item.row.destination }}" list="ta-destinations" placeholder="Indirecto" autocomplete="off"{% if not editable %} disabled{% endif %}></label>
+        <label>Destino <input name="f{{ item.index }}-destino" value="{{ item.row.destination }}" list="ta-destinations" placeholder="Indirecto" autocomplete="off"{% if not editable %} disabled{% elif item.row.lost %} readonly{% endif %}></label>{% if item.row.lost %}<input type="hidden" name="f{{ item.index }}-perdido" value="1"><small class="pj-late">Ya no está en el presupuesto vigente</small>{% endif %}
         <label>Tarea <input name="f{{ item.index }}-tarea" value="{{ item.row.task }}" list="ta-tasks" autocomplete="off"{% if not editable %} disabled{% endif %}></label>
         <label>Fracción <input name="{{ item.name }}" value="{{ item.value }}" inputmode="decimal" maxlength="6"{% if not editable %} disabled{% endif %}></label>
       </li>

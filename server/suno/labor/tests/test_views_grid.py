@@ -12,14 +12,17 @@ from unittest import mock
 from django.conf import settings
 from django.test import TestCase
 
-from suno.core.models import Timesheet, TimesheetLine
+from suno.core.models import Timesheet, TimesheetLine, TimesheetLineItem
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
+from suno.costs.catalog import Catalog, load_catalog
+from suno.costs.tests.factories import item
 from suno.labor import timesheets
 from suno.labor.common import LaborRejected
+from suno.materials.destination import DestinationData
 
 from .factories import TODAY, WEEK, labor_world, line_data, to_item
 
@@ -153,6 +156,39 @@ class GridPageTests(TestCase):
                                       [line_data(self.lw.pedro, MON)], [MON])  # fmt: skip
         self.assertIn("más de 2 filas", caught.exception.errors[0])
         self.assertEqual(TimesheetLine.objects.count(), 3)
+
+    def test_a_row_whose_destination_left_the_budget_keeps_it(self) -> None:
+        """I4: el texto del destino perdía el ítem que ya no está y guardar lo cambiaba."""
+        two, gone = item(self.lw.cw.budget, "2.1"), item(self.lw.cw.budget, "2.2")
+        both = DestinationData("selection", (two.pk, gone.pk), item(self.lw.cw.budget, "2").pk)
+        ctx = self.lw.ctx(self.lw.contributor)
+        timesheets.save_lines(ctx, self.lw.project, self.sheet.pk,
+                              [line_data(self.lw.pedro, MON, "1", both)], [MON])  # fmt: skip
+        full = load_catalog(ctx, self.lw.project)
+        reduced = Catalog(rows={k: v for k, v in full.rows.items() if k != gone.pk})
+        with mock.patch("suno.labor.views_timesheets.load_catalog", return_value=reduced):
+            page = self.client.get(self.url)
+            inputs = page.context["inputs"]
+            data: dict[str, Any] = {
+                "semana": "2026-03-02",
+                "accion": "guardar",
+                "version": self.version(),
+                "filas": str(len(inputs)),
+            }
+            for entry in inputs:
+                row, i = entry["row"], entry["index"]
+                data[f"f{i}-trabajador"] = str(row.worker_id)
+                data[f"f{i}-destino"] = row.destination
+                data[f"f{i}-tarea"] = row.task
+                if getattr(row, "lost", False):
+                    data[f"f{i}-perdido"] = "1"
+                data.update(dict(entry["cells"]))
+            saved = self.client.post(self.url + "guardar/", data)
+        line = TimesheetLine.objects.get(worker=self.lw.pedro)
+        self.assertEqual((line.scope, TimesheetLineItem.objects.filter(line=line).count()),
+                         ("selection", 2))  # fmt: skip
+        self.assertContains(saved, "ya no está en el presupuesto vigente")
+        self.assertContains(page, "Ya no está en el presupuesto vigente")
 
     def test_viewer_cannot_save(self) -> None:
         self.client.force_login(self.lw.viewer)

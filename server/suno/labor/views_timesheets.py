@@ -68,7 +68,7 @@ def _posted_grid_rows(
 ) -> list[GridRow]:
     return [
         GridRow(row.worker_id, names.get(row.worker_id, "—"), "", row.destination, row.task, "",
-                tuple(row.cells.get(day, "") for day in days), NO_DAYS, None)
+                tuple(row.cells.get(day, "") for day in days), NO_DAYS, None, row.lost)
         for row in rows
     ]  # fmt: skip
 
