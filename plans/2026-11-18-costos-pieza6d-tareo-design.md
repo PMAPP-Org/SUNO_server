@@ -258,3 +258,63 @@ Sección nueva **LABOR** ("Mano de obra") en la matriz fija de `core/access.py`:
   licencias) y nómina electrónica.
 - Ajustar el libro con la nómina real.
 - Datos de afiliación (EPS, pensión, ARL) y documentos del trabajador.
+
+## Decisiones tomadas al planear
+
+Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la sección del mismo nombre de
+`2026-11-18-costos-pieza6d-tareo-plan.md`; aquí el resumen (⚑ = las que el usuario revisó).
+
+1. Una migración `0031_labor` (aditiva). ⚑ Su `RunPython` da **Mano de obra / Gestor / toda la
+   organización** a las membresías `OWNER` y `ADMIN` existentes (como la `0028` con Costos);
+   `LEGACY_GRANTS` hace lo mismo con las nuevas.
+2. ⚑ Matriz de `LABOR`: Gestor todo; Revisor sin anular; Colaborador crear, leer, editar, borrar y
+   exportar (solo lo suyo); **Consulta solo `read`** (sin exportar). Sin `import`.
+3. ⚑ El registro (trabajadores, jornales, factor y conciliación) pide Mano de obra con alcance de
+   **toda la organización**: `read` para ver; `create` y `update` para gestionar; `export` para el
+   Excel de la conciliación.
+4. Políticas del proyecto `can_*_labor` con su `check_*`; 404 a quien no lee Mano de obra en el
+   proyecto, 403 a quien la lee sin la capacidad.
+5. Paquete `server/suno/labor/` sin `apps.py`; modelos en `core/models/labor.py`; reutiliza el
+   destino escrito y las piezas de bloqueo y reverso de la 6c.
+6. ⚑ Trabajador: `is_active` y `retired_on` van juntos; retirar cierra las asignaciones;
+   "reincorporar" corrige un retiro; documento guardado limpio; tipos CC, CE, PPT, PEP y PA.
+7. ⚑ Un jornal o un factor usado por una planilla aprobada o anulada no se edita ni se borra; uno
+   nuevo no puede regir sobre días ya congelados.
+8. ⚑ Importación de trabajadores: un documento nuevo crea; uno existente actualiza nombre y cargo y,
+   si el jornal cambió, agrega un jornal desde "Jornal desde" (sin ella, desde hoy).
+9. Asignaciones dentro del vínculo y sin cruces en el mismo proyecto; editar o borrar no deja fuera
+   días ya tareados.
+10. ⚑ Destino de una fila como texto de la 6c y tarea por su número de esquema; unicidad con
+    `destination_key` (SHA-256 del destino).
+11. ⚑ Cuadrícula semanal que reemplaza las líneas de esa semana; vista por día que guarda solo ese
+    día; `DATA_UPLOAD_MAX_NUMBER_FIELDS` = 4.000.
+12. ⚑ "Repetir el día anterior" y "Partir la fila" son botones del formulario que vuelven a pintar
+    sin guardar; el JavaScript solo da totales en vivo.
+13. Estados borrador, aprobada, rechazada y anulada; la decisión en `decided_by`/`decided_at`.
+14. ⚑ Huella: líneas, jornales, total, por destino y por trabajador, y si el costo está completo;
+    "Recalcular el resumen" es una edición (quita el soporte firmado).
+15. ⚑ Valores congelados: la base exige "los tres nulos o los tres > 0"; que el borrador no los
+    tenga lo garantiza el servicio. Una línea en $0 no se aprueba.
+16. Tope diario y orden de bloqueo: proyecto, planilla, trabajadores en orden de `pk` y, al aprobar,
+    las filas del factor. Cuentan borradores, rechazadas y aprobadas de toda la organización.
+17. Al aprobar, un `CostEntry` aprobado de Mano de obra por destino, con fecha del fin del periodo y
+    la planilla firmada como soporte; sin nombres en el libro.
+18. Anular cualquier planilla aprobada, con motivo y reversos de hoy.
+19. ⚑ La bandeja "Por aprobar" de Costos no muestra planillas; la pestaña Tareo dice cuántas hay.
+20. Libro: filtro y etiqueta "Tareo"; el enlace a la planilla solo para quien lee Mano de obra; un
+    movimiento de tareo no se reversa desde el libro.
+21. ⚑ De la nómina importada se guardan nombre, tamaño y SHA-256 del Excel, no el archivo.
+22. ⚑ Conciliación por proyecto: lo pagado se prorratea por jornales; quien fue pagado sin tareo en
+    ningún proyecto solo aparece en la vista de la organización.
+23. Un solo token de importación (`LaborImportToken`) para las tres importaciones.
+24. ⚑ PDF A4 horizontal, en bloques de hasta 16 días, con documento enmascarado, firmas y el resumen
+    que se compara al aprobar.
+25. ⚑ Auditoría sin nombres (ids, documento enmascarado y cantidades); cada consulta de la
+    conciliación se audita.
+26. Límites de longitud y de filas de las importaciones; listas paginadas de a 100.
+27. "Trabajadores" en la barra lateral para quien lee el registro; pestaña "Tareo" para quien lee
+    Mano de obra en el proyecto.
+28. Nombres de archivo de los PDF, Excel y plantillas.
+29. ⚑ Prueba de concurrencia del tope: dos guardados en obras distintas y un guardado contra una
+    aprobación (los borradores ya cuentan para el tope).
+30. Fechas de las pruebas fijas (hoy 2026-04-15; semana del 2 al 8 de marzo de 2026).
