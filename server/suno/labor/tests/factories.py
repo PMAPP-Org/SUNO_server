@@ -22,6 +22,7 @@ from typing import Any
 from django.utils import timezone
 
 from suno.authn.tests.factories import make_user
+from suno.backoffice.export import to_xlsx_book
 from suno.contracts.tests.factories import ContractWorld, contract_world
 from suno.core.access import AccessScope, Section, SectionRole
 from suno.core.access_services import set_section_grant
@@ -215,3 +216,9 @@ def bare_line(
         factor=D(factor) if factor else None,
         amount=D(amount) if amount else None,
     )
+
+
+def xlsx(sheet: str, header: Sequence[str], rows: Sequence[Sequence[Any]]) -> bytes:
+    """Un libro de una hoja, con el escritor del repositorio (las celdas de texto que empiezan
+    con = + - @ salen con apóstrofo, como en un exporte real)."""
+    return to_xlsx_book([(sheet, list(header), [list(row) for row in rows])])
