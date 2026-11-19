@@ -1,0 +1,33 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Conciliación {{ result.payroll.starts_on|date:"d/m/Y" }}{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'labor_registry:payrolls' %}">Conciliación de nómina</a></p><h1>{{ result.payroll.starts_on|date:"d/m/Y" }} – {{ result.payroll.ends_on|date:"d/m/Y" }}</h1><p>Tareado: planillas aprobadas del periodo. Diferencia = pagado − tareado.</p></div></section>
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Proyecto">
+    <label>Proyecto <select name="proyecto"><option value="">Toda la organización</option>{% for pk, name in projects %}<option value="{{ pk }}" {% if project and project.pk == pk %}selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Ver</button>
+    {% if can_export_registry %}<a class="text-link" href="{% url 'labor_registry:reconciliation_xlsx' result.payroll.pk %}{% if project %}?proyecto={{ project.pk }}{% endif %}">Excel</a>{% endif %}
+  </form>
+  {% if project %}<p class="pj-muted">Lo pagado se prorratea por los jornales tareados en el proyecto.{% if result.excluded %} {{ result.excluded }} pagado{{ result.excluded|pluralize }} sin tareo en ningún proyecto no se puede{{ result.excluded|pluralize:"n" }} prorratear: está{{ result.excluded|pluralize:"n" }} en la vista de toda la organización.{% endif %}</p>{% endif %}
+  <p>{{ result.days|qty }} jornales · tareado {{ result.estimated|money }} · pagado {{ result.paid|money }} · <strong>diferencia {{ result.difference|signed }}</strong></p>
+  {% if result.rows %}
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Trabajador</th><th>Cargo</th><th class="num">Jornales</th><th class="num">Tareado</th><th class="num">Pagado</th><th class="num">Diferencia</th><th class="num">%</th><th>Marca</th></tr></thead>
+    <tbody>{% for r in result.rows %}<tr>
+      <td class="pj-name">{{ r.label }}</td><td class="pj-wrap">{{ r.position|default:"—" }}</td>
+      <td class="num">{{ r.days|qty }}</td><td class="num">{{ r.estimated|money }}</td>
+      <td class="num">{% if r.paid is not None %}{{ r.paid|money }}{% else %}—{% endif %}</td>
+      <td class="num">{{ r.difference|signed }}</td><td class="num">{% if r.pct is not None %}{{ r.pct }}{% else %}—{% endif %}</td>
+      <td>{% if r.flag %}<span class="pj-late">{{ r.flag }}</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">No hay tareo aprobado ni pagos en el periodo.</p>{% endif %}
+  {% if result.unknown and not project %}
+  <h3>Documentos que no están en el registro</h3>
+  <ul>{% for u in result.unknown %}<li>Fila {{ u.row }}: {{ u.document }} · {{ u.paid|money }}</li>{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endblock %}

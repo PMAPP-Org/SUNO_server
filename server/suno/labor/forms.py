@@ -167,3 +167,8 @@ def split_row(rows: Sequence[PostedRow], index: int, days: Sequence[date]) -> li
         return list(rows)
     copy = PostedRow(rows[index].worker_id, "", "", dict.fromkeys(days, ""))
     return [*rows[: index + 1], copy, *rows[index + 1 :]]
+
+
+class PayrollForm(forms.Form):
+    starts_on = forms.DateField(label="Desde", widget=date_input())
+    ends_on = forms.DateField(label="Hasta", widget=date_input())
