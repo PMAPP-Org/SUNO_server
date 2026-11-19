@@ -13,7 +13,9 @@ viajes de un transportador. Desde la pieza 6b también siembra contratos: un sub
 otrosí y actas (una anulada y una en borrador firmada), un destajo, un subcontrato liquidado y un
 borrador por aprobar. Desde la pieza 6c también siembra materiales: catálogo, dos bodegas, compras a
 bodega y directa, salidas, una devolución, un traslado, un ajuste y un corte aprobados, una salida
-sin cortar y una compra en borrador.
+sin cortar y una compra en borrador. Desde la pieza 6d también siembra tareo: cuatro trabajadores
+con jornal, factor prestacional, asignaciones, una planilla aprobada (en el libro como Mano de
+obra) y otra en borrador, y la nómina del mes importada.
 
 Escribe sin pasar por las importaciones (como `bootstrap_demo`): lo que interesa es el estado
 final. Es aprovisionamiento offline y por eso figura en `ALLOWED` de `test_architecture.py`.
@@ -35,6 +37,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from suno.attachments.web import store_upload
+from suno.backoffice.export import to_xlsx_book
 from suno.budgets.totals import BASE_DIRECT, ChargeSpec, compute_charges, line_base, money
 from suno.contracts import certificates as contract_certificates
 from suno.contracts import services as contract_services
@@ -45,6 +48,7 @@ from suno.core.access_services import set_section_grant
 from suno.core.context import Principal, resolve_request_context
 from suno.core.models import (
     AppUser,
+    BenefitFactor,
     Budget,
     BudgetCharge,
     BudgetItem,
@@ -81,13 +85,23 @@ from suno.core.models import (
     Role,
     StockBalance,
     Task,
+    Timesheet,
     TransportContractor,
     TransportMaterial,
     TransportRoute,
     TransportVehicle,
     Trip,
+    Worker,
 )
 from suno.equipment.costing import usage_cost, usage_hours
+from suno.labor import approval as labor_approval
+from suno.labor import assignments as labor_assignments
+from suno.labor import payroll as labor_payroll
+from suno.labor import registry as labor_registry
+from suno.labor import timesheets as labor_timesheets
+from suno.labor.assignments import AssignmentData
+from suno.labor.registry import WorkerData
+from suno.labor.timesheets import LineData as TareoLineData
 from suno.management.commands.bootstrap_demo import DEMO_FORM_DEFINITION
 from suno.materials import adjustments as material_adjustments
 from suno.materials import cuts as material_cuts
@@ -213,6 +227,15 @@ COSTS = [
 ]  # fmt: skip
 
 #: (código, nombre, unidad, categoría) del catálogo de ejemplo (de la organización).
+#: (documento, nombre, cargo, jornal) de los trabajadores de ejemplo (pieza 6d).
+WORKERS = (
+    ("1012345678", "Pedro Pérez (ejemplo)", "Oficial", "85000.00"),
+    ("52123456", "María Gómez (ejemplo)", "Ayudante", "65000.00"),
+    ("80111222", "Luis Torres (ejemplo)", "Oficial", "85000.00"),
+    ("79333444", "Ana Rojas (ejemplo)", "Ayudante", "65000.00"),
+)
+
+
 MATERIALS = [
     ("CEM-01", "Cemento gris 50 kg", "und", "Cementos"),
     ("ARE-01", "Arena de río", "m3", "Agregados"),
@@ -289,6 +312,7 @@ class _Seeder:
         self._costs(project, start, items, tasks)
         self._contracts(project, start, items, tasks)
         self._materials(project, start, items, tasks)
+        self._labor(project, start, items, tasks)
         return project
 
     def _budget(self, project: Project) -> dict[str, BudgetItem]:
@@ -934,6 +958,78 @@ class _Seeder:
         # Después del corte: una salida sin cortar vieja (aviso) y una compra por aprobar.
         issue(north, self.today - timedelta(days=35), INDIRECT, "CEM-01", "5")
         purchase(W, main, "FE-2003", -2, line("ACE-12", "2000", "4200"), approve=False)
+
+    def _labor(
+        self,
+        project: Project,
+        start: date,
+        items: dict[str, BudgetItem],
+        tasks: dict[str, Task],
+    ) -> None:
+        """Tareo por los servicios: el administrador lleva el registro; el residente (Revisor de
+        Mano de obra) asigna, llena y firma; el administrador aprueba. El registro es de la
+        organización: se reutiliza si ya existe."""
+        resident = self._resident()
+        set_section_grant(
+            self.ctx, user_id=resident.pk, section=Section.LABOR, role=SectionRole.REVIEWER,
+            scope=AccessScope.ORGANIZATION,
+        )  # fmt: skip
+        office = resolve_request_context(Principal(user_id=resident.pk, org_id=self.org.pk))
+        admin = self.ctx
+        hired = start - timedelta(days=14)
+        if not BenefitFactor.objects.filter(org=self.org).exists():
+            labor_registry.add_factor(
+                admin,
+                hired,
+                Decimal("1.5200"),
+                "Prestaciones, seguridad social, parafiscales y dotación",
+            )
+        crew = []
+        for number, name, position, wage in WORKERS:
+            worker = Worker.objects.filter(org=self.org, document_type="CC",
+                                           document_number=number).first()  # fmt: skip
+            if worker is None:
+                worker = labor_registry.create_worker(
+                    admin, WorkerData("CC", number, name, position, hired), Decimal(wage)
+                )
+            labor_assignments.create_assignment(office, project,
+                                                AssignmentData(worker.pk, hired, None))  # fmt: skip
+            crew.append(worker)
+        if Timesheet.objects.filter(org=self.org).exists():
+            # Otro proyecto de ejemplo en la misma organización: el registro ya tiene tareo esos
+            # días y el tope de 1,5 jornales (entre obras) rechazaría una planilla igual.
+            return
+        monday = start + timedelta(days=98)
+        week = (monday, monday + timedelta(days=6))
+        footing = DestinationData(str(CostScope.ITEM), (items["3.1"].pk,),
+                                  task_id=tasks["Zapatas eje A"].pk)  # fmt: skip
+        approved = labor_timesheets.create_timesheet(office, project, *week)
+        days = [monday + timedelta(days=n) for n in range(6)]  # lunes a sábado
+        lines = [
+            TareoLineData(worker.pk, day, footing if n % 2 == 0 else INDIRECT,
+                     Decimal("1") if day.weekday() < 5 else Decimal("0.5"))
+            for n, worker in enumerate(crew)
+            for day in days
+        ]  # fmt: skip
+        labor_timesheets.save_lines(office, project, approved.pk, lines, days)
+        labor_timesheets.attach_signed(office, project, approved.pk, self._upload(),
+                                       "planilla-firmada.pdf")  # fmt: skip
+        labor_approval.approve_timesheet(admin, project, approved.pk)
+        # La semana siguiente, en borrador (sin firmar).
+        following = (week[0] + timedelta(days=7), week[1] + timedelta(days=7))
+        draft = labor_timesheets.create_timesheet(office, project, *following)
+        labor_timesheets.save_lines(
+            office, project, draft.pk,
+            [TareoLineData(crew[0].pk, following[0], INDIRECT, Decimal("1"))], [following[0]],
+        )  # fmt: skip
+        # La nómina del mes de la planilla aprobada (pagado un poco más que lo tareado).
+        month_start = monday.replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        book = to_xlsx_book([("Nómina", ["Tipo de documento", "Número de documento",
+                                         "Total pagado"],
+                              [["CC", number, "800000"] for number, *_ in WORKERS])])  # fmt: skip
+        preview = labor_payroll.preview(admin, book, month_start, month_end, "nomina-ejemplo.xlsx")
+        labor_payroll.apply(admin, preview.token)
 
 
 class Command(BaseCommand):

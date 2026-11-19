@@ -34,11 +34,14 @@ from suno.core.models import (
     MaterialPurchase,
     MaterialReturn,
     MaterialTransfer,
+    PayrollImport,
     Project,
     Role,
     StockBalance,
     StockMovement,
+    Timesheet,
     Warehouse,
+    Worker,
 )
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
@@ -190,3 +193,12 @@ class SeedControlDemoTests(TestCase):
                 warehouse=row.warehouse, material=row.material
             ).aggregate(q=Sum("quantity"), v=Sum("value"))
             self.assertEqual((row.quantity, row.value), (sums["q"], sums["v"]))
+
+    def test_seeds_labor_with_an_approved_timesheet_and_a_payroll(self) -> None:
+        self.seed()
+        org = self.org
+        self.assertGreaterEqual(Worker.objects.filter(org=org).count(), 4)
+        sheet = Timesheet.objects.get(project__org=org, status="approved")
+        self.assertTrue(CostEntry.objects.filter(timesheet=sheet, kind="labor").exists())
+        self.assertTrue(PayrollImport.objects.filter(org=org).exists())
+        self.assertTrue(Timesheet.objects.filter(project__org=org, status="draft").exists())
