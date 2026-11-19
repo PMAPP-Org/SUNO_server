@@ -75,6 +75,9 @@ FROM_MATERIALS = (
     "Este costo viene de una compra, un corte o un ajuste de materiales: se anula el documento "
     "desde la pestaña Materiales."
 )
+FROM_TIMESHEET = (
+    "Este costo viene de una planilla de tareo: se anula la planilla desde la pestaña Tareo."
+)
 
 
 class CostRejected(Exception):
@@ -461,9 +464,13 @@ def reverse(ctx: RequestContext, project: Project, entry_id: UUID, reason: str) 
         if original.status != CostStatus.APPROVED or original.reverses_id is not None:
             raise CostRejected(["Solo se reversa un costo aprobado que no sea un reverso."])
         if original.from_document:
-            raise CostRejected(
-                [FROM_CERTIFICATE if original.certificate_id is not None else FROM_MATERIALS]
-            )
+            if original.certificate_id is not None:
+                message = FROM_CERTIFICATE
+            elif original.timesheet_id is not None:
+                message = FROM_TIMESHEET
+            else:
+                message = FROM_MATERIALS
+            raise CostRejected([message])
         if scoped_qs(ctx, CostEntry).filter(reverses=original).exists():
             raise CostRejected(["Este costo ya se reversó."])
         reversal = scoped_qs(ctx, CostEntry).create(

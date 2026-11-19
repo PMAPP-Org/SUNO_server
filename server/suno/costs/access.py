@@ -39,6 +39,7 @@ def get_entry(ctx: RequestContext, project: Project, entry_id: UUID) -> CostEntr
             "material_purchase",
             "consumption_cut",
             "inventory_adjustment",
+            "timesheet",
         )
         .filter(pk=entry_id, project=project)
         .first()

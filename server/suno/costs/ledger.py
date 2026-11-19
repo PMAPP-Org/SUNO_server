@@ -45,6 +45,7 @@ PAGE_SIZE = 100
 MAX_EXPORT_LINES = 50_000
 ALL, LEDGER_ONLY, AUTOMATIC = "todos", "libro", "automaticos"
 CERTIFICATES, PURCHASES, CUTS, ADJUSTMENTS = "actas", "compras", "cortes", "ajustes"
+TIMESHEETS = "tareo"
 ORIGINS = {
     ALL: "Todos",
     LEDGER_ONLY: "Manual",
@@ -52,14 +53,16 @@ ORIGINS = {
     PURCHASES: "Compras",
     CUTS: "Cortes",
     ADJUSTMENTS: "Ajustes",
+    TIMESHEETS: "Tareo",
     AUTOMATIC: "Solo automáticos",
 }
-#: El campo de origen de `CostEntry` de cada filtro de documento (6b y 6c).
+#: El campo de origen de `CostEntry` de cada filtro de documento (6b, 6c y 6d).
 DOCUMENT_ORIGINS = {
     CERTIFICATES: "certificate",
     PURCHASES: "material_purchase",
     CUTS: "consumption_cut",
     ADJUSTMENTS: "inventory_adjustment",
+    TIMESHEETS: "timesheet",
 }
 CERTIFICATE_LABEL = "Acta"
 SOURCE_LABELS = {
@@ -67,6 +70,7 @@ SOURCE_LABELS = {
     "purchase": "Compra",
     "cut": "Corte",
     "adjustment": "Ajuste",
+    "timesheet": "Tareo",
 }
 LEDGER, EQUIPMENT, TRANSPORT = "libro", "equipo", "transporte"
 ORIGIN_LABELS = {LEDGER: "Libro", EQUIPMENT: "Equipo propio", TRANSPORT: "Transporte"}
@@ -243,6 +247,7 @@ def _with_details(ctx: RequestContext, entries: QuerySet[CostEntry]) -> QuerySet
             "material_purchase",
             "consumption_cut",
             "inventory_adjustment",
+            "timesheet",
         )
         .prefetch_related("item_links__item")
         .annotate(is_reversed=Exists(scoped_qs(ctx, CostEntry).filter(reverses=OuterRef("pk"))))
@@ -265,8 +270,10 @@ def assignment_text(entry: CostEntry, catalog: Catalog) -> str:
     return text
 
 
-def entry_source(entry: CostEntry) -> tuple[str, str, str]:
-    """(tipo, etiqueta, URL) del documento que escribió el movimiento; vacío si es manual."""
+def entry_source(entry: CostEntry, *, labor_links: bool = True) -> tuple[str, str, str]:
+    """(tipo, etiqueta, URL) del documento que escribió el movimiento; vacío si es manual. La
+    planilla de tareo (6d) solo se enlaza para quien lee Mano de obra (`labor_links`): los
+    demás ven la etiqueta sin enlace (spec 3.5)."""
     project_id = entry.project_id
     if entry.certificate is not None:
         certificate = entry.certificate
@@ -295,14 +302,18 @@ def entry_source(entry: CostEntry) -> tuple[str, str, str]:
             f"Ajuste {adjustment.code}",
             reverse("materials:adjustment", args=[project_id, adjustment.pk]),
         )
+    if entry.timesheet is not None:
+        sheet = entry.timesheet
+        url = reverse("labor:timesheet", args=[project_id, sheet.pk]) if labor_links else ""
+        return "timesheet", f"Tareo {sheet.code}", url
     return "", "", ""
 
 
-def _entry_line(entry: CostEntry, catalog: Catalog) -> LedgerLine:
+def _entry_line(entry: CostEntry, catalog: Catalog, labor_links: bool = True) -> LedgerLine:
     document = " ".join(
         part for part in (entry.get_document_type_display(), entry.document_number) if part
     )
-    kind, label, url = entry_source(entry)
+    kind, label, url = entry_source(entry, labor_links=labor_links)
     return LedgerLine(
         day=entry.incurred_on,
         origin=LEDGER,
@@ -441,6 +452,7 @@ def ledger_page(
     *,
     page: int,
     catalog: Catalog,
+    labor_links: bool = True,
 ) -> LedgerPage:
     entries = manual_entries(ctx, project, filters, catalog) if filters.shows_ledger else None
     automatic = automatic_lines(ctx, project, filters, catalog)
@@ -449,7 +461,7 @@ def ledger_page(
     number = min(max(page, 1), pages)
     end = number * PAGE_SIZE
     head = (
-        [_entry_line(e, catalog) for e in _with_details(ctx, entries)[:end]]
+        [_entry_line(e, catalog, labor_links) for e in _with_details(ctx, entries)[:end]]
         if entries is not None
         else []
     )
