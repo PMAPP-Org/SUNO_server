@@ -12,7 +12,7 @@ Los plazos se configuran con variables de entorno, con valor por defecto en `ser
 | Adjuntos subidos y nunca confirmados | Fotos | 24 h | `ATTACHMENT_UNCONFIRMED_MAX_AGE_HOURS` (setting) | Periódico `attachments.gc_unconfirmed_uploads` |
 | Copias de seguridad de la BD | Todo el contenido | Ver `infra/backup/README.md` | `BACKUP_RETENTION_DAYS` | Rotación en el job de backup |
 | Tareo aprobado o anulado (`timesheet`, `timesheet_line`) y sus costos | Trabajador: documento, días y costo | Mientras exista la organización: es soporte contable y laboral (la ley laboral exige conservar los registros de la relación laboral; el plazo exacto lo define el cliente) | — | Sin purga automática; no se borra desde la aplicación |
-| Trabajador sin tareo (`worker`, `worker_wage`, `project_worker`) | Documento, nombre, cargo, jornal | Mientras el cliente lo mantenga | — | Se borra desde su ficha (solo si no tiene tareo) |
+| Trabajador sin tareo (`worker`, `worker_wage`, `project_worker`) | Documento, nombre, cargo, jornal | Mientras el cliente lo mantenga | — | Se borra desde su ficha solo si no tiene tareo y no aparece en ninguna nómina importada; si no, se retira |
 | Nómina importada (`payroll_import`, `payroll_import_line`) | Documento y total pagado | Mientras el cliente la mantenga | — | **Sin borrado en la aplicación** (ver issue `known-issue`); el archivo original no se guarda |
 
 **Por qué estos plazos**

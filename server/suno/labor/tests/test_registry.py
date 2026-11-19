@@ -16,11 +16,11 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
-from suno.labor import registry
+from suno.labor import payroll, registry
 from suno.labor.common import LaborRejected
 from suno.labor.registry import WorkerData
 
-from .factories import TODAY, WEEK, bare_line, bare_timesheet, labor_world
+from .factories import TODAY, WEEK, bare_line, bare_timesheet, labor_world, xlsx
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -107,6 +107,20 @@ class WorkerTests(TestCase):
         self.assertFalse(Worker.objects.filter(pk=self.lw.maria.pk).exists())
         self.assertFalse(WorkerWage.objects.filter(worker_id=self.lw.maria.pk).exists())
         self.assertTrue(AuditEvent.objects.filter(action="worker.deleted").exists())
+
+    def test_a_worker_in_an_imported_payroll_is_retired_not_deleted(self) -> None:
+        """I1: borrarlo daba un `ProtectedError` (500)."""
+        book = xlsx("Nómina", ["Tipo de documento", "Número de documento", "Total pagado"],
+                    [["CC", "52123456", "500000"]])  # fmt: skip
+        preview = payroll.preview(self.ctx, book, date(2026, 3, 1), date(2026, 3, 31), "n.xlsx")
+        payroll.apply(self.ctx, preview.token)
+        with self.assertRaises(LaborRejected) as caught:
+            registry.delete_worker(self.ctx, self.lw.maria.pk)
+        self.assertEqual(
+            caught.exception.errors,
+            ["Aparece en la nómina del 01/03/2026 al 31/03/2026: se puede retirar, no borrar."],
+        )
+        self.assertTrue(Worker.objects.filter(pk=self.lw.maria.pk).exists())
 
 
 @skip_without_db

@@ -29,6 +29,7 @@ from suno.core.context import RequestContext
 from suno.core.models import (
     BenefitFactor,
     DocumentType,
+    PayrollImportLine,
     ProjectWorker,
     TimesheetLine,
     TimesheetStatus,
@@ -261,12 +262,25 @@ def reinstate_worker(ctx: RequestContext, worker_id: UUID) -> Worker:
 
 
 def delete_worker(ctx: RequestContext, worker_id: UUID) -> None:
-    """Solo sin tareo (en ninguna planilla, ni anulada); se van sus jornales y asignaciones."""
+    """Solo sin tareo (en ninguna planilla, ni anulada) y fuera de toda nómina importada; se van
+    sus jornales y asignaciones."""
     _require_manager(ctx)
     with transaction.atomic():
         worker = _locked_worker(ctx, worker_id)
         if scoped_qs(ctx, TimesheetLine).filter(worker=worker).exists():
             raise LaborRejected(["Tiene tareo: no se borra; retíralo."])
+        paid = (
+            scoped_qs(ctx, PayrollImportLine)
+            .filter(worker=worker)
+            .order_by("-payroll__starts_on")
+            .values_list("payroll__starts_on", "payroll__ends_on")
+            .first()
+        )
+        if paid is not None:
+            raise LaborRejected(
+                [f"Aparece en la nómina del {paid[0]:%d/%m/%Y} al {paid[1]:%d/%m/%Y}: se puede "
+                 "retirar, no borrar."]
+            )  # fmt: skip
         metadata = _metadata(worker)
         scoped_qs(ctx, ProjectWorker).filter(worker=worker).delete()
         scoped_qs(ctx, WorkerWage).filter(worker=worker).delete()
