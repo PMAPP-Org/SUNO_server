@@ -16,7 +16,7 @@
     {% if editable %}<a class="text-link" href="{{ urls.import }}">Importar Excel</a>{% endif %}{# nosemgrep: generic.html-templates.security.var-in-href.var-in-href -- href hecho en el servidor con reverse() (ruta de la app), nunca texto del usuario #}
   </p>
   {% include "suno/materials/_support.html" with doc=sheet label="Planilla firmada" view=urls.view upload=urls.upload support_version=sheet.version %}
-  {% if can_attach %}<p class="pj-muted">Carga el soporte de la versión {{ code }} (la que imprime el PDF de ahora).</p>{% endif %}
+  {% if can_attach %}<p class="pj-muted">Escribe el código que trae impreso el papel firmado: la versión actual es {{ code }}. Si no coincide, la planilla cambió desde que se imprimió y hay que volver a imprimirla y firmarla.</p>{% endif %}
   {% include "suno/materials/_decide.html" with approve=urls.approve reject=urls.reject void=urls.void can_void=can_reverse back="" decide_version=sheet.version decide_code=code %}
   {% if can_delete %}<form method="post" action="{{ urls.delete }}">{% csrf_token %}<button class="text-link" type="submit">Borrar la planilla</button></form>{% endif %}
   <p class="pj-muted">Registró {{ sheet.created_by }}{% if sheet.updated_by_id != sheet.created_by_id %} · modificó {{ sheet.updated_by }}{% endif %}{% if sheet.decided_by %} · {{ sheet.get_status_display|lower }} por {{ sheet.decided_by }} el {{ sheet.decided_at|date:"d/m/Y" }}{% endif %}{% if sheet.reversed_by %} · anuló {{ sheet.reversed_by }}{% endif %}</p>

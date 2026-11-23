@@ -21,6 +21,7 @@ from suno.costs.tests.factories import pdf_upload
 from suno.labor import approval, timesheets
 from suno.labor.common import STALE, LaborRejected
 from suno.labor.pdf import timesheet_pdf
+from suno.labor.timesheets import CODE_CHANGED
 
 from .factories import TODAY, WEEK, labor_world, line_data
 
@@ -89,6 +90,28 @@ class VersionTests(TestCase):
         self.assertIsNotNone(sheet.attachment_id)
         self.assertEqual(sheet.version, 2)  # cargar el soporte no es editar
 
+    def test_the_support_needs_the_code_printed_on_it(self) -> None:
+        """C3: se imprime la versión 1, alguien edita (versión 2), quien sube recarga la página
+        (ve la versión 2) y sube el papel de la versión 1: se rechaza por el código impreso."""
+        printed = timesheets.version_code(Timesheet.objects.get(pk=self.sheet.pk))
+        self.save("1", 1)  # la edición después de imprimir
+        self.client.force_login(self.lw.contributor)
+        page = self.client.get(self.url)
+        self.assertContains(page, 'name="codigo"', html=False)
+        self.assertContains(page, "Código impreso en la planilla")
+        refused = self.client.post(self.url + "firmada/", {
+            "file": pdf_upload(), "version": "2", "codigo": printed}, follow=True)  # fmt: skip
+        self.assertContains(refused, CODE_CHANGED)
+        self.assertIsNone(Timesheet.objects.get(pk=self.sheet.pk).attachment_id)
+        missing = self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": "2"},
+                                   follow=True)  # fmt: skip
+        self.assertContains(missing, CODE_CHANGED)
+        current = timesheets.version_code(Timesheet.objects.get(pk=self.sheet.pk))
+        typed = f" {current[:4].lower()} {current[4:]} "  # mayúsculas y espacios no importan
+        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": "2",
+                                                 "codigo": typed})  # fmt: skip
+        self.assertIsNotNone(Timesheet.objects.get(pk=self.sheet.pk).attachment_id)
+
     def test_approve_checks_the_version_the_reviewer_saw(self) -> None:
         self.save("1", 1)
         timesheets.attach_signed(self.ctx, self.lw.project, self.sheet.pk, pdf_upload(),
@@ -114,10 +137,14 @@ class VersionTests(TestCase):
         self.assertEqual(TimesheetLine.objects.get().fraction, 0.5)
         without = self.client.post(self.url + "guardar/", {**data, "version": ""}, follow=True)
         self.assertContains(without, STALE)
-        stale = self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": "2"},
+        code = timesheets.version_code(Timesheet.objects.get(pk=self.sheet.pk))
+        stale = self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": "2",
+                                                         "codigo": code},
                                  follow=True)  # fmt: skip
         self.assertContains(stale, STALE)
-        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": "3"})
+        self.client.post(
+            self.url + "firmada/", {"file": pdf_upload(), "version": "3", "codigo": code}
+        )
         self.client.force_login(self.lw.world.supervisor)
         sheet = Timesheet.objects.get(pk=self.sheet.pk)
         page = self.client.get(self.url)

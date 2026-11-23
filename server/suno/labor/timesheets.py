@@ -153,6 +153,19 @@ def version_code(sheet: Timesheet) -> str:
     return hashed(f"{sheet.pk}:{sheet.version}:{fingerprint}")[:8].upper()
 
 
+CODE_CHANGED = (
+    "El código no coincide con la versión actual: la planilla cambió desde que se imprimió; "
+    "vuelve a imprimirla y firmarla."
+)
+
+
+def require_code(sheet: Timesheet, code: str | None) -> None:
+    """El código impreso en el papel firmado (`None`: sin comprobar, servicios internos). Sin
+    distinguir mayúsculas ni espacios."""
+    if code is not None and "".join(code.split()).upper() != version_code(sheet):
+        raise LaborRejected([CODE_CHANGED])
+
+
 def default_period(today: date) -> tuple[date, date]:
     """La semana anterior, de lunes a domingo (spec 3.2 "Crear")."""
     monday = today - timedelta(days=today.weekday() + 7)
@@ -701,21 +714,24 @@ def attach_signed(
     name: str,
     *,
     version: int | None = None,
+    code: str | None = None,
 ) -> Timesheet:
-    """Sube la planilla firmada de la versión `version` (la que se imprimió o se vio); si la
-    planilla cambió desde entonces, se rechaza. No es editar: `updated_by` y la versión no
-    cambian."""
+    """Sube la planilla firmada. `code` es el código que imprimió el PDF firmado: si no es el
+    de la versión actual, la planilla cambió desde que se imprimió y se rechaza. `version` (la
+    que se vio) también se comprueba. No es editar: `updated_by` y la versión no cambian."""
     current = scoped_qs(ctx, Timesheet).filter(pk=timesheet_id, project=project).first()
     if current is None:
         raise Http404
     _require_signable(ctx, current)
     require_version(current, version)
+    require_code(current, code)
     blob = stored_upload(upload)
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
         _require_signable(ctx, sheet)
         require_version(sheet, version)
+        require_code(sheet, code)
         sheet.attachment = blob
         sheet.attachment_name = name[:MAX_FILE_NAME]
         sheet.save(update_fields=["attachment", "attachment_name"])

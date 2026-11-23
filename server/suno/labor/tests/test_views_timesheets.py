@@ -53,7 +53,10 @@ class TimesheetFlowTests(TestCase):
         self.assertTrue(document.content.startswith(b"%PDF"))
         self.assertTrue(AuditEvent.objects.filter(action="timesheet.exported").exists())
         version = str(Timesheet.objects.get(pk=self.sheet.pk).version)
-        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": version})
+        code = timesheets.version_code(Timesheet.objects.get(pk=self.sheet.pk))
+        self.client.post(
+            self.url + "firmada/", {"file": pdf_upload(), "version": version, "codigo": code}
+        )
         self.client.force_login(self.lw.world.supervisor)
         self.assertRedirects(
             self.client.post(self.url + "aprobar/", {"version": version}), self.url
@@ -71,7 +74,10 @@ class TimesheetFlowTests(TestCase):
         """M3: Consulta no exporta (decisión 2): tampoco baja el escaneo firmado."""
         version = str(Timesheet.objects.get(pk=self.sheet.pk).version)
         self.client.force_login(self.lw.contributor)
-        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": version})
+        code = timesheets.version_code(Timesheet.objects.get(pk=self.sheet.pk))
+        self.client.post(
+            self.url + "firmada/", {"file": pdf_upload(), "version": version, "codigo": code}
+        )
         self.client.force_login(self.lw.viewer)
         self.assertEqual(self.client.get(self.url + "firmada/ver/").status_code, 403)
         self.assertNotContains(self.client.get(self.url), "firmada/ver/")

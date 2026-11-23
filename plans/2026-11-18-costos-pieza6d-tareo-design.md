@@ -294,9 +294,11 @@ Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la secci
 14. ⚑ Huella: líneas, jornales, total, por destino y por trabajador, y si el costo está completo;
     "Recalcular el resumen" es una edición (quita el soporte firmado).
     **Revisado con el usuario el 2026-11-19:** la planilla tiene una versión que sube en cada
-    edición; el PDF imprime un código corto (versión y huella), el soporte firmado se carga para
-    la versión vista (si cambió, se rechaza) y la ficha muestra el código junto a "Aprobar". La
-    versión es también el control de concurrencia de la cuadrícula (ADR-0032).
+    edición; el PDF imprime un código corto (versión y huella). Al cargar el soporte firmado se
+    escribe el "Código impreso en la planilla": si no es el de la versión actual, la planilla
+    cambió desde que se imprimió y se rechaza (además se comprueba la versión vista). La ficha
+    muestra el código junto a "Aprobar". La versión es también el control de concurrencia de la
+    cuadrícula (ADR-0032).
 15. ⚑ Valores congelados: la base exige "los tres nulos o los tres > 0"; que el borrador no los
     tenga lo garantiza el servicio. Una línea en $0 no se aprueba.
 16. Tope diario y orden de bloqueo: proyecto, planilla, trabajadores en orden de `pk` y, al aprobar,

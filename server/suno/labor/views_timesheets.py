@@ -246,8 +246,9 @@ def timesheet_signed(request: HttpRequest, project_id: UUID, timesheet_id: UUID)
     if upload is not None:
         name = upload.name or "planilla-firmada.pdf"
         version = _version(request)
+        code = request.POST.get("codigo", "")[:40]
         run(request, lambda: timesheets.attach_signed(ctx, project, timesheet_id, upload, name,
-                                                      version=version),
+                                                      version=version, code=code),
             "Planilla firmada adjunta; ya se puede aprobar.")  # fmt: skip
     return _detail(project.pk, timesheet_id)
 
