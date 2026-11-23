@@ -568,8 +568,9 @@ def _edit(
             outside = [day for day in replaced if not sheet.starts_on <= day <= sheet.ends_on]
             if outside:
                 raise LaborRejected(["Hay días fuera del periodo de la planilla."])
+            # Antes de validar (asignaciones y retiro): un retiro a la vez espera (ADR-0035).
+            lock_workers(ctx, {line.worker_id for line in lines})
             placed = _validate(ctx, project, sheet, lines, replaced, catalog, tasks)
-            lock_workers(ctx, {p.worker_id for p in placed})
             totals = day_totals(ctx, {p.worker_id for p in placed}, {p.day for p in placed},
                                 skip=sheet, skip_days=replaced)  # fmt: skip
             for p in placed:

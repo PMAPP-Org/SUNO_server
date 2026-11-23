@@ -39,7 +39,9 @@ class AssignmentData:
 
 
 def _worker(ctx: RequestContext, worker_id: UUID) -> Worker:
-    found = scoped_qs(ctx, Worker).filter(pk=worker_id).first()
+    """La fila del trabajador, bloqueada (después del proyecto, ADR-0035): un retiro a la vez
+    espera a que se guarde la asignación y la cierra, o la asignación ve el retiro."""
+    found = scoped_qs(ctx, Worker).select_for_update(no_key=True).filter(pk=worker_id).first()
     if found is None:
         raise LaborRejected(["Elige un trabajador del registro."])
     return found
@@ -128,13 +130,17 @@ def create_assignment(ctx: RequestContext, project: Project, data: AssignmentDat
 def update_assignment(
     ctx: RequestContext, project: Project, assignment_id: UUID, data: AssignmentData
 ) -> ProjectWorker:
+    current = get_assignment(ctx, project, assignment_id)
+    if data.worker_id != current.worker_id:
+        raise LaborRejected(["El trabajador de una asignación no cambia: crea otra."])
     with transaction.atomic():
+        # Proyecto, trabajador y asignación: el mismo orden que `retire_worker` (trabajador y
+        # luego sus asignaciones), sin ciclos.
         lock_project(ctx, project)
+        _worker(ctx, current.worker_id)
         row = locked(ctx, ProjectWorker, project, assignment_id)
         if not can_update_labor(ctx, row):
             raise PermissionDenied
-        if data.worker_id != row.worker_id:
-            raise LaborRejected(["El trabajador de una asignación no cambia: crea otra."])
         worker = _check(ctx, project, data, exclude=row.pk)
         day = _outside(ctx, project, row, data)
         if day is not None:
@@ -152,15 +158,16 @@ def update_assignment(
 
 
 def delete_assignment(ctx: RequestContext, project: Project, assignment_id: UUID) -> None:
+    current = get_assignment(ctx, project, assignment_id)
     with transaction.atomic():
         lock_project(ctx, project)
+        worker = _worker(ctx, current.worker_id)
         row = locked(ctx, ProjectWorker, project, assignment_id)
         if not can_delete_labor(ctx, row):
             raise PermissionDenied
         day = _outside(ctx, project, row, None)
         if day is not None:
             raise LaborRejected([f"Hay tareo el {day:%d/%m/%Y} en esta asignación."])
-        worker = scoped_qs(ctx, Worker).get(pk=row.worker_id)
         metadata = _metadata(row, worker, "deleted")
         row.delete()
         audit.record(ctx, action=AuditAction.LABOR_ASSIGNMENT_CHANGED,

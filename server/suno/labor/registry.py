@@ -219,7 +219,12 @@ def _last_tareo(ctx: RequestContext, worker: Worker) -> date | None:
 
 
 def retire_worker(ctx: RequestContext, worker_id: UUID, retired_on: date) -> Worker:
-    """Lo inactiva y cierra en esa fecha las asignaciones abiertas o que terminan después."""
+    """Lo inactiva y cierra en esa fecha las asignaciones abiertas o que terminan después.
+
+    Bloquea solo la fila del trabajador y luego escribe sus asignaciones. Guardar tareo
+    (proyecto, planilla, trabajadores) y asignar (proyecto, trabajador, asignación) toman el
+    trabajador antes que sus asignaciones y nunca esperan al proyecto teniéndolo: no hay ciclo.
+    Quien llega segundo ve lo que escribió el primero."""
     _require_manager(ctx)
     with transaction.atomic():
         worker = _locked_worker(ctx, worker_id)
