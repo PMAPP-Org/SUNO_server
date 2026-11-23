@@ -1,15 +1,16 @@
-"""Excel de mano de obra (costos, pieza 6d, spec 3.4): planilla y conciliación. Todo texto de
-usuario pasa por `safe_cell`; valores como número y fechas en ISO; documento enmascarado."""
+"""Excel de mano de obra (costos, pieza 6d, spec 3.4): planilla y conciliación. Como los de
+costos y materiales: todo texto de usuario pasa por `safe_cell`; montos y cantidades como
+número (`materials.export.number`: vacío si no hay valor); fechas en ISO; documento
+enmascarado."""
 
 from __future__ import annotations
-
-from decimal import Decimal
 
 from suno.backoffice.export import safe_cell, to_xlsx
 from suno.core.context import RequestContext
 from suno.core.models import Timesheet, TimesheetLine
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog
+from suno.materials.export import number  # la convención de los exportes: número o vacío
 
 from .payroll import Reconciliation
 from .timesheets import evaluate
@@ -21,10 +22,6 @@ RECONCILIATION_HEADER = [
     "trabajador", "cargo", "jornales", "costo_tareado", "pagado", "diferencia", "porcentaje",
     "marca",
 ]  # fmt: skip
-
-
-def number(value: Decimal | None) -> float | str:
-    return "" if value is None else float(value)
 
 
 def timesheet_workbook(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> bytes:
