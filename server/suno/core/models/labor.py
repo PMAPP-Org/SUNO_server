@@ -54,8 +54,12 @@ class LaborImportKind(models.TextChoices):
 
 
 def mask_document(number: str) -> str:
-    """`***4567`: el documento en listas, planillas, PDF y Excel (spec 3.6)."""
-    return f"***{number[-4:]}" if number else ""
+    """`***4567`: el documento en listas, planillas, PDF y Excel (spec 3.6). Uno corto deja ver
+    menos: de 5 a 7 caracteres, los últimos 2; de 4 o menos, nada."""
+    if not number:
+        return ""
+    shown = 4 if len(number) >= 8 else 2 if len(number) >= 5 else 0
+    return f"***{number[-shown:]}" if shown else "***"
 
 
 class Worker(OrgScopedModel):

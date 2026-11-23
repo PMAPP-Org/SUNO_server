@@ -85,10 +85,12 @@ class RegistryPageTests(TestCase):
         self.client.force_login(self.lw.world.admin)
         header = ["Tipo de documento", "Número de documento", "Nombre", "Cargo",
                   "Fecha de ingreso", "Jornal"]  # fmt: skip
-        book = xlsx("Trabajadores", header, [["CC", "70111222", "Ana", "Ayudante", "2026-02-01",
+        book = xlsx("Trabajadores", header, [["CC", "70.111.222", "Ana", "Ayudante", "2026-02-01",
                                               "70000"]])  # fmt: skip
         preview = self.client.post(f"{BASE}importar/", {"file": _file(book)})
         self.assertContains(preview, "nuevo")
+        self.assertContains(preview, "CC ***1222")  # M4: el documento limpio, no el escrito
+        self.assertNotContains(preview, ".222")
         token = preview.context["result"].token
         applied = self.client.post(f"{BASE}importar/aplicar/", {"token": token})
         self.assertRedirects(applied, BASE)

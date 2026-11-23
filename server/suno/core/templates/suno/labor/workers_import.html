@@ -21,7 +21,7 @@
   <div class="pj-scroll">
   <table class="pj-table ta-table">
     <thead><tr><th>Fila</th><th>Documento</th><th>Nombre</th><th>Cargo</th><th>Ingreso</th><th class="num">Jornal</th><th>Qué pasa</th></tr></thead>
-    <tbody>{% for row in result.rows %}<tr><td>{{ row.line }}</td><td>{{ row.data.document_type }} ***{{ row.data.document_number|slice:"-4:" }}</td><td class="pj-name">{{ row.data.full_name }}</td><td class="pj-wrap">{{ row.data.position|default:"—" }}</td><td>{{ row.data.hired_on|date:"d/m/Y" }}</td><td class="num">{{ row.wage|money }}</td><td>{{ row.action }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for row in result.rows %}<tr><td>{{ row.line }}</td><td>{{ row.document }}</td><td class="pj-name">{{ row.data.full_name }}</td><td class="pj-wrap">{{ row.data.position|default:"—" }}</td><td>{{ row.data.hired_on|date:"d/m/Y" }}</td><td class="num">{{ row.wage|money }}</td><td>{{ row.action }}</td></tr>{% endfor %}</tbody>
   </table>
   </div>
   {% endif %}

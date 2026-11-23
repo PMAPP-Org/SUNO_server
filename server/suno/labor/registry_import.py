@@ -24,6 +24,7 @@ from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
 from suno.core.models import LaborImportKind, TimesheetLine, Worker, WorkerWage
+from suno.core.models.labor import mask_document
 from suno.core.policies import can_manage_labor_registry
 from suno.core.scoping import scoped_qs
 
@@ -49,6 +50,12 @@ class WorkerRow:
     wage: Decimal
     wage_from: date | None
     action: str
+
+    @property
+    def document(self) -> str:
+        """ "CC ***5678": el documento limpio y enmascarado (spec 3.6)."""
+        number = clean_document(self.data.document_number)
+        return f"{self.data.document_type} {mask_document(number)}"
 
 
 @dataclass(frozen=True)

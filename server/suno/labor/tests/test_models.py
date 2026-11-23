@@ -194,3 +194,18 @@ class LedgerOriginTests(TestCase):
                                             applied_by=lw.world.admin)  # fmt: skip
         self.assertEqual(Worker.objects.filter(org=org).count(), 2)
         self.assertEqual(Timesheet.objects.count(), 0)
+
+
+class MaskDocumentTests(unittest.TestCase):
+    """M4: un documento corto no se muestra completo."""
+
+    def test_short_documents_hide_more(self) -> None:
+        from suno.core.models.labor import mask_document
+
+        self.assertEqual(mask_document("1012345678"), "***5678")
+        self.assertEqual(mask_document("52123456"), "***3456")
+        self.assertEqual(mask_document("AB12345"), "***45")  # 5 a 7: los últimos 2
+        self.assertEqual(mask_document("X1234"), "***34")
+        self.assertEqual(mask_document("1234"), "***")  # 3 o 4: todo
+        self.assertEqual(mask_document("123"), "***")
+        self.assertEqual(mask_document(""), "")
