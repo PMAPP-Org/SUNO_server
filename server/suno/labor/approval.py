@@ -62,6 +62,13 @@ from .timesheets import (
 CHANGED = "La planilla cambió desde que se imprimió; revísala y vuelve a cargar el soporte firmado."
 
 
+def _require(allowed: bool) -> None:
+    """La política se revisa antes de bloquear (quien no puede no toma `FOR UPDATE`) y otra vez
+    con las filas bloqueadas."""
+    if not allowed:
+        raise PermissionDenied
+
+
 def _post(ctx: RequestContext, project: Project, sheet: Timesheet, evaluation: Evaluation) -> int:
     """Un costo aprobado por destino: la suma de sus líneas ya redondeadas."""
     first: dict[str, StoredLine] = {}
@@ -123,12 +130,12 @@ def approve_timesheet(
     version: int | None = None,
 ) -> Timesheet:
     """`version`: la que vio el revisor junto a su código (el del PDF firmado)."""
+    _require(can_approve_labor(ctx, project))
     catalog = catalog if catalog is not None else load_catalog(ctx, project)
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
-        if not can_approve_labor(ctx, project):
-            raise PermissionDenied
+        _require(can_approve_labor(ctx, project))
         require_decidable(ctx, sheet)
         require_version(sheet, version)
         if sheet.attachment_id is None:
@@ -171,12 +178,12 @@ def approve_timesheet(
 def reject_timesheet(
     ctx: RequestContext, project: Project, timesheet_id: UUID, note: str
 ) -> Timesheet:
+    _require(can_reject_labor(ctx, project))
     reason = clean_note(note, "del rechazo")
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
-        if not can_reject_labor(ctx, project):
-            raise PermissionDenied
+        _require(can_reject_labor(ctx, project))
         require_decidable(ctx, sheet)
         sheet.status = str(TimesheetStatus.REJECTED)
         sheet.decided_by_id = ctx.user_id
@@ -195,12 +202,12 @@ def reject_timesheet(
 def reverse_timesheet(
     ctx: RequestContext, project: Project, timesheet_id: UUID, note: str
 ) -> Timesheet:
+    _require(can_reverse_labor(ctx, project))
     reason = clean_note(note, "de la anulación")
     with transaction.atomic():
         lock_project(ctx, project)
         sheet = locked(ctx, Timesheet, project, timesheet_id)
-        if not can_reverse_labor(ctx, project):
-            raise PermissionDenied
+        _require(can_reverse_labor(ctx, project))
         if sheet.status != TimesheetStatus.APPROVED:
             raise LaborRejected(["Solo se anula una planilla aprobada."])
         reversals = reverse_entries(ctx, project, "timesheet", sheet, reason)

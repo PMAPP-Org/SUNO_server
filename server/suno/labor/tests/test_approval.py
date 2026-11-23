@@ -8,7 +8,9 @@ from decimal import Decimal
 from unittest import mock
 
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from suno.core.models import (
     AuditEvent,
@@ -63,6 +65,24 @@ class ApprovalTests(TestCase):
 
     def sign(self) -> None:
         timesheets.attach_signed(self.author, self.lw.project, self.sheet.pk, pdf_upload(), "f.pdf")
+
+    def test_no_row_is_locked_for_someone_without_permission(self) -> None:
+        """M5: la política se revisa antes de los `FOR UPDATE`."""
+        self.sign()
+        viewer = self.lw.ctx(self.lw.viewer)
+        actions = {
+            "approve": lambda: approval.approve_timesheet(viewer, self.lw.project, self.sheet.pk),
+            "reject": lambda: approval.reject_timesheet(viewer, self.lw.project, self.sheet.pk,
+                                                        "No"),
+            "reverse": lambda: approval.reverse_timesheet(self.approver, self.lw.project,
+                                                          self.sheet.pk, "No"),
+        }  # fmt: skip
+        for name, action in actions.items():
+            with self.subTest(name), CaptureQueriesContext(connection) as queries:
+                with self.assertRaises(PermissionDenied):
+                    action()
+            locks = [q["sql"] for q in queries.captured_queries if "FOR " in q["sql"]]
+            self.assertEqual(locks, [], name)
 
     def test_approval_freezes_lines_and_posts_one_cost_per_destination(self) -> None:
         self.sign()
