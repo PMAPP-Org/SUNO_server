@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 from datetime import date
+from decimal import Decimal
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,11 @@ BLOCK_DAYS = 16
 
 #: Días de la semana en español (`%a` depende del locale del servidor).
 WEEKDAYS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+
+
+def plural(value: Any, one: str, many: str) -> str:
+    """ "1 jornal", "1,5 jornales", "2 líneas"."""
+    return f"{qty(value)} {one if Decimal(str(value)) == 1 else many}"
 
 
 def day_label(day: date) -> str:
@@ -97,13 +103,14 @@ def timesheet_pdf(
     data = period_table(ctx, sheet, load_catalog(ctx, project))
     summary = sheet.summary or {}
     fingerprint = summary.get("fingerprint", {})
+    lines = plural(fingerprint.get("lines", 0), "línea", "líneas")
+    jornales = plural(fingerprint.get("days", "0"), "jornal", "jornales")
     story: list[Any] = [
         Paragraph(f"Planilla de tareo {sheet.code}", heading),
         table([["Proyecto", project.name],
                ["Periodo", f"{sheet.starts_on:%d/%m/%Y} – {sheet.ends_on:%d/%m/%Y}"],
                ["Versión", f"Versión {code} (se compara al cargar el soporte y al aprobar)"],
-               ["Líneas y jornales", f"{fingerprint.get('lines', 0)} líneas · "
-                                     f"{qty(fingerprint.get('days', '0'))} jornales"]],
+               ["Líneas y jornales", f"{lines} · {jornales}"]],
               [width * 0.2, width * 0.8], header=False),
     ]  # fmt: skip
     for start in range(0, len(data.days), BLOCK_DAYS):

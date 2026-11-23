@@ -6,7 +6,7 @@
 {% include "suno/labor/_nav.html" with sub="timesheets" %}
 <section class="pj-panel">
   <h2>Planilla {{ sheet.code }} <span class="bg-label ta-{{ sheet.status }}">{{ sheet.get_status_display }}</span></h2>
-  <p>{{ sheet.starts_on|date:"d/m/Y" }} – {{ sheet.ends_on|date:"d/m/Y" }} · {{ grid.days|qty }} jornales · costo estimado {{ grid.total|money }}</p>
+  <p>{{ sheet.starts_on|date:"d/m/Y" }} – {{ sheet.ends_on|date:"d/m/Y" }} · {{ grid.days|qty }} jornal{{ grid.days|pluralize:"es" }} · costo estimado {{ grid.total|money }}</p>
   {% if sheet.status == "rejected" %}<p class="pj-warning">Rechazada: {{ sheet.decision_note }}</p>{% endif %}
   {% if sheet.status == "reversed" %}<p class="pj-warning">Anulada: {{ sheet.reverse_note }}</p>{% endif %}
   {% if grid.changed %}<p class="pj-warning">Cambió un jornal o el factor desde que se guardó: recalcula el resumen y vuelve a imprimir la planilla antes de aprobarla.</p>{% endif %}

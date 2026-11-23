@@ -90,6 +90,10 @@ class GridPageTests(TestCase):
         self.assertEqual(saved, {"Pedro Pérez": D("1.0000"), "María Gómez": D("0.5000")})
         page = self.client.get(self.url)
         self.assertContains(page, "197.600,00")  # 121.600 + 76.000
+        self.assertContains(page, "· 1,5 jornales ·")
+        self.client.post(self.url + "guardar/", self.form(**{
+            self.cell("Pedro Pérez", MON): "1", "accion": "guardar"}))  # fmt: skip
+        self.assertContains(self.client.get(self.url), "· 1 jornal ·")  # no "1 jornales"
 
     def test_repeat_and_split_redraw_without_saving(self) -> None:
         data = self.form(**{self.cell("Pedro Pérez", MON): "1",
