@@ -9,7 +9,7 @@ El tareo de la pieza 6d lleva nombres, documentos y salarios. La sección Costos
 
 ## Decisión
 
-- Sección nueva **`LABOR` ("Mano de obra")** en la matriz fija de `core/access.py`: Gestor (crear, leer, editar, borrar, aprobar, rechazar, anular, exportar), Revisor (sin anular), Colaborador (crear, leer, editar, borrar y exportar; solo lo suyo) y Consulta (solo leer: los exportes llevan nombres y salarios).
+- Sección nueva **`LABOR` ("Mano de obra")** en la matriz fija de `core/access.py`: Gestor (crear, leer, editar, borrar, aprobar, rechazar, anular, exportar), Revisor (sin anular), Colaborador (crear, leer, editar, borrar y exportar; solo lo suyo) y Consulta (solo leer: los exportes llevan nombres y salarios). Bajar el escaneo de la planilla firmada **también es exportar** (403 para Consulta, auditado como el PDF y el Excel; revisado con el usuario el 2026-11-19).
 - La migración `0031` da la sección a la administración existente (`OWNER`, `ADMIN`) como Gestora con alcance de organización, igual que la `0028` con Costos; `LEGACY_GRANTS` hace lo mismo con las membresías nuevas. A los demás se la da el administrador de accesos.
 - El **registro** (trabajadores, jornales, factor y conciliación) pide la sección con alcance de **toda la organización**: leer para verlo, `create` y `update` para gestionarlo. Un alcance por proyectos solo abre la pestaña Tareo de esos proyectos, con el documento enmascarado.
 - En Costos y Control la mano de obra aparece como costos por destino ("Tareo TA-001"), **sin nombres ni salarios**; el enlace a la planilla solo se muestra a quien lee Mano de obra en el proyecto.

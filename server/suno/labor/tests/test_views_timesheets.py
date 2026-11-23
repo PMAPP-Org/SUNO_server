@@ -67,6 +67,19 @@ class TimesheetFlowTests(TestCase):
         self.assertEqual(Timesheet.objects.get(pk=self.sheet.pk).status, "reversed")
         self.assertEqual(CostEntry.objects.filter(timesheet=self.sheet).count(), 2)
 
+    def test_the_signed_scan_is_an_export(self) -> None:
+        """M3: Consulta no exporta (decisión 2): tampoco baja el escaneo firmado."""
+        version = str(Timesheet.objects.get(pk=self.sheet.pk).version)
+        self.client.force_login(self.lw.contributor)
+        self.client.post(self.url + "firmada/", {"file": pdf_upload(), "version": version})
+        self.client.force_login(self.lw.viewer)
+        self.assertEqual(self.client.get(self.url + "firmada/ver/").status_code, 403)
+        self.assertNotContains(self.client.get(self.url), "firmada/ver/")
+        self.client.force_login(self.lw.contributor)
+        self.assertEqual(self.client.get(self.url + "firmada/ver/").status_code, 302)
+        event = AuditEvent.objects.filter(action="timesheet.exported").latest("created_at")
+        self.assertEqual(event.metadata["what"], "planilla firmada")
+
     def test_viewer_cannot_print_and_reviewer_cannot_reverse(self) -> None:
         self.client.force_login(self.lw.viewer)
         self.assertEqual(self.client.get(self.url + "planilla.pdf").status_code, 403)

@@ -208,7 +208,7 @@ Sección nueva **LABOR** ("Mano de obra") en la matriz fija de `core/access.py`:
 | Aprobar | `approve` |
 | Rechazar | `reject` |
 | Anular | `reverse` |
-| Exportar | `export` |
+| Exportar (PDF, Excel y la planilla firmada escaneada; revisado con el usuario el 2026-11-19) | `export` |
 
 - El registro de trabajadores, sus jornales, el factor y la conciliación requieren `create` y `update`
   de LABOR con alcance de **toda la organización**.

@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -20,6 +21,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from suno.attachments import validation
 from suno.attachments.storage import get_blob_store
 from suno.budgets.excel import MAX_BYTES, ExcelRejected, check_file_name
+from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
 from suno.core.download import content_disposition
@@ -27,6 +29,7 @@ from suno.core.models import Project, Timesheet
 from suno.core.policies import (
     can_approve_labor,
     can_delete_labor,
+    can_export_labor,
     can_reverse_labor,
     can_update_labor,
 )
@@ -135,7 +138,8 @@ def _render_sheet(
             "reject": url + "rechazar/",
             "void": url + "anular/",
             "upload": url + "firmada/",
-            "view": url + "firmada/ver/",
+            # El escaneo firmado es un exporte (lleva nombres y documentos): Consulta no lo baja.
+            "view": url + "firmada/ver/" if can_export_labor(ctx, project) else "",
             "pdf": url + "planilla.pdf",
             "xlsx": url + "planilla.xlsx",
             "import": url + "importar/",
@@ -254,13 +258,19 @@ def timesheet_signed_file(
     request: HttpRequest, project_id: UUID, timesheet_id: UUID
 ) -> HttpResponse:
     """La planilla firmada, por URL prefirmada, después de comprobar que se lee la pestaña (el
-    `Blob` no tiene organización), como `materials.common.attachment_url`."""
+    `Blob` no tiene organización), como `materials.common.attachment_url`. Bajarla es exportar
+    (403 sin el permiso, como el PDF y el Excel) y queda en la auditoría."""
     ctx = _ctx(request)
     project = get_labor_project(ctx, project_id)
+    require_export(ctx, project)
     sheet = get_timesheet(ctx, project, timesheet_id)
     blob = blob_registry().filter(pk=sheet.attachment_id).first() if sheet.attachment_id else None
     if blob is None:
         raise Http404
+    with transaction.atomic():
+        audit.record(ctx, action=AuditAction.TIMESHEET_EXPORTED, target=f"timesheet:{sheet.pk}",
+                     metadata={"project": str(project.pk), "number": sheet.number,
+                               "what": "planilla firmada"})  # fmt: skip
     url = get_blob_store().presign_download(
         sha256=blob.sha256,
         expires_in=int(settings.ATTACHMENT_DOWNLOAD_URL_TTL_SECONDS),
