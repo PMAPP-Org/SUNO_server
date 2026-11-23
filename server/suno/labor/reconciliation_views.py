@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
 from django.views.decorators.http import require_GET, require_POST
 
@@ -89,13 +89,18 @@ def payroll_apply(request: HttpRequest) -> HttpResponse:
 
 
 def _project(ctx: RequestContext, value: str | None) -> Project | None:
+    """El proyecto del filtro (vacío: la organización). Un id inválido o de otra organización
+    es 404, no la vista de la organización: así no se confunde con un filtro aplicado."""
+    if not value:
+        return None
     try:
-        wanted = UUID(value) if value else None
-    except ValueError:
-        return None
-    if wanted is None:
-        return None
-    return scoped_qs(ctx, Project).filter(pk=wanted).first()
+        wanted = UUID(value)
+    except ValueError as exc:
+        raise Http404 from exc
+    found = scoped_qs(ctx, Project).filter(pk=wanted).first()
+    if found is None:
+        raise Http404
+    return found
 
 
 @login_required(login_url="platform_login")
