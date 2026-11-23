@@ -12,7 +12,9 @@ from unittest import mock
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 
+from suno.core.access import AccessScope, SectionRole
 from suno.core.models import AuditEvent, Timesheet, TimesheetLine, WorkerWage
+from suno.core.policies import can_read_labor
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
@@ -27,6 +29,7 @@ from .factories import (
     WEEK,
     bare_line,
     bare_timesheet,
+    grant_labor,
     labor_world,
     line_data,
     make_worker,
@@ -157,6 +160,21 @@ class SaveLinesTests(TestCase):
         self.assertEqual(
             timesheets.day_totals(self.lw.ctx(), {self.lw.pedro.pk}, {date(2026, 3, 9)}), {}
         )
+
+    def test_the_cap_message_hides_projects_the_user_cannot_read(self) -> None:
+        """M1: quien no lee Mano de obra en la otra obra ve "otro proyecto", no su nombre."""
+        other = other_project(self.lw)
+        elsewhere = bare_timesheet(self.lw, project=other)
+        bare_line(elsewhere, self.lw.pedro, MON, "1")
+        grant_labor(self.lw.world, self.lw.contributor, SectionRole.CONTRIBUTOR,
+                    scope=AccessScope.PROJECTS, projects=[self.lw.project])  # fmt: skip
+        limited = self.lw.ctx(self.lw.contributor)
+        self.assertFalse(can_read_labor(limited, other))
+        with self.assertRaises(LaborRejected) as rejected:
+            self.save([line_data(self.lw.pedro, MON, "0.75")], ctx=limited)
+        text = rejected.exception.errors[0]
+        self.assertIn("el resto está en TA-001 (otro proyecto)", text)
+        self.assertNotIn("Obra 2", text)
 
     def test_editing_a_rejected_sheet_returns_it_to_draft_and_drops_the_signature(self) -> None:
         self.save([line_data(self.lw.pedro, MON)])

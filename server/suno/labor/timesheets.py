@@ -46,7 +46,12 @@ from suno.core.models import (
     Worker,
 )
 from suno.core.models.labor import MAX_FRACTION, MAX_PERIOD_DAYS
-from suno.core.policies import can_create_labor, can_delete_labor, can_update_labor
+from suno.core.policies import (
+    can_create_labor,
+    can_delete_labor,
+    can_read_labor,
+    can_update_labor,
+)
 from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog, assignable_tasks, load_catalog
 from suno.materials.common import lock_project, locked, next_number
@@ -77,6 +82,7 @@ from .common import (
 )
 
 FIRST_DAY = date(2000, 1, 1)
+OTHER_PROJECT = "otro proyecto"
 #: 60 trabajadores × 31 días × 3 destinos son 5.580; el resto es margen.
 MAX_LINES = 20_000
 
@@ -458,13 +464,14 @@ def day_totals(
 def cap_errors(
     ctx: RequestContext, totals: Mapping[tuple[UUID, date], Decimal], current: Timesheet
 ) -> list[str]:
-    """Quién, qué día, cuánto suma y en qué otras planillas (número y proyecto) está el resto."""
+    """Quién, qué día, cuánto suma y en qué otras planillas (número y proyecto) está el resto.
+    Un proyecto en el que quien guarda no lee Mano de obra sale como "otro proyecto"."""
     found = over_cap(totals)
     if not found:
         return []
     names = worker_names(ctx, {worker for worker, _, _ in found})
     elsewhere: dict[tuple[UUID, date], set[str]] = defaultdict(set)
-    for worker_id, day, number, project in (
+    rows = list(
         scoped_qs(ctx, TimesheetLine)
         .filter(
             worker_id__in=[w for w, _, _ in found],
@@ -472,8 +479,14 @@ def cap_errors(
             timesheet__status__in=COUNTED_STATES,
         )
         .exclude(timesheet=current)
-        .values_list("worker_id", "worked_on", "timesheet__number", "timesheet__project__name")
-    ):
+        .values_list("worker_id", "worked_on", "timesheet__number", "timesheet__project_id")
+    )
+    projects = {
+        project.pk: project.name if can_read_labor(ctx, project) else OTHER_PROJECT
+        for project in scoped_qs(ctx, Project).filter(pk__in={row[3] for row in rows})
+    }
+    for worker_id, day, number, project_id in rows:
+        project = projects.get(project_id, OTHER_PROJECT)
         elsewhere[(worker_id, day)].add(f"TA-{number:03d} ({project})")
     errors = []
     for worker_id, day, total in found[:MAX_ERRORS]:
