@@ -345,7 +345,7 @@ def factor_in_use(ctx: RequestContext, factor: BenefitFactor) -> bool:
                  _next_start(rows, factor.valid_from))  # fmt: skip
 
 
-def _wage_audit(ctx: RequestContext, worker: Worker, change: str, wage: WorkerWage) -> None:
+def wage_audit(ctx: RequestContext, worker: Worker, change: str, wage: WorkerWage) -> None:
     audit.record(
         ctx,
         action=AuditAction.WORKER_WAGE_CHANGED,
@@ -376,7 +376,7 @@ def add_wage(
             org_id=ctx.org_id, worker=worker, valid_from=valid_from, daily_wage=daily_wage,
             created_by_id=ctx.user_id,
         )  # fmt: skip
-        _wage_audit(ctx, worker, "added", wage)
+        wage_audit(ctx, worker, "added", wage)
     return wage
 
 
@@ -401,7 +401,7 @@ def change_wage(ctx: RequestContext, wage_id: UUID, daily_wage: Decimal) -> Work
             raise LaborRejected([USED])
         wage.daily_wage = daily_wage
         wage.save(update_fields=["daily_wage"])
-        _wage_audit(ctx, worker, "changed", wage)
+        wage_audit(ctx, worker, "changed", wage)
     return wage
 
 
@@ -414,7 +414,7 @@ def delete_wage(ctx: RequestContext, wage_id: UUID) -> None:
             raise LaborRejected([USED])
         if wage.valid_from <= worker.hired_on:
             raise LaborRejected(["El jornal de ingreso no se borra: cámbialo."])
-        _wage_audit(ctx, worker, "deleted", wage)
+        wage_audit(ctx, worker, "deleted", wage)
         wage.delete()
 
 

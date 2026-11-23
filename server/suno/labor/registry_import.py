@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from suno.backoffice.export import to_xlsx_book
 from suno.budgets.excel import ExcelRejected, preview_sheet, read_rows
+from suno.budgets.totals import money
 from suno.core import audit
 from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
@@ -31,7 +32,14 @@ from suno.core.scoping import scoped_qs
 from . import imports
 from .calc import History
 from .common import FROZEN_STATES, MAX_ERRORS, LaborRejected
-from .registry import WorkerData, clean_document, frozen_message, wage_ok, worker_errors
+from .registry import (
+    WorkerData,
+    clean_document,
+    frozen_message,
+    wage_audit,
+    wage_ok,
+    worker_errors,
+)
 
 SHEET = "Trabajadores"
 H_TYPE, H_NUMBER, H_NAME, H_POSITION = "Tipo de documento", "Número de documento", "Nombre", "Cargo"
@@ -264,7 +272,7 @@ def apply(ctx: RequestContext, token: str) -> tuple[int, int]:
                 since = row.wage_from or today
                 if wages.get(current.pk, History()).on(since) != row.wage:
                     new_wages.append(WorkerWage(org_id=ctx.org_id, worker=current,
-                                                valid_from=since, daily_wage=row.wage,
+                                                valid_from=since, daily_wage=money(row.wage),
                                                 created_by_id=ctx.user_id))  # fmt: skip
         if problems:
             raise LaborRejected(problems[:MAX_ERRORS])
@@ -278,6 +286,10 @@ def apply(ctx: RequestContext, token: str) -> tuple[int, int]:
         if clash:
             raise LaborRejected(["Ya hay un jornal con esa fecha: cambia «Jornal desde»."])
         scoped_qs(ctx, WorkerWage).bulk_create(new_wages)
+        fresh = {worker.pk for worker in created}
+        for wage in new_wages:
+            if wage.worker_id not in fresh:  # un cambio de jornal, uno a uno (spec 3.6)
+                wage_audit(ctx, wage.worker, "imported", wage)
         audit.record(
             ctx,
             action=AuditAction.WORKERS_IMPORTED,

@@ -65,6 +65,12 @@ class WorkerImportTests(TestCase):
         self.assertEqual(LaborImportToken.objects.get().kind, "workers")
         event = AuditEvent.objects.get(action="workers.imported")
         self.assertEqual(event.metadata, {"created": 1, "updated": 1})
+        # M7: cada cambio de jornal queda en la auditoría, uno a uno (spec 3.6).
+        wage_event = AuditEvent.objects.get(action="worker.wage_changed")
+        self.assertEqual(wage_event.target, f"worker:{pedro.pk}")
+        self.assertEqual(wage_event.metadata, {
+            "worker": str(pedro.pk), "document": "CC ***5678", "change": "imported",
+            "valid_from": "2026-04-01", "wage": "95000.00"})  # fmt: skip
         with self.assertRaises(LaborRejected) as again:
             registry_import.apply(self.ctx, preview.token)
         self.assertIn("ya se cargó", again.exception.errors[0])
