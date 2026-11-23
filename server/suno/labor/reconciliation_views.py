@@ -37,8 +37,9 @@ from .registry_views import XLSX_TYPE, page
 @require_GET
 def payroll_list(request: HttpRequest) -> HttpResponse:
     ctx = registry_ctx(request)
-    return page(request, ctx, "suno/labor/payrolls.html", rows=payroll_rows(ctx),
-                form=PayrollForm(), result=None, errors=[])  # fmt: skip
+    rows = payroll_rows(ctx, page=request.GET.get("pagina"))
+    return page(request, ctx, "suno/labor/payrolls.html", rows=rows, form=PayrollForm(),
+                result=None, errors=[])  # fmt: skip
 
 
 @login_required(login_url="platform_login")

@@ -24,13 +24,14 @@
 {% endif %}
 <section class="pj-panel">
   <h2>Nóminas importadas</h2>
-  {% if rows %}
+  {% if rows.object_list %}
   <div class="pj-scroll">
   <table class="pj-table ta-table">
     <thead><tr><th>Periodo</th><th>Archivo</th><th class="num">Líneas</th><th class="num">Total pagado</th><th>Importó</th></tr></thead>
     <tbody>{% for p in rows %}<tr><td><a href="{% url 'labor_registry:reconciliation' p.pk %}">{{ p.starts_on|date:"d/m/Y" }} – {{ p.ends_on|date:"d/m/Y" }}</a></td><td class="pj-wrap">{{ p.file_name }}</td><td class="num">{{ p.line_count }}</td><td class="num">{{ p.total|money }}</td><td class="pj-wrap">{{ p.imported_by }} · {{ p.imported_at|date:"d/m/Y" }}</td></tr>{% endfor %}</tbody>
   </table>
   </div>
+  {% if rows.has_other_pages %}<p class="pj-pages">{% if rows.has_previous %}<a href="?pagina={{ rows.previous_page_number }}">Anterior</a>{% endif %} Página {{ rows.number }} de {{ rows.paginator.num_pages }} {% if rows.has_next %}<a href="?pagina={{ rows.next_page_number }}">Siguiente</a>{% endif %}</p>{% endif %}
   {% else %}<p class="pj-empty">Todavía no hay nóminas importadas.</p>{% endif %}
 </section>
 {% endblock %}

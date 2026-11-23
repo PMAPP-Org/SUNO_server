@@ -122,5 +122,11 @@ def worker_sheet(ctx: RequestContext, worker: Worker) -> WorkerSheet:
     )
 
 
-def payroll_rows(ctx: RequestContext) -> QuerySet[PayrollImport]:
-    return scoped_qs(ctx, PayrollImport).select_related("imported_by").order_by("-starts_on")[:200]
+def payroll_rows(ctx: RequestContext, *, page: int | str | None = None) -> Page[Any]:
+    """Las nóminas importadas, de la más nueva a la más vieja, de a 100 (decisión 26)."""
+    rows = (
+        scoped_qs(ctx, PayrollImport)
+        .select_related("imported_by")
+        .order_by("-starts_on", "-imported_at")
+    )
+    return Paginator(rows, PAGE_SIZE).get_page(page)

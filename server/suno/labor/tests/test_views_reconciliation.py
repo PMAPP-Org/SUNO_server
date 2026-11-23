@@ -4,6 +4,7 @@ exportar; cada consulta queda en la auditoría."""
 from __future__ import annotations
 
 import unittest
+from datetime import date, timedelta
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -47,6 +48,23 @@ class ReconciliationPageTests(TestCase):
         token = preview.context["result"].token
         self.client.post(BASE + "importar/aplicar/", {"token": token})
         return PayrollImport.objects.get()
+
+    def test_the_list_pages_by_100(self) -> None:
+        """M9: la lista cortaba en 200 sin paginar (decisión 26: de a 100)."""
+        PayrollImport.objects.bulk_create([
+            PayrollImport(org=self.lw.world.org, starts_on=date(2020, 1, 1) + timedelta(days=n),
+                          ends_on=date(2020, 1, 1) + timedelta(days=n), file_name=f"n{n}.xlsx",
+                          file_size=1, file_sha256="0" * 64, line_count=1, total=1,
+                          imported_by=self.lw.world.admin)
+            for n in range(201)
+        ])  # fmt: skip
+        self.client.force_login(self.lw.world.admin)
+        first = self.client.get(BASE)
+        self.assertEqual(len(first.context["rows"]), 100)
+        self.assertContains(first, "Página 1 de 3")
+        last = self.client.get(BASE + "?pagina=3")
+        self.assertEqual(len(last.context["rows"]), 1)
+        self.assertContains(last, "01/01/2020")  # la más vieja, en la última página
 
     def test_import_view_filter_and_export(self) -> None:
         self.client.force_login(self.lw.world.admin)
