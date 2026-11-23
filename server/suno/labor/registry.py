@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -496,7 +496,3 @@ def delete_factor(ctx: RequestContext, factor_id: UUID) -> None:
             raise LaborRejected([USED])
         _factor_audit(ctx, "deleted", factor)
         factor.delete()
-
-
-def previous_day(day: date) -> date:
-    return day - timedelta(days=1)

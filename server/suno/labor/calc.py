@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -178,10 +177,3 @@ def days_text(value: Decimal) -> str:
     """ "1,75": jornales con coma decimal y sin ceros de sobra."""
     text = format(value.normalize(), "f")
     return text.replace(".", ",")
-
-
-def totals_by_day(rows: Iterable[tuple[UUID, date, Decimal]]) -> dict[tuple[UUID, date], Decimal]:
-    totals: dict[tuple[UUID, date], Decimal] = defaultdict(lambda: NO_DAYS)
-    for worker, day, fraction in rows:
-        totals[(worker, day)] += fraction
-    return dict(totals)
