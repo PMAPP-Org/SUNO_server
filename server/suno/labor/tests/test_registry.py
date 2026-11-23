@@ -132,6 +132,20 @@ class WageAndFactorTests(TestCase):
         self.lw = labor_world()
         self.ctx = self.lw.ctx()
 
+    def test_two_factors_on_the_same_day_at_once_are_a_message(self) -> None:
+        """M6: sin factores no hay filas que bloquear; la otra alta entra entre la revisión y la
+        escritura y la restricción única daba un 500."""
+        BenefitFactor.objects.all().delete()
+        day = date(2026, 2, 1)
+
+        def other_session(*_args: object) -> None:
+            BenefitFactor.objects.create(org=self.lw.world.org, valid_from=day, factor=D("1.5"))
+
+        with mock.patch("suno.labor.registry._require_after_frozen", side_effect=other_session):
+            with self.assertRaises(LaborRejected) as caught:
+                registry.add_factor(self.ctx, day, D("1.6"), "")
+        self.assertEqual(caught.exception.errors, ["Ya hay un factor desde el 01/02/2026."])
+
     def test_a_change_is_a_new_row_and_used_rows_are_frozen(self) -> None:
         pedro = self.lw.pedro
         new = registry.add_wage(self.ctx, pedro.pk, date(2026, 4, 1), D("90000.00"))

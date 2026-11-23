@@ -46,6 +46,7 @@ MIN_DOCUMENT, MAX_DOCUMENT = 3, 20
 MAX_WAGE = Decimal("999999999999.99")
 FIRST_DAY = date(2000, 1, 1)
 DOCUMENT_CONSTRAINT = "worker_document_uq"
+FACTOR_CONSTRAINT = "benefit_factor_day_uq"
 USED = "Este valor ya lo usó una planilla aprobada o anulada: registra un cambio con otra fecha."
 
 
@@ -443,17 +444,25 @@ def _factor_checks(value: Decimal, note: str) -> None:
 def add_factor(ctx: RequestContext, valid_from: date, value: Decimal, note: str) -> BenefitFactor:
     _require_manager(ctx)
     _factor_checks(value, note)
-    with transaction.atomic():
-        lock_factors(ctx)
-        if scoped_qs(ctx, BenefitFactor).filter(valid_from=valid_from).exists():
-            raise LaborRejected([f"Ya hay un factor desde el {valid_from:%d/%m/%Y}."])
-        _require_after_frozen(scoped_qs(ctx, TimesheetLine), valid_from)
-        factor = scoped_qs(ctx, BenefitFactor).create(
-            org_id=ctx.org_id, valid_from=valid_from, factor=value, note=note.strip(),
-            created_by_id=ctx.user_id,
-        )  # fmt: skip
-        factor.refresh_from_db()
-        _factor_audit(ctx, "added", factor)
+    taken = LaborRejected([f"Ya hay un factor desde el {valid_from:%d/%m/%Y}."])
+    try:
+        with transaction.atomic():
+            lock_factors(ctx)
+            if scoped_qs(ctx, BenefitFactor).filter(valid_from=valid_from).exists():
+                raise taken
+            _require_after_frozen(scoped_qs(ctx, TimesheetLine), valid_from)
+            factor = scoped_qs(ctx, BenefitFactor).create(
+                org_id=ctx.org_id, valid_from=valid_from, factor=value, note=note.strip(),
+                created_by_id=ctx.user_id,
+            )  # fmt: skip
+            factor.refresh_from_db()
+            _factor_audit(ctx, "added", factor)
+    except IntegrityError as exc:
+        # Sin factores no hay filas que bloquear: dos altas del mismo día a la vez chocan en
+        # la restricción única.
+        if FACTOR_CONSTRAINT not in str(exc):
+            raise
+        raise taken from exc
     return factor
 
 
