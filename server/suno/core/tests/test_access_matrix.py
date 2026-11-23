@@ -106,3 +106,25 @@ class AccessCatalogTests(SimpleTestCase):
                 self.assertEqual(capabilities_for(Section.COSTS, role), frozenset(capabilities))
         self.assertTrue(role_has_capability(Section.COSTS, SectionRole.MANAGER, "reverse"))
         self.assertFalse(role_has_capability(Section.BUDGETS, SectionRole.MANAGER, "reverse"))
+
+    def test_labor_profiles_match_the_approved_design(self) -> None:
+        """Costos, pieza 6d (decisión 2 del plan): Consulta solo lee; nada de `import`."""
+        c = Capability
+        expected = {
+            SectionRole.MANAGER: {
+                c.CREATE, c.READ, c.UPDATE, c.DELETE, c.APPROVE, c.REJECT, c.REVERSE, c.EXPORT,
+            },
+            SectionRole.REVIEWER: {
+                c.CREATE, c.READ, c.UPDATE, c.DELETE, c.APPROVE, c.REJECT, c.EXPORT,
+            },
+            SectionRole.CONTRIBUTOR: {c.CREATE, c.READ, c.UPDATE, c.DELETE, c.EXPORT},
+            SectionRole.VIEWER: {c.READ},
+        }  # fmt: skip
+        self.assertEqual(Section(Section.LABOR).label, "Mano de obra")
+        self.assertEqual(allowed_roles(Section.LABOR), set(expected))
+        for role, capabilities in expected.items():
+            with self.subTest(role=role):
+                self.assertEqual(capabilities_for(Section.LABOR, role), frozenset(capabilities))
+        # Costos no cambia: la mano de obra es otra sección.
+        self.assertTrue(role_has_capability(Section.COSTS, SectionRole.VIEWER, Capability.EXPORT))
+        self.assertFalse(role_has_capability(Section.LABOR, SectionRole.VIEWER, Capability.EXPORT))

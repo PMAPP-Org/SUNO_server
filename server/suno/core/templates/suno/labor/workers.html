@@ -1,0 +1,40 @@
+{% extends "suno/projects/base.html" %}
+{% load money_tags %}
+{% block title %}Trabajadores{% endblock %}
+{% block content %}
+<section class="workspace-heading">
+  <div><p class="editorial-label">Mano de obra</p><h1>Trabajadores</h1><p>Datos mínimos para el tareo: documento, nombre, cargo, ingreso y jornal.</p></div>
+</section>
+{% include "suno/labor/_registry_nav.html" with sub="workers" %}
+<section class="pj-panel">
+  <form method="get" class="pj-filters" aria-label="Filtros de trabajadores">
+    <label>Nombre o documento <input name="texto" value="{{ filters.text }}" maxlength="100"></label>
+    <label>Cargo <select name="cargo"><option value="">Todos</option>{% for p in positions %}<option value="{{ p }}" {% if p == filters.position %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></label>
+    <label>Estado <select name="estado">{% for key, label in states.items %}<option value="{{ key }}" {% if key == filters.state %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Filtrar</button>
+  </form>
+  {% if can_manage_registry %}<p class="ctr-actions"><a class="button" href="{% url 'labor_registry:new' %}">Nuevo trabajador</a> <a class="text-link" href="{% url 'labor_registry:import' %}">Importar Excel</a></p>{% endif %}
+</section>
+<section class="pj-panel">
+  {% if page.object_list %}
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <caption class="sr-only">Trabajadores de la organización</caption>
+    <thead><tr><th>Nombre</th><th>Documento</th><th>Cargo</th><th>Ingreso</th><th>Estado</th></tr></thead>
+    <tbody>
+    {% for w in page.object_list %}
+      <tr>
+        <td class="pj-name"><a href="{% url 'labor_registry:worker' w.pk %}">{{ w.full_name }}</a></td>
+        <td>{{ w.masked_document }}</td>
+        <td class="pj-wrap">{{ w.position|default:"—" }}</td>
+        <td>{{ w.hired_on|date:"d/m/Y" }}</td>
+        <td>{% if w.is_active %}Activo{% else %}<span class="pj-muted">Retirado el {{ w.retired_on|date:"d/m/Y" }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if page.has_other_pages %}<p class="pj-pages">{% if page.has_previous %}<a href="?{{ query }}&amp;pagina={{ page.previous_page_number }}">Anterior</a>{% endif %} Página {{ page.number }} de {{ page.paginator.num_pages }} {% if page.has_next %}<a href="?{{ query }}&amp;pagina={{ page.next_page_number }}">Siguiente</a>{% endif %}</p>{% endif %}
+  {% else %}<p class="pj-empty">No hay trabajadores con ese filtro.</p>{% endif %}
+</section>
+{% endblock %}

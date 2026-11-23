@@ -151,6 +151,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # test_limits.py` comprueba que ambos números siguen coincidiendo.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
+# La cuadrícula del tareo (costos, pieza 6d, decisión 11 del plan) envía una semana completa:
+# 60 trabajadores × 3 destinos × 7 días son 1.260 celdas más 720 campos de fila. El valor de
+# Django (1.000) la rechazaría con un 400; 4.000 deja margen y sigue acotando la petición.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 4000
+
 # --- Contraseñas -----------------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {

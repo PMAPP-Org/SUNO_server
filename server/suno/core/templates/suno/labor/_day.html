@@ -1,0 +1,26 @@
+<div class="ta-day">
+  <form method="get" class="pj-filters" aria-label="Día">
+    <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
+    <label>Día <select name="dia">{% for d in grid.week.days %}<option value="{{ d|date:'Y-m-d' }}" {% if d == day %}selected{% endif %}>{{ d|date:"l j/m" }}</option>{% endfor %}</select></label>
+    <button class="button" type="submit">Ver</button>
+  </form>
+  <form method="post" action="{{ urls.save }}" aria-label="Tareo del día"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    {% csrf_token %}
+    <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
+    <input type="hidden" name="dia" value="{{ day|date:'Y-m-d' }}">
+    <input type="hidden" name="filas" value="{{ day_inputs|length }}">
+    <input type="hidden" name="version" value="{{ version }}">
+    <ul class="ta-day-list">
+    {% for item in day_inputs %}
+      <li>
+        <strong>{{ item.row.worker }}</strong>
+        <input type="hidden" name="f{{ item.index }}-trabajador" value="{{ item.row.worker_id }}">
+        <label>Destino <input name="f{{ item.index }}-destino" value="{{ item.row.destination }}" list="ta-destinations" placeholder="Indirecto" autocomplete="off"{% if not editable %} disabled{% elif item.row.lost %} readonly{% endif %}></label>{% if item.row.lost %}<input type="hidden" name="f{{ item.index }}-perdido" value="1"><small class="pj-late">Ya no está en el presupuesto vigente</small>{% endif %}
+        <label>Tarea <input name="f{{ item.index }}-tarea" value="{{ item.row.task }}" list="ta-tasks" autocomplete="off"{% if not editable %} disabled{% endif %}></label>
+        <label>Fracción <input name="{{ item.name }}" value="{{ item.value }}" inputmode="decimal" maxlength="6"{% if not editable %} disabled{% endif %}></label>
+      </li>
+    {% endfor %}
+    </ul>
+    {% if editable %}<button class="button" type="submit" name="accion" value="guardar-dia">Guardar el día</button>{% endif %}
+  </form>
+</div>

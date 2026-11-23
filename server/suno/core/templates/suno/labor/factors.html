@@ -1,0 +1,23 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Factor prestacional{% endblock %}
+{% block content %}
+<section class="workspace-heading"><div><p class="editorial-label">Mano de obra</p><h1>Factor prestacional</h1><p>Prestaciones sociales, seguridad social, parafiscales y dotación sobre el jornal básico. Rige desde su fecha; un cambio es una fila nueva.</p></div></section>
+{% include "suno/labor/_registry_nav.html" with sub="factors" %}
+<section class="pj-panel">
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Desde</th><th class="num">Factor</th><th>Composición</th><th>Uso</th>{% if can_manage_registry %}<th>Corregir</th>{% endif %}</tr></thead>
+    <tbody>{% for f, used in rows %}<tr>
+      <td>{{ f.valid_from|date:"d/m/Y" }}</td><td class="num">{{ f.factor|floatformat:"4g" }}</td><td class="pj-wrap">{{ f.note|default:"—" }}</td>
+      <td>{% if used %}Usado en planillas aprobadas{% else %}<span class="pj-muted">Sin usar</span>{% endif %}</td>
+      {% if can_manage_registry %}<td>{% if not used %}<form method="post" action="{% url 'labor_registry:factor_update' f.pk %}" class="cst-reject">{% csrf_token %}<input type="hidden" name="valid_from" value="{{ f.valid_from|date:'Y-m-d' }}"><input name="factor" inputmode="decimal" value="{{ f.factor }}" size="7" aria-label="Factor corregido"><input name="note" value="{{ f.note }}" maxlength="500" aria-label="Composición"><button class="text-link" type="submit">Corregir</button><button class="text-link" type="submit" name="accion" value="borrar">Borrar</button></form>{% endif %}</td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-warning">No hay factor prestacional: ninguna planilla se puede aprobar sin él.</p>{% endif %}
+  {% if can_manage_registry %}
+  <form method="post" class="pj-filters ta-form" aria-label="Nuevo factor">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Registrar factor</button></form>
+  {% endif %}
+</section>
+{% endblock %}

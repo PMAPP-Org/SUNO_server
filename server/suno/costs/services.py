@@ -49,6 +49,7 @@ from suno.core.policies import (
     can_create_costs,
     can_delete_cost,
     can_read_costs,
+    can_read_labor,
     can_reject_costs,
     can_reverse_costs,
     can_update_cost,
@@ -74,6 +75,9 @@ FROM_CERTIFICATE = (
 FROM_MATERIALS = (
     "Este costo viene de una compra, un corte o un ajuste de materiales: se anula el documento "
     "desde la pestaña Materiales."
+)
+FROM_TIMESHEET = (
+    "Este costo viene de una planilla de tareo: se anula la planilla desde la pestaña Tareo."
 )
 
 
@@ -461,9 +465,13 @@ def reverse(ctx: RequestContext, project: Project, entry_id: UUID, reason: str) 
         if original.status != CostStatus.APPROVED or original.reverses_id is not None:
             raise CostRejected(["Solo se reversa un costo aprobado que no sea un reverso."])
         if original.from_document:
-            raise CostRejected(
-                [FROM_CERTIFICATE if original.certificate_id is not None else FROM_MATERIALS]
-            )
+            if original.certificate_id is not None:
+                message = FROM_CERTIFICATE
+            elif original.timesheet_id is not None:
+                message = FROM_TIMESHEET
+            else:
+                message = FROM_MATERIALS
+            raise CostRejected([message])
         if scoped_qs(ctx, CostEntry).filter(reverses=original).exists():
             raise CostRejected(["Este costo ya se reversó."])
         reversal = scoped_qs(ctx, CostEntry).create(
@@ -500,10 +508,19 @@ def reverse(ctx: RequestContext, project: Project, entry_id: UUID, reason: str) 
     return reversal
 
 
+def can_see_support(ctx: RequestContext, project: Project, entry: CostEntry) -> bool:
+    """El soporte de un costo de tareo es la planilla firmada, con nombres y documentos: solo
+    para quien lee Mano de obra en el proyecto (decisión 17 de la 6d, ADR-0040)."""
+    return entry.timesheet_id is None or can_read_labor(ctx, project)
+
+
 def support_url(ctx: RequestContext, project: Project, entry: CostEntry) -> str:
     """URL prefirmada y corta del soporte, **después** de comprobar que se leen los costos del
-    proyecto (el `Blob` no tiene organización: la autorización es la del movimiento)."""
+    proyecto (el `Blob` no tiene organización: la autorización es la del movimiento) y, si es
+    de tareo, Mano de obra (404 si no)."""
     if not can_read_costs(ctx, project) or entry.project_id != project.pk:
+        raise Http404
+    if not can_see_support(ctx, project, entry):
         raise Http404
     blob = blob_registry().filter(pk=entry.attachment_id).first() if entry.attachment_id else None
     if blob is None:

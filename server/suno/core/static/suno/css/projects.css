@@ -265,3 +265,30 @@ button.text-link:hover { color: var(--suno-red); }
 @media (max-width: 640px) {
   .mat-table td.pj-name { min-width: 160px; max-width: 200px; }
 }
+
+/* Tareo (costos, pieza 6d) */
+.ta-nav { margin: 0 0 16px; }
+.ta-form > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; max-width: 100%; }
+.ta-form select { max-width: 100%; }
+.ta-table td.pj-name { min-width: 200px; max-width: 320px; }
+.ta-grid th.pj-name { min-width: 160px; max-width: 220px; white-space: normal; text-align: left; font-weight: 600; overflow-wrap: anywhere; position: sticky; left: 0; background: var(--suno-white); z-index: 1; }
+.ta-grid input { min-height: var(--suno-control-height); padding: 4px 6px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); font: inherit; }
+.ta-grid .ta-destination { min-width: 150px; width: 100%; }
+.ta-grid .ta-task { width: 64px; }
+.ta-grid .ta-cell { width: 56px; text-align: right; }
+.ta-grid .ta-repeat { font-size: 12px; }
+.ta-day { display: none; }
+.ta-day-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 12px; }
+.ta-day-list li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--suno-line); border-radius: var(--suno-radius-sm); }
+.ta-day-list strong { overflow-wrap: anywhere; }
+.ta-day-list input { width: 100%; min-width: 0; min-height: var(--suno-control-height); padding: 6px 8px; border: 1px solid var(--suno-line-strong); border-radius: var(--suno-radius-sm); font: inherit; }
+.ta-totals .pj-scroll + .pj-scroll { margin-top: 16px; }
+.bg-label.ta-draft { background: var(--suno-line-strong); color: var(--suno-ink); }
+.bg-label.ta-approved { background: var(--suno-green); }
+.bg-label.ta-rejected, .bg-label.ta-reversed { background: var(--suno-red); }
+.bg-label.ta-pending { background: var(--suno-amber); }
+@media (max-width: 700px) {
+  .ta-week { display: none; }
+  .ta-day { display: block; }
+  .ta-table td.pj-name { min-width: 160px; max-width: 200px; }
+}

@@ -19,6 +19,7 @@
 | T-7 | Intentos fallidos de login (**usuario e IP en claro**) | Quien intenta entrar, aunque el usuario no exista | Defensa contra fuerza bruta | PostgreSQL (django-axes) | 90 días ([`retencion.md`](retencion.md)) | Ninguno | Purga automática |
 | T-8 | Logs del proxy (IP, ruta, hora) | Cualquier cliente | Operación y seguridad | stdout de Caddy en el VPS | Rotación de Docker: 5 archivos de 10 MB (`infra/provision/provision.sh`) | Ninguno | Sin cuerpos de petición ni cabeceras de autorización |
 | T-9 | **Autorización del titular**: versión del aviso, finalidades aceptadas, dispositivo, fecha | Agente | Prueba de la autorización (art. 9) | PostgreSQL (`privacy_consent`) | Mientras exista la cuenta (es la prueba de que el tratamiento fue autorizado) | Ninguno | Solo lectura en el Admin; se escribe solo desde `POST /v1/consents`; incluida en la consulta del titular |
+| T-10 | **Trabajadores de obra**: tipo y número de documento, nombre, cargo, fechas de ingreso y retiro, jornal básico con su historial, días tareados y su costo; en la conciliación, el total pagado por la nómina | Trabajadores de la organización cliente (no son usuarios de SUNO) | Tareo y costo estimado de la mano de obra de cada obra; conciliación con la nómina (pieza 6d) | PostgreSQL (`worker`, `worker_wage`, `timesheet_line`, `payroll_import_line`) → backups | El tareo aprobado se conserva según la ley laboral (ver [`retencion.md`](retencion.md)); un trabajador sin tareo ni nómina importada se puede borrar; si no, se retira | Ninguno; Cloudflare R2 para los backups (**transferencia internacional**) | Datos mínimos (sin dirección, teléfono, correo, cuenta, EPS ni fondo); sección **Mano de obra** separada de Costos (ADR-0040); documento enmascarado (`***4567`) en listas, planillas, PDF y Excel; auditoría de altas, cambios de jornal, importaciones, exportes y consultas de la conciliación (sin nombres en la metadata); del Excel de nómina solo se guardan nombre, tamaño y SHA-256 |
 
 ## Pendientes para cumplir
 
@@ -29,6 +30,7 @@
 5. **Fotos de terceros**: criterio de captura (evitar rostros y documentos innecesarios) en la guía de campo del cliente.
 6. **Registro Nacional de Bases de Datos** ante la SIC, si el responsable está obligado.
 7. ~~**Rotación de logs de Docker** (T-8)~~: hecho en `infra/provision/provision.sh` (`max-size` 10 MB, `max-file` 5).
+8. **Trabajadores de obra (T-10)**: la consulta y la supresión del titular que no es usuario no tienen flujo propio en el back-office; hoy se atienden con el registro (ficha y borrado de quien no tiene tareo). Ver el issue `known-issue` correspondiente.
 
 ## Derechos del titular en el back-office (Paso 24)
 

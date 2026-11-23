@@ -1,6 +1,6 @@
 {% if can_decide %}
 <div class="cst-decide">
-  <form method="post" action="{{ approve }}">{% csrf_token %}<input type="hidden" name="volver" value="{{ back }}"><button class="button" type="submit"{% if needs %} disabled title="{{ needs }}"{% endif %}>Aprobar</button></form>
+  <form method="post" action="{{ approve }}">{% csrf_token %}<input type="hidden" name="volver" value="{{ back }}">{% if decide_version %}<input type="hidden" name="version" value="{{ decide_version }}">{% endif %}<button class="button" type="submit"{% if needs %} disabled title="{{ needs }}"{% endif %}>Aprobar</button>{% if decide_code %} <span class="pj-muted">Versión <strong>{{ decide_code }}</strong>: compárala con la del papel firmado</span>{% endif %}</form>
   <form method="post" action="{{ reject }}" class="cst-reject">{% csrf_token %}<input type="hidden" name="volver" value="{{ back }}"><input aria-label="Motivo del rechazo" name="motivo" maxlength="500" required placeholder="Motivo del rechazo"><button class="text-link" type="submit">Rechazar</button></form>
 </div>
 {% endif %}

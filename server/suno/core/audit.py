@@ -216,6 +216,27 @@ class AuditAction:
     CONSUMPTION_CUT_VOIDED = "consumption_cut.voided"
     CONSUMPTION_CUT_EXPORTED = "consumption_cut.exported"
     MATERIALS_EXPORTED = "materials.exported"
+    # Mano de obra (costos, pieza 6d). Metadata con ids y documento enmascarado, nunca nombres
+    # (decisión 25 del plan); `metadata.project` en todos los del proyecto.
+    WORKER_CREATED = "worker.created"
+    WORKER_UPDATED = "worker.updated"
+    WORKER_RETIRED = "worker.retired"
+    WORKER_DELETED = "worker.deleted"
+    WORKER_WAGE_CHANGED = "worker.wage_changed"
+    WORKERS_IMPORTED = "workers.imported"
+    BENEFIT_FACTOR_CHANGED = "benefit_factor.changed"
+    LABOR_ASSIGNMENT_CHANGED = "labor_assignment.changed"
+    TIMESHEET_CREATED = "timesheet.created"
+    TIMESHEET_UPDATED = "timesheet.updated"
+    TIMESHEET_DELETED = "timesheet.deleted"
+    TIMESHEET_APPROVED = "timesheet.approved"
+    TIMESHEET_REJECTED = "timesheet.rejected"
+    TIMESHEET_REVERSED = "timesheet.reversed"
+    TIMESHEET_IMPORTED = "timesheet.imported"
+    TIMESHEET_EXPORTED = "timesheet.exported"
+    PAYROLL_IMPORTED = "payroll.imported"
+    LABOR_RECONCILIATION_VIEWED = "labor_reconciliation.viewed"
+    LABOR_EXPORTED = "labor.exported"
 
 
 def hash_ip(ip: str | None) -> str | None:

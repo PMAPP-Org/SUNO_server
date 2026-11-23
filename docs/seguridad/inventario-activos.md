@@ -25,6 +25,7 @@
 | Historial del monorepo anterior (evidencia de cambios y revisiones hasta v0.2.0) | Público, solo lectura | GitHub `PMAPP-Org/Seguimiento_Proyectos` (archivado) | Archivado: sin escrituras | Victor-Pulido |
 | Imágenes y artefactos de release | Interno | GHCR y GitHub Releases | Atestaciones SLSA firmadas, SBOM | Por designar |
 | Métricas y alertas | Interno | Prometheus y Grafana en el VPS | Solo `127.0.0.1` (túnel SSH), admin con contraseña | Por designar |
+| Registro de trabajadores y tareo (pieza 6d) | **Confidencial** (datos personales y salariales de terceros) | PostgreSQL (`worker`, `worker_wage`, `benefit_factor`, `project_worker`, `timesheet`, `timesheet_line`, `payroll_import`, `payroll_import_line`) y backups; planillas firmadas en el R2 de adjuntos | Sección Mano de obra (ADR-0040); aislamiento por organización; documento enmascarado fuera de la ficha; auditoría de exportes y consultas | Producto (Mano de obra) |
 
 ## 3. Secretos y llaves
 

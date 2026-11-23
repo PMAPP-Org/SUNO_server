@@ -35,6 +35,7 @@ from suno.core.policies import (
     can_delete_cost,
     can_export_costs,
     can_import_costs,
+    can_read_labor,
     can_reverse_costs,
     can_update_cost,
 )
@@ -114,7 +115,12 @@ def ledger_list(request: HttpRequest, project_id: UUID) -> HttpResponse:
     catalog = load_catalog(ctx, project)
     filters = LedgerFilters.from_query(request.GET)
     page = ledger_page(
-        ctx, project, filters, page=_page(request.GET.get("pagina")), catalog=catalog
+        ctx,
+        project,
+        filters,
+        page=_page(request.GET.get("pagina")),
+        catalog=catalog,
+        labor_links=can_read_labor(ctx, project),
     )
     return _render(
         request,
@@ -272,7 +278,8 @@ def detail(request: HttpRequest, project_id: UUID, entry_id: UUID) -> HttpRespon
             "can_edit": _editable(ctx, entry),
             "can_delete": _editable(ctx, entry, delete=True),
             "contract_warning": _contract_warning(ctx, project, entry),
-            "source": entry_source(entry),
+            "source": entry_source(entry, labor_links=can_read_labor(ctx, project)),
+            "can_see_support": services.can_see_support(ctx, project, entry),
         },
     )
 

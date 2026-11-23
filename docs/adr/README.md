@@ -43,3 +43,5 @@ Proceso y formato: [ADR-0000](0000-registro-de-decisiones.md). Los ADR 0001–00
 | [0036](0036-importaciones-en-dos-pasos.md) | Importaciones en dos pasos con vista previa | Aceptada |
 | [0037](0037-tareas-de-campo-en-endpoint-propio.md) | Tareas de campo por endpoint propio | Aceptada |
 | [0038](0038-registro-validado-inmutable-desde-el-push.md) | Un registro validado no cambia por el push | Aceptada |
+| [0039](0039-tareo-nominal-costo-estimado-nomina-solo-se-concilia.md) | Tareo nominal con costo estimado; la nómina solo se concilia | Aceptada |
+| [0040](0040-seccion-mano-de-obra-separada-de-costos.md) | Sección "Mano de obra" separada de Costos | Aceptada |

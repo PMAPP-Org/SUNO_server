@@ -1,0 +1,28 @@
+{% extends "suno/projects/base.html" %}
+{% block title %}Asignaciones · {{ project.name }}{% endblock %}
+{% block content %}
+{% include "suno/projects/_header.html" with tab="labor" %}
+{% include "suno/labor/_nav.html" with sub="assignments" %}
+{% if can_create_labor %}
+<section class="pj-panel">
+  <h2>Asignar un trabajador</h2>
+  <form method="post" class="pj-filters ta-form" aria-label="Nueva asignación">{% csrf_token %}{{ form.as_div }}<button class="button" type="submit">Asignar</button></form>
+  {% if not form.fields.worker.choices|length > 1 %}<p class="pj-muted">No hay trabajadores activos en el registro.</p>{% endif %}
+</section>
+{% endif %}
+<section class="pj-panel">
+  <h2>Quién trabaja en el proyecto</h2>
+  {% if rows %}
+  <div class="pj-scroll">
+  <table class="pj-table ta-table">
+    <thead><tr><th>Trabajador</th><th>Cargo</th><th>Desde</th><th>Hasta</th><th>Cambiar</th></tr></thead>
+    <tbody>{% for a, editable in rows %}<tr>
+      <td class="pj-name">{{ a.worker.label }}</td><td class="pj-wrap">{{ a.worker.position|default:"—" }}</td>
+      <td>{{ a.starts_on|date:"d/m/Y" }}</td><td>{% if a.ends_on %}{{ a.ends_on|date:"d/m/Y" }}{% else %}sin fin{% endif %}</td>
+      <td>{% if editable %}<form method="post" action="{% url 'labor:assignment' project.pk a.pk %}" class="cst-reject">{% csrf_token %}<input type="date" name="starts_on" value="{{ a.starts_on|date:'Y-m-d' }}" aria-label="Desde"><input type="date" name="ends_on" value="{{ a.ends_on|date:'Y-m-d' }}" aria-label="Hasta"><button class="text-link" type="submit">Guardar</button><button class="text-link" type="submit" name="accion" value="borrar">Borrar</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="pj-empty">Nadie asignado todavía.</p>{% endif %}
+</section>
+{% endblock %}

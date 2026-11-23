@@ -1,0 +1,30 @@
+{% load money_tags %}
+<form method="post" action="{{ urls.save }}" class="ta-week" aria-label="Cuadrícula de la semana"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  {% csrf_token %}
+  <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
+  <input type="hidden" name="filas" value="{{ inputs|length }}">
+  <input type="hidden" name="version" value="{{ version }}">
+  <div class="pj-scroll">
+  <table class="pj-table ta-grid" data-ta-grid>
+    <thead><tr>
+      <th scope="col">Trabajador</th><th scope="col">Destino</th><th scope="col">Tarea</th>
+      {% for day in grid.week.days %}<th scope="col" class="num">{{ day|date:"D j" }}{% if editable and not forloop.first %}<br><button class="text-link ta-repeat" type="submit" name="accion" value="repetir-{{ day|date:'Y-m-d' }}" title="Copiar aquí el día anterior">Repetir</button>{% endif %}</th>{% endfor %}
+      <th scope="col" class="num">Jornales</th>{% if editable %}<th scope="col"><span class="sr-only">Partir</span></th>{% endif %}
+    </tr></thead>
+    <tbody>
+    {% for item in inputs %}
+      <tr data-ta-row>
+        <th scope="row" class="pj-name">{{ item.row.worker }}<input type="hidden" name="f{{ item.index }}-trabajador" value="{{ item.row.worker_id }}"></th>
+        <td><input class="ta-destination" name="f{{ item.index }}-destino" value="{{ item.row.destination }}" list="ta-destinations" placeholder="Indirecto" autocomplete="off" aria-label="Destino de {{ item.row.worker }}"{% if not editable %} disabled{% elif item.row.lost %} readonly{% endif %}>{% if item.row.lost %}<input type="hidden" name="f{{ item.index }}-perdido" value="1"><br><small class="pj-late">Ya no está en el presupuesto vigente</small>{% endif %}</td>
+        <td><input class="ta-task" name="f{{ item.index }}-tarea" value="{{ item.row.task }}" list="ta-tasks" autocomplete="off" aria-label="Tarea de {{ item.row.worker }}"{% if not editable %} disabled{% endif %}></td>
+        {% for name, value in item.cells %}<td class="num"><input class="ta-cell" data-ta-cell="{{ forloop.counter0 }}" name="{{ name }}" value="{{ value }}" inputmode="decimal" maxlength="6" aria-label="Fracción de {{ item.row.worker }}, día {{ forloop.counter }}"{% if not editable %} disabled{% endif %}></td>{% endfor %}
+        <td class="num" data-ta-row-total>{{ item.row.days|qty }}</td>
+        {% if editable %}<td><button class="text-link" type="submit" name="accion" value="partir-{{ item.index }}" title="Otra fila de esta persona para repartir el día">Partir</button></td>{% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th scope="row" colspan="3">Jornales del día</th>{% for total in grid.day_totals %}<td class="num" data-ta-day-total="{{ forloop.counter0 }}">{{ total|qty }}</td>{% endfor %}<td></td>{% if editable %}<td></td>{% endif %}</tr></tfoot>
+  </table>
+  </div>
+  {% if editable %}<p class="ctr-actions"><button class="button" type="submit" name="accion" value="guardar">Guardar la semana</button> <button class="text-link" type="submit" name="accion" value="recalcular">Recalcular el resumen</button></p>{% endif %}
+</form>

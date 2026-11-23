@@ -1,0 +1,5 @@
+<nav class="pj-tabs ta-nav" aria-label="Tareo">
+  <a href="{% url 'labor:timesheets' project.pk %}" {% if sub == "timesheets" %}aria-current="page"{% endif %}>Planillas{% if labor_pending %} <span class="bg-label ta-pending">{{ labor_pending }} por aprobar</span>{% endif %}</a>
+  <a href="{% url 'labor:assignments' project.pk %}" {% if sub == "assignments" %}aria-current="page"{% endif %}>Asignaciones</a>
+  {% if navigation.LABOR_REGISTRY %}<a href="{% url 'labor_registry:list' %}">Trabajadores</a>{% endif %}
+</nav>

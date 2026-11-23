@@ -35,6 +35,7 @@ class Section(models.TextChoices):
     PROJECTS = "PROJECTS", "Proyectos"
     BUDGETS = "BUDGETS", "Presupuestos"
     COSTS = "COSTS", "Costos"
+    LABOR = "LABOR", "Mano de obra"
     FORMS = "FORMS", "Formularios"
     EQUIPMENT = "EQUIPMENT", "Equipos"
     GIS = "GIS", "Mapas y capas GIS"
@@ -186,6 +187,38 @@ CAPABILITY_MATRIX: dict[Any, dict[Any, frozenset[Capability]]] = {
             Capability.EXPORT,
         ),
         SectionRole.VIEWER: _caps(Capability.READ, Capability.EXPORT),
+    },
+    # Mano de obra por jornal (costos, pieza 6d, spec 3.5): tareo nominal, separado de Costos
+    # porque lleva nombres y salarios. Consulta no exporta (decisión 2 del plan). "Solo
+    # propios" del Colaborador lo decide `policies.can_update_labor`/`can_delete_labor`.
+    Section.LABOR: {
+        SectionRole.MANAGER: _caps(
+            Capability.CREATE,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.APPROVE,
+            Capability.REJECT,
+            Capability.REVERSE,
+            Capability.EXPORT,
+        ),
+        SectionRole.REVIEWER: _caps(
+            Capability.CREATE,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.APPROVE,
+            Capability.REJECT,
+            Capability.EXPORT,
+        ),
+        SectionRole.CONTRIBUTOR: _caps(
+            Capability.CREATE,
+            Capability.READ,
+            Capability.UPDATE,
+            Capability.DELETE,
+            Capability.EXPORT,
+        ),
+        SectionRole.VIEWER: _caps(Capability.READ),
     },
     Section.FORMS: {
         SectionRole.MANAGER: _caps(

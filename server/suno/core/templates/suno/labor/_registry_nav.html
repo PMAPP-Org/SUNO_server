@@ -1,0 +1,5 @@
+<nav class="pj-tabs ta-nav" aria-label="Mano de obra">
+  <a href="{% url 'labor_registry:list' %}" {% if sub == "workers" %}aria-current="page"{% endif %}>Trabajadores</a>
+  <a href="{% url 'labor_registry:factors' %}" {% if sub == "factors" %}aria-current="page"{% endif %}>Factor prestacional</a>
+  <a href="{% url 'labor_registry:payrolls' %}" {% if sub == "payroll" %}aria-current="page"{% endif %}>Conciliación de nómina</a>
+</nav>
