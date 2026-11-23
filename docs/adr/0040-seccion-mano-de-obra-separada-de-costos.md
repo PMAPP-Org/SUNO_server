@@ -13,6 +13,7 @@ El tareo de la pieza 6d lleva nombres, documentos y salarios. La sección Costos
 - La migración `0031` da la sección a la administración existente (`OWNER`, `ADMIN`) como Gestora con alcance de organización, igual que la `0028` con Costos; `LEGACY_GRANTS` hace lo mismo con las membresías nuevas. A los demás se la da el administrador de accesos.
 - El **registro** (trabajadores, jornales, factor y conciliación) pide la sección con alcance de **toda la organización**: leer para verlo, `create` y `update` para gestionarlo. Un alcance por proyectos solo abre la pestaña Tareo de esos proyectos, con el documento enmascarado.
 - En Costos y Control la mano de obra aparece como costos por destino ("Tareo TA-001"), **sin nombres ni salarios**; el enlace a la planilla solo se muestra a quien lee Mano de obra en el proyecto.
+- El costo de tareo conserva como soporte la planilla firmada (lleva nombres y documentos), pero **solo la descarga quien lee Mano de obra en el proyecto**: para los demás `/costos/<movimiento>/soporte/` responde 404 y el detalle del movimiento no muestra el enlace (el exporte del libro no enlaza soportes). Revisado con el usuario el 2026-11-19 (hallazgo C1 de la revisión).
 
 ## Consecuencias
 

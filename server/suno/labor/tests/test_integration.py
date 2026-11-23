@@ -9,6 +9,7 @@ from datetime import date
 from decimal import Decimal
 from unittest import mock
 
+from django.http import Http404
 from django.test import TestCase
 
 from suno.control.loader import load_control_input
@@ -19,6 +20,7 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from suno.costs import export as cost_export
 from suno.costs import services as cost_services
 from suno.costs.services import CostRejected
 from suno.costs.tests.factories import entry, pdf_upload
@@ -77,6 +79,26 @@ class LedgerAndControlTests(TestCase):
         with self.assertRaises(CostRejected) as refused:
             cost_services.reverse(self.lw.ctx(), self.lw.project, cost.pk, "No")
         self.assertIn("planilla de tareo", refused.exception.errors[0])
+
+    def test_the_signed_timesheet_is_only_for_labor_readers(self) -> None:
+        """C1: el costo de tareo hereda la planilla firmada; quien solo tiene Costos no la baja
+        ni ve el enlace (en el detalle ni en el exporte del libro)."""
+        cost = CostEntry.objects.filter(timesheet=self.sheet).first()
+        assert cost is not None and cost.attachment_id is not None  # se mantiene el adjunto
+        support = f"{self.costs}{cost.pk}/soporte/"
+        self.client.force_login(self.lw.accountant)
+        self.assertEqual(self.client.get(support).status_code, 404)
+        detail = self.client.get(f"{self.costs}{cost.pk}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertNotContains(detail, "/soporte/")
+        self.assertNotContains(detail, cost.attachment_name)
+        with self.assertRaises(Http404):
+            cost_services.support_url(self.lw.ctx(self.lw.accountant), self.lw.project, cost)
+        self.assertNotIn("soporte", cost_export.HEADER)  # el exporte del libro no lo enlaza
+        # Quien lee Mano de obra sí.
+        self.client.force_login(self.lw.world.admin)
+        self.assertContains(self.client.get(f"{self.costs}{cost.pk}/"), "/soporte/")
+        self.assertEqual(self.client.get(support).status_code, 302)
 
     def test_labor_is_actual_cost_in_control(self) -> None:
         data = load_control_input(self.lw.ctx(), self.lw.project, cut=date(2026, 3, 31),

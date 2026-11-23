@@ -279,6 +279,7 @@ def detail(request: HttpRequest, project_id: UUID, entry_id: UUID) -> HttpRespon
             "can_delete": _editable(ctx, entry, delete=True),
             "contract_warning": _contract_warning(ctx, project, entry),
             "source": entry_source(entry, labor_links=can_read_labor(ctx, project)),
+            "can_see_support": services.can_see_support(ctx, project, entry),
         },
     )
 

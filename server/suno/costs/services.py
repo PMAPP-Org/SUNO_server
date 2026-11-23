@@ -49,6 +49,7 @@ from suno.core.policies import (
     can_create_costs,
     can_delete_cost,
     can_read_costs,
+    can_read_labor,
     can_reject_costs,
     can_reverse_costs,
     can_update_cost,
@@ -507,10 +508,19 @@ def reverse(ctx: RequestContext, project: Project, entry_id: UUID, reason: str) 
     return reversal
 
 
+def can_see_support(ctx: RequestContext, project: Project, entry: CostEntry) -> bool:
+    """El soporte de un costo de tareo es la planilla firmada, con nombres y documentos: solo
+    para quien lee Mano de obra en el proyecto (decisión 17 de la 6d, ADR-0040)."""
+    return entry.timesheet_id is None or can_read_labor(ctx, project)
+
+
 def support_url(ctx: RequestContext, project: Project, entry: CostEntry) -> str:
     """URL prefirmada y corta del soporte, **después** de comprobar que se leen los costos del
-    proyecto (el `Blob` no tiene organización: la autorización es la del movimiento)."""
+    proyecto (el `Blob` no tiene organización: la autorización es la del movimiento) y, si es
+    de tareo, Mano de obra (404 si no)."""
     if not can_read_costs(ctx, project) or entry.project_id != project.pk:
+        raise Http404
+    if not can_see_support(ctx, project, entry):
         raise Http404
     blob = blob_registry().filter(pk=entry.attachment_id).first() if entry.attachment_id else None
     if blob is None:

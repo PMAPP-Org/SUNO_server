@@ -19,7 +19,7 @@
     <dt>Asignación</dt><dd>{{ assignment }}</dd>
     <dt>Tercero</dt><dd>{{ entry.third_party|default:"—" }}</dd>
     <dt>Documento</dt><dd>{{ entry.get_document_type_display }} {{ entry.document_number }}</dd>
-    <dt>Soporte</dt><dd>{% if entry.attachment_id %}<a href="{% url 'costs:support' project.pk entry.pk %}" target="_blank" rel="noopener">{{ entry.attachment_name|default:"Ver soporte" }}</a>{% else %}Sin soporte{% endif %}</dd>
+    <dt>Soporte</dt><dd>{% if entry.attachment_id and not can_see_support %}Planilla firmada (la ve quien lee Mano de obra){% elif entry.attachment_id %}<a href="{% url 'costs:support' project.pk entry.pk %}" target="_blank" rel="noopener">{{ entry.attachment_name|default:"Ver soporte" }}</a>{% else %}Sin soporte{% endif %}</dd>
     <dt>Registró</dt><dd>{{ entry.created_by }} · {{ entry.created_at|date:"d/m/Y H:i" }}</dd>
     {% if entry.decided_by %}<dt>{% if entry.status == "rejected" %}Rechazó{% else %}Aprobó{% endif %}</dt><dd>{{ entry.decided_by }} · {{ entry.decided_at|date:"d/m/Y H:i" }}</dd>{% endif %}
   </dl>

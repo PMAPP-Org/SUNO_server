@@ -302,7 +302,9 @@ Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la secci
 16. Tope diario y orden de bloqueo: proyecto, planilla, trabajadores en orden de `pk` y, al aprobar,
     las filas del factor. Cuentan borradores, rechazadas y aprobadas de toda la organización.
 17. Al aprobar, un `CostEntry` aprobado de Mano de obra por destino, con fecha del fin del periodo y
-    la planilla firmada como soporte; sin nombres en el libro.
+    la planilla firmada como soporte; sin nombres en el libro. **Revisado con el usuario el
+    2026-11-19:** ese soporte solo lo descarga quien lee Mano de obra en el proyecto (para los demás,
+    404 y sin enlace en el detalle ni en el exporte del libro; ADR-0040).
 18. Anular cualquier planilla aprobada, con motivo y reversos de hoy.
 19. ⚑ La bandeja "Por aprobar" de Costos no muestra planillas; la pestaña Tareo dice cuántas hay.
 20. Libro: filtro y etiqueta "Tareo"; el enlace a la planilla solo para quien lee Mano de obra; un
