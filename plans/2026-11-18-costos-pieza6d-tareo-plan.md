@@ -10317,7 +10317,7 @@ Ninguna reabre lo aprobado; precisan cómo se cumple. Las marcadas con ⚑ convi
 
 ## Ronda de correcciones de la revisión de código (2026-11-19 a 2026-11-23)
 
-PR #___. Detalle en `plans/suno-progreso.md` (pieza 6d, "Correcciones de la revisión de código"). Cada hallazgo con prueba de regresión primero.
+PR #108. Detalle en `plans/suno-progreso.md` (pieza 6d, "Correcciones de la revisión de código"). Cada hallazgo con prueba de regresión primero.
 
 | Hallazgo | Commit | Corrección |
 |---|---|---|
