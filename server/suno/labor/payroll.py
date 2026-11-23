@@ -8,7 +8,9 @@
   Marca a los pagados sin tareo y a los tareados sin pago; los documentos que no están en el
   registro van aparte. Por proyecto, lo pagado se prorratea por los jornales tareados en el
   proyecto sobre los de toda la organización (decisión 22).
-- Importar pide `can_manage_labor_registry`; ver, `can_read_labor_registry`. Cuatro consultas.
+- Importar pide `can_manage_labor_registry`; ver, `can_read_labor_registry`. Cuatro consultas
+  (cinco si hay líneas que al importar no estaban en el registro: se buscan otra vez por
+  documento, para reconocer a quien se registró después).
 """
 
 from __future__ import annotations
@@ -290,6 +292,23 @@ def _tareo(
     }
 
 
+def _registered_later(
+    ctx: RequestContext, documents: list[tuple[str, str]]
+) -> dict[tuple[str, str], UUID]:
+    """Las líneas que al importar quedaron fuera del registro se buscan otra vez por documento:
+    quien se registró después aparece en la conciliación. Una consulta (ninguna si no hay)."""
+    if not documents:
+        return {}
+    wanted = set(documents)
+    return {
+        (kind, number): pk
+        for pk, kind, number in scoped_qs(ctx, Worker)
+        .filter(document_number__in={number for _, number in wanted})
+        .values_list("pk", "document_type", "document_number")
+        if (kind, number) in wanted
+    }
+
+
 def reconcile(
     ctx: RequestContext, payroll: PayrollImport, project: Project | None = None
 ) -> Reconciliation:
@@ -302,7 +321,10 @@ def reconcile(
     )
     paid: dict[UUID, Decimal] = {}
     unknown: list[UnknownLine] = []
+    later = _registered_later(ctx, [(kind, number) for _, kind, number, worker, _ in lines
+                                    if worker is None])  # fmt: skip
     for row, kind, number, worker_id, total in lines:
+        worker_id = worker_id or later.get((kind, number))
         if worker_id is None:
             unknown.append(UnknownLine(row, f"{kind} {mask_document(number)}", total))
         else:

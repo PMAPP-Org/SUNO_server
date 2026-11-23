@@ -103,8 +103,20 @@ class PayrollTests(TestCase):
         self.assertEqual(
             rows["María Gómez"].estimated, D("76000.00")
         )  # sin la anulada ni el borrador
-        self.assertEqual([u.document for u in result.unknown], ["CE ***3456"])
+        self.assertEqual(
+            [u.document for u in result.unknown], ["CE ***56"]
+        )  # 6 caracteres: los últimos 2 (M4)
         self.assertEqual(result.paid, D("800000.00"))  # sin la línea desconocida
+
+    def test_someone_registered_after_the_import_is_recognized(self) -> None:
+        """M8: la línea "fuera del registro" se resuelve por documento al conciliar."""
+        imported = self.imported()
+        make_worker(self.lw.world.org, "123456", "Ana Ruiz", document_type="CE")
+        result = payroll.reconcile(self.ctx, imported)
+        rows = {row.label.split(" · ")[0]: row for row in result.rows}
+        self.assertEqual(rows["Ana Ruiz"].paid, D("50000.00"))
+        self.assertEqual(result.unknown, ())
+        self.assertEqual(result.paid, D("850000.00"))
 
     def test_reconciliation_of_a_project_prorates_what_was_paid(self) -> None:
         result = payroll.reconcile(self.ctx, self.imported(), project=self.lw.project)
