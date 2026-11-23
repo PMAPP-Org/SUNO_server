@@ -10314,3 +10314,30 @@ Ninguna reabre lo aprobado; precisan cómo se cumple. Las marcadas con ⚑ convi
 28. **Archivos**: `planilla-TA-001.pdf`, `planilla-TA-001.xlsx`, `conciliacion-<desde>-<hasta>.xlsx` y las plantillas `plantilla-trabajadores.xlsx`, `plantilla-tareo.xlsx` y `plantilla-nomina.xlsx`.
 29. ⚑ **Prueba de concurrencia del tope.** Como los borradores ya cuentan para el tope (spec 2.2: "planillas no anuladas"), dos aprobaciones no pueden sumar por encima entre sí: lo que aprueban ya contaba al guardarse. Las carreras que se prueban con hilos (`TransactionTestCase`) son **dos guardados en obras distintas** y **un guardado contra una aprobación**; la aprobación vuelve a validar el tope igual (para datos que lleguen por otra vía).
 30. **Fechas en las pruebas**: hoy = 2026-04-15; planilla de ejemplo del lunes 2 al domingo 8 de marzo de 2026; factor 1,5200; Pedro 80.000 y María 100.000 (un jornal de Pedro = 121.600,00).
+
+## Ronda de correcciones de la revisión de código (2026-11-19 a 2026-11-23)
+
+PR #___. Detalle en `plans/suno-progreso.md` (pieza 6d, "Correcciones de la revisión de código"). Cada hallazgo con prueba de regresión primero.
+
+| Hallazgo | Commit | Corrección |
+|---|---|---|
+| C1 | `80b6ea6` | Soporte del costo de tareo solo para quien lee Mano de obra (decisión 17, ADR-0040; usuario 2026-11-19) |
+| C2 | `f90aadd` | Importación respeta días congelados; aprobadas y anuladas muestran lo congelado |
+| C3 | `8131743`, `2628d58` | Versión y código impreso; la carga del soporte pide el código (decisión 14, ADR-0032; usuario 2026-11-19) |
+| I1 | `af76272` | Trabajador en una nómina: se retira, no se borra |
+| I2 | `d1b3741` | Más de 250 filas: rechazo sin borrar nada |
+| I3 | `8131743` | Concurrencia optimista con `Timesheet.version` (en la `0031`) |
+| I4 | `16f3a62` | Destino que ya no está: fila de solo lectura, nunca cambia en silencio |
+| I5 | `abfcff9` | Orden de bloqueos trabajador/asignaciones (ADR-0035) |
+| M1 | `657aa5e` | "otro proyecto" en el mensaje del tope (usuario 2026-11-19) |
+| M2 | `a0c0757` | Selector de asignación con todos los activos: decisión aceptada (ADR-0040; usuario 2026-11-19) |
+| M3 | `8d8f357` | Escaneo firmado = exportar (usuario 2026-11-19) |
+| M4 | `f2b25a3` | Enmascarado de documentos cortos y del número limpio |
+| M5 | `b50c4b6` | Políticas antes de bloquear |
+| M6 | `6d12496` | Factor duplicado concurrente → mensaje |
+| M7 | `986c595` | Auditoría por cambio de jornal importado |
+| M8 | `4ce4c24` | Nómina resuelta por documento al conciliar |
+| M9 | `949f381` | Nóminas de a 100 |
+| M10 | `b298126` | Convención de montos de los exportes |
+| Detalle | `ca6a98b` | "1 jornal" |
+| Cobertura | `5dd41c9`, `0052670` | `suno/labor` 89 % → 98 % |
