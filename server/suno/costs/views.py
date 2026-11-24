@@ -40,6 +40,7 @@ from suno.core.policies import (
     can_update_cost,
 )
 from suno.core.scoping import scoped_qs
+from suno.labor.queries import inbox_timesheet_count, inbox_timesheets
 from suno.materials.queries import inbox_count as material_inbox_count
 from suno.materials.queries import inbox_items as material_inbox_items
 from suno.projects.views import _ctx, _parse_uuid, _project_context, _render
@@ -75,6 +76,7 @@ def _context(ctx: RequestContext, project: Project) -> dict[str, Any]:
         .count()
         + inbox_count(ctx, project)
         + material_inbox_count(ctx, project)
+        + inbox_timesheet_count(ctx, project)
         if can_decide
         else 0
     )
@@ -349,6 +351,7 @@ def inbox(request: HttpRequest, project_id: UUID) -> HttpResponse:
             "rows": [(entry, assignment_text(entry, catalog)) for entry in entries],
             "contract_items": inbox_items(ctx, project),
             "material_items": material_inbox_items(ctx, project),
+            "timesheet_items": inbox_timesheets(ctx, project),
         },
     )
 

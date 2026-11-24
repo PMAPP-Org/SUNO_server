@@ -15,10 +15,13 @@ from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 
+from suno.authn.tests.factories import make_user
+from suno.core.access import SectionRole
 from suno.core.models import (
     AuditEvent,
     BenefitFactor,
     CostEntry,
+    Role,
     Timesheet,
     TimesheetLine,
     Worker,
@@ -29,12 +32,21 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
-from suno.costs.tests.factories import pdf_upload
+from suno.costs.tests.factories import grant_costs, pdf_upload
 from suno.labor import approval, timesheets
 from suno.labor.common import LaborRejected
 from suno.labor.pdf import timesheet_pdf
 
-from .factories import TODAY, WEEK, bare_line, bare_timesheet, labor_world, line_data, xlsx
+from .factories import (
+    TODAY,
+    WEEK,
+    bare_line,
+    bare_timesheet,
+    grant_labor,
+    labor_world,
+    line_data,
+    xlsx,
+)
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
@@ -225,3 +237,60 @@ class TimesheetListStaleTests(TestCase):
         stale, three = self.listed()
         self.assertEqual(len(stale), 3)
         self.assertEqual(three, one)
+
+
+@skip_without_db
+class TimesheetInboxTests(TestCase):
+    """#107: la bandeja «Por aprobar» de Costos lista las planillas firmadas que esperan
+    aprobación, solo a quien aprueba tareo en el proyecto, sin nombres ni jornales."""
+
+    def setUp(self) -> None:
+        patcher = mock.patch("django.utils.timezone.localdate", return_value=TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        storage = override_settings(STORAGE_BACKEND="localfs", STORAGE_LOCAL_ROOT=self._tmp.name)
+        storage.enable()
+        self.addCleanup(storage.disable)
+        self.lw = labor_world()
+        ctx = self.lw.ctx(self.lw.contributor)
+        self.sheet = timesheets.create_timesheet(ctx, self.lw.project, *WEEK)
+        timesheets.save_lines(ctx, self.lw.project, self.sheet.pk,
+                              [line_data(self.lw.pedro, WEEK[0])], [WEEK[0]])  # fmt: skip
+        timesheets.attach_signed(ctx, self.lw.project, self.sheet.pk, pdf_upload(), "f.pdf")
+        # Un borrador sin firmar todavía no está por aprobar.
+        timesheets.create_timesheet(ctx, self.lw.project, date(2026, 3, 9), date(2026, 3, 15))
+        self.inbox = f"/plataforma/proyectos/{self.lw.project.pk}/costos/por-aprobar/"
+        self.link = f"/plataforma/proyectos/{self.lw.project.pk}/tareo/{self.sheet.pk}/"
+
+    def test_the_labor_approver_sees_number_period_project_and_total(self) -> None:
+        self.client.force_login(self.lw.world.supervisor)
+        page = self.client.get(self.inbox)
+        self.assertContains(page, "Por aprobar (1)")
+        self.assertContains(page, f'href="{self.link}"')
+        self.assertContains(page, "Planilla TA-001")
+        self.assertContains(page, "02/03/2026 – 08/03/2026")
+        self.assertContains(page, self.lw.project.name)
+        self.assertContains(page, "121.600,00")
+        self.assertNotContains(page, "TA-002")
+        for private in ("Pedro", "1012345678", "80.000", "Oficial"):
+            self.assertNotContains(page, private)
+
+    def test_only_who_approves_labor_and_not_the_author(self) -> None:
+        costs_only = make_user(self.lw.world.org, username="solo-costos", role=Role.VIEWER)
+        grant_costs(self.lw.world, costs_only, SectionRole.REVIEWER)
+        self.client.force_login(costs_only)
+        page = self.client.get(self.inbox)
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, "TA-001")
+        self.assertContains(page, "Por aprobar (0)")
+        project_viewer = make_user(self.lw.world.org, username="tareo-consulta", role=Role.VIEWER)
+        grant_costs(self.lw.world, project_viewer, SectionRole.REVIEWER)
+        grant_labor(self.lw.world, project_viewer, SectionRole.VIEWER)  # lee tareo, no aprueba
+        self.client.force_login(project_viewer)
+        self.assertNotContains(self.client.get(self.inbox), "TA-001")
+        # Quien la editó no la aprueba: no le aparece.
+        Timesheet.objects.filter(pk=self.sheet.pk).update(updated_by=self.lw.world.supervisor)
+        self.client.force_login(self.lw.world.supervisor)
+        self.assertNotContains(self.client.get(self.inbox), "TA-001")

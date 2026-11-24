@@ -25,6 +25,7 @@ from suno.core.models import (
     Worker,
     WorkerWage,
 )
+from suno.core.policies import can_approve_labor
 from suno.core.scoping import scoped_qs
 
 from .calc import price, summarize
@@ -78,6 +79,31 @@ def pending_count(ctx: RequestContext, project: Project) -> int:
         .filter(project=project, status=TimesheetStatus.DRAFT, attachment__isnull=False)
         .count()
     )
+
+
+def _awaiting(ctx: RequestContext, project: Project) -> QuerySet[Timesheet]:
+    """Borradores firmados (listos para aprobar, decisión 19) que no preparó ni editó quien
+    mira: nadie aprueba lo suyo."""
+    return (
+        scoped_qs(ctx, Timesheet)
+        .filter(project=project, status=TimesheetStatus.DRAFT, attachment__isnull=False)
+        .exclude(created_by_id=ctx.user_id)
+        .exclude(updated_by_id=ctx.user_id)
+    )
+
+
+def inbox_timesheets(ctx: RequestContext, project: Project) -> list[Timesheet]:
+    """Para la bandeja "Por aprobar" de Costos (#107): solo a quien aprueba tareo en el
+    proyecto; la plantilla muestra número, periodo, proyecto y total, sin trabajadores ni
+    jornales. Una consulta (ninguna sin el permiso)."""
+    if not can_approve_labor(ctx, project):
+        return []
+    return list(_awaiting(ctx, project).order_by("starts_on", "number"))
+
+
+def inbox_timesheet_count(ctx: RequestContext, project: Project) -> int:
+    """Para el contador de "Por aprobar" de Costos. Una consulta (ninguna sin el permiso)."""
+    return _awaiting(ctx, project).count() if can_approve_labor(ctx, project) else 0
 
 
 def assignment_rows(ctx: RequestContext, project: Project) -> QuerySet[ProjectWorker]:
