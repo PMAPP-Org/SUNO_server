@@ -134,9 +134,15 @@ class Summary:
         }
 
     def snapshot(self, labels: Mapping[str, str]) -> dict[str, Any]:
-        """La huella y el resumen por destino que imprime el PDF (`Timesheet.summary`)."""
+        """La huella y el resumen por destino que imprime el PDF (`Timesheet.summary`). Cada
+        destino guarda su clave: al aprobar, el libro copia la etiqueta impresa (#88)."""
         groups = [
-            {"label": labels.get(key, "—"), "days": str(v.days), "total": str(v.amount)}
+            {
+                "key": key,
+                "label": labels.get(key, "—"),
+                "days": str(v.days),
+                "total": str(v.amount),
+            }
             for key, v in self.groups.items()
         ]
         groups.sort(key=lambda group: group["label"])

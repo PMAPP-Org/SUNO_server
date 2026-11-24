@@ -168,6 +168,7 @@ class Proposal:
             "fingerprint": self.fingerprint(),
             "groups": [
                 {
+                    "key": key_text(group.key),
                     "label": group.label,
                     "issued": str(group.issued),
                     "returned": str(group.returned),
@@ -478,20 +479,26 @@ def attach_signed_report(
 
 
 def _post(ctx: RequestContext, project: Project, cut: ConsumptionCut, proposal: Proposal) -> int:
-    """Un costo aprobado por destino con neto distinto de cero (decisión 17 del plan)."""
+    """Un costo aprobado por destino con neto distinto de cero (decisión 17 del plan). El
+    destino, como lo imprimió el reporte firmado (`summary`, #88); un corte guardado antes
+    no trae la clave y usa el nombre vigente."""
     now = timezone.now()
+    printed = {
+        group["key"]: group["label"] for group in cut.summary.get("groups", []) if "key" in group
+    }
     entries: list[CostEntry] = []
     links: list[CostEntryItem] = []
     for group in proposal.groups:
         if group.net == 0:
             continue
         scope, chapter_id, item_ids, task_id = group.key
+        label = printed.get(key_text(group.key), group.label)
         entry = CostEntry(
             org_id=ctx.org_id,
             project=project,
             incurred_on=cut.period_end,
             kind=CostKind.MATERIALS,
-            description=f"{cut.code} de consumos · {group.label}"[:MAX_DESCRIPTION],
+            description=f"{cut.code} de consumos · {label}"[:MAX_DESCRIPTION],
             amount=group.net,
             third_party="",
             document_type=CostDocumentType.CONSUMPTION_CUT,

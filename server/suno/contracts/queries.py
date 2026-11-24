@@ -398,7 +398,8 @@ def certificate_document(
     catalog: Catalog,
 ) -> CertificateDocument:
     """Por línea: contratado (vigente), anterior (actas aprobadas de número menor), esta acta,
-    acumulado y saldo, en cantidad y valor. Dos consultas."""
+    acumulado y saldo, en cantidad y valor. El ítem, como lo guardó el acta (#88). Dos
+    consultas."""
     rows = list(
         scoped_qs(ctx, CertificateLine)
         .filter(certificate=certificate)
@@ -412,7 +413,7 @@ def certificate_document(
         certificate=certificate,
         lines=tuple(
             DocumentLine(
-                label=catalog.label_of(row.line.item_id, row.line.item.code),
+                label=row.label or catalog.label_of(row.line.item_id, row.line.item.code),
                 unit=row.line.unit,
                 unit_price=row.line.unit_price,
                 contracted=row.line.current_quantity,

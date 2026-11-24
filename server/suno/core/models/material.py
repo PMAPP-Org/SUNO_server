@@ -331,6 +331,9 @@ class MaterialPurchaseLine(OrgScopedModel, Destined):
     quantity = models.DecimalField(max_digits=18, decimal_places=4, verbose_name="cantidad")
     unit_price = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="valor unitario")
     amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="valor")
+    #: Código y nombre del material al registrar la compra: los copia el libro al aprobar,
+    #: aunque el catálogo lo renombre después (#88). Vacío en compras anteriores.
+    material_label = models.TextField(blank=True, verbose_name="material registrado")
     items = models.ManyToManyField(
         "core.BudgetItem",
         through="MaterialPurchaseLineItem",
