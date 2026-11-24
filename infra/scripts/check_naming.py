@@ -66,6 +66,7 @@ _MIGRATIONS_HISTORY = {
     "server/suno/core/migrations/0014_add_quantity_matrix.py",
     "server/suno/core/migrations/0027_rename_visit_to_record.py",
     "server/suno/core/tests/test_rename_visit_migration.py",
+    "server/suno/core/tests/test_quantity_matrix_migration.py",
 }
 # Compatibilidad de despliegue estrictamente acotada. La primera actualización
 # desde v0.13 necesita reconocer su ruta y variable de imagen para poder hacer
