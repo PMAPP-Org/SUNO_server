@@ -8,6 +8,8 @@
   Marca a los pagados sin tareo y a los tareados sin pago; los documentos que no están en el
   registro van aparte. Por proyecto, lo pagado se prorratea por los jornales tareados en el
   proyecto sobre los de toda la organización (decisión 22).
+- Borrar una importación (#103) pide `can_delete_payroll`: se van sus líneas y, con ellas, su
+  conciliación (es solo un reporte). Reemplazar es borrar e importar otra vez.
 - Importar pide `can_manage_labor_registry`; ver, `can_read_labor_registry`. Cuatro consultas
   (cinco si hay líneas que al importar no estaban en el registro: se buscan otra vez por
   documento, para reconocer a quien se registró después).
@@ -26,6 +28,7 @@ from uuid import UUID
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Sum
+from django.http import Http404
 
 from suno.backoffice.export import to_xlsx_book
 from suno.budgets.excel import ExcelRejected, preview_sheet, read_rows
@@ -44,7 +47,11 @@ from suno.core.models import (
     Worker,
 )
 from suno.core.models.labor import mask_document
-from suno.core.policies import can_manage_labor_registry, can_read_labor_registry
+from suno.core.policies import (
+    can_delete_payroll,
+    can_manage_labor_registry,
+    can_read_labor_registry,
+)
 from suno.core.scoping import scoped_qs
 
 from . import imports
@@ -209,6 +216,30 @@ def apply(ctx: RequestContext, token: str) -> PayrollImport:
             },
         )  # fmt: skip
     return imported
+
+
+def delete_payroll(ctx: RequestContext, payroll_id: UUID) -> None:
+    """Borra la nómina importada y sus líneas, con la fila bloqueada; queda en la auditoría
+    qué se borró (periodo, líneas, total y huella del archivo)."""
+    if not can_delete_payroll(ctx, ctx.org_id):
+        raise PermissionDenied
+    with transaction.atomic():
+        imported = scoped_qs(ctx, PayrollImport).select_for_update().filter(pk=payroll_id).first()
+        if imported is None:
+            raise Http404
+        metadata = {
+            "start": imported.starts_on.isoformat(),
+            "end": imported.ends_on.isoformat(),
+            "lines": imported.line_count,
+            "total": str(imported.total),
+            "file_name": imported.file_name,
+            "sha256": imported.file_sha256,
+            "imported_by": str(imported.imported_by_id),
+        }
+        target = f"payroll_import:{imported.pk}"
+        scoped_qs(ctx, PayrollImportLine).filter(payroll=imported).delete()
+        imported.delete()
+        audit.record(ctx, action=AuditAction.PAYROLL_DELETED, target=target, metadata=metadata)
 
 
 @dataclass(frozen=True)

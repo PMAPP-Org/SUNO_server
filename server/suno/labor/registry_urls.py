@@ -39,6 +39,11 @@ urlpatterns = [
         name="reconciliation",
     ),
     path(
+        "conciliacion/<uuid:payroll_id>/borrar/",
+        reconciliation_views.payroll_delete,
+        name="payroll_delete",
+    ),
+    path(
         "conciliacion/<uuid:payroll_id>/conciliacion.xlsx",
         reconciliation_views.reconciliation_sheet,
         name="reconciliation_xlsx",

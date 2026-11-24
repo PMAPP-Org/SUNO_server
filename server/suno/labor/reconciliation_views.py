@@ -1,7 +1,8 @@
 """Conciliación de nómina (costos, pieza 6d, spec 2.6 y 3.3): importar la nómina del periodo,
 ver la tabla por trabajador (de la organización o de un proyecto) y exportarla. Ver pide
 `can_read_labor_registry` (404); importar, `can_manage_labor_registry` (403); exportar,
-`can_export_labor_registry` (403). Cada consulta y cada exporte quedan en la auditoría."""
+`can_export_labor_registry` (403); borrar una importación, `can_delete_payroll` (403) con
+confirmación. Cada consulta, exporte y borrado quedan en la auditoría."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from suno.budgets.excel import MAX_BYTES, ExcelRejected, check_file_name
 from suno.core import audit
@@ -21,7 +22,7 @@ from suno.core.audit import AuditAction
 from suno.core.context import RequestContext
 from suno.core.download import content_disposition
 from suno.core.models import Project
-from suno.core.policies import can_export_labor_registry
+from suno.core.policies import can_delete_payroll, can_export_labor_registry
 from suno.core.scoping import scoped_qs
 
 from . import payroll
@@ -119,7 +120,27 @@ def reconciliation(request: HttpRequest, payroll_id: UUID) -> HttpResponse:
         )
     projects = scoped_qs(ctx, Project).order_by("name").values_list("pk", "name")
     return page(request, ctx, "suno/labor/reconciliation.html", result=result,
-                projects=list(projects), project=project)  # fmt: skip
+                projects=list(projects), project=project,
+                can_delete_payroll=can_delete_payroll(ctx, ctx.org_id))  # fmt: skip
+
+
+@login_required(login_url="platform_login")
+@require_http_methods(["GET", "POST"])
+def payroll_delete(request: HttpRequest, payroll_id: UUID) -> HttpResponse:
+    """Confirmación y borrado de una nómina importada (#103). Reemplazarla es borrarla e
+    importar otra vez."""
+    ctx = registry_ctx(request)
+    if not can_delete_payroll(ctx, ctx.org_id):
+        raise PermissionDenied
+    imported = get_payroll(ctx, payroll_id)
+    error = ""
+    if request.method == "POST":
+        if request.POST.get("confirm") == "1":
+            payroll.delete_payroll(ctx, imported.pk)
+            messages.success(request, "Nómina borrada. Puedes importar la corregida.")
+            return redirect("labor_registry:payrolls")
+        error = "Marca la casilla para confirmar el borrado."
+    return page(request, ctx, "suno/labor/payroll_delete.html", payroll=imported, error=error)
 
 
 @login_required(login_url="platform_login")

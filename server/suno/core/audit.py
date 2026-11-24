@@ -235,6 +235,7 @@ class AuditAction:
     TIMESHEET_IMPORTED = "timesheet.imported"
     TIMESHEET_EXPORTED = "timesheet.exported"
     PAYROLL_IMPORTED = "payroll.imported"
+    PAYROLL_DELETED = "payroll.deleted"
     LABOR_RECONCILIATION_VIEWED = "labor_reconciliation.viewed"
     LABOR_EXPORTED = "labor.exported"
 

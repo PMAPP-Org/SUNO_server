@@ -681,6 +681,13 @@ def can_manage_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
     ) and user_has_section_capability(ctx, org_id, Section.LABOR, Capability.UPDATE)
 
 
+def can_delete_payroll(ctx: RequestContext, org_id: UUID) -> bool:
+    """Borrar una nómina importada (con sus líneas), para corregirla e importarla otra vez
+    (#103): `delete` de Mano de obra con alcance de toda la organización, como el registro.
+    Su conciliación es solo un reporte: se va con ella y no toca el libro."""
+    return user_has_section_capability(ctx, org_id, Section.LABOR, Capability.DELETE)
+
+
 def can_export_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
     """Excel de la conciliación: `export` de Mano de obra con alcance de toda la organización."""
     return user_has_section_capability(ctx, org_id, Section.LABOR, Capability.EXPORT)
