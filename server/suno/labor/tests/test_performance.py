@@ -4,6 +4,7 @@ de 500 trabajadores. La cuadrícula, el PDF y la conciliación responden en meno
 
 from __future__ import annotations
 
+import os
 import time
 import unittest
 from datetime import date, timedelta
@@ -44,7 +45,10 @@ skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 D = Decimal
 TODAY = date(2026, 4, 15)
 START, END = date(2026, 3, 1), date(2026, 3, 31)
-LIMIT_SECONDS = 1.0
+#: Objetivo de la spec: menos de 1 s (en Docker local: cuadrícula ~0,19 s, PDF ~0,31 s).
+#: En GitHub Actions (`CI=true`, con cobertura) el runner compartido varía; allí, como en
+#: Control, la prueba solo falla por encima de 2 s (#110).
+LIMIT_SECONDS = 2.0 if os.environ.get("CI") == "true" else 1.0
 MEASUREMENTS = 3
 
 
