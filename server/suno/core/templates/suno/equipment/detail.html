@@ -84,7 +84,7 @@
             <small>{% if item.state == 'overdue' %}Vencido{% elif item.state == 'due_soon' %}Próximo{% elif item.state == 'ok' %}Al día{% else %}Sin lecturas{% endif %}</small>
             {% if item.open_order %}<a href="{% url 'equipment:order_detail' item.open_order.pk %}">{{ item.open_order.code }}</a>
             {% elif maintenance.can_manage and item.state != 'ok' %}<a data-peek href="{% url 'equipment:order_create' equipment.pk %}?plan={{ item.plan.pk }}">Generar orden</a>{% endif %}
-            {% if maintenance.can_manage and not item.open_order %}<form method="post" action="{% url 'equipment:plan_retire' item.plan.pk %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button" type="submit">Retirar</button></form>{% endif %}
+            {% if maintenance.can_manage and not item.open_order %}<form method="post" action="{% url 'equipment:plan_retire' item.plan.pk %}">{% csrf_token %}<button class="eq-button" type="submit">Retirar</button></form>{% endif %}
           </div>
         </article>
         {% empty %}<p class="eq-empty-inline">Este equipo no tiene plan preventivo.</p>{% endfor %}

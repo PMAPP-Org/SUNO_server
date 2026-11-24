@@ -8,7 +8,7 @@
 <section class="pj-panel">
   <h2>Importar la nómina de un periodo</h2>
   <p><a href="{% url 'labor_registry:payroll_template' %}">Descarga la plantilla</a>: hoja «Nómina» con Tipo de documento, Número de documento y Total pagado (devengado, aportes y provisiones del trabajador en el periodo). SUNO guarda las líneas, no el archivo.</p>
-  <form method="post" action="{% url 'labor_registry:payroll_upload' %}" enctype="multipart/form-data" class="pj-filters"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  <form method="post" action="{% url 'labor_registry:payroll_upload' %}" enctype="multipart/form-data" class="pj-filters">
     {% csrf_token %}
     <label>Desde {{ form.starts_on }}</label><label>Hasta {{ form.ends_on }}</label>
     <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>

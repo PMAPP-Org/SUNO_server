@@ -6,7 +6,7 @@
 <section class="pj-panel">
   <h2>Importar tareo a {{ sheet.code }} ({{ sheet.starts_on|date:"d/m/Y" }} – {{ sheet.ends_on|date:"d/m/Y" }})</h2>
   <p><a href="{% url 'labor:template' project.pk %}">Descarga la plantilla</a>: hoja «Tareo» con Tipo de documento, Número de documento, Fecha, Destino («Indirecto», «2.1», «Capítulo 2» o «2.1, 2.2»), Tarea (número de esquema, opcional) y Fracción. Se agrega a lo que ya tiene la planilla; una línea igual se suma.</p>
-  <form method="post" enctype="multipart/form-data" class="pj-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  <form method="post" enctype="multipart/form-data" class="pj-form">
     {% csrf_token %}
     <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
     {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}

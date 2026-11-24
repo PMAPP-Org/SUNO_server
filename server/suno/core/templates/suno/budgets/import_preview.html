@@ -26,7 +26,6 @@
 <section class="pj-panel">
   <h2>Etiqueta y cargos</h2>
   <form method="post" class="bg-charges">
-    {% csrf_token %}
     <p class="pj-form"><label>Etiqueta de la versión <input type="text" name="label" maxlength="200" value="{{ label }}" placeholder="p. ej. Otrosí 2"></label></p>
     {% if charge_error %}<p class="pj-late" role="alert">{{ charge_error }}</p>{% endif %}
     <input type="hidden" name="charge_count" value="{{ charge_rows|length }}">
@@ -51,6 +50,7 @@
       <button class="text-link" type="submit" name="action" value="save">Guardar etiqueta y cargos</button>
       <button class="text-link" type="submit" name="action" value="discard">Descartar</button>
     </p>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% else %}

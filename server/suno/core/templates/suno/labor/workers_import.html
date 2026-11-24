@@ -5,7 +5,7 @@
 <section class="workspace-heading"><div><p class="editorial-label"><a href="{% url 'labor_registry:list' %}">Trabajadores</a></p><h1>Importar desde Excel</h1></div></section>
 <section class="pj-panel">
   <p><a href="{% url 'labor_registry:template' %}">Descarga la plantilla</a>: hoja «Trabajadores» con Tipo de documento, Número de documento, Nombre, Cargo, Fecha de ingreso, Jornal y Jornal desde (opcional). Un documento nuevo se registra; uno existente actualiza nombre y cargo y, si el jornal cambió, agrega un jornal desde «Jornal desde» (sin ella, desde hoy).</p>
-  <form method="post" enctype="multipart/form-data" class="pj-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  <form method="post" enctype="multipart/form-data" class="pj-form">
     {% csrf_token %}
     <label>Archivo .xlsx <input type="file" name="file" accept=".xlsx" required></label>
     {% if errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}

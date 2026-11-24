@@ -29,14 +29,14 @@
         <div><strong>{{ line.description }}</strong><span>{{ line.get_kind_display }}{% if line.supplier %} · {{ line.supplier }}{% endif %} · {{ line.quantity|floatformat:"-2g" }} × ${{ line.unit_cost|floatformat:"2g" }}</span></div>
         <div>
           <strong>${{ line.total|floatformat:"2g" }}</strong>
-          {% if can_edit %}<form method="post" action="{% url 'equipment:order_action' order.pk 'remove-line' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<input type="hidden" name="line" value="{{ line.pk }}"><button class="eq-button" type="submit">Quitar</button></form>{% endif %}
+          {% if can_edit %}<form method="post" action="{% url 'equipment:order_action' order.pk 'remove-line' %}">{% csrf_token %}<input type="hidden" name="line" value="{{ line.pk }}"><button class="eq-button" type="submit">Quitar</button></form>{% endif %}
         </div>
       </article>
       {% empty %}<p class="eq-empty-inline">Sin líneas registradas.</p>{% endfor %}
     </div>
     {% if lines %}<p class="eq-form-note">Costo total de la orden: <strong>${{ total|floatformat:"2g" }}</strong></p>{% endif %}
     {% if can_edit %}
-    <form method="post" action="{% url 'equipment:order_action' order.pk 'line' %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    <form method="post" action="{% url 'equipment:order_action' order.pk 'line' %}" class="eq-form">
       {% csrf_token %}
       {% for field in line_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}
       <div class="eq-form-actions"><button class="eq-button" type="submit">Agregar línea</button></div>
@@ -62,7 +62,7 @@
       <p class="editorial-label">Mecánicos</p>
       {% for link in mechanics %}<div class="eq-expiry"><strong>{{ link.mechanic.display_name|default:link.mechanic.username }}</strong></div>{% empty %}<span>Sin mecánicos asignados</span>{% endfor %}
       {% if can_edit %}
-      <form method="post" action="{% url 'equipment:order_action' order.pk 'mechanic' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'mechanic' %}">
         {% csrf_token %}
         <select name="mechanic" required>
           <option value="">Mecánico…</option>
@@ -78,15 +78,15 @@
       <small>Aprobada: {% if order.approved_at %}{{ order.approved_at|date:"d/m/Y H:i" }} · {{ order.approved_by.display_name|default:order.approved_by.username }}{% else %}—{% endif %}</small><br>
       <small>Inicio de trabajos: {{ order.started_at|date:"d/m/Y H:i"|default:"—" }}</small>
       <div class="eq-form-actions">
-        {% if can_approve %}<form method="post" action="{% url 'equipment:order_action' order.pk 'approve' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Aprobar</button></form>{% endif %}
-        {% if can_start %}<form method="post" action="{% url 'equipment:order_action' order.pk 'start' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Iniciar trabajos</button></form>{% endif %}
+        {% if can_approve %}<form method="post" action="{% url 'equipment:order_action' order.pk 'approve' %}">{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Aprobar</button></form>{% endif %}
+        {% if can_start %}<form method="post" action="{% url 'equipment:order_action' order.pk 'start' %}">{% csrf_token %}<button class="eq-button eq-button-primary" type="submit">Iniciar trabajos</button></form>{% endif %}
       </div>
     </section>
 
     {% if can_close %}
     <section>
       <p class="editorial-label">Cierre técnico</p>
-      <form method="post" action="{% url 'equipment:order_action' order.pk 'close' %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'close' %}" class="eq-form">
         {% csrf_token %}
         {% for field in close_form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
         <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Cerrar orden</button></div>
@@ -97,7 +97,7 @@
     {% if can_cancel %}
     <section>
       <p class="editorial-label">Cancelar</p>
-      <form method="post" action="{% url 'equipment:order_action' order.pk 'cancel' %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+      <form method="post" action="{% url 'equipment:order_action' order.pk 'cancel' %}">
         {% csrf_token %}
         <input type="text" name="reason" placeholder="Motivo" required>
         <button class="eq-button" type="submit">Cancelar orden</button>

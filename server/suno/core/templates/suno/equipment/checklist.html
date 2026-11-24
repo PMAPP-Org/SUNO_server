@@ -13,7 +13,7 @@
   <article>
     <div><strong>{{ item.label }}</strong>{% if item.critical %}<small>Crítico</small>{% endif %}</div>
     {% if can_edit %}
-    <form method="post"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+    <form method="post">
       {% csrf_token %}
       <input type="hidden" name="action" value="retire">
       <input type="hidden" name="item_id" value="{{ item.pk }}">
@@ -24,7 +24,7 @@
   {% empty %}<p class="eq-empty-inline">Esta tipología aún no tiene lista de chequeo: sus equipos no pueden enviar preoperacionales.</p>{% endfor %}
 </div>
 {% if can_edit %}
-<form method="post" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+<form method="post" class="eq-form">
   {% csrf_token %}
   <label class="eq-field-wide"><span>Nuevo ítem</span><input type="text" name="label" maxlength="200" required></label>
   <label><span>Crítico</span><input type="checkbox" name="critical"></label>

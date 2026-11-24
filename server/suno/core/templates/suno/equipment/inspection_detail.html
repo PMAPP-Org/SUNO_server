@@ -40,7 +40,7 @@
           {% if fault.status == 'open' and not fault.work_order_id and can_close_faults %}<a data-peek class="eq-button" href="{% url 'equipment:order_create' inspection.equipment.pk %}?fault={{ fault.pk }}">Crear orden correctiva</a>{% endif %}
           {% if fault.work_order_id %}<small>Con orden de trabajo</small>{% endif %}
           {% if fault.status == 'open' and can_close_faults %}
-          <form method="post" action="{% url 'equipment:fault_close' fault.pk %}"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+          <form method="post" action="{% url 'equipment:fault_close' fault.pk %}">
             {% csrf_token %}
             <input type="text" name="note" placeholder="Cómo se resolvió" required>
             <button class="eq-button" type="submit">Cerrar</button>
@@ -60,7 +60,7 @@
     {% if can_review %}
     <section>
       <p class="editorial-label">Revisión</p><h3>Tu decisión</h3>
-      <form method="post" action="{% url 'equipment:inspection_review' inspection.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+      <form method="post" action="{% url 'equipment:inspection_review' inspection.pk %}" class="eq-form">
         {% csrf_token %}
         <label class="eq-field-wide"><span>Comentario</span><textarea name="comment" rows="3" placeholder="Obligatorio para rechazar o pedir corrección"></textarea></label>
         <div class="eq-form-actions">

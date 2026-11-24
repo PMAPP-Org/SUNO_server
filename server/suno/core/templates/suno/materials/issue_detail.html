@@ -31,8 +31,7 @@
 {% if return_form %}
 <section class="pj-panel">
   <h2>Registrar devolución</h2>
-  <form method="post" action="{% url 'materials:return_issue' project.pk issue.pk %}" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
-    {% csrf_token %}
+  <form method="post" action="{% url 'materials:return_issue' project.pk issue.pk %}" class="ctr-form">
     <div class="pj-form ctr-head">
       <label>{{ return_form.returned_on.label }} {{ return_form.returned_on }}</label>
       <label>{{ return_form.notes.label }} {{ return_form.notes }}</label>
@@ -45,6 +44,7 @@
     </div>
     <p class="pj-muted">Vuelve al costo de la salida y llega al libro restando en el corte del periodo.</p>
     <div class="ctr-actions"><button class="button" type="submit">Registrar devolución</button></div>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% endif %}

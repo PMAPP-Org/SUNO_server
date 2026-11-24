@@ -7,7 +7,7 @@
 {% if can_create_labor %}
 <section class="pj-panel">
   <h2>Nueva planilla</h2>
-  <form method="post" action="{% url 'labor:new_timesheet' project.pk %}" class="pj-filters" aria-label="Periodo de la planilla"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+  <form method="post" action="{% url 'labor:new_timesheet' project.pk %}" class="pj-filters" aria-label="Periodo de la planilla">
     {% csrf_token %}
     <label>Desde {{ form.starts_on }}</label>
     <label>Hasta {{ form.ends_on }}</label>

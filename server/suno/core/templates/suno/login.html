@@ -41,9 +41,7 @@
         <p class="form-kicker">Cuenta SUNO</p>
         <h2>Accede a tu organización</h2>
         {% if form.non_field_errors %}<div class="form-error" role="alert">Usuario o contraseña incorrectos, o cuenta sin acceso activo.</div>{% endif %}
-        <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -- the CSRF field is the first control inside this form. -->
         <form method="post" novalidate data-login-form>
-          {% csrf_token %}
           <div class="field-row{% if form.username.errors %} has-error{% endif %}">
             <label for="{{ form.username.id_for_label }}">Usuario</label>
             {{ form.username }}
@@ -56,6 +54,7 @@
           </div>
           <div class="form-options"><label class="remember-option"><input type="checkbox" name="remember"> <span>Mantener sesión iniciada</span></label><a href="#solicitar-acceso">¿Olvidaste tu contraseña?</a></div>
           <button class="button form-button" type="submit" data-submit-label="Ingresar a SUNO" data-loading-label="Ingresando…">Ingresar a SUNO <span aria-hidden="true">→</span></button>
+          {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
         </form>
         <p class="login-help" id="solicitar-acceso">Si todavía no tienes cuenta o no recuerdas tu contraseña, solicítala al responsable de tu organización.</p>
       </div>

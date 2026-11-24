@@ -7,8 +7,7 @@
 {% if form %}
 <section class="pj-panel">
   <h2>Registrar una salida</h2>
-  <form method="post" class="ctr-form"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
-    {% csrf_token %}
+  <form method="post" class="ctr-form">
     {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
     <div class="pj-form ctr-head">
       <label>{{ form.warehouse.label }} {{ form.warehouse }}</label>
@@ -24,6 +23,7 @@
       <button class="text-link" type="submit" name="accion" value="lineas">Agregar líneas</button>
       <button class="button" type="submit" name="accion" value="guardar">Registrar salida</button>
     </div>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% endif %}
