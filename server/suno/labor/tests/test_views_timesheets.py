@@ -208,8 +208,10 @@ class TimesheetListStaleTests(TestCase):
         bare_line(frozen, self.lw.pedro, date(2026, 3, 23),
                   frozen=("80000.00", "1.5200", "121600.00"))  # fmt: skip
         self.assertEqual(self.listed()[0], set())
-        WorkerWage.objects.create(org=self.lw.world.org, worker=self.lw.pedro,
-                                  valid_from=date(2026, 3, 9), daily_wage=D("90000.00"))  # fmt: skip
+        WorkerWage.objects.create(
+            org=self.lw.world.org, worker=self.lw.pedro, valid_from=date(2026, 3, 9),
+            daily_wage=D("90000.00"),
+        )  # fmt: skip
         stale, _ = self.listed()
         self.assertEqual(stale, {self.sheets[1].pk, self.sheets[2].pk})
         page = self.client.get(self.url)
