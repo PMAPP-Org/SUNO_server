@@ -26,7 +26,7 @@
       <td><a href="{% url 'labor:timesheet' project.pk t.pk %}">{{ t.code }}</a></td>
       <td>{{ t.starts_on|date:"d/m/Y" }} – {{ t.ends_on|date:"d/m/Y" }}</td>
       <td class="num">{{ t.days|qty }}</td><td class="num">{{ t.total|money }}</td>
-      <td><span class="bg-label ta-{{ t.status }}">{{ t.get_status_display }}</span></td>
+      <td><span class="bg-label ta-{{ t.status }}">{{ t.get_status_display }}</span>{% if t.pk in stale %} <span class="bg-label ta-stale" title="Cambió un jornal o el factor desde que se guardó: recalcúlala y vuelve a imprimirla y firmarla.">Desactualizada</span>{% endif %}</td>
       <td>{% if t.attachment_id %}Sí{% else %}<span class="pj-muted">No</span>{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table>

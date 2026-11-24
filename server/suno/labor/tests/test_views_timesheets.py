@@ -5,27 +5,42 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
+from decimal import Decimal
 from unittest import mock
+from uuid import UUID
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
-from suno.core.models import AuditEvent, CostEntry, Timesheet, TimesheetLine, Worker
+from suno.core.models import (
+    AuditEvent,
+    BenefitFactor,
+    CostEntry,
+    Timesheet,
+    TimesheetLine,
+    Worker,
+    WorkerWage,
+)
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
 from suno.costs.tests.factories import pdf_upload
-from suno.labor import timesheets
+from suno.labor import approval, timesheets
+from suno.labor.common import LaborRejected
 from suno.labor.pdf import timesheet_pdf
 
-from .factories import TODAY, WEEK, labor_world, line_data, xlsx
+from .factories import TODAY, WEEK, bare_line, bare_timesheet, labor_world, line_data, xlsx
 
 setUpModule = setup_test_database
 tearDownModule = teardown_test_database
 skip_without_db = unittest.skipUnless(SKIP_REASON is None, SKIP_REASON or "")
 
+D = Decimal
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
@@ -141,3 +156,72 @@ class PdfDayLabelTests(unittest.TestCase):
 
         self.assertEqual(day_label(date(2026, 3, 2)), "lun 02")
         self.assertEqual(day_label(date(2026, 3, 8)), "dom 08")
+
+
+@skip_without_db
+class TimesheetListStaleTests(TestCase):
+    """#106: la lista marca «Desactualizada» los borradores cuyo resumen guardado ya no es el
+    recálculo de hoy (cambió un jornal o el factor), con la comparación de la aprobación y un
+    número de consultas que no crece con la página."""
+
+    WEEKS = (WEEK, (date(2026, 3, 9), date(2026, 3, 15)), (date(2026, 3, 16), date(2026, 3, 22)))
+
+    def setUp(self) -> None:
+        patcher = mock.patch("django.utils.timezone.localdate", return_value=TODAY)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.lw = labor_world()
+        self.ctx = self.lw.ctx(self.lw.contributor)
+        self.url = f"/plataforma/proyectos/{self.lw.project.pk}/tareo/"
+        self.sheets = [self.draft(start, end) for start, end in self.WEEKS[:1]]
+
+    def draft(self, start: date, end: date) -> Timesheet:
+        sheet = timesheets.create_timesheet(self.ctx, self.lw.project, start, end)
+        timesheets.save_lines(self.ctx, self.lw.project, sheet.pk, [
+            line_data(self.lw.pedro, start), line_data(self.lw.maria, start, "0.5"),
+        ], [start])  # fmt: skip
+        return sheet
+
+    def listed(self) -> tuple[set[UUID], int]:
+        self.client.force_login(self.lw.contributor)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        return set(response.context["stale"]), len(queries)
+
+    def test_a_wage_change_marks_the_drafts_it_touches(self) -> None:
+        self.sheets += [self.draft(start, end) for start, end in self.WEEKS[1:]]
+        frozen = bare_timesheet(self.lw, number=9, start=date(2026, 3, 23),
+                                end=date(2026, 3, 29), status="approved")  # fmt: skip
+        bare_line(frozen, self.lw.pedro, date(2026, 3, 23),
+                  frozen=("80000.00", "1.5200", "121600.00"))  # fmt: skip
+        self.assertEqual(self.listed()[0], set())
+        WorkerWage.objects.create(org=self.lw.world.org, worker=self.lw.pedro,
+                                  valid_from=date(2026, 3, 9), daily_wage=D("90000.00"))  # fmt: skip
+        stale, _ = self.listed()
+        self.assertEqual(stale, {self.sheets[1].pk, self.sheets[2].pk})
+        page = self.client.get(self.url)
+        self.assertContains(page, "Desactualizada", count=2)
+        # Es la misma comparación que la aprobación: firmada, no se aprueba.
+        timesheets.attach_signed(self.ctx, self.lw.project, self.sheets[1].pk, pdf_upload(), "f")
+        with self.assertRaises(LaborRejected):
+            approval.approve_timesheet(
+                self.lw.ctx(self.lw.world.supervisor), self.lw.project, self.sheets[1].pk
+            )
+
+    def test_a_factor_change_marks_them_too(self) -> None:
+        BenefitFactor.objects.create(org=self.lw.world.org, valid_from=WEEK[0],
+                                     factor=D("1.6000"), note="Nuevo")  # fmt: skip
+        self.assertEqual(self.listed()[0], {self.sheets[0].pk})
+
+    def test_the_queries_do_not_grow_with_the_page(self) -> None:
+        WorkerWage.objects.create(org=self.lw.world.org, worker=self.lw.pedro,
+                                  valid_from=WEEK[0], daily_wage=D("90000.00"))  # fmt: skip
+        stale, one = self.listed()
+        self.assertEqual(len(stale), 1)
+        self.sheets += [self.draft(start, end) for start, end in self.WEEKS[1:]]
+        WorkerWage.objects.create(org=self.lw.world.org, worker=self.lw.maria,
+                                  valid_from=WEEK[0], daily_wage=D("110000.00"))  # fmt: skip
+        stale, three = self.listed()
+        self.assertEqual(len(stale), 3)
+        self.assertEqual(three, one)

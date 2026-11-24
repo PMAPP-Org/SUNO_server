@@ -3,9 +3,13 @@ consultas: las listas, una o dos; la ficha del trabajador, tres."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from django.core.paginator import Page, Paginator
 from django.db.models import Q, QuerySet
@@ -16,11 +20,15 @@ from suno.core.models import (
     Project,
     ProjectWorker,
     Timesheet,
+    TimesheetLine,
     TimesheetStatus,
     Worker,
     WorkerWage,
 )
 from suno.core.scoping import scoped_qs
+
+from .calc import price, summarize
+from .common import factor_history, wage_histories
 
 PAGE_SIZE = 100
 STATES = {"activos": "Activos", "retirados": "Retirados", "todos": "Todos"}
@@ -36,6 +44,31 @@ def timesheet_page(ctx: RequestContext, project: Project, *, page: int | str | N
         .order_by("-number")
     )
     return Paginator(rows, PAGE_SIZE).get_page(page)
+
+
+def stale_timesheets(ctx: RequestContext, sheets: Iterable[Timesheet]) -> set[UUID]:
+    """Los borradores cuyo resumen guardado (lo que se imprimió) ya no es el recálculo de hoy
+    por un cambio de jornal o de factor (#106): la comparación de la aprobación
+    (`approval.approve_timesheet`). Tres consultas para toda la página (líneas, jornales y
+    factor), ninguna si no hay borradores."""
+    drafts = {sheet.pk: sheet for sheet in sheets if sheet.status == TimesheetStatus.DRAFT}
+    if not drafts:
+        return set()
+    lines: dict[UUID, list[tuple[UUID, date, str, Decimal]]] = defaultdict(list)
+    for sheet_id, worker_id, day, key, fraction in (
+        scoped_qs(ctx, TimesheetLine)
+        .filter(timesheet_id__in=list(drafts))
+        .values_list("timesheet_id", "worker_id", "worked_on", "destination_key", "fraction")
+    ):
+        lines[sheet_id].append((worker_id, day, key, fraction))
+    wages = wage_histories(ctx, (line[0] for found in lines.values() for line in found))
+    factors = factor_history(ctx)
+    return {
+        pk
+        for pk, sheet in drafts.items()
+        if summarize(price(lines.get(pk, []), wages, factors)).fingerprint()
+        != (sheet.summary or {}).get("fingerprint")
+    }
 
 
 def pending_count(ctx: RequestContext, project: Project) -> int:
