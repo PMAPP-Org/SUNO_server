@@ -346,7 +346,9 @@ def test_regression_90_quoted_literal_containing_and_stays_a_literal():
             ]
         )
     )
-    assert parsed.fields[1].visible_if.value == "A and B"
+    rule = parsed.fields[1].visible_if
+    assert isinstance(rule, Comparison)
+    assert rule.value == "A and B"
 
 
 @pytest.mark.parametrize(
