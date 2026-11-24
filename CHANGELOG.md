@@ -4,6 +4,33 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.21.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.20.0...v0.21.0) (2026-11-24)
+
+
+### Agregado
+
+* **labor:** tareo nominal, costo de mano de obra y conciliación de nómina ([#108](https://github.com/PMAPP-Org/SUNO_server/issues/108)) ([987ace3](https://github.com/PMAPP-Org/SUNO_server/commit/987ace303ce447845b54e58fad5fa2cd11777345))
+
+
+### Corregido
+
+* **labor:** la prueba de carga del tareo usa 2 s en CI, como Control ([#111](https://github.com/PMAPP-Org/SUNO_server/issues/111)) ([1a0e8d2](https://github.com/PMAPP-Org/SUNO_server/commit/1a0e8d2b2f91a80208c03dc73cea0cc461540926))
+
+
+### Documentación
+
+* architecture (C4), ADRs, bug history and known problems ([#93](https://github.com/PMAPP-Org/SUNO_server/issues/93)) ([9adcbb2](https://github.com/PMAPP-Org/SUNO_server/commit/9adcbb24c3dadc6e8dcc1577057347fb35b6d767))
+
+
+### Dependencias y build
+
+* **deps:** bump caddy from 2-alpine to 2-alpine in /infra ([#99](https://github.com/PMAPP-Org/SUNO_server/issues/99)) ([fcd6730](https://github.com/PMAPP-Org/SUNO_server/commit/fcd67303f999f7d835b7940e02fcc3ed175b7384))
+* **deps:** bump grafana/grafana from 13.3.0 to 13.3.1 in /infra ([#98](https://github.com/PMAPP-Org/SUNO_server/issues/98)) ([eed65b2](https://github.com/PMAPP-Org/SUNO_server/commit/eed65b2f456c6cfefe31d52914901ad8e108c1aa))
+* **deps:** bump prom/alertmanager from v0.34.2 to v0.35.0 in /infra ([#97](https://github.com/PMAPP-Org/SUNO_server/issues/97)) ([c5de39f](https://github.com/PMAPP-Org/SUNO_server/commit/c5de39f30c4c486b2cc57489473c7d40e8657e37))
+* **deps:** bump prom/prometheus from v3.15.1 to v3.16.0 in /infra ([#81](https://github.com/PMAPP-Org/SUNO_server/issues/81)) ([43a7bba](https://github.com/PMAPP-Org/SUNO_server/commit/43a7bba87b7c0493d58fcc73a3e85882fdd6d36b))
+* **deps:** bump the actions group across 1 directory with 4 updates ([#82](https://github.com/PMAPP-Org/SUNO_server/issues/82)) ([ef6928a](https://github.com/PMAPP-Org/SUNO_server/commit/ef6928a0234caf192dcc2a84d58997aaf75cbccd))
+* **deps:** bump the python group in /server with 6 updates ([#100](https://github.com/PMAPP-Org/SUNO_server/issues/100)) ([8b47bc0](https://github.com/PMAPP-Org/SUNO_server/commit/8b47bc0dfe6a99042597c7c65e4c4ac9d56da652))
+
 ## [0.20.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.19.0...v0.20.0) (2026-11-18)
 
 
