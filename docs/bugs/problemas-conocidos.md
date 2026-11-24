@@ -54,13 +54,10 @@ Problemas abiertos al 2026-11-17, verificados contra el código, la CI y GitHub.
 - **Descripción:** Semgrep marca formularios POST cuyo `{% csrf_token %}` va en la línea siguiente. En el repositorio se suprimen con `nosemgrep` en la línea del `<form>`, pero code scanning las sigue mostrando: 4 alertas descartadas a mano como falso positivo (51, 101, 102, 104) y 1 abierta (127, `contracts/amendment_form.html`, del 2026-11-15). Además quedan abiertas 3 `unsafe-add-mask-workflow-command`, 3 `dynamic-urllib-use-detected` y 44 notas de CodeQL (sobre todo de estilo en pruebas). Hay que revisar si conviene subir el SARIF ya filtrado o descartar con justificación.
 - **Evidencia:** `gh api repos/PMAPP-Org/SUNO_server/code-scanning/alerts` (abiertas y descartadas); `server/suno/core/templates/suno/contracts/amendment_form.html`.
 
-## KI-08. Hallazgos de revisión de C5/C6 sin verificar
-- **Issue:** [#90](https://github.com/PMAPP-Org/SUNO_server/issues/90)
+## KI-08. ~~Hallazgos de revisión de C5/C6 sin verificar~~ — resuelto
 
-- **Título propuesto:** `Verificar hallazgos de la revisión de C5/C6 (#37): repetibles anidados, relevant compuesto, fechas de Excel, exportes con borrados`
-- **Severidad:** S3 hasta verificarlos (uno era un 500 al importar).
-- **Descripción:** `plans/suno-progreso.md` («Estado al 2026-10-29») lista cuatro hallazgos del PR #37 y no consta cuáles se corrigieron antes del merge. Verificarlos con una prueba cada uno; cerrar este issue o abrir uno por cada hallazgo vigente.
-- **Evidencia:** `plans/suno-progreso.md`; PR #37 (`ae782ad`).
+- **Issue:** [#90](https://github.com/PMAPP-Org/SUNO_server/issues/90).
+- Verificado el 2026-11-23: los cuatro hallazgos ya estaban corregidos en `181759b`, dentro del PR #37 (squash `ae782ad`). Quedan pruebas de regresión `test_regression_90_*`; ver el [historial](historial.md), entrada 41.
 
 ## KI-09. Sentry previsto pero no integrado
 - **Issue:** [#91](https://github.com/PMAPP-Org/SUNO_server/issues/91)

@@ -6,6 +6,8 @@ import sqlite3
 import struct
 import tempfile
 import unittest
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -84,6 +86,51 @@ class FormsAndExportsTests(TestCase):
         csv = self.action("export_csv", [own, deleted]).content.decode()
         self.assertIn(str(own.pk), csv)
         self.assertNotIn(str(deleted.pk), csv)
+
+    def test_regression_90_csv_and_xlsx_never_export_deleted_records(self):
+        """Hallazgo 4 de la revisión del PR #37 (issue #90): corregido en 181759b."""
+        own = self.a.record()
+        deleted = self.a.record()
+        deleted.deleted_at = timezone.now()
+        deleted.save()
+        csv = self.action("export_csv", [own, deleted]).content.decode()
+        self.assertIn(str(own.pk), csv)
+        self.assertNotIn(str(deleted.pk), csv)
+        response = self.action("export_xlsx", [own, deleted])
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as book:
+            xml = "".join(
+                book.read(name).decode() for name in book.namelist() if name.endswith(".xml")
+            )
+        self.assertIn(str(own.pk), xml)
+        self.assertNotIn(str(deleted.pk), xml)
+        rows = AuditEvent.objects.filter(action=AuditAction.RECORDS_EXPORTED).values_list(
+            "metadata__rows", flat=True
+        )
+        self.assertEqual(list(rows), [1, 1])
+
+    def test_regression_90_excel_dates_in_xlsform_defaults_never_500(self):
+        """Hallazgo 3 de la revisión del PR #37 (issue #90): corregido en 181759b."""
+        client = admin_client(self.a.staff)
+        url = f"/admin/core/formtemplate/{self.a.version.template_id}/import-xlsform/"
+        bad = workbook(
+            [["type", "name", "label", "default"], ["integer", "n", "N", datetime(2024, 1, 2)]]
+        )
+        response = client.post(url, {"workbook": SimpleUploadedFile("bad.xlsx", bad)})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "default numérico no admitido")
+        self.assertEqual(
+            FormTemplateVersion.objects.filter(template_id=self.a.version.template_id).count(), 1
+        )
+        good = workbook(
+            [["type", "name", "label", "default"], ["date", "d", "D", datetime(2024, 1, 2)]]
+        )
+        response = client.post(url, {"workbook": SimpleUploadedFile("good.xlsx", good)})
+        self.assertEqual(response.status_code, 302)
+        published = FormTemplateVersion.objects.get(
+            template_id=self.a.version.template_id, version_number=2
+        )
+        self.assertEqual(published.definition["fields"][0]["default"], "2024-01-02")
 
     def test_agent_staff_cannot_export_and_pdf_requires_one_record(self):
         self.a.agent.is_staff = True

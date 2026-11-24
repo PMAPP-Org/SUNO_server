@@ -200,6 +200,8 @@ Las dos partes de la etapa 1 están integradas y publicadas: cronograma desde MS
 | [SUNO_server#37](https://github.com/PMAPP-Org/SUNO_server/pull/37) | **C5** repetibles, valores iniciales, QR, importación XLSForm; **C6** GeoJSON, GeoPackage y PDF | repetibles anidados siempre superan el tope de 10 000 campos (no se llega a los 3 niveles anunciados); `relevant` compuesto se importa como literal basura; fechas de Excel y `TypeError` en defaults rompen la importación (500); CSV/XLSX siguen exportando visitas borradas |
 | [SUNO_client#37](https://github.com/PMAPP-Org/SUNO_client/pull/37) | **C5/C6** en la app | un repetible oculto con filas bloquea el guardado; errores del servidor dentro de filas no se pueden limpiar; PDF sin GPS muestra «null, null»; GeoJSON copia todas las respuestas en cada geometría |
 
+> **Verificado el 2026-11-23 (issue #90):** los cuatro hallazgos de SUNO_server#37 se corrigieron antes del merge, en `181759b` (squash `ae782ad`). No hay bug vigente; quedan pruebas de regresión `test_regression_90_*` en `server/suno/forms/tests/test_xlsform.py` y `server/suno/backoffice/tests/test_c5_c6.py` ([historial](../docs/bugs/historial.md), entrada 41).
+
 Los dos #37 van juntos (el cliente fija el contrato a `SUNO_server@8546e55`). El plan de C5/C6 vive en `plans/fase-c5-c6.md` de la rama `feat/forms-and-exports` y entra con el PR.
 
 **Sigue pendiente, sin cambios respecto a la tabla de abajo:** Pasos 18 (subida con la app cerrada), 23 (conflicto contra backend real), 25 (primera ejecución de la carga y mediciones en dispositivo) y la prueba en dispositivo del Paso 16; las pruebas físicas de C4–C6 (cámara QR, compartir, GPS); issues #7 (Admin) y #21 (sustituto de MinIO); validación jurídica del aviso y aprobación del SGSI.

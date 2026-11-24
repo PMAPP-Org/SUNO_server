@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import io
 import zipfile
-from datetime import datetime
+from datetime import date, datetime, time
 from unittest.mock import patch
 
 import pytest
 from openpyxl import Workbook
 
 from suno.forms.answers import validate_answers
-from suno.forms.definition import RepeatField
+from suno.forms.definition import RepeatField, TemplateDefinitionError, validate_definition
 from suno.forms.visibility import Comparison
 from suno.forms.xlsform import InvalidXlsForm, import_xlsform
 
@@ -263,3 +263,123 @@ def test_sparse_xml_is_rejected_before_workbook_iteration(needle, replacement):
                 ]
             )
         )
+
+
+# --- Regresiones de la revisión del PR #37 (issue #90) ---------------------
+# Los cuatro hallazgos se corrigieron en 181759b ("address review findings"),
+# que entró en master con el squash ae782ad. Estas pruebas fijan el escenario
+# exacto de cada hallazgo; el cuarto (CSV/XLSX con borrados) vive en
+# `backoffice/tests/test_c5_c6.py` porque necesita base de datos.
+
+
+def _repeat(key, max_rows, fields):
+    return {
+        "key": key,
+        "type": "repeat",
+        "label": {"es": key},
+        "max_rows": max_rows,
+        "fields": fields,
+    }
+
+
+_LEAF = {"key": "x", "type": "text", "label": {"es": "X"}}
+
+
+def test_regression_90_three_nested_repeat_levels_fit_the_capacity_cap():
+    """Hallazgo 1: con `max_rows` acotado se llega a los 3 niveles anunciados."""
+    definition = validate_definition(
+        {"fields": [_repeat("a", 10, [_repeat("b", 10, [_repeat("c", 10, [_LEAF])])])]}
+    )
+    assert validate_answers(definition, {"a": [{"b": [{"c": [{"x": "hola"}]}]}]}) == []
+    violations = validate_answers(definition, {"a": [{"b": [{"c": [{"x": 1}]}]}]})
+    assert [(v.field, v.reason) for v in violations] == [("answers.a.0.b.0.c.0.x", "not_a_string")]
+
+
+def test_regression_90_repeat_capacity_error_says_how_to_fix_it():
+    with pytest.raises(TemplateDefinitionError, match="lower max_rows"):
+        validate_definition({"fields": [_repeat("a", 100, [_repeat("b", 100, [_LEAF])])]})
+    with pytest.raises(TemplateDefinitionError, match="3 levels"):
+        validate_definition(
+            {
+                "fields": [
+                    _repeat(
+                        "a", 2, [_repeat("b", 2, [_repeat("c", 2, [_repeat("d", 2, [_LEAF])])])]
+                    )
+                ]
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "${n} > 1 and ${n} < 5",
+        "${n} = 1 or ${n} = 2",
+        "${a} = 'A' and ${n} > 1",
+        "${a} = 'A'and${a}='B'",
+        "${a} = 'A' or 'B'",
+        "${a} = ${n}",
+    ],
+)
+def test_regression_90_compound_relevant_is_rejected_not_imported_as_literal(expression):
+    """Hallazgo 2: un `relevant` compuesto nunca llega como literal basura."""
+    with pytest.raises(InvalidXlsForm, match="relevant"):
+        import_xlsform(
+            workbook(
+                [
+                    ["type", "name", "label", "relevant"],
+                    ["text", "a", "A"],
+                    ["integer", "n", "N"],
+                    ["text", "x", "X", expression],
+                ]
+            )
+        )
+
+
+def test_regression_90_quoted_literal_containing_and_stays_a_literal():
+    parsed = import_xlsform(
+        workbook(
+            [
+                ["type", "name", "label", "relevant"],
+                ["text", "a", "A"],
+                ["text", "x", "X", "${a} = 'A and B'"],
+            ]
+        )
+    )
+    rule = parsed.fields[1].visible_if
+    assert isinstance(rule, Comparison)
+    assert rule.value == "A and B"
+
+
+@pytest.mark.parametrize(
+    "kind,value",
+    [
+        ("integer", datetime(2024, 1, 2)),
+        ("decimal", datetime(2024, 1, 2)),
+        ("integer", time(8, 30)),
+        ("decimal", time(8, 30)),
+        ("date", datetime(2024, 1, 2, 8, 30)),
+        ("date", time(8, 30)),
+        ("date", 45000),
+        ("dateTime", datetime(2024, 1, 2, 8, 30)),
+        ("select_multiple state", datetime(2024, 1, 2)),
+        ("geopoint", datetime(2024, 1, 2)),
+    ],
+)
+def test_regression_90_excel_dates_in_defaults_are_invalid_xlsform_not_500(kind, value):
+    """Hallazgo 3: fechas de Excel o tipos cruzados en `default` ⇒ `InvalidXlsForm`
+    (mensaje en el formulario), nunca `TypeError` ni otra excepción (500)."""
+    with pytest.raises(InvalidXlsForm):
+        import_xlsform(
+            workbook(
+                [["type", "name", "label", "default"], [kind, "x", "X", value]],
+                [["list_name", "name", "label"], ["state", "ok", "Bueno"]],
+            )
+        )
+
+
+def test_regression_90_excel_date_only_cell_becomes_iso_date():
+    parsed = import_xlsform(
+        workbook([["type", "name", "label", "default"], ["date", "x", "X", date(2024, 1, 2)]])
+    )
+    assert parsed.fields[0].default == "2024-01-02"
