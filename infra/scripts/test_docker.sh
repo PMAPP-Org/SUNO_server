@@ -6,14 +6,22 @@
 #   infra/scripts/test_docker.sh [args de pytest]       por defecto: toda la suite
 #   infra/scripts/test_docker.sh --cmd "ruff check ."    otro comando dentro de server/
 #   infra/scripts/test_docker.sh --down                  borra el Postgres y la red
+#
+# SUNO_TEST_DB / SUNO_TEST_NET / SUNO_TEST_VENV cambian los nombres del
+# Postgres, la red y el volumen: dos worktrees pueden correr a la vez sin
+# pisarse la base de test.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SERVER_DIR="$(cd "$ROOT/server" && { pwd -W 2>/dev/null || pwd; })"
-NET=suno-test
-DB=suno-test-db
-VENV=suno-test-venv
+# suno/sync/tests/test_load_script.py importa el script de carga desde la raíz
+# del repo (`/infra/load/push_load.py` visto desde /app); en CI está el
+# repositorio entero, aquí se monta solo esa carpeta y de solo lectura.
+LOAD_DIR="$(cd "$ROOT/infra/load" && { pwd -W 2>/dev/null || pwd; })"
+NET="${SUNO_TEST_NET:-suno-test}"
+DB="${SUNO_TEST_DB:-suno-test-db}"
+VENV="${SUNO_TEST_VENV:-suno-test-venv}"
 
 if [ "${1:-}" = "--down" ]; then
 	docker rm -f "$DB" >/dev/null 2>&1 || true
@@ -39,7 +47,7 @@ else
 	CMD="pytest -q -p no:cacheprovider $*"
 fi
 
-docker run --rm --network "$NET" -v "$SERVER_DIR:/app" -v "$VENV:/venv" -w /app \
+docker run --rm --network "$NET" -v "$SERVER_DIR:/app" -v "$LOAD_DIR:/infra/load:ro" -v "$VENV:/venv" -w /app \
 	-e POSTGRES_HOST="$DB" -e POSTGRES_PASSWORD=test -e SUNO_REQUIRE_DB=1 \
 	-e PATH="/venv/bin:/usr/local/bin:/usr/bin:/bin" \
 	python:3.12-slim sh -c '
