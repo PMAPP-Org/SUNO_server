@@ -9,7 +9,9 @@
 #
 # SUNO_TEST_DB / SUNO_TEST_NET / SUNO_TEST_VENV cambian los nombres del
 # Postgres, la red y el volumen: dos worktrees pueden correr a la vez sin
-# pisarse la base de test.
+# pisarse la base de test. Con SUNO_TEST_DB y sin SUNO_TEST_VENV, el venv es
+# "<SUNO_TEST_DB>-venv": tampoco comparten el volumen (que se reinstala si el
+# lock cambia, y lo reinstalaría bajo los pies del otro worktree).
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
@@ -21,7 +23,8 @@ SERVER_DIR="$(cd "$ROOT/server" && { pwd -W 2>/dev/null || pwd; })"
 LOAD_DIR="$(cd "$ROOT/infra/load" && { pwd -W 2>/dev/null || pwd; })"
 NET="${SUNO_TEST_NET:-suno-test}"
 DB="${SUNO_TEST_DB:-suno-test-db}"
-VENV="${SUNO_TEST_VENV:-suno-test-venv}"
+VENV="${SUNO_TEST_VENV:-${SUNO_TEST_DB:+${SUNO_TEST_DB}-venv}}"
+VENV="${VENV:-suno-test-venv}"
 
 if [ "${1:-}" = "--down" ]; then
 	docker rm -f "$DB" >/dev/null 2>&1 || true
