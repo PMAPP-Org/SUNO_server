@@ -140,6 +140,25 @@ class CutTests(TestCase):
             "Corte 1 de consumos · 2.1 Concreto zapatas · tarea 2.1 Columnas", descriptions
         )
 
+
+    def test_an_older_cut_without_keys_uses_the_current_names(self) -> None:
+        """#88: un corte guardado antes (`summary.groups` sin `key`) usa el nombre vigente."""
+        cut = self.signed(MARCH_END)
+        summary = {**cut.summary, "groups": [
+            {k: v for k, v in group.items() if k != "key"} for group in cut.summary["groups"]
+        ]}  # fmt: skip
+        ConsumptionCut.objects.filter(pk=cut.pk).update(summary=summary)
+        BudgetItemVersion.objects.filter(item=item(self.mw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        cuts.approve_cut(self.supervisor, self.project, cut.pk)
+        descriptions = set(
+            CostEntry.objects.filter(consumption_cut=cut).values_list("description", flat=True)
+        )
+        self.assertIn(
+            "Corte 1 de consumos · 2.1 Concreto ciclópeo · tarea 2.1 Columnas", descriptions
+        )
+
     def test_what_is_approved_is_what_was_signed(self) -> None:
         cut = self.signed(MARCH_END)
         issue(self.mw, [(self.mw.cement, "1")], day=date(2026, 3, 28))

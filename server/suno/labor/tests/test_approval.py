@@ -127,6 +127,24 @@ class ApprovalTests(TestCase):
         self.assertEqual(descriptions, {f"Tareo TA-001 · {label}" for label in printed})
         self.assertIn("Tareo TA-001 · 2.1 Concreto zapatas", descriptions)
 
+
+    def test_an_older_sheet_without_keys_uses_the_current_names(self) -> None:
+        """#88: una planilla guardada antes (`summary.groups` sin `key`) usa el nombre vigente."""
+        self.sign()
+        sheet = Timesheet.objects.get(pk=self.sheet.pk)
+        summary = {**sheet.summary, "groups": [
+            {k: v for k, v in group.items() if k != "key"} for group in sheet.summary["groups"]
+        ]}  # fmt: skip
+        Timesheet.objects.filter(pk=sheet.pk).update(summary=summary)
+        BudgetItemVersion.objects.filter(item=item(self.lw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        approved = approval.approve_timesheet(self.approver, self.lw.project, self.sheet.pk)
+        descriptions = set(
+            CostEntry.objects.filter(timesheet=approved).values_list("description", flat=True)
+        )
+        self.assertIn("Tareo TA-001 · 2.1 Concreto ciclópeo", descriptions)
+
     def test_no_self_approval_and_signature_required(self) -> None:
         with self.assertRaises(LaborRejected) as unsigned:
             approval.approve_timesheet(self.approver, self.lw.project, self.sheet.pk)

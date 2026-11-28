@@ -25,6 +25,7 @@ from suno.core.models import (
     AppUser,
     AuditEvent,
     BudgetItemVersion,
+    CertificateLine,
     CertificateStatus,
     ContractCertificate,
     ContractKind,
@@ -153,6 +154,20 @@ class CertificateApprovalTests(TestCase):
             descriptions, sorted(f"Acta 1 · Contrato SC-001 · {label}" for label in printed)
         )
         self.assertIn("Acta 1 · Contrato SC-001 · 2.1 Concreto zapatas", descriptions)
+
+
+    def test_an_older_certificate_without_label_uses_the_current_name(self) -> None:
+        """#88: un acta guardada antes de la 0032 (`label` vacío) usa el nombre vigente."""
+        certificate = self.prepared()
+        CertificateLine.objects.filter(certificate=certificate).update(label="")
+        BudgetItemVersion.objects.filter(item=item(self.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        self.approve(certificate)
+        descriptions = set(
+            CostEntry.objects.filter(certificate=certificate).values_list("description", flat=True)
+        )
+        self.assertIn("Acta 1 · Contrato SC-001 · 2.1 Concreto ciclópeo", descriptions)
 
     def test_self_approval_missing_copy_and_roles(self) -> None:
         own = certificates.create_certificate(
