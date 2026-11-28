@@ -30,8 +30,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # tzdata: SUNO fija TIME_ZONE="America/Bogota" (config/settings/base.py)
 # y necesita la base de datos de zonas horarias del sistema para resolverla.
+# --only-upgrade: aplica los parches de seguridad de Debian que la imagen
+# base todavía no trae (libpam CVE-2025-6020 y CVE-2024-22365, libzstd),
+# sin instalar paquetes nuevos. grype los vuelve a comprobar en el CI.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        libpam0g libpam-modules libpam-modules-bin libpam-runtime libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
 # UID/GID numéricos: un orquestador puede verificar `runAsNonRoot` sin
