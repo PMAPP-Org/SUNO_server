@@ -39,7 +39,7 @@ from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog, load_catalog
 from suno.materials.common import lock_project, locked, reverse_entries
 
-from .calc import problems
+from .calc import is_stale, printed_labels, problems
 from .common import (
     MAX_DESCRIPTION,
     MAX_ERRORS,
@@ -70,23 +70,26 @@ def _require(allowed: bool) -> None:
 
 
 def _post(ctx: RequestContext, project: Project, sheet: Timesheet, evaluation: Evaluation) -> int:
-    """Un costo aprobado por destino: la suma de sus líneas ya redondeadas."""
+    """Un costo aprobado por destino: la suma de sus líneas ya redondeadas. El destino, como lo
+    imprimió la planilla firmada (`summary`, #88); una guardada antes sin la clave usa el
+    nombre vigente."""
     first: dict[str, StoredLine] = {}
     amounts: dict[str, Decimal] = defaultdict(lambda: ZERO)
     for line, cost in zip(evaluation.lines, evaluation.costs, strict=True):
         first.setdefault(line.key, line)
         amounts[line.key] += cost.amount or ZERO
+    labels = printed_labels(sheet.summary, evaluation.labels)
     now = timezone.now()
     entries: list[CostEntry] = []
     links: list[CostEntryItem] = []
-    for key in sorted(first, key=lambda k: evaluation.labels.get(k, "")):
+    for key in sorted(first, key=lambda k: labels.get(k, "")):
         line = first[key]
         entry = CostEntry(
             org_id=ctx.org_id,
             project=project,
             incurred_on=sheet.ends_on,
             kind=CostKind.LABOR,
-            description=f"Tareo {sheet.code} · {evaluation.labels.get(key, '—')}"[:MAX_DESCRIPTION],
+            description=f"Tareo {sheet.code} · {labels.get(key, '—')}"[:MAX_DESCRIPTION],
             amount=amounts[key],
             third_party="",
             document_type=CostDocumentType.TIMESHEET,
@@ -153,7 +156,7 @@ def approve_timesheet(
         found = problems(evaluation.costs, evaluation.names)
         if found:
             raise LaborRejected(found[:MAX_ERRORS])
-        if evaluation.summary.fingerprint() != (sheet.summary or {}).get("fingerprint"):
+        if is_stale(evaluation.summary, sheet.summary):
             raise LaborRejected([CHANGED])
         totals = day_totals(ctx, worker_ids, {line.day for line in evaluation.lines})
         errors = cap_errors(ctx, totals, sheet)

@@ -15,6 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from suno.core.models import (
     AuditEvent,
     BenefitFactor,
+    BudgetItemVersion,
     CostEntry,
     Timesheet,
     TimesheetLine,
@@ -25,7 +26,7 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
-from suno.costs.tests.factories import pdf_upload
+from suno.costs.tests.factories import item, pdf_upload
 from suno.labor import approval, timesheets
 from suno.labor.common import SELF_DECISION, LaborRejected
 
@@ -110,6 +111,38 @@ class ApprovalTests(TestCase):
         self.assertEqual(sum(e.amount for e in entries), sheet.total)  # cuadra al peso
         event = AuditEvent.objects.get(action="timesheet.approved")
         self.assertEqual(event.metadata["entries"], 2)
+
+    def test_a_rename_after_printing_keeps_the_printed_destination(self) -> None:
+        """#88: la descripción del libro es la de la planilla impresa y firmada."""
+        self.sign()
+        printed = {group["label"] for group in Timesheet.objects.get(pk=self.sheet.pk)
+                   .summary["groups"]}  # fmt: skip
+        BudgetItemVersion.objects.filter(item=item(self.lw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        sheet = approval.approve_timesheet(self.approver, self.lw.project, self.sheet.pk)
+        descriptions = set(
+            CostEntry.objects.filter(timesheet=sheet).values_list("description", flat=True)
+        )
+        self.assertEqual(descriptions, {f"Tareo TA-001 · {label}" for label in printed})
+        self.assertIn("Tareo TA-001 · 2.1 Concreto zapatas", descriptions)
+
+    def test_an_older_sheet_without_keys_uses_the_current_names(self) -> None:
+        """#88: una planilla guardada antes (`summary.groups` sin `key`) usa el nombre vigente."""
+        self.sign()
+        sheet = Timesheet.objects.get(pk=self.sheet.pk)
+        summary = {**sheet.summary, "groups": [
+            {k: v for k, v in group.items() if k != "key"} for group in sheet.summary["groups"]
+        ]}  # fmt: skip
+        Timesheet.objects.filter(pk=sheet.pk).update(summary=summary)
+        BudgetItemVersion.objects.filter(item=item(self.lw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        approved = approval.approve_timesheet(self.approver, self.lw.project, self.sheet.pk)
+        descriptions = set(
+            CostEntry.objects.filter(timesheet=approved).values_list("description", flat=True)
+        )
+        self.assertIn("Tareo TA-001 · 2.1 Concreto ciclópeo", descriptions)
 
     def test_no_self_approval_and_signature_required(self) -> None:
         with self.assertRaises(LaborRejected) as unsigned:

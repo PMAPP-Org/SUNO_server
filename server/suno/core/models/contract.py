@@ -530,6 +530,9 @@ class CertificateLine(OrgScopedModel):
     #: Obligatoria si la cantidad difiere de la propuesta.
     justification = models.CharField(max_length=300, blank=True, verbose_name="justificación")
     amount = models.DecimalField(max_digits=18, decimal_places=2, verbose_name="valor")
+    #: El ítem como lo nombra el acta al guardarse: lo imprime el PDF y lo copia el libro al
+    #: aprobar, aunque el presupuesto lo renombre después (#88). Vacío en actas anteriores.
+    label = models.TextField(blank=True, verbose_name="ítem impreso")
 
     class Meta:
         db_table = "certificate_line"

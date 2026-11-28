@@ -4,8 +4,7 @@
     <label>Día <select name="dia">{% for d in grid.week.days %}<option value="{{ d|date:'Y-m-d' }}" {% if d == day %}selected{% endif %}>{{ d|date:"l j/m" }}</option>{% endfor %}</select></label>
     <button class="button" type="submit">Ver</button>
   </form>
-  <form method="post" action="{{ urls.save }}" aria-label="Tareo del día"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
-    {% csrf_token %}
+  <form method="post" action="{{ urls.save }}" aria-label="Tareo del día">
     <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
     <input type="hidden" name="dia" value="{{ day|date:'Y-m-d' }}">
     <input type="hidden" name="filas" value="{{ day_inputs|length }}">
@@ -22,5 +21,6 @@
     {% endfor %}
     </ul>
     {% if editable %}<button class="button" type="submit" name="accion" value="guardar-dia">Guardar el día</button>{% endif %}
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </div>

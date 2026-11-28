@@ -10,6 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 
 from suno.core.models import (
+    BudgetItemVersion,
     ConsumptionCut,
     CostEntry,
     CostScope,
@@ -122,6 +123,40 @@ class CutTests(TestCase):
         with self.assertRaises(MaterialRejected):
             issue(self.mw, [(self.mw.cement, "1")], day=MARCH_END)
         self.assertEqual(cuts.default_start(self.admin, self.project), date(2026, 4, 1))
+
+    def test_a_rename_after_printing_keeps_the_printed_destination(self) -> None:
+        """#88: la descripción del libro es la del reporte impreso y firmado."""
+        cut = self.signed(MARCH_END)
+        printed = {group["label"] for group in cut.summary["groups"]}
+        BudgetItemVersion.objects.filter(item=item(self.mw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        cuts.approve_cut(self.supervisor, self.project, cut.pk)
+        descriptions = set(
+            CostEntry.objects.filter(consumption_cut=cut).values_list("description", flat=True)
+        )
+        self.assertEqual(descriptions, {f"Corte 1 de consumos · {label}" for label in printed})
+        self.assertIn(
+            "Corte 1 de consumos · 2.1 Concreto zapatas · tarea 2.1 Columnas", descriptions
+        )
+
+    def test_an_older_cut_without_keys_uses_the_current_names(self) -> None:
+        """#88: un corte guardado antes (`summary.groups` sin `key`) usa el nombre vigente."""
+        cut = self.signed(MARCH_END)
+        summary = {**cut.summary, "groups": [
+            {k: v for k, v in group.items() if k != "key"} for group in cut.summary["groups"]
+        ]}  # fmt: skip
+        ConsumptionCut.objects.filter(pk=cut.pk).update(summary=summary)
+        BudgetItemVersion.objects.filter(item=item(self.mw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        cuts.approve_cut(self.supervisor, self.project, cut.pk)
+        descriptions = set(
+            CostEntry.objects.filter(consumption_cut=cut).values_list("description", flat=True)
+        )
+        self.assertIn(
+            "Corte 1 de consumos · 2.1 Concreto ciclópeo · tarea 2.1 Columnas", descriptions
+        )
 
     def test_what_is_approved_is_what_was_signed(self) -> None:
         cut = self.signed(MARCH_END)

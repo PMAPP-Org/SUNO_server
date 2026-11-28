@@ -37,7 +37,13 @@ from .access import get_labor_project
 from .assignments import AssignmentData, get_assignment
 from .common import LaborRejected
 from .forms import AssignmentForm, PeriodForm
-from .queries import active_workers, assignment_rows, pending_count, timesheet_page
+from .queries import (
+    active_workers,
+    assignment_rows,
+    pending_count,
+    stale_timesheets,
+    timesheet_page,
+)
 
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -104,8 +110,9 @@ def timesheet_list(request: HttpRequest, project_id: UUID) -> HttpResponse:
     ctx = _ctx(request)
     project = get_labor_project(ctx, project_id)
     start, end = timesheets.default_period(timezone.localdate())
-    return page(request, ctx, project, "suno/labor/timesheets.html",
-                page=timesheet_page(ctx, project, page=request.GET.get("pagina")),
+    sheets = timesheet_page(ctx, project, page=request.GET.get("pagina"))
+    return page(request, ctx, project, "suno/labor/timesheets.html", page=sheets,
+                stale=stale_timesheets(ctx, sheets.object_list),
                 form=PeriodForm(initial={"starts_on": start, "ends_on": end}))  # fmt: skip
 
 

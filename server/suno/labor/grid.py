@@ -33,7 +33,7 @@ from suno.materials.destination import (
     key_text,
 )
 
-from .calc import NO_DAYS, days_text
+from .calc import NO_DAYS, days_text, is_stale, printed_labels
 from .calc import problems as find_problems
 from .common import FROZEN_STATES
 from .timesheets import StoredLine, evaluate, hashed, outline_index, read_destination
@@ -183,7 +183,6 @@ def build_grid(
             rows.append(GridRow(worker_id, names[worker_id], positions[worker_id], "", "",
                                 INDIRECT_LABEL, ("",) * len(week.days), NO_DAYS, ZERO))  # fmt: skip
     rows.sort(key=lambda row: (row.worker, row.destination != "", row.label))
-    stored = (sheet.summary or {}).get("fingerprint")
     return Grid(
         sheet=sheet,
         week=week,
@@ -196,9 +195,7 @@ def build_grid(
         days=evaluation.summary.days,
         total=evaluation.summary.total,
         problems=tuple(find_problems(evaluation.costs, evaluation.names)),
-        changed=stored is not None
-        and sheet.status not in FROZEN_STATES
-        and evaluation.summary.fingerprint() != stored,
+        changed=sheet.status not in FROZEN_STATES and is_stale(evaluation.summary, sheet.summary),
     )  # fmt: skip
 
 
@@ -221,7 +218,8 @@ class PeriodTable:
 
 
 def period_table(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> PeriodTable:
-    """Cinco consultas (`evaluate`)."""
+    """Cinco consultas (`evaluate`). El destino, como lo nombra el resumen guardado (el mismo
+    texto del resumen del PDF y del libro, #88)."""
     evaluation = evaluate(ctx, sheet, catalog)
     days = tuple(sheet.starts_on + timedelta(days=n)
                  for n in range((sheet.ends_on - sheet.starts_on).days + 1))  # fmt: skip
@@ -234,8 +232,9 @@ def period_table(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> Per
         entry[1] += line.fraction
         entry[2] += cost.amount or ZERO
         totals[index[line.day]] += line.fraction
+    labels = printed_labels(sheet.summary, evaluation.labels)
     rows = [
-        (evaluation.names.get(worker, "—"), evaluation.labels.get(key, "—"),
+        (evaluation.names.get(worker, "—"), labels.get(key, "—"),
          tuple(cell_text(v) for v in cells), days_total, amount)
         for (worker, key), (cells, days_total, amount) in grouped.items()
     ]  # fmt: skip

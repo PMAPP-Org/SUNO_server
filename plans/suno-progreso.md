@@ -1,7 +1,23 @@
 # Progreso de ejecución — SUNO
 
 **Seguimiento de**: [visitacampo-construccion.md](visitacampo-construccion.md)
-**Última actualización**: 2026-11-23 (módulo de costos, pieza 6d: tareo y conciliación de nómina, servidor, con las correcciones de la revisión de código. Anterior: pieza 6c, materiales, bodegas y cortes de consumos; pieza 6b, subcontratos y destajos; pieza 6a, libro de costos y control de costo; pieza 5, control con valor ganado; pieza 4b, cantidades en la app; renombre a SUNO y registros; ver «Estado al 2026-10-29» abajo)
+**Última actualización**: 2026-11-24 (deuda menor: #86, #92, #88, #89, #103, #106 y #107. Anterior, 2026-11-23: módulo de costos, pieza 6d: tareo y conciliación de nómina, servidor, con las correcciones de la revisión de código. Anterior: pieza 6c, materiales, bodegas y cortes de consumos; pieza 6b, subcontratos y destajos; pieza 6a, libro de costos y control de costo; pieza 5, control con valor ganado; pieza 4b, cantidades en la app; renombre a SUNO y registros; ver «Estado al 2026-10-29» abajo)
+
+## Deuda menor (#86, #92, #88, #89, #103, #106, #107), servidor — 2026-11-24
+
+**Rama**: `fix/deuda-menor` (sin push; el PR lo abre el controlador).
+
+- **#86** (`835a63a`): `test_docker.sh` monta `infra/load/` de solo lectura; las 4 pruebas de `test_load_script.py` pasan en local. `SUNO_TEST_DB`/`SUNO_TEST_NET`/`SUNO_TEST_VENV` permiten correr la suite en dos worktrees a la vez.
+- **#92** (`5dcfae1`): prueba de la reversa de `0014_add_quantity_matrix` con `MigrationExecutor`. La reversa completa desde las hojas tardaba ~5 min (>60 s): la prueba crea una base aparte y vacía, migra solo hasta 0014, siembra, va a 0013 y vuelve (~11 s), sin tocar la plantilla de `dbsupport`.
+- **#88** (`ee0d239`): la descripción del libro sale de lo impreso. Migración `0032_frozen_document_labels` (`CertificateLine.label`, `MaterialPurchaseLine.material_label`); cortes y planillas guardan la clave de cada destino en `summary.groups`. Sin datos retroactivos: lo anterior usa el nombre vigente.
+- **#89** (`c243f95`): el token CSRF va a 10 líneas o menos de `</form>` (justo antes del cierre en los 17 formularios largos) y no queda ningún `nosemgrep` de esa regla. Semgrep 1.185 con la configuración de `security.yml`: 0 hallazgos. Nada se descartó en GitHub.
+- **#103** (`c248c1e`): «Borrar importación» de nómina con confirmación, `can_delete_payroll` (`delete` de Mano de obra en toda la organización), auditoría `payroll.deleted` en la transacción y cascada de líneas.
+- **#106** (`b6b5e68`): «Desactualizada» en la lista de planillas (borradores cuya huella guardada no es el recálculo de hoy); tres consultas por página.
+- **#107** (`5cf18be`): planillas firmadas de otros en la bandeja «Por aprobar» de Costos, solo para quien aprueba tareo; número, periodo, proyecto y total.
+
+Spec de la 6d: nota del 2026-11-24 en «Decisiones tomadas al planear» (revisa la decisión 19). `docs/arquitectura` (componentes y modelo de datos) y `docs/bugs` (KI-02, KI-04, KI-07 y KI-10 resueltos; historial 42 a 44) al día.
+
+**Verificación real**: suite completa en Docker **2407 passed** (+2666 subtests), **sin fallas** (incluidas las 4 de `test_load_script.py`), 19 min. `ruff check`, `ruff format --check suno`, `mypy`, `makemigrations --check` y `check_naming.py` limpios. Revisión visual a 1440 y 390 px (lista de planillas, bandeja, conciliación y confirmación de borrado): sin recortes, encimados ni scroll horizontal de la página.
 
 ## Módulo de costos — Pieza 6d (mano de obra por jornal: tareo y conciliación de nómina), servidor — 2026-11-18
 

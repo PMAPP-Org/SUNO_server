@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -343,6 +343,7 @@ def _write_lines(ctx: RequestContext, certificate: ContractCertificate, draft: D
                 quantity=line.quantity,
                 justification=line.justification,
                 amount=line.amount,
+                label=line.label,
             )
             for line in draft.lines
         ]
@@ -559,9 +560,12 @@ def post_to_ledger(
     lines: Sequence[ContractLine],
     totals: CertificateTotals,
     catalog: Catalog,
+    printed: Mapping[UUID, str],
 ) -> list[CostEntry]:
     """Un movimiento aprobado por línea con valor (spec 3.2). Registró y modificó: quien
-    preparó y editó el acta; aprobó: quien aprueba; soporte: el acta firmada."""
+    preparó y editó el acta; aprobó: quien aprueba; soporte: el acta firmada. La descripción
+    lleva el ítem como lo imprimió el acta (`printed`, por línea del contrato), no el nombre
+    vigente; un acta guardada antes de #88 no lo tiene y usa el vigente."""
     kind = CostKind.LABOR if contract.kind == ContractKind.PIECEWORK else CostKind.SUBCONTRACT
     by_id = {line.pk: line for line in lines}
     now = timezone.now()
@@ -571,7 +575,7 @@ def post_to_ledger(
         line = by_id[line_id]
         row = catalog.rows.get(line.item_id)
         task_ids = [link.task_id for link in line.task_links.all()]
-        label = catalog.label_of(line.item_id, line.item.code)
+        label = printed.get(line_id) or catalog.label_of(line.item_id, line.item.code)
         entry = CostEntry(
             org_id=ctx.org_id,
             project=project,
@@ -672,7 +676,10 @@ def approve_certificate(
         certificate.decided_by_id = ctx.user_id
         certificate.decided_at = timezone.now()
         certificate.save()
-        entries = post_to_ledger(ctx, project, contract, certificate, lines, totals, catalog)
+        printed = {line_id: row.label for line_id, row in stored.items()}
+        entries = post_to_ledger(
+            ctx, project, contract, certificate, lines, totals, catalog, printed
+        )
         if certificate.is_settlement:
             contract.status = ContractStatus.SETTLED
             contract.closed_by_id = ctx.user_id

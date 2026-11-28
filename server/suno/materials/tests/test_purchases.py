@@ -17,7 +17,9 @@ from suno.core.models import (
     CostEntryItem,
     CostKind,
     CostScope,
+    Material,
     MaterialPurchase,
+    MaterialPurchaseLine,
     MovementKind,
     PurchaseKind,
     StockMovement,
@@ -87,6 +89,33 @@ class PurchaseTests(TestCase):
 
     def supported(self, purchase: MaterialPurchase) -> None:
         MaterialPurchase.objects.filter(pk=purchase.pk).update(attachment=support_blob())
+
+    def test_a_material_renamed_before_approval_keeps_the_registered_name(self) -> None:
+        """#88: la descripción del libro sale de la compra registrada, no del catálogo de hoy."""
+        purchase = self.direct()
+        self.supported(purchase)
+        Material.objects.filter(pk=self.mw.sand.pk).update(code="ARE-02", name="Arena lavada")
+        purchases.approve_purchase(self.supervisor, self.project, purchase.pk)
+        descriptions = set(
+            CostEntry.objects.filter(material_purchase=purchase).values_list(
+                "description", flat=True
+            )
+        )
+        self.assertIn("Compra CM-001 · ARE-01 Arena de río", descriptions)
+
+    def test_an_older_purchase_without_label_uses_the_current_name(self) -> None:
+        """#88: una compra guardada antes de la 0032 (`material_label` vacío) usa el vigente."""
+        purchase = self.direct()
+        self.supported(purchase)
+        MaterialPurchaseLine.objects.filter(purchase=purchase).update(material_label="")
+        Material.objects.filter(pk=self.mw.sand.pk).update(name="Arena lavada")
+        purchases.approve_purchase(self.supervisor, self.project, purchase.pk)
+        descriptions = set(
+            CostEntry.objects.filter(material_purchase=purchase).values_list(
+                "description", flat=True
+            )
+        )
+        self.assertIn("Compra CM-001 · ARE-01 Arena lavada", descriptions)
 
     def test_a_warehouse_purchase_enters_the_stock_when_approved(self) -> None:
         first = stock_in(self.mw, [(self.mw.cement, "100", "32000.00")])

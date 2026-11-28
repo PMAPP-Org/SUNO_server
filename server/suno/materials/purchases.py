@@ -272,6 +272,7 @@ def _write_lines(
                 quantity=line.quantity,
                 unit_price=line.unit_price,
                 amount=line.amount,
+                material_label=material_label(line.material),
                 scope=line.assignment.scope if line.assignment else "",
                 chapter_id=line.assignment.chapter_id if line.assignment else None,
                 task_id=line.assignment.task_id if line.assignment else None,
@@ -429,6 +430,10 @@ def purchase_lines(ctx: RequestContext, purchase: MaterialPurchase) -> list[Mate
     )
 
 
+def material_label(material: Material) -> str:
+    return f"{material.code} {material.name}"
+
+
 def third_party(purchase: MaterialPurchase) -> str:
     tax = purchase.supplier_tax_id
     return (f"{purchase.supplier} (NIT {tax})" if tax else purchase.supplier)[:MAX_THIRD_PARTY]
@@ -441,7 +446,8 @@ def _post_direct(
     lines: Sequence[MaterialPurchaseLine],
 ) -> int:
     """Un costo aprobado por línea (spec 2.3): tipo Materiales, fecha de la compra, el
-    proveedor, el documento y la factura; registró y modificó, los de la compra."""
+    proveedor, el documento y la factura; registró y modificó, los de la compra. El material,
+    como quedó registrado en la compra (#88); una compra anterior usa el nombre vigente."""
     now = timezone.now()
     entries: list[CostEntry] = []
     links: list[CostEntryItem] = []
@@ -451,9 +457,9 @@ def _post_direct(
             project=project,
             incurred_on=purchase.purchased_on,
             kind=CostKind.MATERIALS,
-            description=(f"Compra {purchase.code} · {line.material.code} {line.material.name}")[
-                :MAX_DESCRIPTION
-            ],
+            description=(
+                f"Compra {purchase.code} · {line.material_label or material_label(line.material)}"
+            )[:MAX_DESCRIPTION],
             amount=line.amount,
             third_party=third_party(purchase),
             document_type=purchase.document_type,

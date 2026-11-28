@@ -134,13 +134,40 @@ class Summary:
         }
 
     def snapshot(self, labels: Mapping[str, str]) -> dict[str, Any]:
-        """La huella y el resumen por destino que imprime el PDF (`Timesheet.summary`)."""
+        """La huella y el resumen por destino que imprime el PDF (`Timesheet.summary`). Cada
+        destino guarda su clave: al aprobar, el libro copia la etiqueta impresa (#88)."""
         groups = [
-            {"label": labels.get(key, "—"), "days": str(v.days), "total": str(v.amount)}
+            {
+                "key": key,
+                "label": labels.get(key, "—"),
+                "days": str(v.days),
+                "total": str(v.amount),
+            }
             for key, v in self.groups.items()
         ]
         groups.sort(key=lambda group: group["label"])
         return {"fingerprint": self.fingerprint(), "groups": groups}
+
+
+def printed_labels(stored: Mapping[str, Any] | None, current: Mapping[str, str]) -> dict[str, str]:
+    """La etiqueta de cada destino como la imprimió el resumen guardado (`summary.groups`, por
+    `key`, #88); un destino sin clave guardada (resumen anterior) usa la vigente (`current`).
+    La usan el libro al aprobar y la cuadrícula del PDF y el Excel."""
+    return {
+        **current,
+        **{
+            group["key"]: group["label"]
+            for group in (stored or {}).get("groups", [])
+            if "key" in group
+        },
+    }
+
+
+def is_stale(summary: Summary, stored: Mapping[str, Any] | None) -> bool:
+    """El recálculo de hoy ya no es el resumen guardado (lo que se imprimió y firmó). Sin huella
+    guardada también: no hay nada impreso con qué comparar. Es la comparación de la aprobación;
+    la usan también la ficha (`grid`) y la lista (`queries.stale_timesheets`)."""
+    return summary.fingerprint() != (stored or {}).get("fingerprint")
 
 
 def _add(bucket: dict[str, list[Decimal]], key: str, days: Decimal, amount: Decimal) -> None:

@@ -29,7 +29,7 @@
     </tbody>
   </table>
   </div>
-  {% elif not contract_items.count and not material_items.count %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
+  {% elif not contract_items.count and not material_items.count and not timesheet_items %}<p class="pj-empty">No hay borradores por aprobar.</p>{% endif %}
   {% if contract_items.count %}
   <h3>Contratos, otrosíes y actas</h3>
   <div class="pj-scroll">
@@ -113,6 +113,25 @@
         <td class="pj-wrap">{{ c.created_by }}</td>
         <td>{% if c.attachment_id %}<a href="{% url 'materials:cut_file' project.pk c.pk %}" target="_blank" rel="noopener">Reporte firmado</a>{% else %}<span class="pj-late">Sin firmar</span>{% endif %}</td>
         <td>{% url 'materials:approve_cut' project.pk c.pk as approve %}{% url 'materials:reject_cut' project.pk c.pk as reject %}{% include "suno/materials/_decide.html" with can_decide=True can_void=False needs=c.attachment_id|yesno:",Falta el reporte firmado" back="bandeja" %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if timesheet_items %}
+  <h3>Tareo: planillas firmadas</h3>
+  <p class="pj-muted">Se aprueban en la planilla, contra el código impreso en el papel firmado.</p>
+  <div class="pj-scroll">
+  <table class="pj-table cst-ledger">
+    <thead><tr><th>Qué</th><th>Periodo</th><th>Proyecto</th><th class="num">Valor</th></tr></thead>
+    <tbody>
+    {% for t, stale in timesheet_items %}
+      <tr>
+        <td><a href="{% url 'labor:timesheet' project.pk t.pk %}">Planilla {{ t.code }}</a>{% if stale %} <span class="bg-label ta-stale" title="Cambió un jornal o el factor desde que se imprimió: no se aprueba así; hay que recalcularla y volver a firmarla.">Desactualizada</span>{% endif %}</td>
+        <td>{{ t.starts_on|date:"d/m/Y" }} – {{ t.ends_on|date:"d/m/Y" }}</td>
+        <td class="pj-wrap">{{ project.name }}</td>
+        <td class="num">{{ t.total|signed }}</td>
       </tr>
     {% endfor %}
     </tbody>

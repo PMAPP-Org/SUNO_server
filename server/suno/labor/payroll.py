@@ -8,6 +8,9 @@
   Marca a los pagados sin tareo y a los tareados sin pago; los documentos que no están en el
   registro van aparte. Por proyecto, lo pagado se prorratea por los jornales tareados en el
   proyecto sobre los de toda la organización (decisión 22).
+- Borrar una importación (#103) pide `can_delete_payroll` (quien la importó o quien aprueba
+  tareo, decisión del 2026-11-28): se van sus líneas y, con ellas, su
+  conciliación (es solo un reporte). Reemplazar es borrar e importar otra vez.
 - Importar pide `can_manage_labor_registry`; ver, `can_read_labor_registry`. Cuatro consultas
   (cinco si hay líneas que al importar no estaban en el registro: se buscan otra vez por
   documento, para reconocer a quien se registró después).
@@ -44,7 +47,11 @@ from suno.core.models import (
     Worker,
 )
 from suno.core.models.labor import mask_document
-from suno.core.policies import can_manage_labor_registry, can_read_labor_registry
+from suno.core.policies import (
+    can_delete_payroll,
+    can_manage_labor_registry,
+    can_read_labor_registry,
+)
 from suno.core.scoping import scoped_qs
 
 from . import imports
@@ -209,6 +216,37 @@ def apply(ctx: RequestContext, token: str) -> PayrollImport:
             },
         )  # fmt: skip
     return imported
+
+
+PAYROLL_GONE = "La nómina ya no existe: alguien la borró."
+
+
+def delete_payroll(ctx: RequestContext, payroll_id: UUID) -> None:
+    """Borra la nómina importada y sus líneas, con la fila bloqueada; queda en la auditoría
+    qué se borró (periodo, líneas, total y huella del archivo; no el nombre del archivo, que
+    puede llevar datos personales). Si ya no existe (o es de otra organización),
+    `LaborRejected`: la vista decide el 404."""
+    current = scoped_qs(ctx, PayrollImport).filter(pk=payroll_id).first()
+    if current is None:
+        raise LaborRejected([PAYROLL_GONE])
+    if not can_delete_payroll(ctx, current):  # antes del `FOR UPDATE` (M5 de la 6d)
+        raise PermissionDenied
+    with transaction.atomic():
+        imported = scoped_qs(ctx, PayrollImport).select_for_update().filter(pk=payroll_id).first()
+        if imported is None:
+            raise LaborRejected([PAYROLL_GONE])
+        metadata = {
+            "start": imported.starts_on.isoformat(),
+            "end": imported.ends_on.isoformat(),
+            "lines": imported.line_count,
+            "total": str(imported.total),
+            "sha256": imported.file_sha256,
+            "imported_by": str(imported.imported_by_id),
+        }
+        target = f"payroll_import:{imported.pk}"
+        scoped_qs(ctx, PayrollImportLine).filter(payroll=imported).delete()
+        imported.delete()
+        audit.record(ctx, action=AuditAction.PAYROLL_DELETED, target=target, metadata=metadata)
 
 
 @dataclass(frozen=True)

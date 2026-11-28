@@ -1,6 +1,5 @@
 {% load money_tags %}
-<form method="post" action="{{ urls.save }}" class="ta-week" aria-label="Cuadrícula de la semana"><!-- El token se renderiza justo debajo. nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
-  {% csrf_token %}
+<form method="post" action="{{ urls.save }}" class="ta-week" aria-label="Cuadrícula de la semana">
   <input type="hidden" name="semana" value="{{ grid.week.start|date:'Y-m-d' }}">
   <input type="hidden" name="filas" value="{{ inputs|length }}">
   <input type="hidden" name="version" value="{{ version }}">
@@ -27,4 +26,5 @@
   </table>
   </div>
   {% if editable %}<p class="ctr-actions"><button class="button" type="submit" name="accion" value="guardar">Guardar la semana</button> <button class="text-link" type="submit" name="accion" value="recalcular">Recalcular el resumen</button></p>{% endif %}
+  {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
 </form>

@@ -25,7 +25,6 @@
 </section>
 <section class="pj-panel">
   <form method="post" class="ctr-form">
-    {% csrf_token %}
     <input type="hidden" name="desde" value="{{ start|date:'Y-m-d' }}">
     <input type="hidden" name="hasta" value="{{ end|date:'Y-m-d' }}">
     {% if settlement %}<input type="hidden" name="liquidacion" value="1">{% endif %}
@@ -56,6 +55,7 @@
       <button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
       <a href="{% url 'contracts:detail' project.pk contract.pk %}?pestana=actas">Cancelar</a>
     </div>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% endif %}

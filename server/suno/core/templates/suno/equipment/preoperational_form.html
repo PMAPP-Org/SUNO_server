@@ -7,8 +7,7 @@
   {% if not checklist %}
     <p class="eq-empty-inline">La tipología de este equipo no tiene lista de chequeo: pídele a un gestor que la defina para poder enviar preoperacionales.</p>
   {% else %}
-  <form method="post" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
-    {% csrf_token %}
+  <form method="post" class="eq-form">
     {% if needs_meter %}
     <label><span>Lectura inicial de {{ meter_label|lower }}<b aria-hidden="true">*</b></span><input type="text" inputmode="decimal" name="meter_value" value="{{ answers.meter_value }}" required></label>
     {% endif %}
@@ -22,6 +21,7 @@
     {% endfor %}
     <label class="eq-field-wide"><span>Observaciones generales</span><textarea name="notes" rows="3">{{ answers.notes }}</textarea></label>
     <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Enviar preoperacional</button><a data-peek-close href="{% url 'equipment:detail' equipment.pk %}">Cancelar</a></div>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
   {% endif %}
 </section>

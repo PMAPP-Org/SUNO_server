@@ -21,7 +21,7 @@
 <p class="eq-form-note">Total: <strong>{{ preview.total_m3|floatformat:"-2g" }} m³ · ${{ preview.total_amount|floatformat:"2g" }}</strong>.
 {% if preview.unpriced %} <b>{{ preview.unpriced }} viaje{{ preview.unpriced|pluralize }} sin tarifa:</b> define la tarifa del tramo y el material para poder confirmar.{% endif %}</p>
 {% if preview.vehicles and not preview.unpriced %}
-<form method="post" action="{% url 'equipment:transport_settlement_confirm' settlement.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+<form method="post" action="{% url 'equipment:transport_settlement_confirm' settlement.pk %}" class="eq-form">
   {% csrf_token %}
   {% for field in form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
   <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Confirmar liquidación</button></div>

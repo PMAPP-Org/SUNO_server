@@ -18,7 +18,6 @@
   <h2>{% if contract %}Editar contrato {{ contract.number }}{% else %}Nuevo contrato{% endif %}</h2>
   {% if contract.rejection_note %}<p class="pj-warning">Devuelto por {{ contract.rejected_by }}: {{ contract.rejection_note }}. Al guardarlo queda listo para aprobar otra vez.</p>{% endif %}
   <form method="post" class="ctr-form">
-    {% csrf_token %}
     {% if show_errors %}{% if errors or form.errors %}<div class="pj-late" role="alert"><p>No se pudo guardar:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}{% endif %}
     {% if overlaps %}
     <div class="pj-warning" role="alert">
@@ -45,6 +44,7 @@
     <p class="pj-muted">Anticipo y retención de garantía se descuentan en cada acta; no son costo.</p>
     <div class="ctr-actions"><button class="button" type="submit" name="accion" value="guardar">Guardar borrador</button>
     <a href="{% if contract %}{% url 'contracts:detail' project.pk contract.pk %}{% else %}{% url 'contracts:list' project.pk %}{% endif %}">Cancelar</a></div>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% endblock %}

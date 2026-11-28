@@ -15,7 +15,6 @@
 </section>
 <section class="pj-panel">
   <form method="post" enctype="multipart/form-data" class="pj-form cst-form">
-    {% csrf_token %}
     <input type="hidden" name="alcance" value="{{ step.scope }}">
     <input type="hidden" name="capitulo" value="{{ step.chapter_id|default:'' }}">
     {% if errors or form.errors %}<div class="pj-late" role="alert"><p>No se pudo guardar:</p><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}{% for field in form %}{% for e in field.errors %}<li>{{ field.label }}: {{ e }}</li>{% endfor %}{% endfor %}</ul></div>{% endif %}
@@ -40,6 +39,7 @@
     <label>{{ form.support.label }}{% if entry.attachment_id %} <small>(ya tiene {{ entry.attachment_name|default:"un soporte" }}; otro lo reemplaza)</small>{% endif %} {{ form.support }}</label>
     <p class="pj-muted">Se guarda en borrador. Para aprobarlo hacen falta el soporte y otra persona.</p>
     <button class="button" type="submit">Guardar</button>
+    {% csrf_token %}{# junto al cierre: así lo ve Semgrep, ver test_templates_csrf.py #}
   </form>
 </section>
 {% endblock %}

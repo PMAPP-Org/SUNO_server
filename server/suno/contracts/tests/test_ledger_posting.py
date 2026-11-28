@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from suno.budgets.totals import BASE_DIRECT, ChargeSpec
 from suno.contracts import certificates, services
 from suno.contracts.certificates import CertificateData, CertificateLineData
+from suno.contracts.queries import certificate_document
 from suno.contracts.services import AmendmentData, ContractRejected, IncreaseData
 from suno.control.earned_value import compute
 from suno.control.loader import load_control_input
@@ -23,6 +24,8 @@ from suno.core.audit import AuditAction
 from suno.core.models import (
     AppUser,
     AuditEvent,
+    BudgetItemVersion,
+    CertificateLine,
     CertificateStatus,
     ContractCertificate,
     ContractKind,
@@ -39,6 +42,7 @@ from suno.core.tests.dbsupport import (
     teardown_test_database,
 )
 from suno.costs import services as cost_services
+from suno.costs.catalog import load_catalog
 from suno.costs.services import CostRejected
 from suno.costs.tests.factories import item, pdf_upload
 
@@ -123,6 +127,46 @@ class CertificateApprovalTests(TestCase):
                          (self.cw.contributor, self.world.supervisor))  # fmt: skip
         self.assertEqual(concrete.attachment_id, certificate.attachment_id)
         self.assertTrue(AuditEvent.objects.filter(action=AuditAction.CERTIFICATE_APPROVED).exists())
+
+    def test_a_rename_after_printing_keeps_the_printed_label_in_the_ledger(self) -> None:
+        """#88: la descripción del libro es la del acta impresa y firmada, no la vigente."""
+        certificate = self.prepared()
+        before = certificate_document(
+            self.world.ctx(), self.project, self.contract, certificate,
+            load_catalog(self.world.ctx(), self.project),
+        )  # fmt: skip
+        BudgetItemVersion.objects.filter(item=item(self.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        self.assertIn("2.1 Concreto ciclópeo", load_catalog(self.world.ctx(), self.project)
+                      .label_of(item(self.cw.budget, "2.1").pk))  # fmt: skip
+        after = certificate_document(
+            self.world.ctx(), self.project, self.contract, certificate,
+            load_catalog(self.world.ctx(), self.project),
+        )  # fmt: skip
+        printed = [line.label for line in before.lines]
+        self.assertEqual([line.label for line in after.lines], printed)
+        self.approve(certificate)
+        descriptions = sorted(
+            CostEntry.objects.filter(certificate=certificate).values_list("description", flat=True)
+        )
+        self.assertEqual(
+            descriptions, sorted(f"Acta 1 · Contrato SC-001 · {label}" for label in printed)
+        )
+        self.assertIn("Acta 1 · Contrato SC-001 · 2.1 Concreto zapatas", descriptions)
+
+    def test_an_older_certificate_without_label_uses_the_current_name(self) -> None:
+        """#88: un acta guardada antes de la 0032 (`label` vacío) usa el nombre vigente."""
+        certificate = self.prepared()
+        CertificateLine.objects.filter(certificate=certificate).update(label="")
+        BudgetItemVersion.objects.filter(item=item(self.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        self.approve(certificate)
+        descriptions = set(
+            CostEntry.objects.filter(certificate=certificate).values_list("description", flat=True)
+        )
+        self.assertIn("Acta 1 · Contrato SC-001 · 2.1 Concreto ciclópeo", descriptions)
 
     def test_self_approval_missing_copy_and_roles(self) -> None:
         own = certificates.create_certificate(

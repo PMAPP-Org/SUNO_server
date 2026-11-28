@@ -21,7 +21,7 @@
 <p class="eq-form-note">Total: <strong>{{ preview.total_gallons|floatformat:"-2g" }} galones · ${{ preview.total_amount|floatformat:"2g" }}</strong>.
 {% if preview.unpriced %} <b>{{ preview.unpriced }} tanqueo{{ preview.unpriced|pluralize }} sin tarifa:</b> define la tarifa de la estación para poder confirmar.{% endif %}</p>
 {% if preview.stations and not preview.unpriced %}
-<form method="post" action="{% url 'equipment:fuel_liquidation_confirm' liquidation.pk %}" class="eq-form"><!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+<form method="post" action="{% url 'equipment:fuel_liquidation_confirm' liquidation.pk %}" class="eq-form">
   {% csrf_token %}
   {% for field in form %}<label><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endfor %}
   <div class="eq-form-actions"><button class="eq-button eq-button-primary" type="submit">Confirmar liquidación</button></div>
