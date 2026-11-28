@@ -213,6 +213,12 @@ class CostEntryResource(OrgScopedResource, Protocol):
     created_by_id: UUID
 
 
+class PayrollResource(OrgScopedResource, Protocol):
+    """Una nómina importada ya resuelta: quién la importó."""
+
+    imported_by_id: UUID
+
+
 class PolicyDenied(HttpError):
     """Denegación de política, con el `code` estable del contrato.
 
@@ -674,18 +680,26 @@ def can_read_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
 
 
 def can_manage_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:
-    """Altas, jornales, factor, retiros, borrado e importaciones de trabajadores y de nómina:
-    `create` y `update` de Mano de obra con alcance de toda la organización (spec 3.5)."""
+    """Altas, jornales, factor, retiros, borrado e importaciones de trabajadores, e importar la
+    nómina: `create` y `update` de Mano de obra con alcance de toda la organización (spec 3.5).
+    Borrar una nómina importada lo decide `can_delete_payroll`."""
     return user_has_section_capability(
         ctx, org_id, Section.LABOR, Capability.CREATE
     ) and user_has_section_capability(ctx, org_id, Section.LABOR, Capability.UPDATE)
 
 
-def can_delete_payroll(ctx: RequestContext, org_id: UUID) -> bool:
+def can_delete_payroll(ctx: RequestContext, payroll: PayrollResource) -> bool:
     """Borrar una nómina importada (con sus líneas), para corregirla e importarla otra vez
-    (#103): `delete` de Mano de obra con alcance de toda la organización, como el registro.
-    Su conciliación es solo un reporte: se va con ella y no toca el libro."""
-    return user_has_section_capability(ctx, org_id, Section.LABOR, Capability.DELETE)
+    (#103). Decisión del usuario del 2026-11-28, la misma regla de las planillas: `delete` de
+    Mano de obra con alcance de toda la organización y, además, haberla importado o tener
+    `approve` (Gestor y Revisor; la administración es Gestora). Su conciliación es solo un
+    reporte: se va con ella y no toca el libro."""
+    org_id = payroll.org_id
+    if not user_has_section_capability(ctx, org_id, Section.LABOR, Capability.DELETE):
+        return False
+    return payroll.imported_by_id == ctx.user_id or user_has_section_capability(
+        ctx, org_id, Section.LABOR, Capability.APPROVE
+    )
 
 
 def can_export_labor_registry(ctx: RequestContext, org_id: UUID) -> bool:

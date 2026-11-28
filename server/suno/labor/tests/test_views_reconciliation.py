@@ -145,10 +145,26 @@ class PayrollDeleteTests(TestCase):
         # El trabajador ya no aparece en ninguna nómina: se puede borrar si no tiene tareo.
         self.assertFalse(PayrollImportLine.objects.filter(worker=self.lw.pedro).exists())
 
-    def test_the_contributor_with_delete_may_delete(self) -> None:
-        self.client.force_login(self.lw.contributor)
+    def test_a_contributor_deletes_only_what_they_imported(self) -> None:
+        """Decisión del 2026-11-28: borra quien la importó (con `delete`) o quien aprueba tareo
+        en toda la organización, como las planillas."""
+        self.client.force_login(self.lw.contributor)  # la importó la administración
+        reconciliation = self.client.get(f"{BASE}{self.payroll.pk}/")
+        self.assertNotContains(reconciliation, self.url)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.post(self.url, {"confirm": "1"}).status_code, 403)
+        self.assertTrue(PayrollImport.objects.filter(pk=self.payroll.pk).exists())
+        PayrollImport.objects.filter(pk=self.payroll.pk).update(imported_by=self.lw.contributor)
+        self.assertContains(self.client.get(f"{BASE}{self.payroll.pk}/"), self.url)
         self.assertEqual(self.client.get(self.url).status_code, 200)
         self.client.post(self.url, {"confirm": "1"})
+        self.assertFalse(PayrollImport.objects.exists())
+
+    def test_the_manager_deletes_anyone_s_payroll(self) -> None:
+        PayrollImport.objects.filter(pk=self.payroll.pk).update(imported_by=self.lw.contributor)
+        self.client.force_login(self.lw.world.admin)
+        self.assertContains(self.client.get(f"{BASE}{self.payroll.pk}/"), self.url)
+        self.assertRedirects(self.client.post(self.url, {"confirm": "1"}), BASE)
         self.assertFalse(PayrollImport.objects.exists())
 
     def test_permissions_and_other_organizations(self) -> None:

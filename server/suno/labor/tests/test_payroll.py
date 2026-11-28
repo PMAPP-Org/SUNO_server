@@ -168,6 +168,8 @@ class PayrollDeleteServiceTests(TestCase):
         other = labor_world("Ajena")
         with self.assertRaises(LaborRejected):
             payroll.delete_payroll(other.ctx(), self.payroll.pk)
+        with self.assertRaises(PermissionDenied):  # Colaborador: no la importó
+            payroll.delete_payroll(self.lw.ctx(self.lw.contributor), self.payroll.pk)
         self.payroll.delete()
         with self.assertRaises(LaborRejected):
             payroll.delete_payroll(self.lw.ctx(), self.payroll.pk)

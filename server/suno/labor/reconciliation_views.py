@@ -121,7 +121,7 @@ def reconciliation(request: HttpRequest, payroll_id: UUID) -> HttpResponse:
     projects = scoped_qs(ctx, Project).order_by("name").values_list("pk", "name")
     return page(request, ctx, "suno/labor/reconciliation.html", result=result,
                 projects=list(projects), project=project,
-                can_delete_payroll=can_delete_payroll(ctx, ctx.org_id))  # fmt: skip
+                can_delete_payroll=can_delete_payroll(ctx, imported))  # fmt: skip
 
 
 @login_required(login_url="platform_login")
@@ -130,9 +130,9 @@ def payroll_delete(request: HttpRequest, payroll_id: UUID) -> HttpResponse:
     """Confirmación y borrado de una nómina importada (#103). Reemplazarla es borrarla e
     importar otra vez."""
     ctx = registry_ctx(request)
-    if not can_delete_payroll(ctx, ctx.org_id):
-        raise PermissionDenied
     imported = get_payroll(ctx, payroll_id)
+    if not can_delete_payroll(ctx, imported):
+        raise PermissionDenied
     error = ""
     if request.method == "POST":
         if request.POST.get("confirm") == "1":
