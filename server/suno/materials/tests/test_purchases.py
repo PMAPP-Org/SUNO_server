@@ -103,7 +103,6 @@ class PurchaseTests(TestCase):
         )
         self.assertIn("Compra CM-001 · ARE-01 Arena de río", descriptions)
 
-
     def test_an_older_purchase_without_label_uses_the_current_name(self) -> None:
         """#88: una compra guardada antes de la 0032 (`material_label` vacío) usa el vigente."""
         purchase = self.direct()

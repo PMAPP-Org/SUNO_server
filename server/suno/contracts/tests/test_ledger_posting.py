@@ -155,7 +155,6 @@ class CertificateApprovalTests(TestCase):
         )
         self.assertIn("Acta 1 · Contrato SC-001 · 2.1 Concreto zapatas", descriptions)
 
-
     def test_an_older_certificate_without_label_uses_the_current_name(self) -> None:
         """#88: un acta guardada antes de la 0032 (`label` vacío) usa el nombre vigente."""
         certificate = self.prepared()

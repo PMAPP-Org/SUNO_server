@@ -149,9 +149,7 @@ class Summary:
         return {"fingerprint": self.fingerprint(), "groups": groups}
 
 
-def printed_labels(
-    stored: Mapping[str, Any] | None, current: Mapping[str, str]
-) -> dict[str, str]:
+def printed_labels(stored: Mapping[str, Any] | None, current: Mapping[str, str]) -> dict[str, str]:
     """La etiqueta de cada destino como la imprimió el resumen guardado (`summary.groups`, por
     `key`, #88); un destino sin clave guardada (resumen anterior) usa la vigente (`current`).
     La usan el libro al aprobar y la cuadrícula del PDF y el Excel."""

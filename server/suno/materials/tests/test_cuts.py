@@ -140,7 +140,6 @@ class CutTests(TestCase):
             "Corte 1 de consumos · 2.1 Concreto zapatas · tarea 2.1 Columnas", descriptions
         )
 
-
     def test_an_older_cut_without_keys_uses_the_current_names(self) -> None:
         """#88: un corte guardado antes (`summary.groups` sin `key`) usa el nombre vigente."""
         cut = self.signed(MARCH_END)

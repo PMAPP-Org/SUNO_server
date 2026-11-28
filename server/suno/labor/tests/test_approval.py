@@ -127,7 +127,6 @@ class ApprovalTests(TestCase):
         self.assertEqual(descriptions, {f"Tareo TA-001 · {label}" for label in printed})
         self.assertIn("Tareo TA-001 · 2.1 Concreto zapatas", descriptions)
 
-
     def test_an_older_sheet_without_keys_uses_the_current_names(self) -> None:
         """#88: una planilla guardada antes (`summary.groups` sin `key`) usa el nombre vigente."""
         self.sign()
