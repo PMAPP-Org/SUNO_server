@@ -336,17 +336,24 @@ Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la secci
   libro no cambia. Queda `payroll.deleted` en la auditoría (periodo, líneas, total y huella del
   archivo, sin nombres). Reemplazar una nómina es borrarla e importarla otra vez; no hay acción
   aparte.
+  **Decisión del usuario del 2026-11-28:** quién borra sigue la regla de las planillas. Hace
+  falta `delete` de Mano de obra en toda la organización y, además, haber importado esa nómina o
+  tener `approve` (Gestor, y por la matriz también Revisor; la administración y la propiedad son
+  Gestoras). Un Colaborador borra solo las suyas. El enlace se muestra con la misma política. La
+  auditoría guarda la huella del archivo, no su nombre.
 - **#106, «Desactualizada» en la lista de planillas.** Un borrador cuyo resumen guardado ya no
   coincide con el recálculo de hoy (cambió un jornal o el factor) se marca en la lista. Es la misma
   comparación de huellas que hace la aprobación. Se calcula con tres consultas para toda la página
   (líneas, jornales y factor), no una por planilla. Solo se marcan los borradores: una rechazada
-  vuelve a borrador al editarse.
+  vuelve a borrador al editarse. La ficha, la lista, la bandeja y la aprobación usan la misma
+  función (`calc.is_stale`; sin huella guardada también cuenta como desactualizada).
 - **#107, planillas en la bandeja «Por aprobar» de Costos** (revisa la decisión 19). Se listan los
   borradores **firmados** (los mismos que cuenta la pestaña Tareo, decisión 19) que no preparó ni
   editó quien mira, solo a quien puede aprobar tareo en ese proyecto (`can_approve_labor`). Cada
   fila lleva número con enlace a la planilla, periodo, proyecto y total: sin trabajadores ni
   jornales. Se aprueban en la planilla, contra el código impreso (decisión 14), no desde la bandeja.
-  El contador «Por aprobar (n)» las suma.
+  El contador «Por aprobar (n)» las suma. Una planilla desactualizada lleva la marca
+  «Desactualizada» también en la bandeja.
 - **#88, del mismo día.** El resumen guardado (`summary.groups`) guarda la clave de cada destino.
   Al aprobar, la descripción del libro copia la etiqueta impresa, no el nombre vigente del ítem o
   de la tarea. Una planilla guardada antes usa el nombre vigente.
