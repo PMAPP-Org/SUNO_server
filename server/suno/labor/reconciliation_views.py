@@ -136,8 +136,12 @@ def payroll_delete(request: HttpRequest, payroll_id: UUID) -> HttpResponse:
     error = ""
     if request.method == "POST":
         if request.POST.get("confirm") == "1":
-            payroll.delete_payroll(ctx, imported.pk)
-            messages.success(request, "Nómina borrada. Puedes importar la corregida.")
+            try:
+                payroll.delete_payroll(ctx, imported.pk)
+            except LaborRejected as exc:  # otra persona la borró entre leerla y confirmar
+                messages.error(request, exc.errors[0])
+            else:
+                messages.success(request, "Nómina borrada. Puedes importar la corregida.")
             return redirect("labor_registry:payrolls")
         error = "Marca la casilla para confirmar el borrado."
     return page(request, ctx, "suno/labor/payroll_delete.html", payroll=imported, error=error)

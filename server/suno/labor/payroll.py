@@ -28,7 +28,6 @@ from uuid import UUID
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Sum
-from django.http import Http404
 
 from suno.backoffice.export import to_xlsx_book
 from suno.budgets.excel import ExcelRejected, preview_sheet, read_rows
@@ -218,21 +217,25 @@ def apply(ctx: RequestContext, token: str) -> PayrollImport:
     return imported
 
 
+PAYROLL_GONE = "La nómina ya no existe: alguien la borró."
+
+
 def delete_payroll(ctx: RequestContext, payroll_id: UUID) -> None:
     """Borra la nómina importada y sus líneas, con la fila bloqueada; queda en la auditoría
-    qué se borró (periodo, líneas, total y huella del archivo)."""
+    qué se borró (periodo, líneas, total y huella del archivo; no el nombre del archivo, que
+    puede llevar datos personales). Si ya no existe (o es de otra organización),
+    `LaborRejected`: la vista decide el 404."""
     if not can_delete_payroll(ctx, ctx.org_id):
         raise PermissionDenied
     with transaction.atomic():
         imported = scoped_qs(ctx, PayrollImport).select_for_update().filter(pk=payroll_id).first()
         if imported is None:
-            raise Http404
+            raise LaborRejected([PAYROLL_GONE])
         metadata = {
             "start": imported.starts_on.isoformat(),
             "end": imported.ends_on.isoformat(),
             "lines": imported.line_count,
             "total": str(imported.total),
-            "file_name": imported.file_name,
             "sha256": imported.file_sha256,
             "imported_by": str(imported.imported_by_id),
         }

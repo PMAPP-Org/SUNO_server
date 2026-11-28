@@ -142,3 +142,32 @@ class PayrollTests(TestCase):
             payroll.preview(self.lw.ctx(self.lw.viewer), book, *MARCH, "x.xlsx")
         with self.assertRaises(PermissionDenied):
             payroll.reconcile(self.lw.ctx(self.lw.accountant), self.imported())
+
+
+@skip_without_db
+class PayrollDeleteServiceTests(TestCase):
+    """#103: el servicio no lanza `Http404` (es de la vista) y la auditoría no guarda el nombre
+    del archivo (basta su huella)."""
+
+    def setUp(self) -> None:
+        self.lw = labor_world()
+        self.payroll = PayrollImport.objects.create(
+            org=self.lw.world.org, starts_on=date(2026, 3, 1), ends_on=date(2026, 3, 31),
+            file_name="nomina-pedro-perez.xlsx", file_size=10, file_sha256="a" * 64,
+            line_count=0, total=0, imported_by=self.lw.world.admin,
+        )  # fmt: skip
+
+    def test_the_audit_keeps_the_hash_not_the_file_name(self) -> None:
+        payroll.delete_payroll(self.lw.ctx(), self.payroll.pk)
+        metadata = AuditEvent.objects.get(action="payroll.deleted").metadata
+        self.assertEqual(metadata["sha256"], "a" * 64)
+        self.assertNotIn("file_name", metadata)
+        self.assertNotIn("nomina-pedro-perez", str(metadata))
+
+    def test_a_missing_or_foreign_payroll_is_rejected_not_404(self) -> None:
+        other = labor_world("Ajena")
+        with self.assertRaises(LaborRejected):
+            payroll.delete_payroll(other.ctx(), self.payroll.pk)
+        self.payroll.delete()
+        with self.assertRaises(LaborRejected):
+            payroll.delete_payroll(self.lw.ctx(), self.payroll.pk)

@@ -18,6 +18,8 @@ from suno.core.tests.dbsupport import (
     setup_test_database,
     teardown_test_database,
 )
+from suno.labor.common import LaborRejected
+from suno.labor.payroll import PAYROLL_GONE
 
 from .factories import TODAY, WEEK, bare_line, bare_timesheet, grant_labor, labor_world, xlsx
 
@@ -173,3 +175,11 @@ class PayrollDeleteTests(TestCase):
         self.client.force_login(project_only)
         self.assertEqual(self.client.post(self.url, {"confirm": "1"}).status_code, 404)
         self.assertTrue(PayrollImport.objects.exists())
+
+    def test_a_payroll_deleted_meanwhile_is_a_message_not_an_error(self) -> None:
+        self.client.force_login(self.lw.world.admin)
+        gone = LaborRejected([PAYROLL_GONE])  # otra persona la borró entre leer y confirmar
+        with mock.patch("suno.labor.payroll.delete_payroll", side_effect=gone):
+            response = self.client.post(self.url, {"confirm": "1"}, follow=True)
+        self.assertRedirects(response, BASE)
+        self.assertContains(response, "ya no existe")
