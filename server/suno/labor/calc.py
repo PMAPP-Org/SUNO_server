@@ -149,6 +149,22 @@ class Summary:
         return {"fingerprint": self.fingerprint(), "groups": groups}
 
 
+def printed_labels(
+    stored: Mapping[str, Any] | None, current: Mapping[str, str]
+) -> dict[str, str]:
+    """La etiqueta de cada destino como la imprimió el resumen guardado (`summary.groups`, por
+    `key`, #88); un destino sin clave guardada (resumen anterior) usa la vigente (`current`).
+    La usan el libro al aprobar y la cuadrícula del PDF y el Excel."""
+    return {
+        **current,
+        **{
+            group["key"]: group["label"]
+            for group in (stored or {}).get("groups", [])
+            if "key" in group
+        },
+    }
+
+
 def is_stale(summary: Summary, stored: Mapping[str, Any] | None) -> bool:
     """El recálculo de hoy ya no es el resumen guardado (lo que se imprimió y firmó). Sin huella
     guardada también: no hay nada impreso con qué comparar. Es la comparación de la aprobación;

@@ -33,7 +33,7 @@ from suno.materials.destination import (
     key_text,
 )
 
-from .calc import NO_DAYS, days_text, is_stale
+from .calc import NO_DAYS, days_text, is_stale, printed_labels
 from .calc import problems as find_problems
 from .common import FROZEN_STATES
 from .timesheets import StoredLine, evaluate, hashed, outline_index, read_destination
@@ -218,7 +218,8 @@ class PeriodTable:
 
 
 def period_table(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> PeriodTable:
-    """Cinco consultas (`evaluate`)."""
+    """Cinco consultas (`evaluate`). El destino, como lo nombra el resumen guardado (el mismo
+    texto del resumen del PDF y del libro, #88)."""
     evaluation = evaluate(ctx, sheet, catalog)
     days = tuple(sheet.starts_on + timedelta(days=n)
                  for n in range((sheet.ends_on - sheet.starts_on).days + 1))  # fmt: skip
@@ -231,8 +232,9 @@ def period_table(ctx: RequestContext, sheet: Timesheet, catalog: Catalog) -> Per
         entry[1] += line.fraction
         entry[2] += cost.amount or ZERO
         totals[index[line.day]] += line.fraction
+    labels = printed_labels(sheet.summary, evaluation.labels)
     rows = [
-        (evaluation.names.get(worker, "—"), evaluation.labels.get(key, "—"),
+        (evaluation.names.get(worker, "—"), labels.get(key, "—"),
          tuple(cell_text(v) for v in cells), days_total, amount)
         for (worker, key), (cells, days_total, amount) in grouped.items()
     ]  # fmt: skip

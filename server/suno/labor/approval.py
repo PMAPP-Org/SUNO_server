@@ -39,7 +39,7 @@ from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog, load_catalog
 from suno.materials.common import lock_project, locked, reverse_entries
 
-from .calc import is_stale, problems
+from .calc import is_stale, printed_labels, problems
 from .common import (
     MAX_DESCRIPTION,
     MAX_ERRORS,
@@ -78,14 +78,7 @@ def _post(ctx: RequestContext, project: Project, sheet: Timesheet, evaluation: E
     for line, cost in zip(evaluation.lines, evaluation.costs, strict=True):
         first.setdefault(line.key, line)
         amounts[line.key] += cost.amount or ZERO
-    labels = {
-        **evaluation.labels,
-        **{
-            group["key"]: group["label"]
-            for group in (sheet.summary or {}).get("groups", [])
-            if "key" in group
-        },
-    }
+    labels = printed_labels(sheet.summary, evaluation.labels)
     now = timezone.now()
     entries: list[CostEntry] = []
     links: list[CostEntryItem] = []

@@ -9,13 +9,14 @@ from unittest import mock
 
 from django.test import TestCase
 
-from suno.core.models import Timesheet, WorkerWage
+from suno.core.models import BudgetItemVersion, Timesheet, WorkerWage
 from suno.core.tests.dbsupport import (
     SKIP_REASON,
     setup_test_database,
     teardown_test_database,
 )
 from suno.costs.catalog import assignable_tasks, load_catalog
+from suno.costs.tests.factories import item
 from suno.labor import grid, queries, timesheets
 from suno.labor.calc import is_stale
 from suno.labor.queries import stale_timesheets
@@ -101,6 +102,24 @@ class GridTests(TestCase):
         self.assertTrue(is_stale(evaluation.summary, self.sheet.summary))
         self.assertFalse(is_stale(evaluation.summary, {
             "fingerprint": evaluation.summary.fingerprint()}))  # fmt: skip
+
+    def test_the_period_table_prints_the_stored_destination_labels(self) -> None:
+        """M6 (#88): el PDF y el Excel nombran el destino como el resumen guardado y el libro;
+        un resumen sin clave (anterior) usa el nombre vigente."""
+        BudgetItemVersion.objects.filter(item=item(self.lw.cw.budget, "2.1")).update(
+            description="Concreto ciclópeo"
+        )
+        catalog = load_catalog(self.ctx, self.lw.project)
+        labels = {row[1] for row in grid.period_table(self.ctx, self.sheet, catalog).rows}
+        self.assertIn("2.1 Concreto zapatas", labels)
+        self.assertNotIn("2.1 Concreto ciclópeo", labels)
+        legacy = {**self.sheet.summary, "groups": [
+            {k: v for k, v in group.items() if k != "key"} for group in self.sheet.summary["groups"]
+        ]}  # fmt: skip
+        Timesheet.objects.filter(pk=self.sheet.pk).update(summary=legacy)
+        self.sheet.refresh_from_db()
+        labels = {row[1] for row in grid.period_table(self.ctx, self.sheet, catalog).rows}
+        self.assertIn("2.1 Concreto ciclópeo", labels)
 
     def test_day_view_lists_the_rows_of_one_day(self) -> None:
         built = grid.build_grid(self.ctx, self.lw.project, self.sheet, self.catalog, self.tasks,
