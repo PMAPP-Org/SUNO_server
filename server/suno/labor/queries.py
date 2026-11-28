@@ -91,13 +91,16 @@ def _awaiting(ctx: RequestContext, project: Project) -> QuerySet[Timesheet]:
     )
 
 
-def inbox_timesheets(ctx: RequestContext, project: Project) -> list[Timesheet]:
+def inbox_timesheets(ctx: RequestContext, project: Project) -> list[tuple[Timesheet, bool]]:
     """Para la bandeja "Por aprobar" de Costos (#107): solo a quien aprueba tareo en el
-    proyecto; la plantilla muestra número, periodo, proyecto y total, sin trabajadores ni
-    jornales. Una consulta (ninguna sin el permiso)."""
+    proyecto, cada planilla con si está desactualizada (`stale_timesheets`: no se aprobaría tal
+    cual). La plantilla muestra número, periodo, proyecto y total, sin trabajadores ni
+    jornales. Cuatro consultas (ninguna sin el permiso; una si no hay planillas)."""
     if not can_approve_labor(ctx, project):
         return []
-    return list(_awaiting(ctx, project).order_by("starts_on", "number"))
+    sheets = list(_awaiting(ctx, project).order_by("starts_on", "number"))
+    stale = stale_timesheets(ctx, sheets)
+    return [(sheet, sheet.pk in stale) for sheet in sheets]
 
 
 def inbox_timesheet_count(ctx: RequestContext, project: Project) -> int:

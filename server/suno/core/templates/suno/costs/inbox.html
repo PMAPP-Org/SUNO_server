@@ -126,9 +126,9 @@
   <table class="pj-table cst-ledger">
     <thead><tr><th>Qué</th><th>Periodo</th><th>Proyecto</th><th class="num">Valor</th></tr></thead>
     <tbody>
-    {% for t in timesheet_items %}
+    {% for t, stale in timesheet_items %}
       <tr>
-        <td><a href="{% url 'labor:timesheet' project.pk t.pk %}">Planilla {{ t.code }}</a></td>
+        <td><a href="{% url 'labor:timesheet' project.pk t.pk %}">Planilla {{ t.code }}</a>{% if stale %} <span class="bg-label ta-stale" title="Cambió un jornal o el factor desde que se imprimió: no se aprueba así; hay que recalcularla y volver a firmarla.">Desactualizada</span>{% endif %}</td>
         <td>{{ t.starts_on|date:"d/m/Y" }} – {{ t.ends_on|date:"d/m/Y" }}</td>
         <td class="pj-wrap">{{ project.name }}</td>
         <td class="num">{{ t.total|signed }}</td>

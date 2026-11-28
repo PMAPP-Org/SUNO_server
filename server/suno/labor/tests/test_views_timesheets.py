@@ -296,3 +296,24 @@ class TimesheetInboxTests(TestCase):
         Timesheet.objects.filter(pk=self.sheet.pk).update(updated_by=self.lw.world.supervisor)
         self.client.force_login(self.lw.world.supervisor)
         self.assertNotContains(self.client.get(self.inbox), "TA-001")
+
+    def test_a_stale_signed_sheet_is_marked_without_extra_queries_per_sheet(self) -> None:
+        """M2 (#107): la bandeja no la presenta como aprobable si cambió un jornal o el factor."""
+        self.client.force_login(self.lw.world.supervisor)
+        self.assertNotContains(self.client.get(self.inbox), "Desactualizada")
+        with CaptureQueriesContext(connection) as one:
+            self.client.get(self.inbox)
+        ctx = self.lw.ctx(self.lw.contributor)
+        other = timesheets.create_timesheet(ctx, self.lw.project, date(2026, 3, 16),
+                                            date(2026, 3, 22))  # fmt: skip
+        timesheets.save_lines(ctx, self.lw.project, other.pk,
+                              [line_data(self.lw.maria, date(2026, 3, 16))],
+                              [date(2026, 3, 16)])  # fmt: skip
+        timesheets.attach_signed(ctx, self.lw.project, other.pk, pdf_upload(), "f.pdf")
+        WorkerWage.objects.create(org=self.lw.world.org, worker=self.lw.pedro, valid_from=WEEK[0],
+                                  daily_wage=D("90000.00"))  # fmt: skip
+        with CaptureQueriesContext(connection) as two:
+            page = self.client.get(self.inbox)
+        self.assertContains(page, "TA-003")
+        self.assertContains(page, "Desactualizada", count=1)
+        self.assertEqual(len(two), len(one))
