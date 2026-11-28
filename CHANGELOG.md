@@ -4,6 +4,14 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/), v
 
 Cada release la genera automáticamente [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`) a partir de los mensajes de commit en `master`, que siguen [Conventional Commits](https://www.conventionalcommits.org/es/v1.0.0/). No se edita a mano: lo que deba aparecer aquí se describe en el título del PR (`feat: …`, `fix: …`), que con *Squash and merge* es el mensaje del commit.
 
+## [0.21.1](https://github.com/PMAPP-Org/SUNO_server/compare/v0.21.0...v0.21.1) (2026-11-28)
+
+
+### Corregido
+
+* **docker:** aplicar los parches de libpam y libzstd en la imagen ([#116](https://github.com/PMAPP-Org/SUNO_server/issues/116)) ([c16bc8a](https://github.com/PMAPP-Org/SUNO_server/commit/c16bc8aada093f9ad3b67fe25f5026a1c8c30c95))
+* tanda de deuda ([#86](https://github.com/PMAPP-Org/SUNO_server/issues/86), [#88](https://github.com/PMAPP-Org/SUNO_server/issues/88), [#89](https://github.com/PMAPP-Org/SUNO_server/issues/89), [#92](https://github.com/PMAPP-Org/SUNO_server/issues/92), [#103](https://github.com/PMAPP-Org/SUNO_server/issues/103), [#106](https://github.com/PMAPP-Org/SUNO_server/issues/106), [#107](https://github.com/PMAPP-Org/SUNO_server/issues/107)) ([#114](https://github.com/PMAPP-Org/SUNO_server/issues/114)) ([9ca26a6](https://github.com/PMAPP-Org/SUNO_server/commit/9ca26a675b2fb0d817a4b092e811db03a1d6b769))
+
 ## [0.21.0](https://github.com/PMAPP-Org/SUNO_server/compare/v0.20.0...v0.21.0) (2026-11-24)
 
 
