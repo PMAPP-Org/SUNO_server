@@ -61,7 +61,7 @@ flowchart TB
     projects --> budgets & matrix
     matrix --> budgets
     control --> budgets & matrix & projects & equip & contracts
-    costs --> budgets & matrix & attachments & contracts
+    costs --> budgets & matrix & attachments & contracts & materials & labor
     contracts --> budgets & costs & control & matrix & attachments
     materials --> costs & budgets & attachments
     labor --> costs & budgets & attachments & materials

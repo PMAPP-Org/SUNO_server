@@ -309,6 +309,7 @@ Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la secci
     404 y sin enlace en el detalle ni en el exporte del libro; ADR-0040).
 18. Anular cualquier planilla aprobada, con motivo y reversos de hoy.
 19. ⚑ La bandeja "Por aprobar" de Costos no muestra planillas; la pestaña Tareo dice cuántas hay.
+    **Revisado el 2026-11-24 (#107):** ahora sí las muestra; ver la nota de esa fecha al final.
 20. Libro: filtro y etiqueta "Tareo"; el enlace a la planilla solo para quien lee Mano de obra; un
     movimiento de tareo no se reversa desde el libro.
 21. ⚑ De la nómina importada se guardan nombre, tamaño y SHA-256 del Excel, no el archivo.
@@ -326,3 +327,26 @@ Revisadas y aceptadas por el usuario el 2026-11-18. El detalle está en la secci
 29. ⚑ Prueba de concurrencia del tope: dos guardados en obras distintas y un guardado contra una
     aprobación (los borradores ya cuentan para el tope).
 30. Fechas de las pruebas fijas (hoy 2026-04-15; semana del 2 al 8 de marzo de 2026).
+
+### Revisado el 2026-11-24 (deuda de la 6d: #103, #106 y #107)
+
+- **#103, borrar una nómina importada.** Quien tiene `delete` de Mano de obra con alcance de toda
+  la organización (`can_delete_payroll`, como el resto del registro) la borra desde su conciliación,
+  con una casilla de confirmación. Se van sus líneas y su conciliación, que es solo un reporte: el
+  libro no cambia. Queda `payroll.deleted` en la auditoría (periodo, líneas, total y huella del
+  archivo, sin nombres). Reemplazar una nómina es borrarla e importarla otra vez; no hay acción
+  aparte.
+- **#106, «Desactualizada» en la lista de planillas.** Un borrador cuyo resumen guardado ya no
+  coincide con el recálculo de hoy (cambió un jornal o el factor) se marca en la lista. Es la misma
+  comparación de huellas que hace la aprobación. Se calcula con tres consultas para toda la página
+  (líneas, jornales y factor), no una por planilla. Solo se marcan los borradores: una rechazada
+  vuelve a borrador al editarse.
+- **#107, planillas en la bandeja «Por aprobar» de Costos** (revisa la decisión 19). Se listan los
+  borradores **firmados** (los mismos que cuenta la pestaña Tareo, decisión 19) que no preparó ni
+  editó quien mira, solo a quien puede aprobar tareo en ese proyecto (`can_approve_labor`). Cada
+  fila lleva número con enlace a la planilla, periodo, proyecto y total: sin trabajadores ni
+  jornales. Se aprueban en la planilla, contra el código impreso (decisión 14), no desde la bandeja.
+  El contador «Por aprobar (n)» las suma.
+- **#88, del mismo día.** El resumen guardado (`summary.groups`) guarda la clave de cada destino.
+  Al aprobar, la descripción del libro copia la etiqueta impresa, no el nombre vigente del ítem o
+  de la tarea. Una planilla guardada antes usa el nombre vigente.
