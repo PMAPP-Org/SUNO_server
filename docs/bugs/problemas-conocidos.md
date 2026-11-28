@@ -61,4 +61,4 @@ Problemas abiertos al 2026-11-17 (KI-02, KI-04, KI-07 y KI-10 resueltos el 2026-
 ## KI-10. ~~La reversa de la migración 0014 no tiene prueba automática~~ — resuelto
 
 - **Issue:** [#92](https://github.com/PMAPP-Org/SUNO_server/issues/92); se cierra con el PR de la rama `fix/deuda-menor`.
-- `server/suno/core/tests/test_quantity_matrix_migration.py` (`5dcfae1`) siembra visitas con los modelos de 0014, migra a 0013 y vuelve. Deshacer desde las hojas del grafo tardaba ~5 min; la prueba usa una base aparte y vacía migrada solo hasta 0014 (~11 s) y no toca la plantilla de `dbsupport`.
+- `server/suno/core/tests/test_quantity_matrix_migration.py` (`5dcfae1`) siembra registros con los modelos históricos de 0014, migra a 0013 y vuelve. Deshacer desde las hojas del grafo tardaba ~5 min; la prueba usa una base aparte y vacía migrada solo hasta 0014 (~11 s) y no toca la plantilla de `dbsupport`.
