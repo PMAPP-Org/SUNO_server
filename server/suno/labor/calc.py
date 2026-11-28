@@ -149,6 +149,13 @@ class Summary:
         return {"fingerprint": self.fingerprint(), "groups": groups}
 
 
+def is_stale(summary: Summary, stored: Mapping[str, Any] | None) -> bool:
+    """El recálculo de hoy ya no es el resumen guardado (lo que se imprimió y firmó). Sin huella
+    guardada también: no hay nada impreso con qué comparar. Es la comparación de la aprobación;
+    la usan también la ficha (`grid`) y la lista (`queries.stale_timesheets`)."""
+    return summary.fingerprint() != (stored or {}).get("fingerprint")
+
+
 def _add(bucket: dict[str, list[Decimal]], key: str, days: Decimal, amount: Decimal) -> None:
     row = bucket.setdefault(key, [NO_DAYS, ZERO])
     row[0] += days

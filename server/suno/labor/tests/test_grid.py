@@ -17,6 +17,8 @@ from suno.core.tests.dbsupport import (
 )
 from suno.costs.catalog import assignable_tasks, load_catalog
 from suno.labor import grid, queries, timesheets
+from suno.labor.calc import is_stale
+from suno.labor.queries import stale_timesheets
 
 from .factories import (
     TODAY,
@@ -86,6 +88,19 @@ class GridTests(TestCase):
         by_worker = {label.split(" · ")[0]: days for label, days, _ in built.by_worker}
         self.assertEqual(by_worker, {"Pedro Pérez": D("3.0000")})
         self.assertFalse(built.changed)
+
+    def test_without_a_stored_summary_the_grid_and_the_list_agree(self) -> None:
+        """M1 (#106): sin huella guardada la aprobación rechaza; la ficha y la lista avisan."""
+        Timesheet.objects.filter(pk=self.sheet.pk).update(summary={})
+        self.sheet.refresh_from_db()
+        built = grid.build_grid(self.ctx, self.lw.project, self.sheet, self.catalog, self.tasks,
+                                date(2026, 3, 2))  # fmt: skip
+        self.assertTrue(built.changed)
+        self.assertEqual(stale_timesheets(self.ctx, [self.sheet]), {self.sheet.pk})
+        evaluation = timesheets.evaluate(self.ctx, self.sheet, self.catalog)
+        self.assertTrue(is_stale(evaluation.summary, self.sheet.summary))
+        self.assertFalse(is_stale(evaluation.summary, {
+            "fingerprint": evaluation.summary.fingerprint()}))  # fmt: skip
 
     def test_day_view_lists_the_rows_of_one_day(self) -> None:
         built = grid.build_grid(self.ctx, self.lw.project, self.sheet, self.catalog, self.tasks,

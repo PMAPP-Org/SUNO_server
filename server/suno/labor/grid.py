@@ -33,7 +33,7 @@ from suno.materials.destination import (
     key_text,
 )
 
-from .calc import NO_DAYS, days_text
+from .calc import NO_DAYS, days_text, is_stale
 from .calc import problems as find_problems
 from .common import FROZEN_STATES
 from .timesheets import StoredLine, evaluate, hashed, outline_index, read_destination
@@ -183,7 +183,6 @@ def build_grid(
             rows.append(GridRow(worker_id, names[worker_id], positions[worker_id], "", "",
                                 INDIRECT_LABEL, ("",) * len(week.days), NO_DAYS, ZERO))  # fmt: skip
     rows.sort(key=lambda row: (row.worker, row.destination != "", row.label))
-    stored = (sheet.summary or {}).get("fingerprint")
     return Grid(
         sheet=sheet,
         week=week,
@@ -196,9 +195,7 @@ def build_grid(
         days=evaluation.summary.days,
         total=evaluation.summary.total,
         problems=tuple(find_problems(evaluation.costs, evaluation.names)),
-        changed=stored is not None
-        and sheet.status not in FROZEN_STATES
-        and evaluation.summary.fingerprint() != stored,
+        changed=sheet.status not in FROZEN_STATES and is_stale(evaluation.summary, sheet.summary),
     )  # fmt: skip
 
 

@@ -28,7 +28,7 @@ from suno.core.models import (
 from suno.core.policies import can_approve_labor
 from suno.core.scoping import scoped_qs
 
-from .calc import price, summarize
+from .calc import is_stale, price, summarize
 from .common import factor_history, wage_histories
 
 PAGE_SIZE = 100
@@ -67,8 +67,7 @@ def stale_timesheets(ctx: RequestContext, sheets: Iterable[Timesheet]) -> set[UU
     return {
         pk
         for pk, sheet in drafts.items()
-        if summarize(price(lines.get(pk, []), wages, factors)).fingerprint()
-        != (sheet.summary or {}).get("fingerprint")
+        if is_stale(summarize(price(lines.get(pk, []), wages, factors)), sheet.summary)
     }
 
 

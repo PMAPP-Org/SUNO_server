@@ -39,7 +39,7 @@ from suno.core.scoping import scoped_qs
 from suno.costs.catalog import Catalog, load_catalog
 from suno.materials.common import lock_project, locked, reverse_entries
 
-from .calc import problems
+from .calc import is_stale, problems
 from .common import (
     MAX_DESCRIPTION,
     MAX_ERRORS,
@@ -163,7 +163,7 @@ def approve_timesheet(
         found = problems(evaluation.costs, evaluation.names)
         if found:
             raise LaborRejected(found[:MAX_ERRORS])
-        if evaluation.summary.fingerprint() != (sheet.summary or {}).get("fingerprint"):
+        if is_stale(evaluation.summary, sheet.summary):
             raise LaborRejected([CHANGED])
         totals = day_totals(ctx, worker_ids, {line.day for line in evaluation.lines})
         errors = cap_errors(ctx, totals, sheet)
